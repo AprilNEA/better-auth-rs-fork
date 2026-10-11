@@ -13,7 +13,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth_core::{AuthRequest, HttpMethod};
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, error::Error, fmt::Debug, sync::mpsc};
 use url::Url;

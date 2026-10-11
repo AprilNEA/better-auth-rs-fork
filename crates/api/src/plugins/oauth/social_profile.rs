@@ -299,14 +299,10 @@ pub(super) async fn fetch_user_info_for_code(
     fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, claims).await
 }
 
-async fn fetch_default_user_info(
+async fn map_legacy_profile(
     provider: &ResolvedProvider,
-    request: OAuthUserInfoRequest,
-    claims: Option<VerifiedIdToken>,
+    response: OAuthUserInfoResponse,
 ) -> AuthResult<ProviderProfile> {
-    let Some(response) = fetch_social_user_info(provider, request, claims).await? else {
-        return Ok(ProviderProfile::default());
-    };
     let placeholder_id = response.user.id.clone();
     let mut response = ProviderProfile::from_typed(&provider.config, response)?;
     let data = response.value.model_property("data")?;
@@ -381,31 +377,40 @@ fn mapped_property(mapped: &FieldValue, name: &str) -> AuthResult<FieldValue> {
     }
 }
 
-async fn fetch_social_user_info(
+async fn fetch_default_user_info(
     provider: &ResolvedProvider,
     request: OAuthUserInfoRequest,
     claims: Option<VerifiedIdToken>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     if let Some((user_url, emails_url)) = provider.config.github_endpoints() {
-        return super::providers::github_profile(user_url, emails_url, &request).await;
+        return match super::providers::github_profile(user_url, emails_url, &request).await? {
+            Some(response) => map_legacy_profile(provider, response).await,
+            None => Ok(ProviderProfile::default()),
+        };
     }
     if provider.config.is_twitter() {
-        return super::providers::twitter::fetch_user_info(&provider.config, &request).await;
+        return match super::providers::twitter::fetch_user_info(&provider.config, &request).await? {
+            Some(response) => map_legacy_profile(provider, response).await,
+            None => Ok(ProviderProfile::default()),
+        };
     }
     if provider.config.wechat_refresh_url().is_some() {
-        return super::providers::wechat::fetch_user_info(&provider.config, &request).await;
+        return match super::providers::wechat::fetch_user_info(&provider.config, &request).await? {
+            Some(response) => map_legacy_profile(provider, response).await,
+            None => Ok(ProviderProfile::default()),
+        };
     }
     let data = match claims {
         Some(VerifiedIdToken::Apple(claims)) => {
             let Some(profile) = super::providers::apple::profile(&request, Some(claims))? else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             profile
         }
         Some(VerifiedIdToken::Google(claims)) => {
             let claims = claims.into_value();
             if !google::hosted_domain_allowed(provider.config.google_hosted_domain(), &claims) {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             }
             claims
         }
@@ -413,13 +418,13 @@ async fn fetch_social_user_info(
         Some(_) => return Err(AuthError::internal("Unexpected verified Social profile")),
         None if provider.config.twitch_options().is_some() => {
             let Some(profile) = super::providers::twitch::fetch_profile(&request)? else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             profile
         }
         None if provider.config.apple_options().is_some() => {
             let Some(profile) = super::providers::apple::profile(&request, None)? else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             profile
         }
@@ -427,7 +432,7 @@ async fn fetch_social_user_info(
             let Some(profile) =
                 super::providers::line::fetch_profile(&provider.config, &request).await?
             else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             profile
         }
@@ -442,22 +447,29 @@ async fn fetch_social_user_info(
                 .config
                 .user_info_request(user_info_url, &access_token)?;
             let Some(profile) = fetch_http_profile(request).await? else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             let Some(profile) = provider
                 .config
                 .http_profile_data(profile)
                 .map_err(AuthError::internal)?
             else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             profile
         }
     };
-    Ok(provider
+    if let Some(response) = provider
         .config
-        .decode_profile(data.clone())?
-        .map(|user| OAuthUserInfoResponse { user, data }))
+        .native_default_profile(&FieldValue::from_json(data.clone())?)
+        .await?
+    {
+        return Ok(response);
+    }
+    match provider.config.decode_profile(data.clone())? {
+        Some(user) => map_legacy_profile(provider, OAuthUserInfoResponse { user, data }).await,
+        None => Ok(ProviderProfile::default()),
+    }
 }
 
 pub(super) async fn fetch_http_profile(
@@ -494,7 +506,7 @@ pub(super) fn missing_profile() -> AuthError {
 pub(super) fn placeholder_email(identifier: &str, namespace: &str) -> AuthResult<String> {
     let email = format!("{identifier}@{namespace}.placeholder.invalid");
     if !crate::plugins::json_body::valid_email(&email)? {
-        return Err(AuthError::internal("Invalid placeholder email"));
+        return Err(AuthError::type_error("Invalid placeholder email"));
     }
     Ok(email)
 }

@@ -40,7 +40,11 @@ Account identity resolves separately from the displayed user. Both Social and Ge
 
 Use `FieldMap::into()` for ordinary native objects. For observable getters or changing properties, `FieldObject::from_source` accepts a `FieldObjectSource`; implement property descriptors separately from value reads so spread and JSON retain their respective evaluation order. The current descriptor API supports enumerability for string keys.
 
-The default Social decoders still construct typed user records before this boundary. Dynamic default-field coercion, mapper mutations followed by default-field reads, and every provider's original property order are not yet fully aligned. OAuth Proxy keeps its separate JSON transport schema and validates values at the receiver.
+The 24 ordinary HTTP Social providers construct native user fields from the raw profile and apply the complete mapper result. Provider expressions keep their own evaluation order: Cloudflare computes the name before the mapper, Reddit reads mapped email around the spread, and TikTok does not call the mapper. Roblox and Zoom return a shallow copy of the raw profile and preserve nested native identities.
+
+Apple, Google, GitHub, Twitter, WeChat, Cognito, Facebook, PayPal, Microsoft, Paybin, Twitch, and LINE still use typed default decoding paths. Dynamic default-field coercion and mapper mutation behavior remain incomplete for those providers. The legacy `map_user_info` callback retains its typed bridge. OAuth Proxy keeps its separate JSON transport schema and validates values at the receiver.
+
+HTTP response selection and derived raw fields still use the existing JSON preprocessing. Malformed response shapes, Cloudflare success coercion, Discord avatar conversion, and their error timing need separate alignment.
 
 ## Built-in Providers
 

@@ -13,7 +13,7 @@ use std::sync::{Mutex, atomic::Ordering};
 
 #[path = "paybin_test_support.rs"]
 mod support;
-use support::{Mapper, Server, fixture, public, resolved};
+use support::{Mapper, Server, fixture, resolved};
 #[path = "paybin_sqlite_tests.rs"]
 mod sqlite;
 

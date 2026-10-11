@@ -65,9 +65,22 @@ fn attempt(read: impl FnOnce() -> AuthResult<Value>, state: &State) -> AuthResul
 }
 
 fn key_order(value: &FieldValue, path: Vec<String>) -> AuthResult<Vec<Value>> {
+    if let FieldValue::Array(array) = value {
+        let indices = array.own_indices()?;
+        let keys: Vec<_> = indices.iter().map(usize::to_string).collect();
+        let mut order = vec![json!({"path": path, "keys": keys})];
+        for (index, key) in indices.into_iter().zip(keys) {
+            let mut child_path = path.clone();
+            child_path.push(key);
+            order.extend(key_order(
+                &array.get(index)?.unwrap_or_default(),
+                child_path,
+            )?);
+        }
+        return Ok(order);
+    }
     let keys = match value {
         FieldValue::Object(object) => object.enumerable_keys()?,
-        FieldValue::Array(array) => (0..array.len()?).map(|index| index.to_string()).collect(),
         _ => return Ok(Vec::new()),
     };
     let mut order = vec![json!({"path": path, "keys": keys})];

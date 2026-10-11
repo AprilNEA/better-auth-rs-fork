@@ -651,6 +651,18 @@ impl OAuthProvider {
         }
     }
 
+    pub(super) async fn native_default_profile(
+        &self,
+        profile: &FieldValue,
+    ) -> AuthResult<Option<super::social_profile::ProviderProfile>> {
+        if self.map_user_info.is_some() {
+            return Ok(None);
+        }
+        self.kind
+            .native_default_profile(profile, self.map_profile_to_user.as_deref())
+            .await
+    }
+
     pub(super) fn resolve(&self) -> Self {
         let mut provider = self.clone();
         if provider.get_user_info.is_some() {

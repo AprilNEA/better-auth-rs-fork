@@ -1,8 +1,7 @@
 use better_auth_core::{AuthError, AuthResult};
-use serde_json::Value;
 
 use super::super::authorization::{AuthorizationRequest, RESERVED_PARAMS};
-use super::{OAuthProvider, OAuthUserInfo};
+use super::OAuthProvider;
 
 pub(in crate::plugins::oauth) fn authorization_url(
     provider: &OAuthProvider,
@@ -32,35 +31,4 @@ pub(in crate::plugins::oauth) fn authorization_url(
         }
     }
     Ok(url.to_string())
-}
-
-pub(in crate::plugins::oauth) fn decode_profile(profile: Value) -> Result<OAuthUserInfo, String> {
-    let user = profile
-        .pointer("/data/user")
-        .ok_or("Missing TikTok user profile")?;
-    let name = ["display_name", "username"]
-        .into_iter()
-        .find_map(|field| {
-            user.get(field)
-                .and_then(Value::as_str)
-                .filter(|value| !value.is_empty())
-        })
-        .unwrap_or_default();
-    Ok(OAuthUserInfo {
-        id: user
-            .get("open_id")
-            .and_then(Value::as_str)
-            .ok_or("missing open_id")?
-            .into(),
-        email: super::defaults::profile_email(user)?,
-        name: Some(name.to_owned()).into(),
-        image: user
-            .get("avatar_large_url")
-            .cloned()
-            .map(serde_json::from_value)
-            .transpose()
-            .map_err(|error| format!("Invalid TikTok image: {error}"))?,
-        email_verified: Some(false).into(),
-        additional_fields: Default::default(),
-    })
 }

@@ -11,6 +11,9 @@ use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
+#[path = "http_provider_native_tests.rs"]
+mod native;
+
 fn fixture() -> Value {
     serde_json::from_str(include_str!(
         "../../../../../tests/fixtures/social-http-providers-1.7.6.json"

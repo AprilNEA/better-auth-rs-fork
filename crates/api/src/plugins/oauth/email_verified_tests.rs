@@ -9,8 +9,8 @@ use super::*;
 use better_auth_core::{FieldValue, SchemaValue};
 use serde_json::Value;
 
-#[test]
-fn default_email_verified_presence_matches_upstream() {
+#[tokio::test]
+async fn default_email_verified_presence_matches_upstream() {
     let fixture: Value = serde_json::from_str(include_str!(
         "../../../../../tests/fixtures/email-verified-presence-1.7.6.json"
     ))
@@ -35,9 +35,18 @@ fn default_email_verified_presence_matches_upstream() {
             profile[field] = serde_json::from_str(case["raw"].as_str().unwrap()).unwrap();
         }
         let profile = provider.http_profile_data(profile).unwrap().unwrap();
-        let user = provider.decode_profile(profile).unwrap().unwrap();
+        let response = provider
+            .native_default_profile(&FieldValue::from_json(profile).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
         let expected = &case["expected"]["user"];
-        let value = user.into_native().model_property("emailVerified").unwrap();
+        let value = response
+            .value
+            .model_property("user")
+            .unwrap()
+            .model_property("emailVerified")
+            .unwrap();
         let output = better_auth_core::FieldMap::from([("emailVerified".into(), value)])
             .json()
             .unwrap();
