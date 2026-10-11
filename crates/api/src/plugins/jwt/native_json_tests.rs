@@ -225,6 +225,7 @@ async fn custom_sign_json_callback_projects_once_without_entering_local_jose_clo
     )]);
     let plugin = JwtPlugin::new()
         .remote_url("http://http-json.test/jwks".into())
+        .algorithm(JwtAlgorithm::EdDsa)
         .custom_sign(Arc::new(|payload, _| {
             Box::pin(async move {
                 assert_eq!(payload["native"], "converted");

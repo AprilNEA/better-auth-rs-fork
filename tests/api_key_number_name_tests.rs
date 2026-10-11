@@ -18,7 +18,9 @@ fn stored(store: &EphemeralStore) -> TestResult<Value> {
             .json()?
             .ok_or("API Key must serialize")?;
         let fields = value.as_object_mut().ok_or("Expected an API Key object")?;
-        assert!(!fields.contains_key("permissions"));
+        if fields.contains_key("permissions") {
+            return Err("Stored API Key must omit permissions".into());
+        }
         for field in ["createdAt", "updatedAt"] {
             let date = fields.get_mut(field).ok_or("Missing API Key date")?;
             *date = json!({"type":"date", "value": date});
