@@ -42,7 +42,7 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
             "1",
             false,
             400,
-            json!({"code": "VALIDATION_ERROR", "message": "Headers is required"}),
+            json!({"message": "Headers is required", "code": "VALIDATION_ERROR"}),
         ),
         (
             "invalid",
@@ -120,6 +120,10 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
                     assert_eq!(
                         serde_json::from_slice::<Value>(&response.body.bytes().unwrap()).unwrap(),
                         expected
+                    );
+                    assert_eq!(
+                        response.body.bytes().unwrap().as_ref(),
+                        serde_json::to_vec(&expected).unwrap().as_slice()
                     );
                     let scope = current_request_hook_context().unwrap();
                     assert_eq!(scope.body.json().unwrap(), original.input_body().unwrap());

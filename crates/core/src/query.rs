@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use std::future::Future;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use crate::{AuthResponse, AuthResult, FieldValue};
 
@@ -88,10 +88,15 @@ fn type_name(value: &Value) -> &'static str {
 }
 
 fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthResponse {
-    AuthResponse::text(400, json!({
-        "code": "VALIDATION_ERROR",
-        "message": format!("[{location}] Invalid input: expected {expected}, received {}", type_name(value)),
-    }).to_string()).with_header("content-type", "application/json")
+    crate::AuthError::from_code(
+        400,
+        "VALIDATION_ERROR",
+        format!(
+            "[{location}] Invalid input: expected {expected}, received {}",
+            type_name(value)
+        ),
+    )
+    .to_auth_response()
 }
 
 pub(crate) fn string_field<'a>(
@@ -138,6 +143,7 @@ pub fn session_query(query: Option<Value>) -> AuthResult<Option<Value>> {
 mod tests {
     use super::*;
     use crate::{AuthRequest, HttpMethod};
+    use serde_json::json;
 
     #[test]
     fn repeated_query_values_keep_order_empty_values_and_literal_names() {

@@ -1,5 +1,5 @@
-use better_auth_core::{AuthRequest, AuthResponse};
-use serde_json::{Value, json};
+use better_auth_core::{AuthError, AuthRequest, AuthResponse};
+use serde_json::Value;
 
 pub(crate) fn is_truthy(value: &Value) -> bool {
     match value {
@@ -76,11 +76,7 @@ pub(crate) fn validation_error(message: &str) -> AuthResponse {
 }
 
 fn error_response(status: u16, code: &str, message: &str) -> AuthResponse {
-    AuthResponse::text(
-        status,
-        json!({ "code": code, "message": message }).to_string(),
-    )
-    .with_header("content-type", "application/json")
+    AuthError::from_code(status, code, message).to_auth_response()
 }
 
 #[derive(Clone, Default)]

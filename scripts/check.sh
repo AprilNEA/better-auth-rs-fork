@@ -765,6 +765,26 @@ run_stage() {
         --test sql_user_extra_output_tests --test plugin_output_capabilities_tests
       ./scripts/consumer-check.sh --test generated_plugin_catalog device_grant -- --include-ignored
       ;;
+    validation-errors)
+      cargo fmt --all -- --check
+      local validation_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/device-request-validation.test.ts \
+        ./compat-tests/reference-server/contracts/user-input-policy.test.ts || validation_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -- -D warnings || validation_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test required_headers_tests --test device_request_validation_tests -- -D warnings || validation_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        error::construction_tests:: plugin::tests::async_body_dispatch:: \
+        plugin::tests::response_status:: plugin::tests::response_values:: || validation_status=1
+      cargo test --locked -p better-auth-api --lib -- \
+        plugins::oauth::signin::error_tests:: || validation_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test required_headers_tests --test device_request_validation_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests || validation_status=1
+      return "$validation_status"
+      ;;
     device-validation)
       cargo fmt --all -- --check
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -p better-auth-cli -- -D warnings

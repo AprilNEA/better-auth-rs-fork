@@ -187,7 +187,11 @@ impl<S: AuthSchema> AuthPlugin<S> for StoredDisplay {
     }
 }
 
-async fn observe(input: Input, asynchronous: bool) -> AuthResult<Value> {
+async fn observe(
+    input: Input,
+    asynchronous: bool,
+    expected_body: Option<&Value>,
+) -> AuthResult<Value> {
     let (sender, receiver) = mpsc::channel();
     let callback_sender = sender.clone();
     let plugin =
@@ -263,7 +267,15 @@ async fn observe(input: Input, asynchronous: bool) -> AuthResult<Value> {
         .map(|(name, value)| (name.to_ascii_lowercase(), value.clone()))
         .collect();
     headers.sort();
-    let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+    let bytes = response.body.bytes()?;
+    if let Some(expected) = expected_body {
+        same(
+            &bytes.as_ref(),
+            &serde_json::to_vec(expected)?.as_slice(),
+            "complete response bytes",
+        )?;
+    }
+    let body: Value = serde_json::from_slice(&bytes)?;
     let stored = match auth
         .store()
         .get_device_code_by_device_code(DEVICE_CODE)
@@ -338,7 +350,11 @@ async fn synchronous_device_display_fields_match_pinned_endpoint_contract() -> A
                 .ok_or_else(|| AuthError::internal("Missing sync input"))?,
         )?;
         let name = input.name.clone();
-        let actual: SyncObservation = serde_json::from_value(observe(input, false).await?)?;
+        let expected_body = expected
+            .get("body")
+            .ok_or_else(|| AuthError::internal("Missing sync response body"))?;
+        let actual: SyncObservation =
+            serde_json::from_value(observe(input, false, Some(expected_body)).await?)?;
         let expected: SyncObservation = serde_json::from_value(expected.clone())?;
         same(&actual, &expected, &name)?;
     }
@@ -364,6 +380,7 @@ async fn asynchronous_device_display_fields_match_pinned_schema_results() -> Aut
                 request_body: serde_json::to_string(body)?,
             },
             true,
+            None,
         )
         .await?;
         let result = expected

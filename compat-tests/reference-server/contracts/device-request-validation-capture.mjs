@@ -24,7 +24,7 @@ const inputs = [
     requestBody: "client_id=ordinary-client&scope=read&label=+Desk+&note=Notes&ignored=drop" },
 ];
 
-async function captureSyncCase(input) {
+async function captureSyncCase(input, observeBody) {
   const requests = [];
   const originalBodies = [];
   const issues = [];
@@ -72,7 +72,9 @@ async function captureSyncCase(input) {
       ? "application/x-www-form-urlencoded" : "application/json" },
     body: input.requestBody,
   }));
-  const body = await response.json();
+  const bytes = await response.text();
+  const body = JSON.parse(bytes);
+  observeBody?.(input.name, bytes);
   const row = await context.adapter.findOne({ model: "deviceCode",
     where: [{ field: "deviceCode", value: deviceCode }] });
   return {
@@ -107,11 +109,11 @@ async function captureAsyncCase(name, input) {
     result: parsed.success ? { value: json(parsed.data) } : { issues: json(parsed.error.issues) } };
 }
 
-export async function captureDeviceRequestValidation() {
+export async function captureDeviceRequestValidation(observeBody) {
   const metadata = await Bun.file(new URL("../node_modules/better-auth/package.json", import.meta.url)).json();
   assert.equal(metadata.version, "1.7.6");
   const syncCases = [];
-  for (const input of inputs) syncCases.push(await captureSyncCase(input));
+  for (const input of inputs) syncCases.push(await captureSyncCase(input, observeBody));
   const asyncCases = [
     await captureAsyncCase("async-display-transform", { ...base, label: " Desk ", note: "Notes", ignored: "drop" }),
     await captureAsyncCase("async-display-issue", { ...base, label: "   " }),

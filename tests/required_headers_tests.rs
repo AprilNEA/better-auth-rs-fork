@@ -129,11 +129,33 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
             )
             .await
             .unwrap_or_else(AuthError::to_auth_response);
+        let bytes = response.body.bytes()?;
         let result: Value = if response.body.is_empty() {
             Value::Null
         } else {
-            serde_json::from_slice(&response.body.bytes()?)?
+            serde_json::from_slice(&bytes)?
         };
+        if case.kind != "empty" {
+            assert_eq!(
+                bytes.as_ref(),
+                serde_json::to_vec(&case.result)?.as_slice(),
+                "{}/{}: complete validation response bytes",
+                case.path,
+                case.kind
+            );
+            let native = response.body.field_value()?.enumerable_fields()?;
+            let expected = case
+                .result
+                .as_object()
+                .ok_or_else(|| AuthError::internal("Expected validation error object"))?;
+            assert_eq!(
+                native.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>(),
+                "{}/{}: native validation property order",
+                case.path,
+                case.kind
+            );
+        }
         if (response.status, &result) != (case.status, &case.result) {
             mismatches.push(format!(
                 "{}/{}: actual ({}, {}), expected ({}, {})",

@@ -224,10 +224,6 @@ impl<S: AuthSchema> Callbacks<S> {
     }
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions verify each controlled field callback"
-)]
 async fn call(
     receiver: &mut mpsc::UnboundedReceiver<Call>,
     field: &str,
@@ -239,10 +235,6 @@ async fn call(
     Ok(call)
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions verify callback completion order and errors"
-)]
 async fn completed(
     receiver: &mut mpsc::UnboundedReceiver<Event>,
     status: &str,
@@ -257,10 +249,6 @@ async fn completed(
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions verify early error delivery, retained peers, and complete storage"
-)]
 async fn check<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
     storage: Storage,

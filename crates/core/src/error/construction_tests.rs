@@ -111,3 +111,55 @@ fn absent_and_null_error_bodies_remain_distinct() -> AuthResult<()> {
     assert!(null.is_null());
     Ok(())
 }
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "FieldInput must retain its typed API while response conversion uses native error construction"
+)]
+fn field_input_retains_its_variant_until_response_conversion() -> AuthResult<()> {
+    let error = AuthError::FieldInput {
+        code: "CUSTOM_FIELD_FAILURE",
+        message: "field rejected".into(),
+    };
+    assert!(matches!(
+        &error,
+        AuthError::FieldInput {
+            code: "CUSTOM_FIELD_FAILURE",
+            ..
+        }
+    ));
+    assert_eq!(
+        error.error_payload(),
+        (
+            400,
+            Some("CUSTOM_FIELD_FAILURE".into()),
+            "field rejected".into()
+        )
+    );
+    assert_eq!(error.to_string(), "field rejected");
+    let _ = observe(
+        error,
+        400,
+        &["message", "code"],
+        br#"{"message":"field rejected","code":"CUSTOM_FIELD_FAILURE"}"#,
+    )?;
+    Ok(())
+}
+
+#[test]
+fn record_and_query_validation_share_native_coded_error_bodies() -> AuthResult<()> {
+    let mut request = crate::AuthRequest::new(crate::HttpMethod::Post, "/record");
+    request.body = Some(b"42".to_vec());
+    let error = crate::endpoint_input::record_body(&request)
+        .err()
+        .ok_or_else(|| AuthError::internal("Record schema accepted a number"))?;
+    let _ = observe(error, 400, &["message", "code"],
+        br#"{"message":"[body] Invalid input: expected record, received number","code":"VALIDATION_ERROR"}"#)?;
+    let error = crate::query::session_query(Some(serde_json::json!(42)))
+        .err()
+        .ok_or_else(|| AuthError::internal("Query schema accepted a number"))?;
+    let _ = observe(error, 400, &["message", "code"],
+        br#"{"message":"[query] Invalid input: expected object, received number","code":"VALIDATION_ERROR"}"#)?;
+    Ok(())
+}

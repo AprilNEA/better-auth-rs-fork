@@ -116,14 +116,10 @@ fn parse_record_body(request: &AuthRequest) -> AuthResult<serde_json::Map<String
         Some(Value::Array(_)) => "array",
         Some(Value::Object(_)) => "object",
     };
-    Err(crate::AuthResponse::json(
-        400,
-        &serde_json::json!({
-            "code": "VALIDATION_ERROR",
-            "message": format!("[body] Invalid input: expected record, received {actual}"),
-        }),
-    )?
-    .into())
+    Err(crate::AuthError::FieldInput {
+        code: "VALIDATION_ERROR",
+        message: format!("[body] Invalid input: expected record, received {actual}"),
+    })
 }
 
 #[derive(Debug, Clone)]

@@ -16,6 +16,8 @@ Coded native API errors contain `message` followed by `code`:
 
 Use `AuthError::from_code(status, code, message)` for the upstream `APIError.from` construction. Explicit bodies created with `AuthResponse::native(status, body).into()` retain their property order, extra fields, and native object identity. An explicit body can contain only `message`, even when another endpoint returns a coded error with the same message. Clients should use `code` when present and the status otherwise.
 
+`AuthError::FieldInput` retains its code and message for input issue aggregation. Response conversion uses the same message-first native coded body as endpoint body, query, and required-header validation. `validation_error_response` and `validate_request_body` remain Rust convenience helpers with their existing response behavior.
+
 An undefined native body produces an empty HTTP body; explicit null serializes as `null`. Undefined object properties remain present for native callers and are omitted at HTTP JSON serialization. Existing convenience constructors retain their current response format. Ordinary runtime failures reach the dispatcher's empty 500 response; explicit API error bodies retain the endpoint's contract.
 
 ## AuthError Variants
@@ -26,6 +28,7 @@ An undefined native body produces an empty HTTP body; explicit null serializes a
 | `BadRequest` | 400 | Malformed request |
 | `InvalidRequest` | 400 | Invalid request parameters |
 | `Validation` | 400 | Input validation failed |
+| `FieldInput` | 400 | Native field validation code and message |
 | `InvalidCredentials` | 401 | Wrong email/password |
 | `Unauthenticated` | 401 | No valid session token |
 | `SessionNotFound` | 401 | Session token not found or expired |

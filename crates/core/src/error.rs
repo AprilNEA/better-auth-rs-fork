@@ -358,6 +358,7 @@ impl AuthError {
 
     /// Convert this error into an [`AuthResponse`](crate::types::AuthResponse).
     /// Explicit response errors retain their native body and property order.
+    /// Field input errors use the upstream message-first coded body.
     /// Legacy convenience variants generate a code-first body from [`Self::error_payload`].
     ///
     /// Named `to_auth_response` to avoid collision with Axum's
@@ -365,6 +366,9 @@ impl AuthError {
     pub fn to_auth_response(self) -> crate::types::AuthResponse {
         if let Self::Response(response) = self {
             return (*response.0).into_api_error();
+        }
+        if let Self::FieldInput { code, message } = self {
+            return Self::from_code(400, code, message).to_auth_response();
         }
         if let Self::PasswordHash(error) = self {
             crate::observability::logger::current().error(

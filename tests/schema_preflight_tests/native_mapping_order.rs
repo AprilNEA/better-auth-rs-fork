@@ -245,8 +245,8 @@ fn numeric_physical_table_names_follow_javascript_property_order() {
         serde_json::to_value(&error).unwrap(),
         json!({
             "code": "SCHEMA_MISMATCH", "source": "database",
-            "findings": ["2", "10", "4294967294", "tail", "01", "4294967295"]
-                .map(|table| json!({"kind": "missing-table", "table": table})),
+            "findings": (["2", "10", "4294967294", "tail", "01", "4294967295"]
+                .map(|table| json!({"kind": "missing-table", "table": table}))),
         })
     );
     assert_eq!(

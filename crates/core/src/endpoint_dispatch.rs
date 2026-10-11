@@ -220,10 +220,9 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                     if route.as_ref().is_some_and(|route| route.require_headers)
                         && internal_req.endpoint_headers().is_none()
                     {
-                        return Err(AuthError::Upstream {
-                            status: 400,
+                        return Err(AuthError::FieldInput {
                             code: "VALIDATION_ERROR",
-                            message: "Headers is required",
+                            message: "Headers is required".into(),
                         });
                     }
                     let mut request = internal_req.clone();
