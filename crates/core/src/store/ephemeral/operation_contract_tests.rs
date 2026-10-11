@@ -46,6 +46,14 @@ struct Operand {
 }
 
 impl FieldObjectSource for Operand {
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(matches!(name, "tag" | "valueOf")
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         Err(AuthError::internal(
             "The predicate must read individual properties",

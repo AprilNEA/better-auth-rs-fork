@@ -5,6 +5,7 @@
 )]
 
 use super::google_test_support::GoogleFixture;
+use super::profile_test_support::json as public_response;
 use super::*;
 use better_auth_core::{AuthError, SchemaValue, endpoint_dispatch::EndpointDispatcher};
 use better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema;
@@ -88,13 +89,6 @@ impl OAuthProfileMapper for Mapper {
     }
 }
 
-fn public_response(response: OAuthUserInfoResponse) -> Value {
-    json!({"user": types::AccountInfoUser {
-        id: None, name: response.user.name, email: response.user.email, image: response.user.image,
-        email_verified: response.user.email_verified, additional_fields: response.user.additional_fields,
-    }, "data": response.data})
-}
-
 fn current_claims(sample: &Value) -> Value {
     let mut claims = sample["profile"].clone();
     let now = chrono::Utc::now().timestamp();
@@ -173,8 +167,7 @@ async fn limited_signed_profiles_match_pinned_on_code_direct_and_account_reads()
                 )
                 .await
                 .unwrap()
-            }
-            .unwrap();
+            };
             assert_eq!(
                 public_response(response),
                 expected,

@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
 use crate::plugins::oauth::google::AcceptedIdToken;
-use crate::plugins::oauth::social_profile::{apply_mapped_profile, fetch_http_profile};
+use crate::plugins::oauth::social_profile::{ProviderProfile, fetch_http_profile};
 
 impl OAuthProvider {
     /// Configure PayPal sandbox code login with PKCE and HTTP Basic grants.
@@ -71,13 +71,13 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
     claims: Option<Value>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     let logger = better_auth_core::observability::logger::current();
     if !request.access_token.is_truthy()? {
         logger.error("Access token is required to fetch PayPal user info", &[]);
-        return Ok(None);
+        return Ok(ProviderProfile::default());
     }
-    let result: AuthResult<Option<OAuthUserInfoResponse>> = async {
+    let result: AuthResult<ProviderProfile> = async {
         let url = provider
             .user_info_url
             .as_deref()
@@ -90,7 +90,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         .await?;
         let Some(profile) = profile.filter(|profile| !profile.is_null()) else {
             logger.error("Failed to fetch user info from PayPal", &[]);
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         if request.id_token.is_truthy()? {
             let claims = match claims {
@@ -123,23 +123,19 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
                     "PayPal user info subject does not match ID token subject",
                     &[],
                 );
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             }
         }
         let Some(user) = provider.decode_profile(profile.clone())? else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
-        let mut response = OAuthUserInfoResponse {
+        let response = OAuthUserInfoResponse {
             user,
             data: profile,
         };
-        if let Some(mapper) = &provider.map_profile_to_user {
-            let mapped = mapper.map_profile(&response.data).await?;
-            apply_mapped_profile(&mut response, mapped);
-        }
-        let _ = response.user.email()?;
-        let _ = response.user.email_verified()?;
-        Ok(Some(response))
+        ProviderProfile::from_typed(provider, response)?
+            .map_user(provider)
+            .await
     }
     .await;
     match result {
@@ -149,7 +145,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
                 "Failed to fetch user info from PayPal:",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
             );
-            Ok(None)
+            Ok(ProviderProfile::default())
         }
     }
 }

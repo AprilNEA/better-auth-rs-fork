@@ -307,12 +307,8 @@ async fn preset_requests_profiles_and_json_mapper_inputs_match_pinned_helpers() 
             };
             let response = generic_profile::fetch_profile(&resolved, &tokens, None)
                 .await
-                .unwrap()
                 .unwrap();
-            assert_eq!(
-                json!({ "user": response.user, "data": response.data }),
-                expected["mapped"]
-            );
+            assert_eq!(response.json().unwrap().unwrap(), expected["mapped"]);
             let mapper_inputs = mapper.inputs.lock().unwrap();
             assert_eq!(json!(*mapper_inputs), expected["mapperInputs"]);
             if id == "yandex" && case["name"] == "avatar" {

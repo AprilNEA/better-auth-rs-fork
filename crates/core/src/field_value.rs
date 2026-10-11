@@ -16,11 +16,13 @@ pub use array::{FieldArray, FieldArrayIter};
 mod function;
 pub use function::FieldFunction;
 mod object;
-pub use object::FieldObject;
-pub(crate) use object::{FieldObjectSource, ObjectIdentity};
+pub(crate) use object::ObjectIdentity;
+pub use object::{FieldObject, FieldObjectSource, FieldPropertyDescriptor};
 mod structured_clone;
+#[doc(hidden)]
+pub use structured_clone::ObjectCloneSeed;
 pub use structured_clone::StructuredCloneContext;
-pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, prepare_clone};
+pub(crate) use structured_clone::{ArrayCloneSeed, prepare_clone};
 mod json;
 pub(crate) use json::{project_input_json, stringify_http};
 mod primitive;
@@ -339,7 +341,7 @@ impl FieldValue {
     /// String keys enumerate UTF-16 units, as in object spread and `Object.entries`.
     pub fn enumerable_fields(&self) -> AuthResult<FieldMap> {
         Ok(match self {
-            Self::Object(fields) => fields.snapshot_fields()?,
+            Self::Object(_) => return self.enumerable_fields_except(&[]),
             Self::Array(values) => {
                 let mut fields = FieldMap::new();
                 for index in values.own_indices()? {
@@ -353,6 +355,43 @@ impl FieldValue {
             Self::Utf16String(value) => string_fields(value.as_utf16().iter().copied()),
             _ => FieldMap::new(),
         })
+    }
+
+    /// Copy object-rest properties without reading an excluded property's getter.
+    pub fn enumerable_fields_except(&self, excluded: &[&str]) -> AuthResult<FieldMap> {
+        match self {
+            Self::Object(object) => {
+                let mut fields = FieldMap::new();
+                for name in object.own_keys()? {
+                    if !excluded.contains(&name.as_str())
+                        && object
+                            .own_property_descriptor(&name)?
+                            .is_some_and(|descriptor| descriptor.enumerable)
+                        && let Some(value) = object.get(&name)?
+                    {
+                        let _ = fields.insert(name, value);
+                    }
+                }
+                Ok(fields)
+            }
+            Self::Array(array) => {
+                let mut fields = FieldMap::new();
+                for index in array.own_indices()? {
+                    let name = index.to_string();
+                    if !excluded.contains(&name.as_str())
+                        && let Some(value) = array.get(index)?
+                    {
+                        let _ = fields.insert(name, value);
+                    }
+                }
+                Ok(fields)
+            }
+            _ => {
+                let mut fields = self.enumerable_fields()?;
+                fields.retain(|name, _| !excluded.contains(&name.as_str()));
+                Ok(fields)
+            }
+        }
     }
 
     /// Evaluate JavaScript truthiness without serializing numbers or objects.

@@ -34,6 +34,16 @@ impl FieldObjectSource for Source {
         Ok(self.fields()?.keys().cloned().collect())
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<super::super::FieldPropertyDescriptor>> {
+        Ok(self
+            .fields()?
+            .contains_key(name)
+            .then_some(super::super::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         if !self.fields()?.contains_key(name) {
             return Ok(None);

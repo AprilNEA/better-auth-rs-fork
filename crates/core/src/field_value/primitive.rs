@@ -9,6 +9,28 @@ pub(crate) enum PrimitiveHint {
 }
 
 impl FieldValue {
+    /// Invoke `toLowerCase` at a business read, retaining a custom method's native result.
+    pub fn lowercase_method(&self, expression: &str) -> AuthResult<Self> {
+        match self {
+            Self::String(text) => Ok(crate::Utf16String::from(text.as_str())
+                .to_lowercase()
+                .into()),
+            Self::Utf16String(text) => Ok(text.to_lowercase().into()),
+            Self::Null | Self::Undefined => {
+                let kind = if self.is_null() { "null" } else { "undefined" };
+                Err(AuthError::type_error(format!(
+                    "{kind} is not an object (evaluating '{expression}.toLowerCase')"
+                )))
+            }
+            _ => match self.model_property("toLowerCase")? {
+                Self::Function(method) => method.call_with(self, &[]),
+                _ => Err(AuthError::type_error(format!(
+                    "{expression}.toLowerCase is not a function. (In '{expression}.toLowerCase()', '{expression}.toLowerCase' is undefined)"
+                ))),
+            },
+        }
+    }
+
     /// Call the receiver's `toString` method without applying ToPrimitive fallback.
     pub(crate) fn call_to_string(&self) -> AuthResult<Self> {
         if let Self::Object(fields) = self {

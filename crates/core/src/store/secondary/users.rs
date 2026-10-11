@@ -227,6 +227,12 @@ impl<S: AuthSchema> UserStore<S> for SecondaryStore<S> {
     ) -> AuthResult<Option<crate::store::UserAccounts>> {
         self.inner.get_user_with_accounts(email).await
     }
+    async fn get_user_with_accounts_value(
+        &self,
+        email: &crate::FieldValue,
+    ) -> AuthResult<Option<crate::store::UserAccounts>> {
+        self.inner.get_user_with_accounts_value(email).await
+    }
     async fn get_user_by_email(&self, email: &str) -> AuthResult<Option<crate::wire::UserView>> {
         self.inner.get_user_by_email(email).await
     }

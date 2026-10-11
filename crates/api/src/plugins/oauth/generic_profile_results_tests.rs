@@ -10,7 +10,7 @@ use axum::{
     routing::get,
 };
 use better_auth_core::{
-    AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthUser, HttpMethod,
+    AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthUser, FieldMap, HttpMethod,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ use super::super::{
     OAuthAccountSubject, OAuthCodeExchange, OAuthPlugin, OAuthProfile, OAuthProfileMapper,
     OAuthTokenHandler, OAuthTokenSet, OAuthUserInfoRequest,
 };
-use super::{ResolvedGenericOAuth, fetch_user_info};
+use super::{GenericProfileError, ResolvedGenericOAuth, fetch_profile, resolve_account_subject};
 use crate::plugins::test_helpers;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -241,26 +241,31 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
             access_token: (Some("ordinary-profile-access".into())).into(),
             ..Default::default()
         };
-        let outcome = match fetch_user_info(
-            &provider,
-            &OAuthTokenSet::from_fields(tokens.fields()),
-            &tokens,
-            None,
-        )
-        .await
-        {
-            Ok(None) => json!({"kind":"absent"}),
-            Ok(Some(response)) => {
-                let user = super::AccountInfoUser {
-                    id: None,
-                    additional_fields: response.user.additional_fields,
-                    email: response.user.email,
-                    name: response.user.name,
-                    image: response.user.image,
-                    email_verified: response.user.email_verified,
-                };
-                json!({"kind":"profile","user":user,"data":response.data,"subject":response.user.id})
+        let result: Result<Value, GenericProfileError> = async {
+            let response = fetch_profile(&provider, &tokens, None).await?;
+            if !response.is_truthy() {
+                return Ok(json!({"kind":"absent"}));
             }
+            let data = response.model_property("data")?;
+            let subject = resolve_account_subject(
+                &provider,
+                &OAuthTokenSet::from_fields(tokens.fields()),
+                &data,
+            )
+            .await?;
+            Ok(Value::Object(
+                FieldMap::from([
+                    ("kind".into(), "profile".into()),
+                    ("user".into(), response.model_property("user")?),
+                    ("data".into(), data),
+                    ("subject".into(), subject),
+                ])
+                .json()?,
+            ))
+        }
+        .await;
+        let outcome = match result {
+            Ok(outcome) => outcome,
             Err(error) => {
                 json!({"kind":"error","response":response_result(error.into_auth_error().to_auth_response())?})
             }

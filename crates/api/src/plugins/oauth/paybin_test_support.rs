@@ -23,13 +23,6 @@ pub(super) fn resolved(config: OAuthProvider) -> resolved::ResolvedProvider {
     }
 }
 
-pub(super) fn public(response: OAuthUserInfoResponse) -> Value {
-    json!({"user": types::AccountInfoUser {
-        id: None, name: response.user.name, email: response.user.email, image: response.user.image,
-        email_verified: response.user.email_verified, additional_fields: response.user.additional_fields,
-    }, "data": response.data})
-}
-
 pub(super) struct Mapper {
     pub patch: Value,
     pub seen: Arc<Mutex<Vec<Value>>>,

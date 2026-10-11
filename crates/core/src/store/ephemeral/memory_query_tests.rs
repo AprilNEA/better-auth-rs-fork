@@ -52,6 +52,13 @@ struct ObservedOperand {
 }
 
 impl FieldObjectSource for ObservedOperand {
+    fn own_property_descriptor(
+        &self,
+        _: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(None)
+    }
+
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         Err(AuthError::internal(
             "The query must not enumerate its operand",

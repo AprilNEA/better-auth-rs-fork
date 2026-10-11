@@ -23,10 +23,9 @@ use super::{
     OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse,
     authorization::{AuthorizationRequest, build_authorization_url},
     google_test_support::GoogleFixture,
-    id_token,
+    id_token, profile_test_support,
     resolved::ResolvedProvider,
     social_profile::fetch_user_info_from_provider,
-    types::AccountInfoUser,
 };
 
 type TestResult<T> = Result<T, Box<dyn Error>>;
@@ -81,19 +80,6 @@ fn resolved(config: OAuthProvider) -> ResolvedProvider {
         config: config.resolve(),
         generic: None,
     }
-}
-
-fn profile_json(response: OAuthUserInfoResponse, include_id: bool) -> Value {
-    let user = response.user;
-    let view = AccountInfoUser {
-        id: include_id.then_some(user.id),
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        email_verified: user.email_verified,
-        additional_fields: user.additional_fields,
-    };
-    json!({"user": view, "data": response.data})
 }
 
 #[test]
@@ -305,17 +291,20 @@ async fn microsoft_profile_photo_and_mapper_match_pinned_results() -> TestResult
             access_token: (sample["accessToken"].as_str().map(str::to_owned)).into(),
             ..Default::default()
         };
-        let response = fetch_user_info_from_provider(
-            &resolved(config),
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await?
-        .ok_or("missing Microsoft profile")?;
-        assert_eq!(response.user.id, sample["subject"], "{}", sample["name"]);
+        let provider = resolved(config);
+        let tokens = OAuthTokenSet::from_fields(profile_request.fields());
+        let response =
+            fetch_user_info_from_provider(&provider, &tokens, profile_request, None).await?;
         assert_eq!(
-            profile_json(response, false),
+            profile_test_support::subject(&provider, &tokens, &response)
+                .await
+                .json()?,
+            Some(sample["subject"].clone()),
+            "{}",
+            sample["name"]
+        );
+        assert_eq!(
+            profile_test_support::json(response),
             sample["result"],
             "{}",
             sample["name"]
@@ -381,9 +370,11 @@ async fn microsoft_custom_handler_precedes_the_profile_mapper() -> TestResult<()
         profile_request,
         None,
     )
-    .await?
-    .ok_or("missing custom profile")?;
-    assert_eq!(profile_json(response, true), fixture["custom"]["result"]);
+    .await?;
+    assert_eq!(
+        profile_test_support::json(response),
+        fixture["custom"]["result"]
+    );
     assert_eq!(json!(*calls.lock().await), fixture["custom"]["calls"]);
     assert_eq!(
         json!(inputs.lock().await.len()),
@@ -427,16 +418,21 @@ async fn microsoft_signed_ordinary_tenants_use_the_shared_oidc_boundary() -> Tes
             id_token: (Some(server.token.clone())).into(),
             ..Default::default()
         };
+        let tokens = OAuthTokenSet::from_fields(profile_request.fields());
         let response = super::social_profile::fetch_user_info_with_claims(
             &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
+            &tokens,
             profile_request,
             Some("ordinary-nonce"),
             verified,
         )
-        .await?
-        .ok_or("missing verified profile")?;
-        assert_eq!(response.user.id, "ordinary-microsoft-owner");
+        .await?;
+        assert_eq!(
+            profile_test_support::subject(&provider, &tokens, &response)
+                .await
+                .json()?,
+            Some(json!("ordinary-microsoft-owner"))
+        );
         assert_eq!(
             *server.requests.lock().map_err(|_| "poisoned fixture log")?,
             ["/jwks"]

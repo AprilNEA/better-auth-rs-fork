@@ -96,6 +96,17 @@ impl AuthRequest {
             .clone())
     }
 
+    /// Construct an endpoint redirect with the current response header identity.
+    pub fn redirect(&self, location: impl Into<String>) -> AuthResult<AuthError> {
+        self.set_response_header("location", location)?;
+        AuthError::try_api_error(crate::ApiErrorInit {
+            status: "FOUND".into(),
+            headers: self.response_headers_value()?,
+            class: crate::ApiErrorClass::BetterCall,
+            ..Default::default()
+        })
+    }
+
     /// Take the current response headers without draining retained native handles.
     pub fn take_response_headers(&self) -> AuthResult<Headers> {
         let binding = self.take_response_header_binding()?;
@@ -106,5 +117,33 @@ impl AuthRequest {
     #[doc(hidden)]
     pub fn take_response_headers_value(&self) -> AuthResult<FieldValue> {
         Ok(self.take_response_header_binding()?.value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn redirect_retains_endpoint_header_identity_and_constructor_class() -> AuthResult<()> {
+        let request = AuthRequest::new(crate::HttpMethod::Get, "/callback/provider");
+        request.append_response_header("set-cookie", "state=; Max-Age=0".into())?;
+        let headers = request.response_headers_value()?;
+        let error = request.redirect("/welcome")?;
+        assert!(error.headers_value()?.strict_equals(&headers));
+        assert!(error.is_api_error_instance(crate::ApiErrorClass::BetterCall));
+        assert!(!error.is_api_error_instance(crate::ApiErrorClass::BetterAuth));
+        request.append_response_header("set-cookie", "after=1".into())?;
+        let captured = request.take_response_headers()?;
+        assert_eq!(
+            Headers::from_field_value(&error.headers_value()?)?,
+            captured
+        );
+        assert_eq!(captured.get_all("set-cookie").count(), 2);
+        assert_eq!(
+            captured.get("location").map(String::as_str),
+            Some("/welcome")
+        );
+        Ok(())
     }
 }

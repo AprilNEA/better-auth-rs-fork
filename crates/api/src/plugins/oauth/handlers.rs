@@ -9,13 +9,13 @@ use better_auth_core::session::NativeSessionData;
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount,
-    CreateVerification, FieldMap, FieldValue, UpdateAccount, UpdateUser, Utf16String,
+    CreateVerification, FieldMap, FieldValue, UpdateAccount, UpdateUser,
 };
 
 use super::authorization::{AuthorizationRequest, build_authorization_url};
 use super::encryption::encrypt_token_set;
 pub(super) use super::provider_tokens::refresh_tokens_via_provider;
-use super::providers::{OAuthTokenSet, OAuthUserInfo, OAuthUserInfoRequest};
+use super::providers::{OAuthTokenSet, OAuthUserInfoRequest};
 use super::resolved::{ResolvedOAuthConfig as OAuthConfig, ResolvedProvider};
 pub(super) use super::social_profile::{fetch_user_info_for_code, fetch_user_info_from_provider};
 use super::state::{
@@ -229,11 +229,11 @@ impl OAuthLinkOutcome {
 }
 
 pub(super) async fn complete_link_social(
-    user_info: &OAuthUserInfo,
+    user_info: &FieldValue,
     account: &FieldMap,
     scopes: &better_auth_core::SchemaValue<Vec<String>>,
     link: &OAuthStateLink,
-    profile: Option<&serde_json::Value>,
+    profile: Option<&FieldValue>,
     endpoint: &crate::plugins::endpoint_context::EndpointContext<
         '_,
         impl better_auth_core::AuthSchema,
@@ -242,14 +242,31 @@ pub(super) async fn complete_link_social(
     let provider_id = account.get("providerId").cloned().unwrap_or_default();
     let account_id = account.get("accountId").cloned().unwrap_or_default();
     let ctx = endpoint.auth;
-    if let Err(error) = super::signin::validate_provider_user(
-        user_info,
-        link.user_id().clone(),
-        &provider_id,
-        profile,
-        crate::plugins::user_admission::UserValidationAction::LinkAccount,
-        endpoint,
-    )
+    if let Err(error) = async {
+        let mut user = user_info.enumerable_fields()?;
+        let _ = user.insert("id".into(), link.user_id().clone());
+        let email = user_info.model_property("email")?;
+        let _ = user.insert(
+            "email".into(),
+            if email.is_null() {
+                FieldValue::Undefined
+            } else {
+                email
+            },
+        );
+        crate::plugins::user_admission::validate(
+            crate::plugins::user_admission::UserValidationData {
+                user,
+                source: crate::plugins::user_admission::UserValidationSource::explicit_oauth_link(
+                    &provider_id,
+                    profile,
+                ),
+            },
+            endpoint,
+        )
+        .await
+        .map_err(crate::plugins::user_admission::UserValidationRejection::into_auth_error)
+    }
     .await
     {
         let (code, description) = super::signin::OAuthSignInError::Auth(error).redirect_parts()?;
@@ -261,14 +278,19 @@ pub(super) async fn complete_link_social(
         .iter()
         .any(|trusted| provider_id.strict_equals(&trusted.as_str().into()));
 
-    if !linking.enabled() || (!trusted_provider && !user_info.email_verified()?) {
+    if (!trusted_provider && !user_info.model_property("emailVerified")?.is_truthy())
+        || !linking.enabled()
+    {
         return Ok(OAuthLinkOutcome::failed("unable_to_link_account"));
     }
 
-    let provider_email = user_info
-        .email()?
-        .map(|email| Utf16String::from(email).to_lowercase());
-    if provider_email.as_ref() != Some(&lowercase_link_email(link.email())?)
+    let email = user_info.model_property("email")?;
+    let provider_email = if email.is_null() || email.is_undefined() {
+        FieldValue::Undefined
+    } else {
+        super::native_user::lowercase(&email, "userInfo.email")?
+    };
+    if !provider_email.strict_equals(&super::native_user::lowercase(link.email(), "link.email")?)
         && !linking.allow_different_emails
     {
         return Ok(OAuthLinkOutcome::failed("email_doesn't_match"));
@@ -459,9 +481,16 @@ async fn sign_in_with_id_token_core(
         id_token.nonce.as_deref(),
         claims,
     )
-    .await?
-    .ok_or_else(super::social_profile::missing_profile)?;
-    if user_info.user.email()?.is_none_or(str::is_empty) {
+    .await?;
+    if !user_info.value.is_truthy() || !user_info.value.model_property("user")?.is_truthy() {
+        return Err(super::social_profile::missing_profile());
+    }
+    if !user_info
+        .value
+        .model_property("user")?
+        .model_property("email")?
+        .is_truthy()
+    {
         return Err(AuthError::Upstream {
             status: 401,
             code: "USER_EMAIL_NOT_FOUND",
@@ -469,13 +498,24 @@ async fn sign_in_with_id_token_core(
         });
     }
 
+    let account_id = super::social_profile::resolve_account_subject(
+        provider,
+        &subject_tokens,
+        &user_info.value.model_property("data")?,
+        user_info.legacy_subject.as_ref(),
+    )
+    .await
+    .map_err(|_| super::social_profile::missing_profile())?;
+    let provider_profile = user_info.value.model_property("data")?;
+    let user = super::native_user::direct_user(&user_info.value, account_id.clone())?;
+
     let outcome = match process_oauth_sign_in(
         &body.provider,
         provider,
-        &user_info.user,
+        &user,
         &FieldMap::from([
             ("providerId".into(), body.provider.clone().into()),
-            ("accountId".into(), user_info.user.id.clone().into()),
+            ("accountId".into(), account_id.clone()),
             (
                 "accessToken".into(),
                 id_token
@@ -488,7 +528,7 @@ async fn sign_in_with_id_token_core(
         ]),
         OAuthSignInOptions {
             request: req,
-            profile: Some(&user_info.data),
+            profile: Some(&provider_profile),
             body: req.body_as_json()?,
             disable_sign_up: provider.config.disable_implicit_sign_up()
                 && !body.request_sign_up.unwrap_or(false)
@@ -561,10 +601,16 @@ async fn link_with_id_token_core(
         id_token.nonce.as_deref(),
         claims,
     )
-    .await?
-    .ok_or_else(super::social_profile::missing_profile)?;
-
-    let Some(provider_email) = response.user.email()?.filter(|email| !email.is_empty()) else {
+    .await?;
+    if !response.value.is_truthy() || !response.value.model_property("user")?.is_truthy() {
+        return Err(super::social_profile::missing_profile());
+    }
+    if !response
+        .value
+        .model_property("user")?
+        .model_property("email")?
+        .is_truthy()
+    {
         return Err(AuthError::Upstream {
             status: 401,
             code: "USER_EMAIL_NOT_FOUND",
@@ -572,9 +618,17 @@ async fn link_with_id_token_core(
         });
     };
 
+    let account_id = super::social_profile::resolve_account_subject(
+        provider,
+        &subject_tokens,
+        &response.value.model_property("data")?,
+        response.legacy_subject.as_ref(),
+    )
+    .await
+    .map_err(|_| super::social_profile::missing_profile())?;
     let account = ctx
         .database
-        .get_account(&body.provider, &response.user.id)
+        .get_account_value(&body.provider.as_str().into(), &account_id)
         .await?;
     let current_user_id = current_session.user_property("id")?;
     let account_user_id = account
@@ -619,7 +673,12 @@ async fn link_with_id_token_core(
                 },
             )
             .await?;
-        let _ = apply_link_user_info(&current_user_id, &response.user, ctx).await;
+        let _ = apply_link_user_info(
+            &current_user_id,
+            &response.value.model_property("user")?,
+            ctx,
+        )
+        .await;
         return Ok(SocialSignInResponse {
             url: Some(String::new()),
             redirect: false,
@@ -642,16 +701,33 @@ async fn link_with_id_token_core(
         .iter()
         .any(|trusted| trusted == &body.provider);
 
-    if !linking.enabled() || (!trusted_provider && !response.user.email_verified()?) {
+    if (!trusted_provider
+        && !response
+            .value
+            .model_property("user")?
+            .model_property("emailVerified")?
+            .is_truthy())
+        || !linking.enabled()
+    {
         return Err(AuthError::Upstream {
             status: 401,
             code: "LINKING_NOT_ALLOWED",
             message: "Account not linked - linking not allowed",
         });
     }
-    if Utf16String::from(provider_email).to_lowercase()
-        != lowercase_link_email(&current_session.user_property("email")?)?
-        && !linking.allow_different_emails
+    let email = response
+        .value
+        .model_property("user")?
+        .model_property("email")?;
+    let provider_email = if email.is_null() || email.is_undefined() {
+        FieldValue::Undefined
+    } else {
+        super::native_user::lowercase(&email, "linkingUserInfo.user.email")?
+    };
+    if !provider_email.strict_equals(&super::native_user::lowercase(
+        &current_session.user_property("email")?,
+        "session.user.email",
+    )?) && !linking.allow_different_emails
     {
         return Err(AuthError::Upstream {
             status: 401,
@@ -681,7 +757,7 @@ async fn link_with_id_token_core(
                 additional_fields: FieldMap::from([
                     ("userId".into(), current_user_id.clone()),
                     ("providerId".into(), body.provider.clone().into()),
-                    ("accountId".into(), response.user.id.clone().into()),
+                    ("accountId".into(), account_id.clone()),
                     (
                         "accessToken".into(),
                         token_bundle.access_token.into_field_value(),
@@ -712,7 +788,12 @@ async fn link_with_id_token_core(
             ..Default::default()
         })?);
     }
-    let _ = apply_link_user_info(&current_user_id, &response.user, ctx).await;
+    let _ = apply_link_user_info(
+        &current_user_id,
+        &response.value.model_property("user")?,
+        ctx,
+    )
+    .await;
 
     Ok(SocialSignInResponse {
         url: Some(String::new()),
@@ -725,7 +806,7 @@ async fn link_with_id_token_core(
 
 pub(super) async fn apply_link_user_info(
     user_id: &FieldValue,
-    user_info: &OAuthUserInfo,
+    user_info: &FieldValue,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> Option<UserView> {
     if !ctx
@@ -741,9 +822,14 @@ pub(super) async fn apply_link_user_info(
             .update_user_by_id_value(
                 user_id,
                 UpdateUser {
-                    additional_fields: super::signin::provider_profile_fields(
-                        ctx, user_info, false,
-                    )?,
+                    additional_fields: {
+                        let (name, image, profile) =
+                            super::native_user::profile_fields(user_info, false)?;
+                        let mut fields =
+                            FieldMap::from([("name".into(), name), ("image".into(), image)]);
+                        fields.extend(ctx.config.user.parse_provider_input(&profile, false)?);
+                        fields
+                    },
                     ..Default::default()
                 },
             )
@@ -760,22 +846,6 @@ pub(super) async fn apply_link_user_info(
             );
             None
         }
-    }
-}
-
-fn lowercase_link_email(email: &FieldValue) -> AuthResult<Utf16String> {
-    match email {
-        FieldValue::String(value) => Ok(Utf16String::from(value.as_str()).to_lowercase()),
-        FieldValue::Utf16String(value) => Ok(value.to_lowercase()),
-        FieldValue::Null => Err(AuthError::type_error(
-            "null is not an object (evaluating 'session.user.email.toLowerCase')",
-        )),
-        FieldValue::Undefined => Err(AuthError::type_error(
-            "undefined is not an object (evaluating 'session.user.email.toLowerCase')",
-        )),
-        _ => Err(AuthError::type_error(
-            "session.user.email.toLowerCase is not a function. (In 'session.user.email.toLowerCase()', 'session.user.email.toLowerCase' is undefined)",
-        )),
     }
 }
 

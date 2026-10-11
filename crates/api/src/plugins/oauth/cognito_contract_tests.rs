@@ -4,6 +4,7 @@
     reason = "Contract tests fail immediately when a captured fixture or provider result changes."
 )]
 
+use super::profile_test_support::json as public_response;
 use super::*;
 use base64::Engine;
 use better_auth_core::{AuthError, SchemaValue};
@@ -262,7 +263,7 @@ async fn code_and_refresh_match_captured_post_requests_and_token_fields() {
 async fn fetch(
     config: OAuthProvider,
     access_token: String,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<social_profile::ProviderProfile> {
     let profile_request = OAuthUserInfoRequest {
         access_token: (Some(access_token)).into(),
         ..Default::default()
@@ -274,18 +275,6 @@ async fn fetch(
         None,
     )
     .await
-}
-
-fn public_response(response: Option<OAuthUserInfoResponse>) -> Value {
-    response.map_or(Value::Null, |response| {
-        json!({
-            "user": types::AccountInfoUser {
-                id: None, name: response.user.name, email: response.user.email, image: response.user.image,
-                email_verified: response.user.email_verified, additional_fields: response.user.additional_fields,
-            },
-            "data": response.data,
-        })
-    })
 }
 
 struct Mapper {
@@ -413,22 +402,22 @@ async fn ten_http_profiles_match_capture_and_await_the_mapper() {
 
 struct Custom {
     mode: String,
-    response: OAuthUserInfoResponse,
+    response: better_auth_core::FieldValue,
     events: Events,
     error: String,
 }
 
 #[async_trait]
 impl OAuthUserInfoHandler for Custom {
-    async fn get_user_info(
+    async fn get_user_info_native(
         &self,
         _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    ) -> AuthResult<better_auth_core::FieldValue> {
         self.events.lock().unwrap().push("custom");
         match self.mode.as_str() {
             "custom error" => Err(AuthError::internal(self.error.clone())),
-            "custom null" => Ok(None),
-            _ => Ok(Some(self.response.clone())),
+            "custom null" => Ok(better_auth_core::FieldValue::Null),
+            _ => Ok(self.response.clone()),
         }
     }
 }
@@ -462,26 +451,11 @@ async fn http_failures_and_custom_results_match_the_captured_callback_boundary()
             error: Some(error.clone()),
         }));
         if mode.starts_with("custom") {
-            let user = &custom["result"]["user"];
             config.get_user_info = Some(Arc::new(Custom {
                 mode: mode.into(),
                 events: events.clone(),
                 error: error.clone(),
-                response: OAuthUserInfoResponse {
-                    user: OAuthUserInfo {
-                        id: custom["result"]["data"]["sub"].as_str().unwrap().into(),
-                        name: serde_json::from_value(user["name"].clone()).unwrap(),
-                        email: serde_json::from_value::<Option<String>>(user["email"].clone())
-                            .unwrap()
-                            .into(),
-                        image: user
-                            .get("image")
-                            .map(|value| serde_json::from_value(value.clone()).unwrap()),
-                        email_verified: Some(user["emailVerified"].as_bool().unwrap()).into(),
-                        additional_fields: Default::default(),
-                    },
-                    data: custom["result"]["data"].clone(),
-                },
+                response: custom["result"].clone().into(),
             }));
         }
         let response = fetch(

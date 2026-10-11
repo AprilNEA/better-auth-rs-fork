@@ -219,3 +219,51 @@ async fn literal_undefined_default_skips_binding_but_default_factory_runs() {
         }
     }
 }
+
+#[test]
+fn user_input_lowercase_method_preserves_native_results_and_original_errors() -> AuthResult<()> {
+    let native: Value = FieldMap::from([("result".into(), true.into())]).into();
+    let email: Value = FieldMap::from([("identity".into(), "email".into())]).into();
+    let calls = Arc::new(Mutex::new(0));
+    let _ = email.as_object().unwrap().set("toLowerCase", {
+        let result = native.clone();
+        let calls = calls.clone();
+        crate::FieldFunction::contextual(move |receiver, arguments| {
+            assert!(arguments.is_empty());
+            let _ = receiver.as_object().unwrap().set("observed", true.into())?;
+            *calls.lock().unwrap() += 1;
+            Ok(result.clone())
+        })
+        .into()
+    })?;
+    let fields = FieldMap::from([("email".into(), email.clone())]);
+    let created = crate::CreateUser {
+        additional_fields: fields.clone(),
+        ..Default::default()
+    }
+    .into_user_fields()?;
+    let updated = crate::UpdateUser {
+        additional_fields: fields,
+        ..Default::default()
+    }
+    .into_user_fields()?;
+    assert!(created["email"].strict_equals(&native));
+    assert!(updated["email"].strict_equals(&native));
+    assert_eq!(*calls.lock().unwrap(), 2);
+    assert_eq!(email.model_property("observed")?, Value::Bool(true));
+
+    let thrown: Value = FieldMap::from([("message".into(), "lowercase failed".into())]).into();
+    let _ = email.as_object().unwrap().set("toLowerCase", {
+        let thrown = thrown.clone();
+        crate::FieldFunction::contextual(move |_, _| Err(AuthError::from_thrown(thrown.clone())))
+            .into()
+    })?;
+    let error = crate::CreateUser {
+        additional_fields: FieldMap::from([("email".into(), email)]),
+        ..Default::default()
+    }
+    .into_user_fields()
+    .unwrap_err();
+    assert!(error.raw_value().unwrap().strict_equals(&thrown));
+    Ok(())
+}

@@ -62,6 +62,11 @@ mod providers;
 pub use popup::{OAUTH_POPUP_COMPLETE_SCRIPT, OAUTH_POPUP_SCRIPT_CSP_HASH, OAuthPopupPlugin};
 mod proxy;
 pub use proxy::{OAuthProxyConfig, OAuthProxyPlugin};
+#[cfg(test)]
+mod native_profile_tests;
+mod native_user;
+#[cfg(test)]
+mod profile_test_support;
 mod request;
 mod resolved;
 #[cfg(test)]

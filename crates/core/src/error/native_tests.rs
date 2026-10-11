@@ -19,6 +19,17 @@ impl FieldObjectSource for Source {
         Ok(self.keys.clone())
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(self
+            .keys
+            .iter()
+            .any(|key| key == name)
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         (self.read)(name)
     }
@@ -345,13 +356,16 @@ fn constructed_error_presence_and_enumeration_follow_error_properties() -> AuthR
     assert!(object.has_property("message")?);
     assert!(object.has_property("cause")?);
     assert_eq!(
-        object.own_keys()?,
+        object.enumerable_keys()?,
         ["status", "body", "headers", "statusCode", "name"]
     );
     let _ = object.delete("cause")?;
     assert!(!object.has_property("cause")?);
     let _ = object.set("cause", false.into())?;
-    assert_eq!(object.own_keys()?.last().map(String::as_str), Some("cause"));
+    assert_eq!(
+        object.enumerable_keys()?.last().map(String::as_str),
+        Some("cause")
+    );
     let _ = object.delete("message")?;
     assert!(object.has_property("message")?);
     assert_eq!(error.message_value()?, "".into());

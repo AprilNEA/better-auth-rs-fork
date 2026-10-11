@@ -327,7 +327,7 @@ async fn generic_profile_uses_request_nonce_for_callback_proxy_and_native_extens
         )
         .await
         .unwrap();
-        assert_eq!(response.is_some(), accepted, "{label}");
+        assert_eq!(!response.value.is_null(), accepted, "{label}");
         accepted_count += usize::from(accepted);
         assert_eq!(
             handler.calls.load(Ordering::SeqCst),

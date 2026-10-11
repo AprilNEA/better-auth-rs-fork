@@ -77,7 +77,8 @@ pub(crate) struct ArrayCloneSeed {
 type NativeRecord = Arc<dyn Any + Send + Sync>;
 
 /// A fresh object retains its native record shape until every graph conversion succeeds.
-pub(crate) struct ObjectCloneSeed {
+#[doc(hidden)]
+pub struct ObjectCloneSeed {
     pub(crate) object: FieldObject,
     pub(crate) state: Vec<FieldValue>,
     pub(crate) original_record: Option<NativeRecord>,
@@ -352,7 +353,7 @@ impl<'a> Graph<'a> {
             FieldValue::Object(object) => {
                 let mut seed = object.clone_seed()?;
                 let mut fields = Vec::new();
-                for name in object.own_keys()? {
+                for name in object.enumerable_keys()? {
                     if let Some(value) = object.get(&name)? {
                         fields.push((name, self.visit(&value)?));
                     }

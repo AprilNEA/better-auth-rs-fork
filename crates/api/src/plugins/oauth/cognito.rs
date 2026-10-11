@@ -5,6 +5,7 @@ use serde_json::Value;
 
 use super::oidc::OidcVerifier;
 use super::providers::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::social_profile::ProviderProfile;
 
 /// Cognito hosted domain and user-pool verification policy.
 #[derive(Clone)]
@@ -100,28 +101,20 @@ pub(super) fn decode_profile(profile: Value) -> Result<OAuthUserInfo, String> {
     })
 }
 
-async fn map_profile(
-    provider: &OAuthProvider,
-    data: Value,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+async fn map_profile(provider: &OAuthProvider, data: Value) -> AuthResult<ProviderProfile> {
     let Some(user) = provider.decode_profile(data.clone())? else {
-        return Ok(None);
+        return Ok(ProviderProfile::default());
     };
-    let mut response = OAuthUserInfoResponse { user, data };
-    if let Some(mapper) = &provider.map_profile_to_user {
-        let mapped = mapper.map_profile(&response.data).await?;
-        super::social_profile::apply_mapped_profile(&mut response, mapped);
-    }
-    let _ = response.user.email()?;
-    let _ = response.user.email_verified()?;
-    Ok(Some(response))
+    ProviderProfile::from_typed(provider, OAuthUserInfoResponse { user, data })?
+        .map_user(provider)
+        .await
 }
 
 pub(super) async fn fetch_user_info(
     provider: &OAuthProvider,
     request: OAuthUserInfoRequest,
     claims: Option<Value>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     if let Some(mut claims) = claims {
         let name = profile_name(&claims);
         let _ = claims
@@ -147,10 +140,10 @@ pub(super) async fn fetch_user_info(
             )
             .await?
             else {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             };
             if profile.is_null() {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             }
             map_profile(provider, profile).await
         }
@@ -162,9 +155,9 @@ pub(super) async fn fetch_user_info(
                     "Failed to fetch user info from Cognito:",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
                 );
-                Ok(None)
+                Ok(ProviderProfile::default())
             }
         };
     }
-    Ok(None)
+    Ok(ProviderProfile::default())
 }

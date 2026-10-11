@@ -417,19 +417,11 @@ async fn social_line_configuration_and_profiles_match_pinned_capture() {
             None,
         )
         .await
-        .unwrap()
         .unwrap();
-        let user = response.user;
-        let view = super::super::types::AccountInfoUser {
-            id: None,
-            name: user.name,
-            email: user.email,
-            image: user.image,
-            email_verified: user.email_verified,
-            additional_fields: user.additional_fields,
-        };
-        assert_eq!(serde_json::to_value(view).unwrap(), case["result"]["user"]);
-        assert_eq!(response.data, case["result"]["data"]);
+        assert_eq!(
+            crate::plugins::oauth::profile_test_support::json(response),
+            case["result"]
+        );
         assert_eq!(
             json!(*server.requests.lock().unwrap()),
             if case["source"] == "token" {
@@ -546,20 +538,10 @@ async fn social_line_mapper_matches_pinned_input_and_result() {
         None,
     )
     .await
-    .unwrap()
     .unwrap();
-    let user = response.user;
-    let view = super::super::types::AccountInfoUser {
-        id: None,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        email_verified: user.email_verified,
-        additional_fields: user.additional_fields,
-    };
     assert_eq!(json!(*inputs.lock().unwrap()), expected["mapperInputs"]);
     assert_eq!(
-        json!({"user": view, "data": response.data}),
+        crate::plugins::oauth::profile_test_support::json(response),
         expected["mappedResult"]
     );
 }

@@ -104,6 +104,14 @@ struct ComparisonSource {
 }
 
 impl FieldObjectSource for ComparisonSource {
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok((name == "value")
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         Ok(vec!["value".into()])
     }

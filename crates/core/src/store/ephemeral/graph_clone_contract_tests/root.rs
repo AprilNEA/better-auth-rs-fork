@@ -39,6 +39,14 @@ type ProbeRead = dyn Fn() -> AuthResult<FieldValue> + Send + Sync;
 struct RootProbe(Arc<ProbeRead>);
 
 impl FieldObjectSource for RootProbe {
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok((name == "value")
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         Ok(vec!["value".into()])
     }

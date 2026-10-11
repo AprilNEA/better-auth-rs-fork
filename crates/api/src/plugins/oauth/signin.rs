@@ -2,11 +2,12 @@ use better_auth_core::entity::{AuthSession, AuthUser};
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount, CreateUser,
-    UpdateAccount, UpdateUser,
+    FieldValue, UpdateAccount, UpdateUser,
 };
 
 use super::encryption::encrypt_token_set;
-use super::providers::{OAuthTokenSet, OAuthUserInfo};
+use super::native_user::lower_email;
+use super::providers::OAuthTokenSet;
 use super::resolved::ResolvedProvider;
 use super::state::AccountCookiePayload;
 use crate::plugins::helpers::{
@@ -15,7 +16,7 @@ use crate::plugins::helpers::{
 
 pub(super) struct OAuthSignInOptions<'a> {
     pub(super) request: &'a AuthRequest,
-    pub(super) profile: Option<&'a serde_json::Value>,
+    pub(super) profile: Option<&'a FieldValue>,
     pub(super) body: serde_json::Value,
     pub(super) disable_sign_up: bool,
     pub(super) override_user_info: bool,
@@ -166,6 +167,7 @@ fn api_error_or(
 
 fn account_query_error(
     error: AuthError,
+    request: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> OAuthSignInError {
     ctx.config.logger.error(
@@ -183,16 +185,17 @@ fn account_query_error(
         .unwrap_or_else(|| format!("{}/error", super::handlers::auth_base_url(ctx)));
     let location =
         better_auth_core::utils::url::append_query_params(&target, "error=internal_server_error");
-    OAuthSignInError::Auth(match location {
-        Ok(location) => AuthError::redirect(location),
-        Err(error) => error,
-    })
+    OAuthSignInError::Auth(
+        match location.and_then(|location| request.redirect(location)) {
+            Ok(error) | Err(error) => error,
+        },
+    )
 }
 
 pub(super) async fn process_oauth_sign_in(
     provider_name: &str,
     provider: &ResolvedProvider,
-    user_info: &OAuthUserInfo,
+    user_info: &FieldValue,
     account: &better_auth_core::FieldMap,
     options: OAuthSignInOptions<'_>,
     meta: &better_auth_core::RequestMeta,
@@ -215,22 +218,11 @@ pub(super) async fn process_oauth_sign_in(
                 provider.config.require_email_verification.unwrap_or(false)
             })
     };
-    let email_verified = user_info.email_verified()?;
-    let Some(provider_email) = user_info.email()?.filter(|email| !email.is_empty()) else {
-        return Err(OAuthSignInError::Generic("email not found".to_string()));
-    };
-
-    let user_info = OAuthUserInfo {
-        name: Some(user_info.name()?.unwrap_or_default().to_owned()).into(),
-        ..user_info.clone()
-    };
-    let user_info = &user_info;
-
     let account_owner = ctx
         .database
         .get_account_owner_value(&provider_id, &account_id)
         .await
-        .map_err(|error| account_query_error(error, ctx))?;
+        .map_err(|error| account_query_error(error, options.request, ctx))?;
 
     let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
         Some(options.request),
@@ -242,11 +234,16 @@ pub(super) async fn process_oauth_sign_in(
     let (account_owner, existing_user) = match account_owner {
         Some(owner) => (Some(owner), None),
         None => {
-            let existing = ctx
-                .database
-                .get_user_with_accounts(&provider_email.to_lowercase())
-                .await
-                .map_err(|error| api_error_or(error, |error| account_query_error(error, ctx)))?;
+            let existing = async {
+                let email = super::native_user::lowercase(&lower_email(user_info)?, "email")?;
+                ctx.database.get_user_with_accounts_value(&email).await
+            }
+            .await
+            .map_err(|error| {
+                api_error_or(error, |error| {
+                    account_query_error(error, options.request, ctx)
+                })
+            })?;
             match existing {
                 Some(existing) => {
                     let better_auth_core::store::JoinValue::Many(accounts) = existing.accounts
@@ -359,12 +356,12 @@ pub(super) async fn process_oauth_sign_in(
 
         let mut owner_user = owner.user;
         if let better_auth_core::store::JoinValue::One(Some(user)) = &owner_user
-            && email_verified
+            && user_info.model_property("emailVerified")?.is_truthy()
             && !user.email_verified().is_truthy()?
             && user
                 .email()
                 .field_value()
-                .strict_equals(&provider_email.to_lowercase().into())
+                .strict_equals(&lower_email(user_info)?)
         {
             let _ = ctx
                 .database
@@ -378,32 +375,12 @@ pub(super) async fn process_oauth_sign_in(
                 .await?;
         }
         if options.override_user_info {
-            let (id, existing_verified) = match &owner_user {
-                better_auth_core::store::JoinValue::One(Some(user)) => (
-                    user.id().field_value(),
-                    if user
-                        .email()
-                        .field_value()
-                        .strict_equals(&provider_email.to_lowercase().into())
-                        && user.email_verified().is_truthy()?
-                    {
-                        user.email_verified().field_value()
-                    } else {
-                        email_verified.into()
-                    },
-                ),
-                _ => (
-                    better_auth_core::FieldValue::Undefined,
-                    email_verified.into(),
-                ),
+            let existing = match &owner_user {
+                better_auth_core::store::JoinValue::One(Some(user)) => Some(user),
+                _ => None,
             };
-            let updated = ctx
-                .database
-                .update_user_by_id_value(
-                    &id,
-                    provider_profile_update(ctx, user_info, provider_email, existing_verified)?,
-                )
-                .await?;
+            let (id, update) = provider_profile_update(ctx, user_info, existing)?;
+            let updated = ctx.database.update_user_by_id_value(&id, update).await?;
             if let Some(user) = updated {
                 owner_user = better_auth_core::store::JoinValue::One(Some(user));
             } else {
@@ -457,7 +434,7 @@ pub(super) async fn process_oauth_sign_in(
         // an unverified local account is not implicitly linkable.
         if !linking.enabled()
             || linking.disable_implicit_linking
-            || (!trusted_provider && !email_verified)
+            || (!trusted_provider && !user_info.model_property("emailVerified")?.is_truthy())
             || (linking.require_local_email_verified
                 && !existing_user.email_verified().is_truthy()?)
         {
@@ -513,12 +490,12 @@ pub(super) async fn process_oauth_sign_in(
         })?
         .ok_or_else(|| OAuthSignInError::Generic("unable to link account".to_owned()))?;
 
-        if email_verified
+        if user_info.model_property("emailVerified")?.is_truthy()
             && !existing_user.email_verified().is_truthy()?
             && existing_user
                 .email()
                 .field_value()
-                .strict_equals(&provider_email.to_lowercase().into())
+                .strict_equals(&lower_email(user_info)?)
         {
             let _ = ctx
                 .database
@@ -540,27 +517,8 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .unwrap_or_else(|| existing_user.clone());
         if options.override_user_info {
-            let updated = ctx
-                .database
-                .update_user_by_id_value(
-                    &existing_user.id().field_value(),
-                    provider_profile_update(
-                        ctx,
-                        user_info,
-                        provider_email,
-                        if existing_user
-                            .email()
-                            .field_value()
-                            .strict_equals(&provider_email.to_lowercase().into())
-                            && existing_user.email_verified().is_truthy()?
-                        {
-                            existing_user.email_verified().field_value()
-                        } else {
-                            email_verified.into()
-                        },
-                    )?,
-                )
-                .await?;
+            let (id, update) = provider_profile_update(ctx, user_info, Some(&existing_user))?;
+            let updated = ctx.database.update_user_by_id_value(&id, update).await?;
             if let Some(user) = updated {
                 linked_user = user;
             } else {
@@ -593,16 +551,9 @@ pub(super) async fn process_oauth_sign_in(
         }
 
         let created_user = async {
-            let mut fields = provider_profile_fields(ctx, user_info, true)?;
-            fields.extend([
-                ("email".into(), provider_email.to_lowercase().into()),
-                ("emailVerified".into(), email_verified.into()),
-            ]);
-            let create_user = CreateUser {
-                additional_fields: fields,
-                ..Default::default()
-            };
+            let fields = provider_profile_fields(ctx, user_info, true)?;
             let account = oauth_account_input(ctx, account)?;
+            let user_info = user_info.clone();
 
             let context = ctx.clone();
             let request = options.request.clone();
@@ -624,7 +575,19 @@ pub(super) async fn process_oauth_sign_in(
                         endpoint.path = Some(callback_path(&request));
                         endpoint.session = admission_session;
                         endpoint.transaction = Some(tx);
-                        let mut create_user = create_user.into_user_fields()?;
+                        let mut fields = fields;
+                        fields.extend([
+                            ("email".into(), lower_email(&user_info)?),
+                            (
+                                "emailVerified".into(),
+                                user_info.model_property("emailVerified")?,
+                            ),
+                        ]);
+                        let mut create_user = CreateUser {
+                            additional_fields: fields,
+                            ..Default::default()
+                        }
+                        .into_user_fields()?;
                         if let Err(error) = crate::plugins::user_admission::validate_create(
                             &create_user,
                             source,
@@ -642,6 +605,7 @@ pub(super) async fn process_oauth_sign_in(
                                 AuthError::internal("Cannot read properties of null (reading 'id')")
                             })?;
                         let mut account = account;
+                        account.field_order = account.fields()?.keys().cloned().collect();
                         account.field_order.push("userId".into());
                         account.user_id = user.id().into_owned();
                         let created_account = tx.create_account_optional(account).await?;
@@ -683,12 +647,12 @@ pub(super) async fn process_oauth_sign_in(
 
 pub(super) fn token_account(
     provider_name: &str,
-    account_id: &str,
+    account_id: &FieldValue,
     tokens: &OAuthTokenSet,
 ) -> AuthResult<better_auth_core::FieldMap> {
     let mut account = better_auth_core::FieldMap::from([
         ("providerId".into(), provider_name.into()),
-        ("accountId".into(), account_id.into()),
+        ("accountId".into(), account_id.clone()),
     ]);
     account.extend(tokens.fields());
     let _ = account.insert(
@@ -759,41 +723,52 @@ fn oauth_account_input(
 
 fn provider_profile_update<S: better_auth_core::AuthSchema>(
     ctx: &AuthContext<S>,
-    user_info: &OAuthUserInfo,
-    provider_email: &str,
-    email_verified: better_auth_core::FieldValue,
-) -> AuthResult<UpdateUser> {
+    user_info: &FieldValue,
+    existing: Option<&UserView>,
+) -> AuthResult<(FieldValue, UpdateUser)> {
     let mut fields = provider_profile_fields(ctx, user_info, false)?;
-    fields.extend([
-        ("email".into(), provider_email.to_lowercase().into()),
-        ("emailVerified".into(), email_verified),
-    ]);
-    Ok(UpdateUser {
-        additional_fields: fields,
-        ..Default::default()
-    })
+    let id = existing
+        .map(|user| user.id().field_value())
+        .unwrap_or_default();
+    let _ = fields.insert("email".into(), lower_email(user_info)?);
+    let same_email = lower_email(user_info)?.strict_equals(
+        &existing
+            .map(|user| user.email().field_value())
+            .unwrap_or_default(),
+    );
+    let verified = if same_email {
+        existing
+            .map(|user| user.email_verified().field_value())
+            .unwrap_or_default()
+    } else {
+        FieldValue::Undefined
+    };
+    let _ = fields.insert(
+        "emailVerified".into(),
+        if same_email && verified.is_truthy() {
+            verified
+        } else {
+            user_info.model_property("emailVerified")?
+        },
+    );
+    Ok((
+        id,
+        UpdateUser {
+            additional_fields: fields,
+            ..Default::default()
+        },
+    ))
 }
 
 pub(super) fn provider_profile_fields(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-    user_info: &OAuthUserInfo,
+    user_info: &FieldValue,
     create: bool,
 ) -> AuthResult<better_auth_core::FieldMap> {
-    let additional = ctx
-        .config
-        .user
-        .parse_provider_input(&user_info.additional_fields, create)?;
-    let mut fields = better_auth_core::FieldMap::from([
-        ("name".into(), user_info.name.field_value()),
-        (
-            "image".into(),
-            user_info
-                .image
-                .clone()
-                .map(|image| image.map_or(better_auth_core::FieldValue::Null, Into::into))
-                .unwrap_or_default(),
-        ),
-    ]);
+    let (name, image, profile) = super::native_user::profile_fields(user_info, true)?;
+    let additional = ctx.config.user.parse_provider_input(&profile, create)?;
+    let mut fields =
+        better_auth_core::FieldMap::from([("name".into(), name), ("image".into(), image)]);
     fields.extend(additional);
     Ok(fields)
 }
@@ -807,17 +782,22 @@ pub(crate) async fn sign_in_verified_profile(
     req: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AuthResponse> {
+    let resolved = ResolvedProvider {
+        config: provider.clone(),
+        generic: None,
+    };
+    let account_id: FieldValue = user.user.id.clone().into();
+    let info = user.into_native();
+    let profile = info.model_property("data")?;
+    let user = info.model_property("user")?;
     let outcome = process_oauth_sign_in(
         provider_name,
-        &ResolvedProvider {
-            config: provider.clone(),
-            generic: None,
-        },
-        &user.user,
-        &token_account(provider_name, &user.user.id, &tokens)?,
+        &resolved,
+        &user,
+        &token_account(provider_name, &account_id, &tokens)?,
         OAuthSignInOptions {
             request: req,
-            profile: Some(&user.data),
+            profile: Some(&profile),
             body: req.body_as_json()?,
             disable_sign_up,
             override_user_info: false,
@@ -857,40 +837,17 @@ pub(crate) async fn sign_in_verified_profile(
 }
 
 pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
-    user: &OAuthUserInfo,
+    user: &FieldValue,
     user_id: better_auth_core::FieldValue,
     provider: &better_auth_core::FieldValue,
-    profile: Option<&serde_json::Value>,
+    profile: Option<&FieldValue>,
     action: crate::plugins::user_admission::UserValidationAction,
     endpoint: &crate::plugins::endpoint_context::EndpointContext<'_, S>,
 ) -> AuthResult<()> {
-    let mut fields = user.additional_fields.clone();
+    let _ = user.model_property("id")?;
+    let mut fields = user.enumerable_fields_except(&["id"])?;
     let _ = fields.insert("id".into(), user_id);
-    if let Some(email) = user.email()? {
-        let _ = fields.insert("email".into(), email.to_lowercase().into());
-    } else if user.email.is_undefined() {
-        let _ = fields.remove("email");
-    } else {
-        let _ = fields.insert("email".into(), better_auth_core::FieldValue::Null);
-    }
-    let verified = user.email_verified.field_value();
-    if !verified.is_undefined() {
-        let _ = fields.insert("emailVerified".into(), verified);
-    } else {
-        let _ = fields.remove("emailVerified");
-    }
-    if let Some(name) = user.name()? {
-        let _ = fields.insert("name".into(), name.into());
-    }
-    if let Some(image) = &user.image {
-        let _ = fields.insert(
-            "image".into(),
-            image.clone().map_or(
-                better_auth_core::FieldValue::Null,
-                better_auth_core::FieldValue::String,
-            ),
-        );
-    }
+    let _ = fields.insert("email".into(), lower_email(user)?);
     crate::plugins::user_admission::validate(
         crate::plugins::user_admission::UserValidationData {
             user: fields,

@@ -158,29 +158,34 @@ async fn verified_paybin_profiles_and_mapper_data_match_pinned_results() {
         }));
         let resolved = resolved(config);
         for code_flow in [true, false] {
+            let profile_request = server.request();
+            let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
             let response = if code_flow {
-                let profile_request = server.request();
                 social_profile::fetch_user_info_for_code(
                     &resolved,
-                    &OAuthTokenSet::from_fields(profile_request.fields()),
+                    &subject_tokens,
                     profile_request,
                     None,
                 )
                 .await
             } else {
-                let profile_request = server.request();
                 social_profile::fetch_user_info_from_provider(
                     &resolved,
-                    &OAuthTokenSet::from_fields(profile_request.fields()),
+                    &subject_tokens,
                     profile_request,
                     None,
                 )
                 .await
             }
-            .unwrap()
             .unwrap();
-            assert_eq!(response.user.id, sample["profile"]["sub"].as_str().unwrap());
-            let result = public(response);
+            assert_eq!(
+                profile_test_support::subject(&resolved, &subject_tokens, &response)
+                    .await
+                    .json()
+                    .unwrap(),
+                Some(sample["profile"]["sub"].clone())
+            );
+            let result = profile_test_support::json(response);
             assert_eq!(
                 result["user"], sample["result"]["user"],
                 "{}",
@@ -210,28 +215,26 @@ struct CustomInfo {
 }
 #[async_trait]
 impl OAuthUserInfoHandler for CustomInfo {
-    async fn get_user_info(
+    async fn get_user_info_native(
         &self,
         _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    ) -> AuthResult<better_auth_core::FieldValue> {
         self.calls.lock().unwrap().push("custom".into());
         if self.mode == "custom error" {
             return Err(AuthError::internal("Ordinary Paybin custom error"));
         }
         if self.mode == "custom null" {
-            return Ok(None);
+            return Ok(better_auth_core::FieldValue::Null);
         }
-        Ok(Some(OAuthUserInfoResponse {
-            user: OAuthUserInfo {
-                id: "ordinary-paybin-owner".into(),
-                name: Some("Custom Owner".into()).into(),
-                email: Some("custom@example.com".into()).into(),
-                image: None,
-                email_verified: Some(false).into(),
-                additional_fields: Default::default(),
+        Ok(json!({
+            "user": {
+                "name": "Custom Owner",
+                "email": "custom@example.com",
+                "emailVerified": false
             },
-            data: json!({"ordinary":"custom profile"}),
-        }))
+            "data": {"ordinary": "custom profile"}
+        })
+        .into())
     }
 }
 
@@ -272,10 +275,7 @@ async fn paybin_missing_profile_custom_handlers_and_mapper_keep_original_results
         match result {
             Ok(result) => {
                 events.push("returned".into());
-                assert_eq!(
-                    result.map(public),
-                    sample.get("result").filter(|v| !v.is_null()).cloned()
-                );
+                assert_eq!(profile_test_support::json(result), sample["result"]);
             }
             Err(error) => {
                 events.push("rejected".into());
@@ -336,9 +336,8 @@ async fn application_verified_paybin_profile_uses_the_completed_signature_check(
         verified,
     )
     .await
-    .unwrap()
     .unwrap();
-    assert_eq!(public(profile)["data"], server.claims);
+    assert_eq!(profile_test_support::data(&profile), server.claims);
     assert_eq!(
         *server.paths.lock().unwrap(),
         ["/.well-known/openid-configuration", "/keys/active"]

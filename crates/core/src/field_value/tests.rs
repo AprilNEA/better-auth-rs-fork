@@ -37,6 +37,13 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
             Ok(vec!["id".into()])
         }
 
+        fn own_property_descriptor(
+            &self,
+            name: &str,
+        ) -> AuthResult<Option<FieldPropertyDescriptor>> {
+            Ok((name == "id").then_some(FieldPropertyDescriptor { enumerable: true }))
+        }
+
         fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
             let _ = self.0.fetch_add(1, Ordering::SeqCst);
             Err(AuthError::internal("object source read failed"))
@@ -107,6 +114,16 @@ fn cyclic_live_objects_clone_and_fail_at_json_conversion_boundaries() -> AuthRes
     impl FieldObjectSource for CyclicSource {
         fn own_keys(&self) -> AuthResult<Vec<String>> {
             Ok(self.fields()?.keys().cloned().collect())
+        }
+
+        fn own_property_descriptor(
+            &self,
+            name: &str,
+        ) -> AuthResult<Option<FieldPropertyDescriptor>> {
+            Ok(self
+                .fields()?
+                .contains_key(name)
+                .then_some(FieldPropertyDescriptor { enumerable: true }))
         }
 
         fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {

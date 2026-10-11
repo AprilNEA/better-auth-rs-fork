@@ -4,8 +4,9 @@
 )]
 
 use super::google_test_support::GoogleFixture;
+use super::profile_test_support as profile_test;
 use super::*;
-use better_auth_core::AuthError;
+use better_auth_core::{AuthError, FieldValue};
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -263,28 +264,28 @@ impl OAuthProfileMapper for Mapper {
         Ok(mapped)
     }
 }
-struct CustomProfile(Arc<Mutex<Vec<&'static str>>>);
+struct CustomProfile {
+    calls: Arc<Mutex<Vec<&'static str>>>,
+    data: Value,
+}
 #[async_trait]
 impl OAuthUserInfoHandler for CustomProfile {
-    async fn get_user_info(
-        &self,
-        _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-        self.0
+    async fn get_user_info_native(&self, _: OAuthUserInfoRequest) -> AuthResult<FieldValue> {
+        self.calls
             .lock()
             .map_err(|_| better_auth_core::AuthError::internal("callback log poisoned"))?
             .push("get");
-        Ok(Some(OAuthUserInfoResponse {
-            user: OAuthUserInfo {
-                id: "custom-subject".into(),
-                email: Some("custom@example.test".into()).into(),
-                name: Some("Custom".into()).into(),
-                image: Some(Some("https://images.test/custom.png".into())),
-                email_verified: Some(true).into(),
-                additional_fields: [("locale".into(), "en".into())].into_iter().collect(),
+        Ok(json!({
+            "user": {
+                "name": "Custom",
+                "image": "https://images.test/custom.png",
+                "email": "custom@example.test",
+                "emailVerified": true,
+                "locale": "en"
             },
-            data: json!({"id":"custom-subject"}),
-        }))
+            "data": self.data
+        })
+        .into())
     }
 }
 
@@ -322,7 +323,22 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
                 calls: calls.clone(),
             }));
             if mode == "custom" {
-                provider.get_user_info = Some(Arc::new(CustomProfile(calls.clone())));
+                let data = match id {
+                    "google" => {
+                        json!({"sub":"google-subject","email":"owner@example.test","name":"Owner","picture":"https://images.test/owner.png","email_verified":true})
+                    }
+                    "github" => {
+                        json!({"id":123,"email":"owner@example.test","name":"Owner","login":"owner","avatar_url":"https://images.test/owner.png"})
+                    }
+                    "discord" => {
+                        json!({"id":"123456789","email":"owner@example.test","username":"Owner","avatar":"portrait","verified":true})
+                    }
+                    _ => return Err("Unknown fixture provider".into()),
+                };
+                provider.get_user_info = Some(Arc::new(CustomProfile {
+                    calls: calls.clone(),
+                    data,
+                }));
             }
             let config = resolve(id, provider).await?;
             assert!(
@@ -336,24 +352,18 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
                 id_token: ((id == "google").then(|| google.token.clone())).into(),
                 ..Default::default()
             };
-            let response = handlers::fetch_user_info_for_code(
-                config.providers.get(id).ok_or("missing provider")?,
-                &OAuthTokenSet::from_fields(profile_request.fields()),
-                profile_request,
-                None,
-            )
-            .await?
-            .ok_or("provider returned no profile")?;
+            let provider = config.providers.get(id).ok_or("missing provider")?;
+            let tokens = OAuthTokenSet::from_fields(profile_request.fields());
+            let response =
+                handlers::fetch_user_info_for_code(provider, &tokens, profile_request, None)
+                    .await?;
             assert_eq!(
-                response.user.id,
-                if mode == "custom" {
-                    "custom-subject"
-                } else {
-                    subject
-                }
+                profile_test::subject(provider, &tokens, &response)
+                    .await
+                    .json()?,
+                Some(json!(subject))
             );
-            let mut user = response.user.additional_fields.json()?;
-            user.extend(serde_json::from_value::<serde_json::Map<String, Value>>(json!({"name":response.user.name,"image":response.user.image,"email":response.user.email,"emailVerified":response.user.email_verified}))?);
+            let user = profile_test::user(&response);
             let actual =
                 json!({"user":user,"calls":*calls.lock().map_err(|_| "callback log poisoned")?});
             assert_eq!(
@@ -381,23 +391,19 @@ async fn google_stored_account_profile_keeps_access_token_userinfo()
         access_token: (Some("normal-account-info-token".into())).into(),
         ..Default::default()
     };
-    let response = handlers::fetch_user_info_from_provider(
-        config.providers.get("google").ok_or("missing provider")?,
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await?
-    .ok_or("provider returned no profile")?;
+    let provider = config.providers.get("google").ok_or("missing provider")?;
+    let tokens = OAuthTokenSet::from_fields(profile_request.fields());
+    let response =
+        handlers::fetch_user_info_from_provider(provider, &tokens, profile_request, None).await?;
+    let user = profile_test::user(&response);
+    assert_eq!(user.get("name"), Some(&json!("Owner")));
+    assert_eq!(user.get("email"), Some(&json!("owner@example.test")));
     assert_eq!(
-        response.user.name.typed().unwrap().as_deref(),
-        Some("Owner")
+        profile_test::subject(provider, &tokens, &response)
+            .await
+            .json()?,
+        Some(json!("google-subject"))
     );
-    assert_eq!(
-        response.user.email.typed()?.as_deref(),
-        Some("owner@example.test")
-    );
-    assert_eq!(response.user.id, "google-subject");
     Ok(())
 }
 

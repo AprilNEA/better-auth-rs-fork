@@ -68,32 +68,33 @@ async fn id_token_profile_is_preferred_and_mapping_cannot_change_account_subject
         .into(),
         ..Default::default()
     };
-    let response = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(tokens.fields()),
-        &tokens,
-        None,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    assert_eq!(response.user.id, "immutable-subject");
+    let response = fetch_profile(&provider, &tokens, None).await.unwrap();
+    let user = response.model_property("user").unwrap();
+    let data = response.model_property("data").unwrap();
     assert_eq!(
-        response.user.email.typed().unwrap().as_deref(),
-        Some("mapped@example.com")
+        resolve_account_subject(
+            &provider,
+            &OAuthTokenSet::from_fields(tokens.fields()),
+            &data
+        )
+        .await
+        .unwrap(),
+        FieldValue::from("immutable-subject")
     );
     assert_eq!(
-        response.user.name.typed().unwrap().as_deref(),
-        Some("Mapped name")
+        user.json().unwrap().unwrap(),
+        json!({
+            "email": "mapped@example.com",
+            "emailVerified": true,
+            "image": "https://example.com/image.png",
+            "name": "Mapped name"
+        })
     );
-    assert!(matches!(response.user.email_verified(), Ok(true)));
-    assert_eq!(
-        response.user.image.as_ref().and_then(Option::as_deref),
-        Some("https://example.com/image.png")
-    );
-    assert_eq!(response.data["email"], "original@example.com");
-    assert_eq!(response.data["id"], "profile-alias");
-    assert_eq!(response.data["emailVerified"], false);
+    assert!(user.model_property("id").unwrap().is_undefined());
+    let data = data.json().unwrap().unwrap();
+    assert_eq!(data["email"], "original@example.com");
+    assert_eq!(data["id"], "profile-alias");
+    assert_eq!(data["emailVerified"], false);
 }
 
 struct RawProfile {
@@ -131,22 +132,18 @@ async fn mapped_null_omits_image_without_changing_raw_profile() {
         .into(),
         ..Default::default()
     };
-    let response = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(tokens.fields()),
-        &tokens,
-        None,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    assert_eq!(response.user.name, None);
-    assert_eq!(response.user.image, None);
-    assert_eq!(response.data["name"], "Provider name");
-    assert_eq!(
-        response.data["image"],
-        "https://example.com/provider-image.png"
-    );
+    let response = fetch_profile(&provider, &tokens, None).await.unwrap();
+    let user = response.model_property("user").unwrap();
+    assert!(user.model_property("name").unwrap().is_null());
+    assert!(user.model_property("image").unwrap().is_undefined());
+    let data = response
+        .model_property("data")
+        .unwrap()
+        .json()
+        .unwrap()
+        .unwrap();
+    assert_eq!(data["name"], "Provider name");
+    assert_eq!(data["image"], "https://example.com/provider-image.png");
 }
 
 #[async_trait]
@@ -193,12 +190,12 @@ async fn generic_profile_preserves_email_presence_without_normalization() {
         );
         let response = fetch_profile(&provider, &OAuthUserInfoRequest::default(), None)
             .await
-            .unwrap()
             .unwrap();
-        let user = serde_json::to_value(response.user).unwrap();
+        let response = response.json().unwrap().unwrap();
+        let user = &response["user"];
         assert_eq!(user.get("email"), email.as_ref(), "{label}");
-        assert_eq!(user, expected_user, "{label}");
-        assert_eq!(response.data, raw.profile, "{label}");
+        assert_eq!(user, &expected_user, "{label}");
+        assert_eq!(response["data"], raw.profile, "{label}");
         assert_eq!(raw.calls.load(Ordering::SeqCst), 1, "{label}");
     }
 }
@@ -283,13 +280,13 @@ async fn generic_profile_preserves_name_presence_and_mapper_overrides() {
             );
             let response = fetch_profile(&provider, &OAuthUserInfoRequest::default(), None)
                 .await
-                .unwrap()
                 .unwrap();
-            let user = serde_json::to_value(response.user).unwrap();
+            let response = response.json().unwrap().unwrap();
+            let user = &response["user"];
             let case = format!("{raw_label}/{mapped_label}");
             assert_eq!(user.get("name"), expected_name.as_ref(), "{case}");
-            assert_eq!(user, expected_user, "{case}");
-            assert_eq!(response.data, raw.profile, "{case}");
+            assert_eq!(user, &expected_user, "{case}");
+            assert_eq!(response["data"], raw.profile, "{case}");
             assert_eq!(raw.calls.load(Ordering::SeqCst), 1, "{case}");
             assert_eq!(mapper.calls.load(Ordering::SeqCst), 1, "{case}");
         }
@@ -394,18 +391,20 @@ async fn custom_generic_callbacks_preserve_native_tokens_and_separate_nonce_meta
         false,
     );
     let request = OAuthUserInfoRequest::from_fields(fields);
-    let response = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(request.fields()),
-        &request,
-        None,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    assert_eq!(response.user.id, "native-subject");
+    let response = fetch_profile(&provider, &request, None).await.unwrap();
+    let data = response.model_property("data").unwrap();
     assert_eq!(
-        response.data,
+        resolve_account_subject(
+            &provider,
+            &OAuthTokenSet::from_fields(request.fields()),
+            &data
+        )
+        .await
+        .unwrap(),
+        FieldValue::from("native-subject")
+    );
+    assert_eq!(
+        data.json().unwrap().unwrap(),
         json!({"id": "native-subject", "email": "native@example.com"})
     );
     assert_eq!(callbacks.calls.load(Ordering::SeqCst), 2);
@@ -444,21 +443,25 @@ async fn custom_profile_and_subject_callbacks_receive_original_data() {
         access_token: (Some("access".to_string())).into(),
         ..Default::default()
     };
-    let response = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(tokens.fields()),
-        &tokens,
-        None,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    assert_eq!(response.user.id, "tenant:42");
+    let response = fetch_profile(&provider, &tokens, None).await.unwrap();
+    let data = response.model_property("data").unwrap();
     assert_eq!(
-        response.user.email.typed().unwrap().as_deref(),
-        Some("mapped@example.com")
+        resolve_account_subject(
+            &provider,
+            &OAuthTokenSet::from_fields(tokens.fields()),
+            &data
+        )
+        .await
+        .unwrap(),
+        FieldValue::from("tenant:42")
     );
-    assert_eq!(response.data, raw.profile);
+    let user = response.model_property("user").unwrap();
+    assert_eq!(
+        user.model_property("email").unwrap(),
+        FieldValue::from("mapped@example.com")
+    );
+    assert!(user.model_property("id").unwrap().is_undefined());
+    assert_eq!(data.json().unwrap().unwrap(), raw.profile);
     assert_eq!(raw.calls.load(Ordering::SeqCst), 1);
 }
 
@@ -510,24 +513,26 @@ async fn id_token_without_email_falls_back_to_userinfo_with_access_token() {
         id_token: (Some(encoded_claims(json!({ "sub": "id-token-subject" })))).into(),
         ..Default::default()
     };
-    let response = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(tokens.fields()),
-        &tokens,
-        None,
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    assert_eq!(response.user.id, "userinfo-subject");
+    let response = fetch_profile(&provider, &tokens, None).await.unwrap();
+    let data = response.model_property("data").unwrap();
     assert_eq!(
-        response.user.email.typed().unwrap().as_deref(),
-        Some("userinfo@example.com")
+        resolve_account_subject(
+            &provider,
+            &OAuthTokenSet::from_fields(tokens.fields()),
+            &data
+        )
+        .await
+        .unwrap(),
+        FieldValue::from("userinfo-subject")
     );
-    assert!(matches!(response.user.email_verified(), Ok(false)));
+    let user = response.model_property("user").unwrap();
     assert_eq!(
-        response.user.image.as_ref().and_then(Option::as_deref),
-        Some("https://example.com/picture.png")
+        user.json().unwrap().unwrap(),
+        json!({
+            "email": "userinfo@example.com",
+            "emailVerified": false,
+            "image": "https://example.com/picture.png"
+        })
     );
     task.await.unwrap();
 }
@@ -559,14 +564,7 @@ async fn invalid_verified_id_token_cannot_fall_back_to_custom_profile() {
         expected_id_token_nonce: Some("expected-nonce".to_string()).into(),
         ..Default::default()
     };
-    let error = fetch_user_info(
-        &provider,
-        &OAuthTokenSet::from_fields(tokens.fields()),
-        &tokens,
-        None,
-    )
-    .await
-    .unwrap_err();
+    let error = fetch_profile(&provider, &tokens, None).await.unwrap_err();
     assert!(error.to_string().contains("ID token verification failed"));
     assert_eq!(raw.calls.load(Ordering::SeqCst), 0);
 }
@@ -590,14 +588,13 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             },
             false,
         );
-        let error = fetch_user_info(
-            &provider,
-            &OAuthTokenSet::default(),
-            &OAuthUserInfoRequest::default(),
-            None,
-        )
-        .await
-        .unwrap_err();
+        let response = fetch_profile(&provider, &OAuthUserInfoRequest::default(), None)
+            .await
+            .unwrap();
+        let data = response.model_property("data").unwrap();
+        let error = resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
+            .await
+            .unwrap_err();
         assert!(error.to_string().contains("OAUTH_ACCOUNT_SUBJECT_INVALID"));
     }
     for (subject, expected) in [(42.0, "42"), (-0.0, "0"), (1e-7, "1e-7"), (1e21, "1e+21")] {
@@ -611,19 +608,15 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             },
             false,
         );
-        assert_eq!(
-            fetch_user_info(
-                &provider,
-                &OAuthTokenSet::default(),
-                &OAuthUserInfoRequest::default(),
-                None
-            )
+        let response = fetch_profile(&provider, &OAuthUserInfoRequest::default(), None)
             .await
-            .unwrap()
-            .unwrap()
-            .user
-            .id,
-            expected
+            .unwrap();
+        let data = response.model_property("data").unwrap();
+        assert_eq!(
+            resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
+                .await
+                .unwrap(),
+            FieldValue::from(expected)
         );
     }
 }

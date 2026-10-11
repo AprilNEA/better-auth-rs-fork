@@ -19,6 +19,13 @@ impl FieldObjectSource for AccessProbe {
         self.inner.own_keys()
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        self.inner.own_property_descriptor(name)
+    }
+
     fn has_property(&self, name: &str) -> AuthResult<bool> {
         if self.presence {
             self.events.lock().unwrap().push(format!("has:{name}"));

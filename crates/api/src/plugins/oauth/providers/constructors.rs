@@ -95,6 +95,7 @@ impl OAuthProvider {
             map_user_info: None,
             map_profile_to_user: None,
             get_user_info: None,
+            account_subject: None,
             refresh_access_token: None,
             verify_id_token: None,
             disable_implicit_sign_up: None,

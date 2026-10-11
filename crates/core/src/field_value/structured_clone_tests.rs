@@ -39,6 +39,15 @@ impl FieldObjectSource for Source {
             .collect())
     }
 
+    fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        Ok(self
+            .fields
+            .lock()
+            .map_err(poisoned)?
+            .contains_key(name)
+            .then_some(FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         self.events
             .lock()
@@ -223,6 +232,9 @@ struct RejectedRecord {
 impl FieldObjectSource for RejectedRecord {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         Ok(Vec::new())
+    }
+    fn own_property_descriptor(&self, _: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        Ok(None)
     }
     fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
         Ok(None)

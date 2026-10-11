@@ -225,7 +225,9 @@ impl Serialize for JsonNode<'_> {
                     )));
                 }
                 let result = (|| {
-                    let keys = object.own_keys().map_err(|error| self.1.error(error))?;
+                    let keys = object
+                        .enumerable_keys()
+                        .map_err(|error| self.1.error(error))?;
                     let mut output = serializer.serialize_map(None)?;
                     for name in keys {
                         let value = object

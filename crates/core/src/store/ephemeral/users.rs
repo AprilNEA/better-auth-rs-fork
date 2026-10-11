@@ -15,7 +15,7 @@ impl EphemeralStore {
             .await
     }
 
-    async fn user_ref_by_field_value(
+    pub(super) async fn user_ref_by_field_value(
         &self,
         name: &str,
         value: &Value,
@@ -31,7 +31,11 @@ impl EphemeralStore {
         .await
     }
 
-    fn user_field_selector(&self, name: &str, value: &Value) -> AuthResult<(String, Value)> {
+    pub(super) fn user_field_selector(
+        &self,
+        name: &str,
+        value: &Value,
+    ) -> AuthResult<(String, Value)> {
         let schema = self.user_schema();
         let (logical, field) = schema
             .fields()
@@ -338,6 +342,14 @@ impl UserStore<StatelessSchema> for EphemeralStore {
     async fn get_user_with_accounts(
         &self,
         email: &str,
+    ) -> AuthResult<Option<crate::store::UserAccounts>> {
+        self.get_user_with_accounts_value(&Value::from(email.to_lowercase()))
+            .await
+    }
+
+    async fn get_user_with_accounts_value(
+        &self,
+        email: &Value,
     ) -> AuthResult<Option<crate::store::UserAccounts>> {
         let relation = crate::store::UserAccounts::resolve_schema(
             &self.config,

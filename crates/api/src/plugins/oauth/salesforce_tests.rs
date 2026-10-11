@@ -65,7 +65,7 @@ fn constructor_endpoints_scopes_pkce_and_redirect_match_pinned_salesforce() {
         Some("https://login.salesforce.com/services/oauth2/userinfo")
     );
     assert!(config.scopes.is_none());
-    assert!(!config.account_info_includes_id());
+    assert!(!config.default_profile_includes_id());
     for host in [
         "login.salesforce.com",
         "test.salesforce.com",
@@ -223,7 +223,7 @@ impl Server {
     }
 }
 
-async fn fetch(config: OAuthProvider) -> AuthResult<Option<OAuthUserInfoResponse>> {
+async fn fetch(config: OAuthProvider) -> AuthResult<social_profile::ProviderProfile> {
     let profile_request = OAuthUserInfoRequest {
         access_token: (Some("ordinary-access".into())).into(),
         ..Default::default()
@@ -235,18 +235,6 @@ async fn fetch(config: OAuthProvider) -> AuthResult<Option<OAuthUserInfoResponse
         None,
     )
     .await
-}
-
-fn public_user(user: OAuthUserInfo) -> Value {
-    serde_json::to_value(types::AccountInfoUser {
-        id: None,
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        email_verified: user.email_verified,
-        additional_fields: user.additional_fields,
-    })
-    .unwrap()
 }
 
 #[tokio::test]
@@ -373,7 +361,7 @@ async fn normal_http_profiles_preserve_photo_fallback_and_nullable_email() {
         }
         let events = Arc::new(Mutex::new(Vec::new()));
         let server = Server::start(raw.clone(), 200, events.clone()).await;
-        let response = fetch(server.config()).await.unwrap().unwrap();
+        let response = fetch(server.config()).await.unwrap();
         let mut expected = json!({"name":"Salesforce Owner","emailVerified":verified.and_then(|value|value.as_bool()).unwrap_or(false)});
         if let Some(email) = email {
             expected["email"] = email;
@@ -381,9 +369,19 @@ async fn normal_http_profiles_preserve_photo_fallback_and_nullable_email() {
         if let Some(image) = image {
             expected["image"] = image;
         }
-        assert_eq!(response.user.id, "salesforce-owner");
-        assert_eq!(response.data, raw);
-        assert_eq!(public_user(response.user), expected);
+        assert_eq!(
+            profile_test_support::subject(
+                &resolved(server.config()),
+                &OAuthTokenSet::default(),
+                &response
+            )
+            .await
+            .json()
+            .unwrap(),
+            Some(json!("salesforce-owner"))
+        );
+        assert_eq!(profile_test_support::data(&response), raw);
+        assert_eq!(profile_test_support::user(&response), expected);
         let requests = server.requests.lock().unwrap();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].line, "GET /profile HTTP/1.1\r\n");
@@ -440,11 +438,11 @@ async fn raw_profile_mapper_is_awaited_and_overrides_default_fields() {
     assert_eq!(*events.lock().unwrap(), ["http", "map:start"]);
     assert!(!response.is_finished());
     resume.notify_one();
-    let response = response.await.unwrap().unwrap().unwrap();
+    let response = response.await.unwrap().unwrap();
     events.lock().unwrap().push("returned");
-    assert_eq!(response.data, profile());
+    assert_eq!(profile_test_support::data(&response), profile());
     assert_eq!(
-        public_user(response.user),
+        profile_test_support::user(&response),
         json!({"name":"Mapped Salesforce Owner","email":null,"image":null,"emailVerified":false})
     );
     assert_eq!(
@@ -460,20 +458,21 @@ struct Custom {
 
 #[async_trait]
 impl OAuthUserInfoHandler for Custom {
-    async fn get_user_info(
+    async fn get_user_info_native(
         &self,
         _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    ) -> AuthResult<better_auth_core::FieldValue> {
         self.events.lock().unwrap().push("custom");
         match self.mode {
             "error" => Err(AuthError::internal(
                 "Ordinary custom Salesforce profile failed",
             )),
-            "null" => Ok(None),
-            _ => Ok(Some(OAuthUserInfoResponse {
-                user: provider().decode_profile(profile())?.unwrap(),
-                data: profile(),
-            })),
+            "null" => Ok(better_auth_core::FieldValue::Null),
+            _ => Ok(json!({
+                "user": {"name":"Custom Owner", "email":profile()["email"], "emailVerified":false},
+                "data":profile(),
+            })
+            .into()),
         }
     }
 }
@@ -504,8 +503,8 @@ async fn default_failures_return_none_while_custom_results_bypass_http_mapper_an
             "error" => assert!(
                 matches!(response.unwrap_err(), AuthError::Internal(message) if message == "Ordinary custom Salesforce profile failed")
             ),
-            "success" => assert_eq!(response.unwrap().unwrap().data, profile()),
-            _ => assert!(response.unwrap().is_none()),
+            "success" => assert_eq!(profile_test_support::data(&response.unwrap()), profile()),
+            _ => assert!(response.unwrap().value.is_null()),
         }
         let expected = match mode {
             "http503" => vec!["http"],

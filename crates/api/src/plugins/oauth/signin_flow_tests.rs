@@ -205,10 +205,11 @@ async fn sign_in(
                 name: Some("Provider owner".to_owned()).into(),
                 image: None,
                 email_verified: Some(true).into(),
-            },
+            }
+            .into_native(),
             &token_account(
                 "google",
-                "provider-owner",
+                &"provider-owner".into(),
                 &OAuthTokenSet {
                     access_token: Some("new-access".into()).into(),
                     ..Default::default()

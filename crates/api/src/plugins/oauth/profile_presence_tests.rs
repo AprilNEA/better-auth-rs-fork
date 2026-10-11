@@ -1,23 +1,20 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use better_auth_core::{AuthError, AuthResult};
+use better_auth_core::{AuthError, AuthResult, FieldValue};
 use serde_json::Value;
 
 use super::fetch_user_info_for_code;
 use crate::plugins::oauth::{
     OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfoHandler,
-    OAuthUserInfoRequest, OAuthUserInfoResponse, resolved::ResolvedProvider,
+    OAuthUserInfoRequest, resolved::ResolvedProvider,
 };
 
 struct EmptyProfile(Arc<Mutex<Vec<&'static str>>>);
 
 #[async_trait]
 impl OAuthUserInfoHandler for EmptyProfile {
-    async fn get_user_info(
-        &self,
-        request: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    async fn get_user_info_native(&self, request: OAuthUserInfoRequest) -> AuthResult<FieldValue> {
         assert_eq!(
             request.access_token.field_value().as_str(),
             Some("ordinary-profile-token")
@@ -26,7 +23,7 @@ impl OAuthUserInfoHandler for EmptyProfile {
             .lock()
             .map_err(|_| AuthError::internal("callback log poisoned"))?
             .push("custom");
-        Ok(None)
+        Ok(FieldValue::Null)
     }
 }
 
@@ -81,7 +78,7 @@ async fn custom_null_skips_default_http_and_mapper() -> AuthResult<()> {
             None,
         )
         .await?;
-        assert!(result.is_none());
+        assert!(result.value.is_null());
         assert_eq!(
             *calls
                 .lock()
@@ -223,26 +220,21 @@ mod discord {
                 profile_request,
                 None,
             )
-            .await?
-            .ok_or("Discord returned no profile")?;
+            .await?;
             server.await??;
             assert_eq!(
-                response.user.name.typed().unwrap().as_deref(),
-                Some(name),
+                crate::plugins::oauth::profile_test_support::json(response),
+                json!({
+                    "user": {
+                        "name": name,
+                        "image": image,
+                        "email": "owner@example.test",
+                        "emailVerified": true
+                    },
+                    "data": prepared
+                }),
                 "{label}"
             );
-            assert_eq!(
-                response.user.image.as_ref().and_then(Option::as_deref),
-                Some(image),
-                "{label}"
-            );
-            assert_eq!(
-                response.user.email.typed()?.as_deref(),
-                Some("owner@example.test"),
-                "{label}"
-            );
-            assert!(response.user.email_verified()?, "{label}");
-            assert_eq!(response.data, prepared, "{label}");
             assert_eq!(
                 *events
                     .lock()

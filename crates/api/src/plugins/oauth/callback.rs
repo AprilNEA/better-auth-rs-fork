@@ -279,7 +279,7 @@ pub(super) async fn handle_callback(
         Err(_) => return redirect_on_error("invalid_code", None),
     };
 
-    let user_info = match fetch_user_info_for_code(
+    let profile = fetch_user_info_for_code(
         provider,
         &tokens,
         callback_user_request(
@@ -289,11 +289,34 @@ pub(super) async fn handle_callback(
         )?,
         payload.id_token_nonce.as_deref(),
     )
+    .await?;
+    if !profile.value.is_truthy() || !profile.value.model_property("user")?.is_truthy() {
+        return redirect_on_error("unable_to_get_user_info", None);
+    }
+    let user_info = profile.value.model_property("user")?;
+    let provider_profile = profile.value.model_property("data")?;
+    let account_id = match async {
+        let data = profile.value.model_property("data")?;
+        super::social_profile::resolve_account_subject(
+            provider,
+            &tokens,
+            &data,
+            profile.legacy_subject.as_ref(),
+        )
+        .await
+    }
     .await
     {
-        Ok(Some(response)) => response,
-        Err(error) => return Err(error),
-        Ok(None) => return redirect_on_error("unable_to_get_user_info", None),
+        Ok(value) => value,
+        Err(error) => {
+            ctx.config.logger.error(
+                "Unable to derive provider account identity",
+                &[better_auth_core::observability::logger::LogArgument::Error(
+                    &error,
+                )],
+            );
+            return redirect_on_error("unable_to_get_user_info", None);
+        }
     };
 
     let callback_body = if req.method() == &better_auth_core::HttpMethod::Post {
@@ -307,48 +330,52 @@ pub(super) async fn handle_callback(
         ctx,
     );
     endpoint.path = Some(super::signin::callback_path(req));
-    let account = super::signin::token_account(provider_name, &user_info.user.id, &tokens)?;
+    let account = super::signin::token_account(provider_name, &account_id, &tokens)?;
     if let Some(link) = payload.link.as_ref() {
         if let super::handlers::OAuthLinkOutcome::Failed { code, description } =
             complete_link_social(
-                &user_info.user,
+                &user_info,
                 &account,
                 &tokens.scopes,
                 link,
-                Some(&user_info.data),
+                Some(&provider_profile),
                 &endpoint,
             )
             .await?
         {
-            return Err(AuthError::redirect(error_location(
-                &code,
-                description.as_deref(),
-            )?));
+            return Err(req.redirect(error_location(&code, description.as_deref())?)?);
         }
 
-        return Err(AuthError::redirect(&payload.callback_url));
+        return Err(req.redirect(&payload.callback_url)?);
     }
 
+    if !user_info.model_property("email")?.is_truthy() {
+        return redirect_on_error("email_not_found", None);
+    }
     let disable_sign_up = provider.config.disable_implicit_sign_up()
         && !payload.request_sign_up.unwrap_or(false)
         || provider.config.disable_sign_up();
-    let outcome = match process_oauth_sign_in(
-        provider_name,
-        provider,
-        &user_info.user,
-        &account,
-        OAuthSignInOptions {
-            request: req,
-            profile: Some(&user_info.data),
-            body: callback_body,
-            disable_sign_up,
-            override_user_info: provider.config.override_user_info_on_sign_in,
-            callback_url: &payload.callback_url,
-            email_verification: config.email_verification.as_deref(),
-        },
-        &meta,
-        ctx,
-    )
+    let outcome = match async {
+        let user_info = super::native_user::callback_user(&user_info, account_id)?;
+        process_oauth_sign_in(
+            provider_name,
+            provider,
+            &user_info,
+            &account,
+            OAuthSignInOptions {
+                request: req,
+                profile: Some(&provider_profile),
+                body: callback_body,
+                disable_sign_up,
+                override_user_info: provider.config.override_user_info_on_sign_in,
+                callback_url: &payload.callback_url,
+                email_verification: config.email_verification.as_deref(),
+            },
+            &meta,
+            ctx,
+        )
+        .await
+    }
     .await
     {
         Ok(outcome) => outcome,

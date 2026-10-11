@@ -25,6 +25,14 @@ impl FieldObjectSource for Probe {
         Ok(vec!["value".into(), "later".into()])
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(matches!(name, "value" | "later")
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         record(&self.events, format!("{}.{name}", self.model))?;
         if let Some(error) = self

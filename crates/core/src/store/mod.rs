@@ -564,6 +564,16 @@ pub trait UserStore<S: AuthSchema>: Send + Sync {
             "The store must support user account joins",
         ))
     }
+    /// Query an already normalized native email with the configured Account relationship.
+    async fn get_user_with_accounts_value(
+        &self,
+        email: &crate::FieldValue,
+    ) -> AuthResult<Option<UserAccounts>> {
+        let email = email.as_str().ok_or_else(|| {
+            AuthError::config("The store must support native user account email queries")
+        })?;
+        self.get_user_with_accounts(email).await
+    }
     async fn get_user_by_username(&self, username: &str) -> AuthResult<Option<crate::UserView>>;
     /// Query a declared User field without narrowing its native runtime value.
     async fn get_user_by_field_value(

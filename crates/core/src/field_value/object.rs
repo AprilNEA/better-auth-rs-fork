@@ -21,8 +21,17 @@ enum ObjectStorage {
     Live(Arc<dyn FieldObjectSource>),
 }
 
-pub(crate) trait FieldObjectSource: Send + Sync {
+/// Metadata used by operations that select an object's own enumerable properties.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldPropertyDescriptor {
+    pub enumerable: bool,
+}
+
+/// A live object source. Property access must retain native values and child identities.
+pub trait FieldObjectSource: Send + Sync {
     fn own_keys(&self) -> AuthResult<Vec<String>>;
+    /// Inspect one current own property without evaluating its value or enumerating other keys.
+    fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>>;
     fn has_property(&self, name: &str) -> AuthResult<bool> {
         Ok(self.own_keys()?.iter().any(|key| key == name))
     }
@@ -32,6 +41,7 @@ pub(crate) trait FieldObjectSource: Send + Sync {
     fn snapshot_fields(&self) -> AuthResult<FieldMap>;
     fn identity(&self) -> usize;
 
+    #[doc(hidden)]
     fn clone_seed(&self) -> AuthResult<Option<super::ObjectCloneSeed>> {
         Ok(None)
     }
@@ -89,7 +99,8 @@ impl Drop for FormattingGuard {
 }
 
 impl FieldObject {
-    pub(crate) fn from_source(source: Arc<dyn FieldObjectSource>) -> Self {
+    /// Retain a live source without reading its properties.
+    pub fn from_source(source: Arc<dyn FieldObjectSource>) -> Self {
         Self(ObjectStorage::Live(source))
     }
 
@@ -107,6 +118,35 @@ impl FieldObject {
         keys.sort_by_key(|name| {
             crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))
         });
+        Ok(keys)
+    }
+
+    /// Inspect a current own property. Absence differs from a non-enumerable property.
+    pub fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        match &self.0 {
+            ObjectStorage::Owned(fields) => Ok(fields
+                .lock()
+                .map_err(|_| AuthError::internal("Field object lock poisoned"))?
+                .contains_key(name)
+                .then_some(FieldPropertyDescriptor { enumerable: true })),
+            ObjectStorage::Live(source) => source.own_property_descriptor(name),
+        }
+    }
+
+    /// Capture enumerable keys before reading values, as required by JSON and `Object.keys`.
+    pub fn enumerable_keys(&self) -> AuthResult<Vec<String>> {
+        let mut keys = Vec::new();
+        for name in self.own_keys()? {
+            if self
+                .own_property_descriptor(&name)?
+                .is_some_and(|descriptor| descriptor.enumerable)
+            {
+                keys.push(name);
+            }
+        }
         Ok(keys)
     }
 

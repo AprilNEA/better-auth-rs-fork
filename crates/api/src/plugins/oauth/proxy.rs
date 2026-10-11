@@ -2,7 +2,8 @@
 
 use better_auth_core::{
     AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-    AuthSchema, BeforeRequestAction, FieldValue, HttpMethod, OAuthStateStrategy, ResponseBody,
+    AuthSchema, BeforeRequestAction, FieldMap, FieldValue, HttpMethod, OAuthStateStrategy,
+    ResponseBody,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::{
-    OAuthProvider, OAuthUserInfo, handlers,
+    OAuthProvider, handlers,
     state::{self, OAuthStatePayload},
 };
 use crate::plugins::{json_body, symmetric};
@@ -78,33 +79,17 @@ struct StatePackage {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProfileUser {
-    #[serde(default, flatten, with = "better_auth_core::field_value::serde::map")]
-    additional_fields: better_auth_core::FieldMap,
-    id: String,
-    email: String,
-    name: String,
-    #[serde(
-        default,
-        skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted"
-    )]
-    email_verified: better_auth_core::SchemaValue<Option<bool>>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "::serde_with::rust::double_option"
-    )]
-    image: Option<Option<String>>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Profile {
-    user_info: ProfileUser,
+    #[serde(with = "better_auth_core::field_value::serde::value")]
+    user_info: FieldValue,
     #[serde(with = "better_auth_core::field_value::serde::map")]
     account: better_auth_core::FieldMap,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    profile: Option<serde_json::Map<String, Value>>,
+    #[serde(
+        default,
+        skip_serializing_if = "better_auth_core::field_value::serde::optional_value::is_absent_or_json_omitted",
+        with = "better_auth_core::field_value::serde::optional_value"
+    )]
+    profile: Option<FieldValue>,
     #[serde(
         default,
         skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted"
@@ -169,7 +154,46 @@ impl Profile {
             FieldValue::Array(values) if values.every(|value| Ok(value.is_string()))? => {}
             _ => return Err(AuthError::bad_request("Invalid OAuth proxy scopes")),
         }
+        let user = native.model_property("userInfo")?;
+        if !matches!(user, FieldValue::Object(_)) {
+            return Err(AuthError::bad_request("Invalid OAuth proxy user"));
+        }
+        let mut user_fields = FieldMap::new();
+        for name in ["id", "email", "emailVerified", "name", "image"] {
+            let value = user.model_property(name)?;
+            let value = match name {
+                "emailVerified" if value.is_undefined() => false.into(),
+                "emailVerified" if matches!(value, FieldValue::Bool(_)) => value,
+                "image" if value.is_string() || value.is_null() || value.is_undefined() => value,
+                "id" | "email" | "name" if value.is_string() => {
+                    if name == "email" {
+                        super::native_user::lowercase(&value, "email")?
+                    } else {
+                        value
+                    }
+                }
+                _ => return Err(AuthError::bad_request("Invalid OAuth proxy user")),
+            };
+            if !value.is_undefined() {
+                let _ = user_fields.insert(name.into(), value);
+            }
+        }
+        user_fields.extend(user.enumerable_fields_except(&[
+            "id",
+            "email",
+            "emailVerified",
+            "name",
+            "image",
+        ])?);
+        let raw_profile = native.model_property("profile")?;
+        if !raw_profile.is_undefined() && !matches!(raw_profile, FieldValue::Object(_)) {
+            return Err(AuthError::bad_request(
+                "Invalid OAuth proxy provider profile",
+            ));
+        }
         let mut profile: Self = serde_json::from_str(plain)?;
+        profile.user_info = user_fields.into();
+        profile.profile = (!raw_profile.is_undefined()).then_some(raw_profile);
         fields = fields.in_field_order(
             &[
                 "providerId",
@@ -628,17 +652,48 @@ impl OAuthProxyPlugin {
             Ok(tokens) => tokens,
             Err(_) => return Ok(Some(redirect_error(error_url, "invalid_code", None)?)),
         };
-        let info = match handlers::fetch_user_info_for_code(
+        let info = handlers::fetch_user_info_for_code(
             provider,
             &tokens,
             handlers::callback_user_request(&tokens, params.get("user").map(String::as_str), None)?,
             state.id_token_nonce.as_deref(),
         )
+        .await?;
+        let user = if info.value.is_null() || info.value.is_undefined() {
+            FieldValue::Undefined
+        } else {
+            info.value.model_property("user")?
+        };
+        if !user.is_truthy() {
+            return Ok(Some(redirect_error(
+                error_url,
+                "unable_to_get_user_info",
+                None,
+            )?));
+        }
+        if !user.model_property("email")?.is_truthy() {
+            return Ok(Some(redirect_error(error_url, "email_not_found", None)?));
+        }
+        let account_id = match async {
+            let data = info.value.model_property("data")?;
+            super::social_profile::resolve_account_subject(
+                provider,
+                &tokens,
+                &data,
+                info.legacy_subject.as_ref(),
+            )
+            .await
+        }
         .await
         {
-            Ok(Some(info)) => info,
-            Err(error) => return Err(error),
-            Ok(None) => {
+            Ok(value) => value,
+            Err(error) => {
+                ctx.config.logger.error(
+                    "Unable to derive provider account identity",
+                    &[better_auth_core::observability::logger::LogArgument::Error(
+                        &error,
+                    )],
+                );
                 return Ok(Some(redirect_error(
                     error_url,
                     "unable_to_get_user_info",
@@ -646,11 +701,7 @@ impl OAuthProxyPlugin {
                 )?));
             }
         };
-        let Some(email) = info.user.email()?.filter(|email| !email.is_empty()) else {
-            return Ok(Some(redirect_error(error_url, "email_not_found", None)?));
-        };
-        let email = email.to_owned();
-        let name = info.user.name()?.unwrap_or_default().to_owned();
+        let provider_profile = info.value.model_property("data")?;
         let mut callback = parse_url(&state.callback_url)?;
         let final_url = callback
             .query_pairs()
@@ -659,17 +710,26 @@ impl OAuthProxyPlugin {
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| state.callback_url.clone());
         let payload = Profile {
-            user_info: ProfileUser {
-                additional_fields: info.user.additional_fields,
-                id: info.user.id.clone(),
-                email,
-                name,
-                image: info.user.image,
-                email_verified: info.user.email_verified,
+            user_info: {
+                let email = user.model_property("email")?;
+                let name = user.model_property("name")?;
+                let image = user.model_property("image")?;
+                let verified = user.model_property("emailVerified")?;
+                FieldMap::from([
+                    ("id".into(), account_id.clone()),
+                    ("email".into(), email),
+                    (
+                        "name".into(),
+                        if name.is_truthy() { name } else { "".into() },
+                    ),
+                    ("image".into(), image),
+                    ("emailVerified".into(), verified),
+                ])
+                .into()
             },
             account: better_auth_core::FieldMap::from([
                 ("providerId".into(), provider_id.into()),
-                ("accountId".into(), info.user.id.into()),
+                ("accountId".into(), account_id),
                 ("accessToken".into(), tokens.access_token.field_value()),
                 ("refreshToken".into(), tokens.refresh_token.field_value()),
                 ("idToken".into(), tokens.id_token.field_value()),
@@ -686,7 +746,7 @@ impl OAuthProxyPlugin {
                     super::providers::joined_scopes(&tokens.scopes)?,
                 ),
             ]),
-            profile: info.data.as_object().cloned(),
+            profile: Some(provider_profile),
             scopes: tokens.scopes,
             state: package.state,
             callback_url: final_url,
@@ -750,11 +810,6 @@ impl OAuthProxyPlugin {
             .get("providerId")
             .and_then(FieldValue::as_str)
             .ok_or_else(|| AuthError::internal("OAuth proxy providerId is not a UTF-8 string"))?;
-        let account_id = profile
-            .account
-            .get("accountId")
-            .and_then(FieldValue::as_str)
-            .ok_or_else(|| AuthError::internal("OAuth proxy accountId is not a UTF-8 string"))?;
         if provider.is_some_and(|provider| provider != provider_id) {
             return redirect_error(error_url, "provider_mismatch", None);
         }
@@ -809,14 +864,7 @@ impl OAuthProxyPlugin {
             &ctx.config,
         )?;
         req.append_response_header("Set-Cookie", clear)?;
-        let user = OAuthUserInfo {
-            additional_fields: profile.user_info.additional_fields,
-            id: account_id.to_owned(),
-            email: Some(profile.user_info.email.to_lowercase()).into(),
-            name: Some(profile.user_info.name).into(),
-            image: profile.user_info.image,
-            email_verified: profile.user_info.email_verified,
-        };
+        let user = profile.user_info.clone();
         let scopes = if !profile.scopes.is_undefined() {
             profile.scopes.clone()
         } else {
@@ -837,7 +885,7 @@ impl OAuthProxyPlugin {
                 }
             }
         };
-        let provider_profile = profile.profile.clone().map(Value::Object);
+        let provider_profile = profile.profile.clone();
         if let Some(link) = state.link {
             if let handlers::OAuthLinkOutcome::Failed { code, description } =
                 handlers::complete_link_social(
@@ -845,7 +893,7 @@ impl OAuthProxyPlugin {
                     &profile.account,
                     &scopes,
                     &link,
-                    Some(provider_profile.as_ref().unwrap_or(&serde_json::json!({}))),
+                    Some(provider_profile.as_ref().unwrap_or(&FieldMap::new().into())),
                     &crate::plugins::endpoint_context::EndpointContext::new(
                         Some(req),
                         better_auth_core::FieldValue::Null,
@@ -854,13 +902,13 @@ impl OAuthProxyPlugin {
                 )
                 .await?
             {
-                return Err(AuthError::redirect(error_location(
+                return Err(req.redirect(error_location(
                     error_url,
                     &code,
                     description.as_deref(),
-                )?));
+                )?)?);
             }
-            return Err(AuthError::redirect(&profile.callback_url));
+            return Err(req.redirect(&profile.callback_url)?);
         }
         let fallback = super::resolved::ResolvedProvider {
             config: OAuthProvider::google("", ""),
@@ -952,7 +1000,7 @@ mod verification_presence_tests {
         reason = "Serialization fixtures fail immediately on an invalid ordinary field shape."
     )]
 
-    use super::ProfileUser;
+    use super::Profile;
     use serde_json::{Value, json};
 
     #[test]
@@ -968,8 +1016,19 @@ mod verification_presence_tests {
             if let Some(value) = value {
                 profile["emailVerified"] = value;
             }
-            let decoded: ProfileUser = serde_json::from_value(profile.clone()).unwrap();
-            assert_eq!(serde_json::to_value(decoded).unwrap(), profile);
+            let payload = json!({
+                "userInfo": profile, "account": {"providerId":"google", "accountId":"ordinary-account"},
+                "state":"state", "callbackURL":"http://localhost/callback", "timestamp": 1000,
+            });
+            let decoded = Profile::parse(&payload.to_string());
+            if profile.get("emailVerified") == Some(&Value::Null) {
+                assert!(decoded.is_err());
+            } else {
+                if profile.get("emailVerified").is_none() {
+                    profile["emailVerified"] = json!(false);
+                }
+                assert_eq!(decoded.unwrap().user_info.json().unwrap(), Some(profile));
+            }
         }
     }
 }

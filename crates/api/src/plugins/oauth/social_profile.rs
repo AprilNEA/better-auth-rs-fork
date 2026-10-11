@@ -1,26 +1,63 @@
-use better_auth_core::{AuthError, AuthResult, SchemaValue};
+use better_auth_core::{AuthError, AuthResult, FieldValue};
 
 use super::google;
 use super::id_token::VerifiedIdToken;
 use super::providers::{OAuthTokenSet, OAuthUserInfoRequest, OAuthUserInfoResponse};
 use super::resolved::ResolvedProvider;
 
+#[path = "social_profile_native.rs"]
+mod native;
+pub(super) use native::{LegacySubject, ProviderProfile};
+
+pub(super) async fn resolve_account_subject(
+    provider: &ResolvedProvider,
+    subject_tokens: &OAuthTokenSet,
+    raw_profile: &FieldValue,
+    legacy_subject: Option<&LegacySubject>,
+) -> AuthResult<FieldValue> {
+    if let Some(generic) = &provider.generic {
+        return super::generic_profile::resolve_account_subject(
+            generic,
+            subject_tokens,
+            raw_profile,
+        )
+        .await;
+    }
+    let subject = if let Some(resolver) = &provider.config.account_subject {
+        let tokens = OAuthUserInfoRequest::from_fields(subject_tokens.fields());
+        resolver
+            .resolve_subject_native(&tokens, raw_profile)
+            .await?
+    } else if let Some(subject) = provider.config.builtin_account_subject(raw_profile)? {
+        subject
+    } else {
+        match legacy_subject {
+            Some(LegacySubject::Direct(subject)) => subject.clone(),
+            Some(LegacySubject::ProfileUser(response)) => {
+                response.model_property("user")?.model_property("id")?
+            }
+            None => FieldValue::Undefined,
+        }
+    };
+    super::generic_profile::account_subject_string(subject)
+}
+
 pub(super) async fn fetch_user_info_from_provider(
     provider: &ResolvedProvider,
     subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, None).await
 }
 
 pub(super) async fn fetch_user_info_with_claims(
     provider: &ResolvedProvider,
-    subject_tokens: &OAuthTokenSet,
+    _subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
     claims: Option<VerifiedIdToken>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     if let Some(generic) = &provider.generic {
         let claims = match claims {
             Some(VerifiedIdToken::Generic(claims)) => Some(claims),
@@ -39,16 +76,20 @@ pub(super) async fn fetch_user_info_with_claims(
                 ));
             }
         };
-        return super::generic_profile::fetch_user_info(generic, subject_tokens, &request, claims)
+        return super::generic_profile::fetch_profile(generic, &request, claims)
             .await
+            .map(ProviderProfile::from)
             .map_err(super::generic_profile::GenericProfileError::into_auth_error);
     }
     if let Some(handler) = &provider.config.get_user_info {
-        let response = handler.get_user_info(request).await?;
-        if let Some(response) = &response {
-            let _ = response.user.email()?;
-            let _ = response.user.email_verified()?;
-        }
+        let value = handler.get_user_info_native(request).await?;
+        let legacy_subject = (provider.config.is_custom()
+            && provider.config.account_subject.is_none())
+        .then(|| LegacySubject::ProfileUser(value.clone()));
+        let response = ProviderProfile {
+            value,
+            legacy_subject,
+        };
         return Ok(response);
     }
     if let Some(options) = provider.config.microsoft_options() {
@@ -149,7 +190,7 @@ pub(super) async fn fetch_user_info_with_claims(
         None => {
             if let Some(issuer) = provider.config.paybin_issuer() {
                 if !request.id_token.is_truthy()? {
-                    return Ok(None);
+                    return Ok(ProviderProfile::default());
                 }
                 let token = request.id_token.field_value();
                 let token = super::providers::jwt_string(&token)?;
@@ -179,10 +220,13 @@ pub(super) async fn fetch_user_info_with_claims(
     if (provider.config.is_atlassian() || provider.config.is_vk())
         && !request.access_token.is_truthy()?
     {
-        return Ok(None);
+        return Ok(ProviderProfile::default());
     }
     match fetch_default_user_info(provider, request, claims).await {
-        Ok(None) if provider.config.is_figma() || provider.config.is_salesforce() => {
+        Ok(response)
+            if !response.value.is_truthy()
+                && (provider.config.is_figma() || provider.config.is_salesforce()) =>
+        {
             better_auth_core::observability::logger::current().error(
                 if provider.config.is_salesforce() {
                     "Failed to fetch user info from Salesforce"
@@ -191,7 +235,7 @@ pub(super) async fn fetch_user_info_with_claims(
                 },
                 &[],
             );
-            Ok(None)
+            Ok(response)
         }
         Err(error)
             if provider.config.is_figma()
@@ -207,7 +251,7 @@ pub(super) async fn fetch_user_info_with_claims(
                 },
                 &[better_auth_core::observability::LogArgument::Error(&error)],
             );
-            Ok(None)
+            Ok(ProviderProfile::default())
         }
         response => response,
     }
@@ -218,18 +262,13 @@ pub(super) async fn fetch_user_info_for_code(
     subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     if let Some(generic) = &provider.generic {
-        return match super::generic_profile::fetch_user_info(
-            generic,
-            subject_tokens,
-            &request,
-            None,
-        )
-        .await
-        {
-            Ok(response) => Ok(response),
-            Err(super::generic_profile::GenericProfileError::Identity(_)) => Ok(None),
+        return match super::generic_profile::fetch_profile(generic, &request, None).await {
+            Ok(response) => Ok(response.into()),
+            Err(super::generic_profile::GenericProfileError::Identity(_)) => {
+                Ok(ProviderProfile::default())
+            }
             Err(super::generic_profile::GenericProfileError::Profile(error)) => Err(error),
         };
     }
@@ -237,11 +276,11 @@ pub(super) async fn fetch_user_info_for_code(
         && let Some(jwks_url) = provider.config.google_jwks_url()
     {
         if !request.id_token.is_truthy()? {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         }
         let token = request.id_token.field_value();
         let Ok(token) = super::providers::jwt_string(&token) else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         let Some(claims) = google::verify(
             &token,
@@ -251,7 +290,7 @@ pub(super) async fn fetch_user_info_for_code(
         )
         .await
         else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         Some(VerifiedIdToken::Google(claims))
     } else {
@@ -264,31 +303,30 @@ async fn fetch_default_user_info(
     provider: &ResolvedProvider,
     request: OAuthUserInfoRequest,
     claims: Option<VerifiedIdToken>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
-    let Some(mut response) = fetch_social_user_info(provider, request, claims).await? else {
-        return Ok(None);
+) -> AuthResult<ProviderProfile> {
+    let Some(response) = fetch_social_user_info(provider, request, claims).await? else {
+        return Ok(ProviderProfile::default());
     };
+    let placeholder_id = response.user.id.clone();
+    let mut response = ProviderProfile::from_typed(&provider.config, response)?;
+    let data = response.value.model_property("data")?;
     let mapped = if !provider.config.is_tiktok()
         && let Some(mapper) = &provider.config.map_profile_to_user
     {
-        Some(mapper.map_profile(&response.data).await?)
+        mapper.map_profile_native(&data).await?
     } else {
-        None
+        FieldValue::Undefined
     };
-    if provider.config.is_vk() {
-        let original_email = SchemaValue::from_json(response.data.pointer("/user/email").cloned())?;
-        let mapped_email = mapped
-            .as_ref()
-            .and_then(|value| value.email.as_ref())
-            .map(super::providers::profile_email)
-            .transpose()?
-            .flatten();
-        if super::providers::profile_email(&original_email)?.is_none_or(str::is_empty)
-            && mapped_email.is_none_or(str::is_empty)
-        {
-            return Ok(None);
-        }
+    if provider.config.is_vk()
+        && !data
+            .model_property("user")?
+            .model_property("email")?
+            .is_truthy()
+        && !mapped_property(&mapped, "email")?.is_truthy()
+    {
+        return Ok(ProviderProfile::default());
     }
+    let mut user = response.value.model_property("user")?.enumerable_fields()?;
     let placeholder_namespace = if provider.config.is_twitter() {
         Some("twitter")
     } else if provider.config.is_roblox() {
@@ -301,43 +339,45 @@ async fn fetch_default_user_info(
         None
     };
     if let Some(namespace) = placeholder_namespace
-        && response.user.email()?.is_none_or(str::is_empty)
+        && !user.get("email").is_some_and(FieldValue::is_truthy)
     {
-        response.user.email = Some(placeholder_email(&response.user.id, namespace)?).into();
+        let _ = user.insert(
+            "email".into(),
+            placeholder_email(&placeholder_id, namespace)?.into(),
+        );
     }
-    if let Some(mapped) = mapped {
-        apply_mapped_profile(&mut response, mapped);
+    let reddit_email = if provider.config.is_reddit() {
+        let email = mapped_property(&mapped, "email")?;
+        Some(if email.is_truthy() {
+            email
+        } else {
+            placeholder_email(&placeholder_id, "reddit")?.into()
+        })
+    } else {
+        None
+    };
+    user.extend(mapped.enumerable_fields()?);
+    if let Some(email) = reddit_email {
+        let _ = user.insert("email".into(), email);
+        let verified = mapped_property(&mapped, "emailVerified")?;
+        let _ = user.insert(
+            "emailVerified".into(),
+            if verified.is_null() || verified.is_undefined() {
+                FieldValue::Bool(false)
+            } else {
+                verified
+            },
+        );
     }
-    if provider.config.is_reddit() && response.user.email()?.is_none_or(str::is_empty) {
-        response.user.email = Some(placeholder_email(&response.user.id, "reddit")?).into();
-    }
-    let verified = response.user.email_verified()?;
-    if provider.config.is_reddit() && !verified {
-        response.user.email_verified = Some(false).into();
-    }
-    let _ = response.user.email()?;
-    Ok(Some(response))
+    response.replace_user(user)?;
+    Ok(response)
 }
 
-pub(super) fn apply_mapped_profile(
-    response: &mut OAuthUserInfoResponse,
-    mapped: super::OAuthProfile,
-) {
-    response
-        .user
-        .additional_fields
-        .extend(mapped.additional_fields);
-    if let Some(email) = mapped.email {
-        response.user.email = email;
-    }
-    if let Some(name) = mapped.name {
-        response.user.name = name;
-    }
-    if let Some(image) = mapped.image {
-        response.user.image = Some(image);
-    }
-    if let Some(verified) = mapped.email_verified {
-        response.user.email_verified = verified;
+fn mapped_property(mapped: &FieldValue, name: &str) -> AuthResult<FieldValue> {
+    if mapped.is_null() || mapped.is_undefined() {
+        Ok(FieldValue::Undefined)
+    } else {
+        mapped.model_property(name)
     }
 }
 

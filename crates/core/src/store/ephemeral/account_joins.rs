@@ -48,20 +48,22 @@ impl EphemeralStore {
 
     pub(super) async fn user_accounts_relation(
         &self,
-        email: &str,
+        email: &Value,
         relation: &ResolvedJoin,
     ) -> AuthResult<Option<UserAccounts>> {
         let native = self.config.advanced.database.joins == Some(true);
         let (mut user, accounts) = if native {
+            self.model_fields.begin_id_query(EntityRole::User)?;
+            let (email_field, email) = self.user_field_selector("email", email)?;
             let selected = self
                 .raw("user", "findOne", |op| {
                     let users = op
                         .capture_table(EntityRole::User)?
                         .select_refs(|user| {
                             Ok(user
-                                .field("email")?
+                                .field(&email_field)?
                                 .unwrap_or_default()
-                                .strict_equals(&Value::from(email.to_lowercase())))
+                                .strict_equals(&email))
                         })?
                         .into_iter()
                         .map(RecordSource::Live)
@@ -108,7 +110,7 @@ impl EphemeralStore {
                 Some(accounts),
             )
         } else {
-            let Some(user) = self.user_ref_by_email(email).await? else {
+            let Some(user) = self.user_ref_by_field_value("email", email).await? else {
                 return Ok(None);
             };
             (self.output_user_refs(vec![user]).await?.remove(0), None)

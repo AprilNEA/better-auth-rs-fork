@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
-use better_auth_core::{AuthRequest, AuthResult};
+use better_auth_core::{AuthError, AuthRequest, AuthResult, FieldValue};
 use indexmap::IndexMap;
 use reqwest::header::HeaderMap;
 use serde_json::Value;
@@ -90,8 +90,13 @@ impl<'a> GenericOAuthProfileContext<'a> {
 /// Fetches the raw profile used for Generic OAuth account recognition.
 #[async_trait]
 pub trait GenericOAuthUserInfoHandler: Send + Sync {
-    /// Return a raw provider profile, `None` when unavailable, or an application error.
-    async fn get_user_info(&self, tokens: &OAuthUserInfoRequest) -> AuthResult<Option<Value>>;
+    /// Return a raw profile at the legacy JSON callback boundary.
+    /// Native handlers may implement `get_user_info_native` instead.
+    async fn get_user_info(&self, _tokens: &OAuthUserInfoRequest) -> AuthResult<Option<Value>> {
+        Err(AuthError::internal(
+            "This Generic OAuth user info handler does not implement the typed JSON callback",
+        ))
+    }
 
     /// Read resolved options and completed verification before mapping a profile.
     /// Existing handlers retain their token-based lookup unless they override this method.
@@ -101,6 +106,19 @@ pub trait GenericOAuthUserInfoHandler: Send + Sync {
         _context: GenericOAuthProfileContext<'_>,
     ) -> AuthResult<Option<Value>> {
         self.get_user_info(tokens).await
+    }
+
+    /// Return the original profile, including primitives, null, undefined, and shared objects.
+    /// The default imports the legacy context-aware callback's JSON result once.
+    async fn get_user_info_native(
+        &self,
+        tokens: &OAuthUserInfoRequest,
+        context: GenericOAuthProfileContext<'_>,
+    ) -> AuthResult<FieldValue> {
+        Ok(self
+            .get_user_info_with_context(tokens, context)
+            .await?
+            .map_or(FieldValue::Undefined, FieldValue::from))
     }
 }
 
@@ -122,8 +140,20 @@ pub struct OAuthProfile {
 /// Maps provider profile fields without changing the provider account subject.
 #[async_trait]
 pub trait OAuthProfileMapper: Send + Sync {
-    /// Return local user fields derived from the raw provider profile.
-    async fn map_profile(&self, profile: &Value) -> AuthResult<OAuthProfile>;
+    /// Return local user fields at the legacy JSON callback boundary.
+    /// Native mappers may implement `map_profile_native` instead.
+    async fn map_profile(&self, _profile: &Value) -> AuthResult<OAuthProfile> {
+        Err(AuthError::internal(
+            "This OAuth profile mapper does not implement the typed JSON callback",
+        ))
+    }
+
+    /// Read the original profile and return the value spread into the provider user.
+    /// The default explicitly projects JSON for the legacy callback and consumes its typed patch.
+    async fn map_profile_native(&self, profile: &FieldValue) -> AuthResult<FieldValue> {
+        let profile = super::providers::json_profile_bridge(profile)?;
+        Ok(self.map_profile(&profile).await?.into_native())
+    }
 }
 
 /// Resolves a stable provider account identifier from the original profile.
@@ -134,9 +164,24 @@ pub trait OAuthAccountSubject: Send + Sync {
     /// Direct ID-token flows supply the endpoint's token record.
     async fn resolve_subject(
         &self,
+        _tokens: &OAuthUserInfoRequest,
+        _profile: &Value,
+    ) -> AuthResult<String> {
+        Err(AuthError::internal(
+            "This OAuth account subject resolver does not implement the typed JSON callback",
+        ))
+    }
+
+    /// Return the account subject before the shared JavaScript String conversion and validation.
+    /// The default explicitly projects JSON for the legacy callback without replacing the profile.
+    async fn resolve_subject_native(
+        &self,
         tokens: &OAuthUserInfoRequest,
-        profile: &Value,
-    ) -> AuthResult<String>;
+        profile: &FieldValue,
+    ) -> AuthResult<FieldValue> {
+        let profile = super::providers::json_profile_bridge(profile)?;
+        Ok(self.resolve_subject(tokens, &profile).await?.into())
+    }
 }
 
 /// Resolves extra token refresh parameters for the authenticated request.

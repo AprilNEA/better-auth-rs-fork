@@ -10,7 +10,21 @@ struct Source {
 
 impl FieldObjectSource for Source {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
-        Ok(self.enumerable.keys().cloned().collect())
+        Ok(self
+            .enumerable
+            .keys()
+            .chain(self.hidden.keys())
+            .cloned()
+            .collect())
+    }
+
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        let enumerable = self.enumerable.contains_key(name);
+        Ok((enumerable || self.hidden.contains_key(name))
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable }))
     }
 
     fn get(&self, name: &str) -> AuthResult<Option<Value>> {

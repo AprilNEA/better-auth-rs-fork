@@ -15,9 +15,9 @@ use better_auth_core::{AuthError, AuthResult};
 use serde_json::{Value, json};
 
 use super::authorization::{AuthorizationRequest, build_authorization_url};
+use super::profile_test_support as profile_test;
 use super::resolved::ResolvedProvider;
 use super::social_profile::fetch_user_info_from_provider;
-use super::types::AccountInfoUser;
 use super::{
     OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfo,
     OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse,
@@ -285,30 +285,19 @@ async fn tiktok_profiles_preserve_envelope_and_skip_mapper_like_pinned_capture()
             access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         };
-        let response = fetch_user_info_from_provider(
-            &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await;
+        let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
+        let response =
+            fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None).await;
         server.abort();
-        let response = response?.ok_or("Missing TikTok profile")?;
-        assert_eq!(response.user.id, string(case, "/subject")?);
-        let user = response.user;
-        let user = AccountInfoUser {
-            id: provider
-                .config
-                .account_info_includes_id()
-                .then_some(user.id),
-            name: user.name,
-            email: user.email,
-            image: user.image,
-            email_verified: user.email_verified,
-            additional_fields: user.additional_fields,
-        };
+        let response = response?;
         assert_eq!(
-            json!({"user":user,"data":response.data}),
+            profile_test::subject(&provider, &subject_tokens, &response)
+                .await
+                .json()?,
+            Some(field(case, "/subject")?.clone())
+        );
+        assert_eq!(
+            profile_test::json(response),
             *field(case, "/result")?,
             "{}",
             string(case, "/name")?

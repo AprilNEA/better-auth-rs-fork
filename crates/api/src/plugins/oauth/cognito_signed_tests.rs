@@ -5,6 +5,7 @@
 )]
 
 use super::google_test_support::GoogleFixture;
+use super::profile_test_support::json as public_response;
 use super::*;
 use better_auth_core::{AuthError, SchemaValue};
 use serde_json::{Value, json};
@@ -85,13 +86,6 @@ impl OAuthProfileMapper for Mapper {
     }
 }
 
-fn public_response(response: OAuthUserInfoResponse) -> Value {
-    json!({"user": types::AccountInfoUser {
-        id: None, name: response.user.name, email: response.user.email, image: response.user.image,
-        email_verified: response.user.email_verified, additional_fields: response.user.additional_fields,
-    }, "data": response.data})
-}
-
 #[tokio::test]
 async fn signed_claims_match_pinned_profiles_on_code_direct_and_account_reads() {
     let fixture = fixture();
@@ -161,8 +155,7 @@ async fn signed_claims_match_pinned_profiles_on_code_direct_and_account_reads() 
                 )
                 .await
                 .unwrap()
-            }
-            .unwrap();
+            };
             assert_eq!(
                 public_response(response),
                 expected,
@@ -208,7 +201,6 @@ async fn signed_mapper_failure_uses_the_separate_http_mapper_stage() {
         None,
     )
     .await
-    .unwrap()
     .unwrap();
     assert_eq!(public_response(response), sample["result"]);
     assert_eq!(seen.lock().unwrap().len(), 2);
@@ -340,7 +332,6 @@ async fn application_verified_signed_claims_are_not_verified_a_second_time() {
         verified,
     )
     .await
-    .unwrap()
     .unwrap();
     assert_eq!(
         public_response(response)["user"],

@@ -56,6 +56,11 @@ pub mod optional_value {
         value.as_ref().is_some_and(FieldValue::is_json_omitted)
     }
 
+    /// Omit an absent property and native values omitted by JSON object serialization.
+    pub fn is_absent_or_json_omitted(value: &Option<FieldValue>) -> bool {
+        value.as_ref().is_none_or(FieldValue::is_json_omitted)
+    }
+
     pub fn serialize<S: ::serde::Serializer>(
         value: &Option<FieldValue>,
         serializer: S,

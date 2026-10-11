@@ -178,7 +178,7 @@ fn key_order(value: &Value, path: Vec<String>, output: &mut Vec<Json>) -> AuthRe
             .map(|index| Ok((index.to_string(), required(array.get(index)?)?)))
             .collect::<AuthResult<Vec<_>>>()?,
         Value::Object(object) => object
-            .own_keys()?
+            .enumerable_keys()?
             .into_iter()
             .map(|key| Ok((key.clone(), required(object.get(&key)?)?)))
             .collect::<AuthResult<Vec<_>>>()?,
@@ -221,7 +221,7 @@ async fn capture(scenario: &Scenario) -> AuthResult<Json> {
                     "name": values::observe(&raw.model_property("name")?)?,
                     "message": values::observe(&raw.model_property("message")?)?,
                     "properties": values::observe(raw)?,
-                    "keys": object.own_keys()?,
+                    "keys": object.enumerable_keys()?,
                 },
                 "originalError": raw.strict_equals(&state.failure),
             })

@@ -1,5 +1,5 @@
 use super::{OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
-use better_auth_core::{AuthError, AuthResult, SchemaValue};
+use better_auth_core::{AuthError, AuthResult, FieldValue, SchemaValue};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -63,6 +63,85 @@ pub(super) enum ProviderKind {
 }
 
 impl ProviderKind {
+    pub(super) fn account_subject(&self, profile: &FieldValue) -> AuthResult<Option<FieldValue>> {
+        let field = match self {
+            Self::Custom => return Ok(None),
+            Self::Apple(_)
+            | Self::Cognito(_)
+            | Self::Google { .. }
+            | Self::Paybin { .. }
+            | Self::HuggingFace
+            | Self::Railway
+            | Self::Roblox
+            | Self::Twitch(_)
+            | Self::Vercel
+            | Self::LinkedIn
+            | Self::Line { .. } => "sub",
+            Self::GitHub { .. }
+            | Self::Discord
+            | Self::GitLab
+            | Self::Spotify
+            | Self::Polar
+            | Self::Notion
+            | Self::Figma
+            | Self::Kakao
+            | Self::Zoom { .. }
+            | Self::Cloudflare
+            | Self::Reddit
+            | Self::Linear => "id",
+            Self::Microsoft { .. } => "oid",
+            Self::Atlassian | Self::Dropbox => "account_id",
+            Self::Salesforce | Self::Kick | Self::PayPal => "user_id",
+            Self::Slack => "https://slack.com/user_id",
+            Self::Naver => {
+                return profile
+                    .model_property("response")?
+                    .model_property("id")
+                    .map(Some);
+            }
+            Self::Twitter => {
+                return profile
+                    .model_property("data")?
+                    .model_property("id")
+                    .map(Some);
+            }
+            Self::TikTok => {
+                return profile
+                    .model_property("data")?
+                    .model_property("user")?
+                    .model_property("open_id")
+                    .map(Some);
+            }
+            Self::Vk => {
+                return profile
+                    .model_property("user")?
+                    .model_property("user_id")
+                    .map(Some);
+            }
+            Self::WeChat { .. } => {
+                let unionid = profile.model_property("unionid")?;
+                return if unionid.is_truthy() {
+                    Ok(Some(unionid))
+                } else {
+                    profile.model_property("openid").map(Some)
+                };
+            }
+            Self::Facebook(_) => {
+                let has_sub = match profile {
+                    FieldValue::Object(object) => object.has_property("sub")?,
+                    FieldValue::Array(_) | FieldValue::Date(_) | FieldValue::Function(_) => false,
+                    _ => {
+                        return Err(AuthError::type_error(
+                            "Cannot use 'in' operator to search for 'sub'",
+                        ));
+                    }
+                };
+                if has_sub { "sub" } else { "id" }
+            }
+        };
+        profile.model_property(field).map(Some)
+    }
+
     pub(super) fn scopes(&self) -> &'static [&'static str] {
         match self {
             Self::Apple(_) => &["email", "name"],

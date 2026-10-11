@@ -106,6 +106,12 @@ pub(super) fn headers_init(value: &FieldValue) -> AuthResult<Headers> {
         }
     } else if let Some(fields) = value.as_object() {
         for name in fields.own_keys()? {
+            if !fields
+                .own_property_descriptor(&name)?
+                .is_some_and(|descriptor| descriptor.enumerable)
+            {
+                continue;
+            }
             if let Some(value) = fields.get(&name)? {
                 let value = value.display_utf16()?;
                 converted.push(vec![name.into(), value]);

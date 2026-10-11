@@ -13,10 +13,7 @@ use super::handlers::{
 use super::providers::{OAuthTokenSet, OAuthUserInfoRequest};
 use super::resolved::ResolvedOAuthConfig as OAuthConfig;
 use super::state::AccountCookiePayload;
-use super::types::{
-    AccessTokenResponse, AccountInfoAccount, AccountInfoResponse, AccountInfoUser,
-    RefreshTokenResponse,
-};
+use super::types::{AccessTokenResponse, RefreshTokenResponse};
 
 #[derive(Clone)]
 enum AccountSource {
@@ -529,44 +526,32 @@ pub(super) async fn handle_account_info(
         return Err(AuthError::bad_request("Access token not found"));
     }
     let request = OAuthUserInfoRequest::from_fields(tokens.into_field_value().enumerable_fields()?);
-    let (user, data) = if let Some(generic) = &provider.generic {
-        let info = super::generic_profile::fetch_profile(generic, &request, None)
+    let info = if let Some(generic) = &provider.generic {
+        super::generic_profile::fetch_profile(generic, &request, None)
             .await
             .map_err(super::generic_profile::GenericProfileError::into_auth_error)?
-            .ok_or_else(super::social_profile::missing_profile)?;
-        (info.user, info.data)
     } else {
-        let info = fetch_user_info_from_provider(
+        fetch_user_info_from_provider(
             provider,
             &OAuthTokenSet::from_fields(request.fields()),
             request,
             None,
         )
         .await?
-        .ok_or_else(super::social_profile::missing_profile)?;
-        (
-            AccountInfoUser {
-                id: provider
-                    .config
-                    .account_info_includes_id()
-                    .then_some(info.user.id),
-                name: info.user.name,
-                email: info.user.email,
-                image: info.user.image,
-                email_verified: info.user.email_verified,
-                additional_fields: info.user.additional_fields,
-            },
-            info.data,
-        )
+        .value
     };
-    let response = AccountInfoResponse {
-        user,
-        data,
-        account: AccountInfoAccount {
-            id: account.id.clone(),
-            provider_id: account.provider_id.clone(),
-            account_id: account.account_id.clone(),
-        },
-    };
-    Ok(AuthResponse::native(None, response.into_field_value()))
+    if !info.is_truthy() {
+        return Err(super::social_profile::missing_profile());
+    }
+    let mut response = info.enumerable_fields()?;
+    let _ = response.insert(
+        "account".into(),
+        FieldMap::from([
+            ("id".into(), account.id.field_value()),
+            ("providerId".into(), account.provider_id.field_value()),
+            ("accountId".into(), account.account_id.field_value()),
+        ])
+        .into(),
+    );
+    Ok(AuthResponse::native(None, response.into()))
 }

@@ -97,7 +97,7 @@ impl OAuthRefreshTokenHandler for Refresh {
         });
         self.events
             .send(json!({
-                "token": token, "hasContext": context.is_some(),
+                "token": token.json().map_err(|error| error.to_string())?, "hasContext": context.is_some(),
                 "headers": self.headers(context.and_then(|context| context.headers)),
                 "request": request,
             }))

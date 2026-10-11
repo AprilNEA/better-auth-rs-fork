@@ -23,11 +23,12 @@ where
     S::User: SeaOrmUserModel,
 {
     async fn user_record_by_email(&self, email: &str) -> AuthResult<Option<SqlRow>> {
-        let query = self.user_field_query(
-            self.connection(),
-            "email",
-            &normalize_user_email(email).into(),
-        )?;
+        self.user_record_by_email_value(&normalize_user_email(email).into())
+            .await
+    }
+
+    async fn user_record_by_email_value(&self, email: &FieldValue) -> AuthResult<Option<SqlRow>> {
+        let query = self.user_field_query(self.connection(), "email", email)?;
         database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
             self.config(),
             "findOne",
@@ -550,6 +551,14 @@ where
         &self,
         email: &str,
     ) -> AuthResult<Option<better_auth_core::store::UserAccounts>> {
+        self.get_user_with_accounts_value(&normalize_user_email(email).into())
+            .await
+    }
+
+    async fn get_user_with_accounts_value(
+        &self,
+        email: &FieldValue,
+    ) -> AuthResult<Option<better_auth_core::store::UserAccounts>> {
         let relation = better_auth_core::store::UserAccounts::resolve_schema(
             self.config(),
             &self.model_fields,
@@ -563,12 +572,8 @@ where
                 <S::Account as SeaOrmAccountModel>::Entity,
             >(
                 (
-                    self.user_field_query(
-                        self.connection(),
-                        "email",
-                        &normalize_user_email(email).into(),
-                    )?
-                    .limit(1),
+                    self.user_field_query(self.connection(), "email", email)?
+                        .limit(1),
                     S::User::id_column(),
                 ),
                 (
@@ -598,7 +603,7 @@ where
             )?;
             (record, Some(accounts))
         } else {
-            let Some(record) = self.user_record_by_email(email).await? else {
+            let Some(record) = self.user_record_by_email_value(email).await? else {
                 return Ok(None);
             };
             (record, None)

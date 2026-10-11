@@ -10,9 +10,9 @@ use crate::plugins::oauth::{
     OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfo,
     OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse, TwitchOptions,
     authorization::{AuthorizationRequest, build_authorization_url},
+    profile_test_support as profile_test,
     resolved::ResolvedProvider,
     social_profile::fetch_user_info_from_provider,
-    types::AccountInfoUser,
 };
 
 type TestResult<T> = Result<T, Box<dyn Error>>;
@@ -82,19 +82,6 @@ fn tokens(fixture: &Value, profile: &Value) -> TestResult<OAuthUserInfoRequest> 
     })
 }
 
-fn profile_json(response: OAuthUserInfoResponse, include_id: bool) -> Value {
-    let user = response.user;
-    let view = AccountInfoUser {
-        id: include_id.then_some(user.id),
-        name: user.name,
-        email: user.email,
-        image: user.image,
-        email_verified: user.email_verified,
-        additional_fields: user.additional_fields,
-    };
-    json!({"user": view, "data": response.data})
-}
-
 #[test]
 fn twitch_authorization_matches_the_pinned_ordinary_contract() -> TestResult<()> {
     let fixture = fixture()?;
@@ -139,17 +126,18 @@ async fn twitch_profiles_match_the_pinned_ordinary_contract() -> TestResult<()> 
         .ok_or("missing Twitch profiles")?
     {
         let profile_request = tokens(&fixture, &case["profile"])?;
-        let response = fetch_user_info_from_provider(
-            &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await?
-        .ok_or("missing Twitch profile")?;
-        assert_eq!(json!(response.user.id), case["profile"]["sub"]);
+        let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
+        let response =
+            fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None)
+                .await?;
         assert_eq!(
-            profile_json(response, false),
+            profile_test::subject(&provider, &subject_tokens, &response)
+                .await
+                .json()?,
+            Some(case["profile"]["sub"].clone())
+        );
+        assert_eq!(
+            profile_test::json(response),
             case["result"],
             "{}",
             case["name"]
@@ -204,20 +192,18 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
     let mut config = config(&fixture, &json!({}))?;
     config.map_profile_to_user = Some(Arc::new(Mapper(inputs.clone())));
     let profile_request = tokens(&fixture, &fixture["profiles"][0]["profile"])?;
-    let response = fetch_user_info_from_provider(
-        &resolved(config.clone()),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await?
-    .ok_or("missing mapped Twitch profile")?;
+    let provider = resolved(config.clone());
+    let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
+    let response =
+        fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None).await?;
     assert_eq!(
-        json!(response.user.id),
-        fixture["profiles"][0]["profile"]["sub"]
+        profile_test::subject(&provider, &subject_tokens, &response)
+            .await
+            .json()?,
+        Some(fixture["profiles"][0]["profile"]["sub"].clone())
     );
     assert_eq!(json!(*inputs.lock().await), fixture["mapperInputs"]);
-    assert_eq!(profile_json(response, false), fixture["mappedResult"]);
+    assert_eq!(profile_test::json(response), fixture["mappedResult"]);
 
     let custom_inputs = Arc::new(Mutex::new(Vec::new()));
     let calls = Arc::new(Mutex::new(0));
@@ -230,9 +216,8 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
         profile_request,
         None,
     )
-    .await?
-    .ok_or("missing custom Twitch profile")?;
-    assert_eq!(profile_json(response, true), fixture["customResult"]);
+    .await?;
+    assert_eq!(profile_test::json(response), fixture["customResult"]);
     assert_eq!(json!(*calls.lock().await), fixture["customCalls"]);
     assert_eq!(
         json!(custom_inputs.lock().await.len()),

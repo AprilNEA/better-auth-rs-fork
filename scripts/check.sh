@@ -247,9 +247,24 @@ run_stage() {
       return "$organization_status"
       ;;
     oauth-profile)
+      cargo fmt --all -- --check
+      local profile_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/oauth-native-profile.test.ts \
         ./compat-tests/reference-server/contracts/generic-profile-results.test.ts \
-        ./compat-tests/reference-server/contracts/oauth-profile-override.test.ts
+        ./compat-tests/reference-server/contracts/oauth-profile-override.test.ts || profile_status=1
+      cargo clippy --locked -p better-auth-api --features axum --lib -- -D warnings || profile_status=1
+      cargo test --locked -p better-auth-api --features axum --lib -- \
+        plugins::oauth:: plugins::one_tap:: plugins::user_admission:: || profile_status=1
+      cargo test --locked -p better-auth-api --features axum --no-fail-fast \
+        --test account_oauth_tests --test oauth_session_revocation_tests || profile_status=1
+      cargo test --locked -p better-auth-core --lib -- field_value:: user_fields::input_binding_tests:: || profile_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --no-fail-fast \
+        --test account_user_auth_boundary_reference_tests --test account_native_selector_tests \
+        --test social_refresh_context_tests --test oauth_profile_presence_tests \
+        --test oauth_proxy_hooks_tests --test oauth_proxy_request_url_tests \
+        --test oauth_proxy_max_age_tests || profile_status=1
+      return "$profile_status"
       ;;
     memory-joins)
       cargo fmt --all -- --check

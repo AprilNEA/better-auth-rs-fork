@@ -4,7 +4,6 @@ use super::{
     provider_tokens::{refresh_tokens_via_provider, validate_authorization_code_via_provider},
     resolved::ResolvedProvider,
     social_profile::fetch_user_info_for_code,
-    types::AccountInfoUser,
 };
 use axum::{
     Json, Router,
@@ -216,18 +215,9 @@ async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
             profile_request,
             None,
         )
-        .await?
-        .ok_or("Expected the ordinary active GitLab profile")?;
-        let user = AccountInfoUser {
-            id: None,
-            name: info.user.name,
-            email: info.user.email,
-            image: info.user.image,
-            email_verified: info.user.email_verified,
-            additional_fields: info.user.additional_fields,
-        };
+        .await?;
         same(
-            &json!({"user": user, "data": info.data}),
+            &crate::plugins::oauth::profile_test_support::json(info),
             &case.user_info,
             &format!("{} profile", case.name),
         )?;

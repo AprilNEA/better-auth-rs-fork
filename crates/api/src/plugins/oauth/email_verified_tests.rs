@@ -37,15 +37,11 @@ fn default_email_verified_presence_matches_upstream() {
         let profile = provider.http_profile_data(profile).unwrap().unwrap();
         let user = provider.decode_profile(profile).unwrap().unwrap();
         let expected = &case["expected"]["user"];
-        let output = serde_json::to_value(types::AccountInfoUser {
-            id: None,
-            name: Default::default(),
-            email: Default::default(),
-            image: None,
-            email_verified: user.email_verified,
-            additional_fields: Default::default(),
-        })
-        .unwrap();
+        let value = user.into_native().model_property("emailVerified").unwrap();
+        let output = better_auth_core::FieldMap::from([("emailVerified".into(), value)])
+            .json()
+            .unwrap();
+        let output = Value::Object(output);
         assert_eq!(output, *expected, "{id}/{}", case["raw"]);
     }
 }

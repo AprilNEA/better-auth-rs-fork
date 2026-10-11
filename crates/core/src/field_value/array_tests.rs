@@ -48,6 +48,66 @@ impl FieldArraySource for Source {
 }
 
 #[test]
+fn array_object_rest_preserves_holes_exclusions_and_shared_values_after_getter_deletion()
+-> AuthResult<()> {
+    let reads = Arc::new(Mutex::new(Vec::new()));
+    let child = FieldValue::from(crate::FieldMap::from([("value".into(), 1.into())]));
+    let source: Arc<Source> = Arc::new_cyclic(|weak: &std::sync::Weak<Source>| {
+        let weak = weak.clone();
+        let reads = reads.clone();
+        Source {
+            length: 5,
+            entries: Mutex::new(
+                [
+                    (0, child.clone()),
+                    (1, "excluded".into()),
+                    (2, "removed-by-first".into()),
+                    (4, FieldValue::Undefined),
+                ]
+                .into(),
+            ),
+            on_read: Box::new(move |index| {
+                if index == 1 {
+                    return Err(AuthError::internal(
+                        "The excluded array getter must not run",
+                    ));
+                }
+                let source = weak
+                    .upgrade()
+                    .ok_or_else(|| AuthError::internal("Missing rest array source"))?;
+                if !source
+                    .entries
+                    .lock()
+                    .map_err(poisoned)?
+                    .contains_key(&index)
+                {
+                    return Ok(());
+                }
+                reads.lock().map_err(poisoned)?.push(index);
+                if index == 0 {
+                    let mut entries = source.entries.lock().map_err(poisoned)?;
+                    let _ = entries.remove(&2);
+                    let _ = entries.insert(5, "not-enumerated".into());
+                }
+                Ok(())
+            }),
+            target: Mutex::new(None),
+        }
+    });
+    let array = FieldArray::from_source(source);
+    let rest = FieldValue::from(array.clone()).enumerable_fields_except(&["1"])?;
+    assert_eq!(
+        rest.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["0", "4"]
+    );
+    assert_eq!(*reads.lock().map_err(poisoned)?, [0, 4]);
+    assert!(rest["0"].strict_equals(&child));
+    assert!(rest["4"].is_undefined());
+    assert_eq!(array.own_indices()?, [0, 1, 4, 5]);
+    Ok(())
+}
+
+#[test]
 fn clone_reads_arrays_depth_first_and_preserves_holes_and_own_undefined() -> AuthResult<()> {
     let events = Arc::new(Mutex::new(Vec::new()));
     let log = events.clone();

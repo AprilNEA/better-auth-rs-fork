@@ -4,7 +4,10 @@ use serde_json::{Value, json};
 use super::{
     OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse, ProviderKind,
 };
-use crate::plugins::oauth::{oidc::OidcVerifier, social_profile::fetch_http_profile};
+use crate::plugins::oauth::{
+    oidc::OidcVerifier,
+    social_profile::{ProviderProfile, fetch_http_profile},
+};
 
 /// Facebook profile fields and additional app audiences.
 #[derive(Clone, Default)]
@@ -78,15 +81,15 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     options: &FacebookOptions,
     request: OAuthUserInfoRequest,
     claims: Option<Value>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     let (data, limited) = if let Some(claims) = claims {
         (claims, true)
     } else {
         if !request.access_token.is_truthy()? {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         }
         if provider.client_id.is_empty() || provider.client_secret.is_empty() {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         }
         let debug_url = "https://graph.facebook.com/debug_token";
         #[cfg(test)]
@@ -100,30 +103,30 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             ),
         ]);
         let Some(inspection) = fetch_http_profile(inspection).await? else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         let Some(data) = inspection.get("data") else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         let Some(app_id) = data
             .get("app_id")
             .and_then(Value::as_str)
             .filter(|id| !id.is_empty())
         else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         let Some(user_id) = data
             .get("user_id")
             .and_then(Value::as_str)
             .filter(|id| !id.is_empty())
         else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         if data.get("is_valid") != Some(&Value::Bool(true))
             || (app_id != provider.client_id
                 && !options.additional_client_ids.iter().any(|id| id == app_id))
         {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         }
         let endpoint = provider
             .user_info_url
@@ -142,10 +145,10 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
                 super::token_http::authorization("Bearer", &request.access_token.field_value())?,
             );
         let Some(profile) = fetch_http_profile(profile).await? else {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         };
         if profile.get("id").and_then(Value::as_str) != Some(user_id) {
-            return Ok(None);
+            return Ok(ProviderProfile::default());
         }
         (profile, false)
     };
@@ -155,14 +158,9 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         decode_profile(&data, limited)
     }
     .map_err(AuthError::internal)?;
-    let mut response = OAuthUserInfoResponse { user, data };
-    if let Some(mapper) = &provider.map_profile_to_user {
-        let mapped = mapper.map_profile(&response.data).await?;
-        crate::plugins::oauth::social_profile::apply_mapped_profile(&mut response, mapped);
-    }
-    let _ = response.user.email()?;
-    let _ = response.user.email_verified()?;
-    Ok(Some(response))
+    ProviderProfile::from_typed(provider, OAuthUserInfoResponse { user, data })?
+        .map_user(provider)
+        .await
 }
 
 pub(super) fn graph_profile(profile: Value) -> Result<OAuthUserInfo, String> {

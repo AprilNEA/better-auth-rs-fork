@@ -428,21 +428,15 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
             None,
         )
         .await
-        .unwrap()
         .unwrap();
         assert_eq!(
-            response.user.email.is_undefined(),
+            crate::plugins::oauth::profile_test_support::property(&response, "user")
+                .model_property("email")
+                .unwrap()
+                .is_undefined(),
             expected_email.is_none(),
             "{label}"
         );
-        let user = crate::plugins::oauth::types::AccountInfoUser {
-            id: None,
-            name: response.user.name,
-            email: response.user.email,
-            image: response.user.image,
-            email_verified: response.user.email_verified,
-            additional_fields: response.user.additional_fields,
-        };
         let mut expected_user = json!({
             "name":"Octo Cat", "image":"https://images.example.test/octocat.png",
             "emailVerified":verified
@@ -452,7 +446,7 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
         }
         // serde_json::Value represents upstream own undefined email by omitting the JSON key.
         assert_eq!(
-            json!({"user":user,"data":response.data}),
+            crate::plugins::oauth::profile_test_support::json(response),
             json!({"user":expected_user,"data":expected_data}),
             "{label}"
         );

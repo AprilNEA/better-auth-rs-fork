@@ -21,6 +21,16 @@ impl FieldObjectSource for Probe {
         Ok(self.fields.keys().cloned().collect())
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(self
+            .fields
+            .contains_key(name)
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         if ["buffer", "constructor", "toJSON", "toString", "valueOf"].contains(&name) {
             self.events

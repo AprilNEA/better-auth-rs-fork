@@ -121,13 +121,22 @@ struct ApiErrorObject {
 
 impl crate::field_value::FieldObjectSource for ApiErrorObject {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
-        let mut keys = self.fields.own_keys()?;
+        self.fields.own_keys()
+    }
+
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        let Some(mut descriptor) = self.fields.own_property_descriptor(name)? else {
+            return Ok(None);
+        };
         let hidden = self
             .hidden
             .lock()
             .map_err(|_| AuthError::internal("API error property lock poisoned"))?;
-        keys.retain(|name| !hidden.contains(name));
-        Ok(keys)
+        descriptor.enumerable = !hidden.contains(name);
+        Ok(Some(descriptor))
     }
 
     fn has_property(&self, name: &str) -> AuthResult<bool> {

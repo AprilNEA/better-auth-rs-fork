@@ -4,6 +4,7 @@
     reason = "Ordinary contract fixtures fail immediately on invalid setup or changed output."
 )]
 
+use super::profile_test_support::json as public_response;
 use super::*;
 use better_auth_core::{AuthError, FieldMap, FieldValue, SchemaValue};
 use serde_json::{Value, json};
@@ -47,10 +48,6 @@ fn resolved(config: OAuthProvider) -> resolved::ResolvedProvider {
         generic: None,
     }
 }
-fn public_response(response: OAuthUserInfoResponse) -> Value {
-    json!({"user": types::AccountInfoUser { id: None, name: response.user.name, email: response.user.email, image: response.user.image, email_verified: response.user.email_verified, additional_fields: response.user.additional_fields }, "data": response.data})
-}
-
 #[test]
 fn paypal_authorization_matches_every_captured_url_and_credential_error() {
     use base64::Engine;
@@ -390,7 +387,7 @@ async fn paypal_profiles_preserve_http_data_mapping_and_optional_verified_token(
         .await
         .unwrap();
         assert_eq!(
-            result.map(public_response).unwrap_or(Value::Null),
+            public_response(result),
             sample["result"],
             "{}",
             sample["name"]
@@ -458,7 +455,6 @@ async fn paypal_explicit_verifier_runs_once_for_direct_and_stored_profile_reads(
             )
             .await
         }
-        .unwrap()
         .unwrap();
         assert_eq!(
             public_response(result),
@@ -500,7 +496,7 @@ async fn paypal_optional_token_requires_the_explicit_application_verifier() {
     )
     .await
     .unwrap();
-    assert!(response.is_none());
+    assert!(response.value.is_null());
     assert!(seen.lock().unwrap().is_empty());
     assert_eq!(server.requests.lock().unwrap().len(), 1);
 }
@@ -508,27 +504,18 @@ async fn paypal_optional_token_requires_the_explicit_application_verifier() {
 struct Custom(String);
 #[async_trait]
 impl OAuthUserInfoHandler for Custom {
-    async fn get_user_info(
-        &self,
-        _request: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    async fn get_user_info_native(&self, _request: OAuthUserInfoRequest) -> AuthResult<FieldValue> {
         if self.0.ends_with("error") {
             return Err(AuthError::internal(format!("Ordinary PayPal {}", self.0)));
         }
         if self.0.ends_with("null") {
-            return Ok(None);
+            return Ok(FieldValue::Null);
         }
-        Ok(Some(OAuthUserInfoResponse {
-            user: OAuthUserInfo {
-                id: "paypal-owner".into(),
-                name: Some("Custom Owner".into()).into(),
-                email: Some("custom-paypal@example.test".into()).into(),
-                image: None,
-                email_verified: Default::default(),
-                additional_fields: Default::default(),
-            },
-            data: fixture()["profile"].clone(),
-        }))
+        Ok(json!({
+            "user": {"name": "Custom Owner", "email": "custom-paypal@example.test"},
+            "data": fixture()["profile"],
+        })
+        .into())
     }
 }
 #[async_trait]
@@ -587,7 +574,7 @@ async fn paypal_default_mapper_catch_and_custom_callbacks_keep_distinct_errors()
                 None,
             )
             .await
-            .map(|result| result.map(public_response).unwrap_or(Value::Null))
+            .map(public_response)
         };
         if let Some(error) = sample.get("error") {
             assert!(

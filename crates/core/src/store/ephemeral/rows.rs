@@ -121,6 +121,16 @@ impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
         Ok(self.shallow_fields()?.keys().cloned().collect())
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        Ok(self
+            .shallow_fields()?
+            .contains_key(name)
+            .then_some(crate::field_value::FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         self.field(name)
     }

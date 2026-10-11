@@ -1,8 +1,6 @@
 //! Convert convenience inputs once before hooks and ordered adapter policies.
 
-use crate::{
-    AuthError, AuthResult, CreateUser, FieldMap, FieldValue as Value, SchemaField, UpdateUser,
-};
+use crate::{AuthResult, CreateUser, FieldMap, FieldValue as Value, SchemaField, UpdateUser};
 
 pub(crate) const USER_FIELDS: &[&str] = &[
     "name",
@@ -28,13 +26,7 @@ fn normalize_email(fields: &mut FieldMap, create: bool) -> AuthResult<()> {
     }
     let value = match email {
         Value::Undefined | Value::Null if create => Value::Undefined,
-        Value::String(text) => text.to_lowercase().into(),
-        Value::Utf16String(text) => text.to_lowercase().into(),
-        _ => {
-            return Err(AuthError::internal(
-                "user.email.toLowerCase is not a function",
-            ));
-        }
+        value => value.lowercase_method("user.email")?,
     };
     let _ = fields.insert("email".into(), value);
     Ok(())

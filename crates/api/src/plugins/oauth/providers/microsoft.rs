@@ -1,12 +1,13 @@
 use std::{sync::Arc, time::Duration};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use better_auth_core::{AuthError, AuthResult, SchemaValue};
+use better_auth_core::{AuthError, AuthResult, FieldValue, SchemaValue};
 use serde_json::Value;
 
-use super::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest};
 use crate::plugins::oauth::{
     ClientAssertion, generic_profile::decode_claims, id_token, oidc::OidcVerifier,
+    social_profile::ProviderProfile,
 };
 
 const CONSUMER_TENANT: &str = "9188040d-6c67-4c5b-b112-36a304b66dad";
@@ -183,12 +184,12 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     options: &MicrosoftOptions,
     request: OAuthUserInfoRequest,
     claims: Option<Value>,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+) -> AuthResult<ProviderProfile> {
     let mut data = match claims {
         Some(claims) => claims,
         None => {
             if !request.id_token.is_truthy()? {
-                return Ok(None);
+                return Ok(ProviderProfile::default());
             }
             let token = request.id_token.field_value();
             decode_claims(&crate::plugins::oauth::providers::jwt_string(&token)?)
@@ -203,7 +204,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         better_auth_core::observability::logger::current().error(
             "Microsoft Entra ID token did not include a valid oid claim; unable to resolve a stable account identifier.", &[],
         );
-        return Ok(None);
+        return Ok(ProviderProfile::default());
     }
     if !options.disable_profile_photo && request.access_token.is_truthy()? {
         let photo_url = options.photo_endpoint();
@@ -240,18 +241,13 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             }
         }
     }
+    let raw = FieldValue::from(data.clone());
     let mapped = match &provider.map_profile_to_user {
-        Some(mapper) => Some(mapper.map_profile(&data).await?),
-        None => None,
+        Some(mapper) => mapper.map_profile_native(&raw).await?,
+        None => FieldValue::Undefined,
     };
-    let mut response = OAuthUserInfoResponse {
-        user: decode_profile(data.clone()).map_err(AuthError::internal)?,
-        data,
-    };
-    if let Some(mapped) = mapped {
-        crate::plugins::oauth::social_profile::apply_mapped_profile(&mut response, mapped);
-    }
-    let _ = response.user.email()?;
-    let _ = response.user.email_verified()?;
-    Ok(Some(response))
+    let user = decode_profile(data).map_err(AuthError::internal)?;
+    let mut response = ProviderProfile::from_parts(provider, user, raw)?;
+    response.apply_mapped(&mapped)?;
+    Ok(response)
 }

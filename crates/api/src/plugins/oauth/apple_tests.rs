@@ -184,14 +184,6 @@ impl OAuthUserInfoHandler for Custom {
     }
 }
 
-fn public_response(response: OAuthUserInfoResponse, custom: bool) -> Value {
-    let user = response.user;
-    json!({ "user": types::AccountInfoUser {
-        id: custom.then_some(user.id), name: user.name, email: user.email, image: user.image,
-        email_verified: user.email_verified, additional_fields: user.additional_fields,
-    }, "data": response.data })
-}
-
 #[test]
 fn apple_authorization_matches_the_pinned_complete_urls() -> TestResult<()> {
     let fixture = fixture()?;
@@ -306,20 +298,22 @@ async fn apple_signed_profiles_preserve_callback_names_mapper_precedence_and_dat
                 .into(),
             ..Default::default()
         };
-        let response = social_profile::fetch_user_info_for_code(
-            &resolved::ResolvedProvider {
-                config: config.resolve(),
-                generic: None,
-            },
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await?
-        .ok_or("Missing Apple profile")?;
-        assert_eq!(response.user.id, text(sample, "/subject")?);
+        let provider = resolved::ResolvedProvider {
+            config: config.resolve(),
+            generic: None,
+        };
+        let tokens = OAuthTokenSet::from_fields(profile_request.fields());
+        let response =
+            social_profile::fetch_user_info_for_code(&provider, &tokens, profile_request, None)
+                .await?;
         assert_eq!(
-            normalized(public_response(response, sample.get("custom").is_some())),
+            profile_test_support::subject(&provider, &tokens, &response)
+                .await
+                .json()?,
+            Some(json!(text(sample, "/subject")?))
+        );
+        assert_eq!(
+            normalized(profile_test_support::json(response)),
             *sample.get("result").ok_or("Missing result")?,
             "{}",
             text(sample, "/name")?
@@ -391,13 +385,12 @@ async fn apple_valid_signed_tokens_use_audience_precedence_and_both_nonce_forms(
             request.nonce.as_deref(),
             verified,
         )
-        .await?
-        .ok_or("Missing verified Apple profile")?;
+        .await?;
         let mut expected = sample.get("claims").ok_or("Missing claims")?.clone();
         let fields = expected.as_object_mut().ok_or("Claims must be an object")?;
         let _ = fields.insert("iat".into(), json!("<issued-at>"));
         let _ = fields.insert("exp".into(), json!("<expiry>"));
-        assert_eq!(normalized(response.data), expected);
+        assert_eq!(normalized(profile_test_support::data(&response)), expected);
         assert_eq!(
             *server.requests.lock().map_err(|error| error.to_string())?,
             ["/jwks"]

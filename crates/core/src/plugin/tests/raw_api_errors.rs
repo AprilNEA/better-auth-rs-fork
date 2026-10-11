@@ -35,6 +35,13 @@ impl FieldObjectSource for Probe {
         self.fields.own_keys()
     }
 
+    fn own_property_descriptor(
+        &self,
+        name: &str,
+    ) -> AuthResult<Option<crate::field_value::FieldPropertyDescriptor>> {
+        self.fields.own_property_descriptor(name)
+    }
+
     fn has_property(&self, name: &str) -> AuthResult<bool> {
         Ok(self.getters.iter().any(|(key, _)| *key == name) || self.fields.has_property(name)?)
     }

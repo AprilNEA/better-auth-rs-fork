@@ -411,40 +411,17 @@ impl OAuthProfileMapper for Mapper {
     }
 }
 
-struct CustomProfile(Value, String, Arc<Mutex<Vec<&'static str>>>);
+struct CustomProfile(Value, Value, Arc<Mutex<Vec<&'static str>>>);
 
 #[async_trait]
 impl OAuthUserInfoHandler for CustomProfile {
-    async fn get_user_info(
+    async fn get_user_info_native(
         &self,
         _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    ) -> AuthResult<better_auth_core::FieldValue> {
         self.2.lock().unwrap().push("custom");
-        Ok(Some(OAuthUserInfoResponse {
-            user: OAuthUserInfo {
-                id: self.1.clone(),
-                email: Some(self.0["email"].as_str().unwrap().into()).into(),
-                name: serde_json::from_value(self.0["name"].clone()).unwrap(),
-                image: Some(serde_json::from_value(self.0["image"].clone()).unwrap()),
-                email_verified: Some(self.0["emailVerified"].as_bool().unwrap()).into(),
-                additional_fields: Default::default(),
-            },
-            data: json!({"id":self.1}),
-        }))
+        Ok(json!({"user":self.0, "data":self.1}).into())
     }
-}
-
-fn public_user(user: OAuthUserInfo) -> Value {
-    let mut output = user.additional_fields.json().unwrap();
-    let _ = output.insert("name".into(), json!(user.name));
-    if !user.email.is_undefined() {
-        let _ = output.insert("email".into(), json!(user.email));
-    }
-    let _ = output.insert("emailVerified".into(), json!(user.email_verified));
-    if let Some(image) = user.image {
-        let _ = output.insert("image".into(), json!(image));
-    }
-    Value::Object(output)
 }
 
 fn profile_response(id: &str, profile: &Value) -> Value {
@@ -518,7 +495,7 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             if mode == "custom" {
                 config.get_user_info = Some(Arc::new(CustomProfile(
                     case["customUser"].clone(),
-                    subject.clone(),
+                    case["profile"].clone(),
                     events.clone(),
                 )));
             }
@@ -528,13 +505,18 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
                     access_token: (Some("ordinary-access".into())).into(),
                     ..Default::default()
                 };
-                social_profile::fetch_user_info_for_code(
+                let tokens = OAuthTokenSet::from_fields(profile_request.fields());
+                let response = social_profile::fetch_user_info_for_code(
                     &resolved.providers[id],
-                    &OAuthTokenSet::from_fields(profile_request.fields()),
+                    &tokens,
                     profile_request,
                     None,
                 )
-                .await
+                .await?;
+                let subject =
+                    profile_test_support::subject(&resolved.providers[id], &tokens, &response)
+                        .await;
+                Ok::<_, AuthError>((response, subject))
             });
             if mode == "mapped" {
                 tokio::time::timeout(std::time::Duration::from_secs(5), started.notified())
@@ -544,7 +526,7 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
                 assert!(!response.is_finished());
                 resume.notify_one();
             }
-            let response = response.await.unwrap().unwrap().unwrap();
+            let (response, account_subject) = response.await.unwrap().unwrap();
             events.lock().unwrap().push("returned");
             if id == "reddit" && mode != "custom" {
                 assert!(
@@ -564,11 +546,12 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
                         .contains("notion-version: 2022-06-28")
                 );
             }
-            if mode != "custom" {
-                assert_eq!(response.data, case["profile"]);
-            }
-            assert_eq!(response.user.id, subject);
-            assert_eq!(public_user(response.user), case[format!("{mode}User")]);
+            assert_eq!(profile_test_support::data(&response), case["profile"]);
+            assert_eq!(account_subject.json().unwrap(), Some(json!(subject)));
+            assert_eq!(
+                profile_test_support::user(&response),
+                case[format!("{mode}User")]
+            );
             assert_eq!(
                 *events.lock().unwrap(),
                 match mode {
@@ -601,10 +584,9 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
                 None,
             )
             .await
-            .unwrap()
             .unwrap();
-            assert_eq!(public_user(response.user), variant["user"]);
-            assert_eq!(response.data, variant["profile"]);
+            assert_eq!(profile_test_support::user(&response), variant["user"]);
+            assert_eq!(profile_test_support::data(&response), variant["profile"]);
             assert_eq!(*events.lock().unwrap(), ["http"]);
         }
     }
@@ -635,7 +617,7 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             None,
         )
         .await;
-        assert!(matches!(result, Ok(None)));
+        assert!(matches!(result, Ok(profile) if profile.value.is_null()));
         assert_eq!(*events.lock().unwrap(), ["http"]);
     }
 }
@@ -669,7 +651,7 @@ async fn cloudflare_api_failures_return_no_profile_before_mapping() {
             None,
         )
         .await;
-        assert!(matches!(result, Ok(None)));
+        assert!(matches!(result, Ok(profile) if profile.value.is_null()));
         assert_eq!(*events.lock().unwrap(), ["http"]);
     }
 }
@@ -710,7 +692,7 @@ async fn linear_missing_viewer_returns_no_profile_before_mapping() {
             None,
         )
         .await;
-        assert!(matches!(result, Ok(None)));
+        assert!(matches!(result, Ok(profile) if profile.value.is_null()));
         assert_eq!(*events.lock().unwrap(), ["http"]);
     }
 }
@@ -821,7 +803,7 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
         )
         .await
         .unwrap();
-        assert!(result.is_none());
+        assert!(result.value.is_null());
         assert!(events.lock().unwrap().is_empty());
     }
     let profile_request = OAuthUserInfoRequest {
@@ -836,7 +818,7 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
     )
     .await
     .unwrap();
-    assert!(result.is_none());
+    assert!(result.value.is_null());
     assert_eq!(*events.lock().unwrap(), ["http"]);
 }
 
@@ -891,12 +873,16 @@ async fn reddit_placeholder_follows_mapper_email_presence() {
             None,
         )
         .await
-        .unwrap()
         .unwrap();
         let mut expected = data["defaultUser"].clone();
         expected["email"] = case["email"].clone();
-        assert_eq!(public_user(response.user), expected, "{}", case["name"]);
-        assert_eq!(response.data, data["profile"]);
+        assert_eq!(
+            profile_test_support::user(&response),
+            expected,
+            "{}",
+            case["name"]
+        );
+        assert_eq!(profile_test_support::data(&response), data["profile"]);
         assert_eq!(*events.lock().unwrap(), ["http", "map"]);
     }
 }
@@ -939,7 +925,7 @@ async fn reddit_http_failure_skips_mapper_and_mapper_error_propagates() {
         )
         .await;
         if status.starts_with("503") {
-            assert!(result.unwrap().is_none());
+            assert!(result.unwrap().value.is_null());
         } else {
             assert!(
                 matches!(result, Err(AuthError::Internal(message)) if message == "Ordinary Reddit mapper failed")
@@ -988,7 +974,7 @@ async fn zoom_http_failure_skips_mapper_and_mapper_error_propagates() {
         )
         .await;
         if status.starts_with("503") {
-            assert!(result.unwrap().is_none());
+            assert!(result.unwrap().value.is_null());
             assert_eq!(*events.lock().unwrap(), ["http"]);
         } else {
             assert!(

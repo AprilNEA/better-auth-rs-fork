@@ -17,8 +17,8 @@ pub(super) mod token_http;
 pub(super) mod twitch;
 pub(super) mod twitter;
 pub(super) mod wechat;
-use super::OAuthProfileMapper;
 use super::token::{TokenEndpointAuth, TokenEndpointSecretAuthentication, TokenGrantType};
+use super::{OAuthAccountSubject, OAuthProfileMapper};
 use defaults::ProviderKind;
 pub(super) use defaults::github_profile;
 use std::{collections::HashSet, sync::Arc};
@@ -60,30 +60,6 @@ pub struct OAuthUserInfo {
     pub image: Option<Option<String>>,
     /// Preserve omitted or null provider values without treating either as verified.
     pub email_verified: SchemaValue<Option<bool>>,
-}
-
-impl OAuthUserInfo {
-    pub(super) fn email(&self) -> AuthResult<Option<&str>> {
-        profile_email(&self.email)
-    }
-
-    pub(super) fn email_verified(&self) -> AuthResult<bool> {
-        profile_email_verified(&self.email_verified)
-    }
-
-    pub(super) fn name(&self) -> AuthResult<Option<&str>> {
-        match &self.name {
-            SchemaValue::Typed(Some(value)) | SchemaValue::Dynamic(FieldValue::String(value)) => {
-                Ok(Some(value))
-            }
-            SchemaValue::Undefined
-            | SchemaValue::Typed(None)
-            | SchemaValue::Dynamic(FieldValue::Null) => Ok(None),
-            SchemaValue::Dynamic(_) => Err(AuthError::internal(
-                "OAuth profile name must be a string, null, or undefined",
-            )),
-        }
-    }
 }
 
 pub(super) fn decode_profile_name(value: Option<&Value>) -> SchemaValue<Option<String>> {
@@ -159,6 +135,9 @@ pub struct OAuthUserInfoRequest {
 mod token_record;
 pub(super) use token_record::{joined_scopes, merge_scopes, split_scopes};
 
+#[path = "profile_record.rs"]
+mod profile_record;
+
 pub(super) fn jwt_string(value: &FieldValue) -> AuthResult<std::borrow::Cow<'_, str>> {
     match value {
         FieldValue::String(value) => Ok(std::borrow::Cow::Borrowed(value)),
@@ -178,11 +157,33 @@ pub struct OAuthUserInfoResponse {
 /// Fetch a provider profile while preserving application errors at the endpoint boundary.
 #[async_trait]
 pub trait OAuthUserInfoHandler: Send + Sync {
-    /// Return `None` when no profile is available, or preserve an application error.
+    /// Return a typed response at the legacy JSON callback boundary.
+    /// Native handlers may implement `get_user_info_native` instead.
     async fn get_user_info(
         &self,
-        request: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>>;
+        _request: OAuthUserInfoRequest,
+    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+        Err(AuthError::internal(
+            "This OAuth user info handler does not implement the typed JSON callback",
+        ))
+    }
+
+    /// Return the complete provider response without narrowing values or copying object handles.
+    /// The default consumes the legacy typed response once at its JSON callback boundary.
+    async fn get_user_info_native(&self, request: OAuthUserInfoRequest) -> AuthResult<FieldValue> {
+        Ok(self
+            .get_user_info(request)
+            .await?
+            .map_or(FieldValue::Undefined, OAuthUserInfoResponse::into_native))
+    }
+}
+
+pub(super) fn json_profile_bridge(profile: &FieldValue) -> AuthResult<Value> {
+    profile.json()?.ok_or_else(|| {
+        AuthError::type_error(
+            "The typed JSON profile callback cannot receive an omitted JSON value",
+        )
+    })
 }
 
 #[async_trait]
@@ -241,6 +242,8 @@ pub struct OAuthProvider {
     /// Map local fields after built-in profile decoding without changing account identity.
     pub map_profile_to_user: Option<Arc<dyn OAuthProfileMapper>>,
     pub get_user_info: Option<Arc<dyn OAuthUserInfoHandler>>,
+    /// Resolve a custom provider's account identity from its original profile and token record.
+    pub account_subject: Option<Arc<dyn OAuthAccountSubject>>,
     pub refresh_access_token: Option<Arc<dyn OAuthRefreshTokenHandler>>,
     pub verify_id_token: Option<Arc<dyn OAuthIdTokenVerifier>>,
     pub disable_implicit_sign_up: Option<bool>,
@@ -615,7 +618,22 @@ impl OAuthProvider {
         }
     }
 
-    pub(super) fn account_info_includes_id(&self) -> bool {
+    pub(super) fn builtin_account_subject(
+        &self,
+        profile: &FieldValue,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.kind.account_subject(profile)
+    }
+
+    pub(super) fn uses_legacy_profile_subject(&self) -> bool {
+        matches!(self.kind, ProviderKind::Custom) && self.map_user_info.is_some()
+    }
+
+    pub(super) fn is_custom(&self) -> bool {
+        matches!(self.kind, ProviderKind::Custom)
+    }
+
+    pub(super) fn default_profile_includes_id(&self) -> bool {
         self.get_user_info.is_some()
             || (self.github_endpoints().is_none() && self.map_user_info.is_some())
     }

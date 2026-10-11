@@ -4,8 +4,7 @@ use super::endpoint_context::EndpointContext;
 use async_trait::async_trait;
 use better_auth_core::{AuthError, AuthResponse, AuthResult, AuthSchema, CreateUser};
 use better_auth_core::{FieldMap, FieldValue, SchemaValue};
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Serialize, ser::SerializeMap};
 use std::sync::Arc;
 
 /// The operation that is subject to the admission policy.
@@ -23,20 +22,42 @@ pub enum UserValidationAction {
 pub struct UserValidationProvider {
     #[serde(skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub provider_id: SchemaValue<String>,
-    /// `None` preserves an absent profile; `Some(Value::Null)` preserves explicit null.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub profile: Option<Value>,
+    /// Retain the original profile handle until the caller serializes the validation data.
+    #[serde(
+        skip_serializing_if = "better_auth_core::field_value::serde::optional_value::is_absent_or_json_omitted",
+        with = "better_auth_core::field_value::serde::optional_value"
+    )]
+    pub profile: Option<FieldValue>,
 }
 
 /// Provenance of a user validation operation.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct UserValidationSource {
     pub action: UserValidationAction,
     pub method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub oauth: Option<UserValidationProvider>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sso: Option<UserValidationProvider>,
+    action_first: bool,
+}
+
+impl Serialize for UserValidationSource {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        if self.action_first {
+            map.serialize_entry("action", &self.action)?;
+        }
+        map.serialize_entry("method", &self.method)?;
+        if let Some(oauth) = &self.oauth {
+            map.serialize_entry("oauth", oauth)?;
+        }
+        if let Some(sso) = &self.sso {
+            map.serialize_entry("sso", sso)?;
+        }
+        if !self.action_first {
+            map.serialize_entry("action", &self.action)?;
+        }
+        map.end()
+    }
 }
 impl UserValidationSource {
     pub fn new(method: impl Into<String>, action: UserValidationAction) -> Self {
@@ -45,11 +66,12 @@ impl UserValidationSource {
             method: method.into(),
             oauth: None,
             sso: None,
+            action_first: false,
         }
     }
     pub(crate) fn oauth(
         provider: &FieldValue,
-        profile: Option<&Value>,
+        profile: Option<&FieldValue>,
         action: UserValidationAction,
     ) -> Self {
         Self {
@@ -58,6 +80,13 @@ impl UserValidationSource {
                 profile: profile.cloned(),
             }),
             ..Self::new("oauth", action)
+        }
+    }
+
+    pub(crate) fn explicit_oauth_link(provider: &FieldValue, profile: Option<&FieldValue>) -> Self {
+        Self {
+            action_first: true,
+            ..Self::oauth(provider, profile, UserValidationAction::LinkAccount)
         }
     }
 }

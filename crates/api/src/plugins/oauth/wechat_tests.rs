@@ -4,6 +4,7 @@
     reason = "Contract tests fail immediately when a captured fixture or provider result changes."
 )]
 
+use super::profile_test_support::json as public_response;
 use super::*;
 use better_auth_core::{AuthError, SchemaValue};
 use chrono::{Duration, Utc};
@@ -292,15 +293,10 @@ impl OAuthProfileMapper for Mapper {
     }
 }
 
-fn public_response(response: Option<OAuthUserInfoResponse>) -> Value {
-    response.map_or(Value::Null, |response| json!({
-        "user": types::AccountInfoUser { id: None, name: response.user.name, email: response.user.email,
-            image: response.user.image, email_verified: response.user.email_verified,
-            additional_fields: response.user.additional_fields }, "data": response.data,
-    }))
-}
-
-async fn fetch(config: OAuthProvider, token: &Value) -> AuthResult<Option<OAuthUserInfoResponse>> {
+async fn fetch(
+    config: OAuthProvider,
+    token: &Value,
+) -> AuthResult<social_profile::ProviderProfile> {
     let profile_request = OAuthUserInfoRequest::from_fields(better_auth_core::FieldMap::from_json(
         token.as_object().unwrap().clone(),
     )?);
@@ -353,30 +349,23 @@ struct Custom {
 
 #[async_trait]
 impl OAuthUserInfoHandler for Custom {
-    async fn get_user_info(
+    async fn get_user_info_native(
         &self,
         _: OAuthUserInfoRequest,
-    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    ) -> AuthResult<better_auth_core::FieldValue> {
         self.events.lock().unwrap().push("custom".into());
         match self.mode.as_str() {
-            "custom null" => Ok(None),
+            "custom null" => Ok(better_auth_core::FieldValue::Null),
             "custom error" => Err(AuthError::internal("Ordinary callback failure")),
             "custom API error" => Err(AuthError::Upstream {
                 status: 429,
                 code: "ORDINARY_CALLBACK_LIMIT",
                 message: "Ordinary callback limit",
             }),
-            _ => Ok(Some(OAuthUserInfoResponse {
-                user: OAuthUserInfo {
-                    id: "ordinary-unionid".into(),
-                    name: Some("Custom User".into()).into(),
-                    email: Some("custom@example.com".into()).into(),
-                    email_verified: Some(false).into(),
-                    image: None,
-                    additional_fields: Default::default(),
-                },
-                data: json!({"source":"custom"}),
-            })),
+            _ => Ok(json!({
+                "user": {"id":"ordinary-unionid", "name":"Custom User", "email":"custom@example.com", "emailVerified":false},
+                "data": {"source":"custom"},
+            }).into()),
         }
     }
 }
@@ -447,13 +436,7 @@ async fn custom_handlers_keep_priority_and_original_error_contracts() {
                     );
                 }
             } else {
-                let result = result.unwrap();
-                let include_id = result.as_ref().map(|response| response.user.id.clone());
-                let mut actual = public_response(result);
-                if let Some(id) = include_id {
-                    actual["user"]["id"] = id.into();
-                }
-                assert_eq!(actual, sample["result"]);
+                assert_eq!(public_response(result.unwrap()), sample["result"]);
             }
         }
         assert_eq!(json!(*events.lock().unwrap()), sample["events"]);

@@ -140,3 +140,177 @@ fn owned_cycles_have_finite_comparison_and_debug_but_require_explicit_unlinking(
         .delete("self")?;
     Ok(())
 }
+
+#[test]
+fn object_enumeration_preserves_descriptor_schedules_deletion_and_child_identity() -> AuthResult<()>
+{
+    use std::sync::Mutex;
+
+    struct RestSource {
+        fields: FieldObject,
+        reads: Mutex<Vec<String>>,
+    }
+
+    impl FieldObjectSource for RestSource {
+        fn own_keys(&self) -> AuthResult<Vec<String>> {
+            self.reads
+                .lock()
+                .map_err(|_| AuthError::internal("Rest read events poisoned"))?
+                .push("keys".into());
+            self.fields.own_keys()
+        }
+
+        fn own_property_descriptor(
+            &self,
+            name: &str,
+        ) -> AuthResult<Option<FieldPropertyDescriptor>> {
+            if name == "excluded" {
+                return Err(AuthError::internal("The excluded descriptor must not run"));
+            }
+            self.reads
+                .lock()
+                .map_err(|_| AuthError::internal("Rest read events poisoned"))?
+                .push(format!("descriptor:{name}"));
+            Ok(self
+                .fields
+                .own_property_descriptor(name)?
+                .map(|mut descriptor| {
+                    descriptor.enumerable = name != "hidden";
+                    descriptor
+                }))
+        }
+
+        fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            if matches!(name, "excluded" | "hidden") {
+                return Err(AuthError::internal("The unselected getter must not run"));
+            }
+            self.reads
+                .lock()
+                .map_err(|_| AuthError::internal("Rest read events poisoned"))?
+                .push(format!("get:{name}"));
+            let value = self.fields.get(name)?;
+            if name == "first" {
+                let _ = self.fields.delete("deleted")?;
+                let _ = self.fields.set("added", "not-enumerated".into())?;
+            }
+            Ok(value)
+        }
+
+        fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+            self.fields.set(name, value)
+        }
+
+        fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            self.fields.delete(name)
+        }
+
+        fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+            Err(AuthError::internal(
+                "Rest must read only selected properties",
+            ))
+        }
+
+        fn identity(&self) -> usize {
+            std::ptr::from_ref(self) as usize
+        }
+    }
+
+    let child = FieldValue::from(FieldMap::from([("value".into(), 1.into())]));
+    let source = || {
+        Arc::new(RestSource {
+            fields: FieldMap::from([
+                ("excluded".into(), "unread".into()),
+                ("first".into(), child.clone()),
+                ("deleted".into(), "removed-by-first".into()),
+                ("hidden".into(), "not-enumerable".into()),
+                ("alias".into(), child.clone()),
+                ("ownUndefined".into(), FieldValue::Undefined),
+            ])
+            .into(),
+            reads: Mutex::default(),
+        })
+    };
+    for operation in ["rest", "spread", "json", "keys"] {
+        let source = source();
+        if operation != "rest" {
+            let _ = source.fields.delete("excluded")?;
+        }
+        let object = FieldObject::from_source(source.clone());
+        let value = FieldValue::Object(object.clone());
+        let expected = match operation {
+            "json" => {
+                assert_eq!(
+                    value.json()?,
+                    Some(serde_json::json!({
+                        "first": {"value": 1}, "alias": {"value": 1},
+                    }))
+                );
+                vec![
+                    "get:toJSON",
+                    "keys",
+                    "descriptor:first",
+                    "descriptor:deleted",
+                    "descriptor:hidden",
+                    "descriptor:alias",
+                    "descriptor:ownUndefined",
+                    "get:first",
+                    "get:deleted",
+                    "get:alias",
+                    "get:ownUndefined",
+                ]
+            }
+            "keys" => {
+                assert_eq!(
+                    object.enumerable_keys()?,
+                    ["first", "deleted", "alias", "ownUndefined"]
+                );
+                vec![
+                    "keys",
+                    "descriptor:first",
+                    "descriptor:deleted",
+                    "descriptor:hidden",
+                    "descriptor:alias",
+                    "descriptor:ownUndefined",
+                ]
+            }
+            _ => {
+                let fields = if operation == "rest" {
+                    value.enumerable_fields_except(&["excluded"])?
+                } else {
+                    value.enumerable_fields()?
+                };
+                assert_eq!(
+                    fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                    ["first", "alias", "ownUndefined"]
+                );
+                assert!(fields["first"].strict_equals(&child));
+                assert!(fields["alias"].strict_equals(&child));
+                assert!(fields["ownUndefined"].is_undefined());
+                vec![
+                    "keys",
+                    "descriptor:first",
+                    "get:first",
+                    "descriptor:deleted",
+                    "descriptor:hidden",
+                    "descriptor:alias",
+                    "get:alias",
+                    "descriptor:ownUndefined",
+                    "get:ownUndefined",
+                ]
+            }
+        };
+        assert_eq!(
+            *source
+                .reads
+                .lock()
+                .map_err(|_| AuthError::internal("Rest read events poisoned"))?,
+            expected,
+            "{operation}",
+        );
+        if operation != "keys" {
+            assert_eq!(source.fields.get("deleted")?, None);
+            assert_eq!(source.fields.get("added")?, Some("not-enumerated".into()));
+        }
+    }
+    Ok(())
+}
