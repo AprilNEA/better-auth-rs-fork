@@ -149,42 +149,15 @@ impl TrustedValuesResolver for MergedOrigins {
         let mut values = self.values.clone();
         let resolvers = self.resolvers.clone();
         let request = request.cloned();
-        let count = resolvers.len();
-        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        // One supervisor polls callbacks in declaration order. Dropping the receiver
-        // after rejection must not cancel the other Promise.all callbacks.
-        let task = super::scope::spawn(async move {
-            let _ = futures_util::future::join_all(resolvers.into_iter().enumerate().map(
-                |(index, resolver)| {
-                    let sender = sender.clone();
-                    let request = request.clone();
-                    async move {
-                        let result = resolver.resolve(request.as_ref()).await;
-                        let _ = sender.send((index, result));
-                    }
-                },
-            ))
-            .await;
-        });
-        let mut results = vec![None; count];
-        for _ in 0..count {
-            let Some((index, result)) = receiver.recv().await else {
-                break;
-            };
-            if let Some(slot) = results.get_mut(index) {
-                *slot = Some(result?);
-            }
-        }
-        match task.await {
-            Ok(()) => {}
-            Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
-            Err(error) => {
-                return Err(crate::AuthError::internal(format!(
-                    "Trusted-origin resolver task: {error}"
-                )));
-            }
-        }
-        values.extend(results.into_iter().flatten().flatten());
+        let results = super::concurrent::all(
+            "Trusted-origin resolver task",
+            resolvers.into_iter().map(|resolver| {
+                let request = request.clone();
+                async move { resolver.resolve(request.as_ref()).await }
+            }),
+        )
+        .await?;
+        values.extend(results.into_iter().flatten());
         values.retain(|value| !value.is_empty());
         Ok(values)
     }

@@ -1,6 +1,5 @@
 use super::id_filter::IdColumn;
 use async_trait::async_trait;
-use better_auth_core::store::schema::resolve_field_name;
 use chrono::Utc;
 use sea_orm::{
     ColumnTrait, DatabaseBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
@@ -19,25 +18,7 @@ use crate::SeaOrmOrganizationModel;
 use better_auth_core::{FieldValue, SchemaField};
 use sea_orm::sea_query::{BinOper, Expr, ExprTrait};
 
-fn member_column<M: SeaOrmOrganizationModel>(
-    field: &str,
-    config: &better_auth_core::user_fields::UserConfig,
-) -> Option<M::Column> {
-    let name = match field {
-        "organizationId" => "organization_id",
-        "userId" => "user_id",
-        "createdAt" => "created_at",
-        other => other,
-    };
-    M::column(resolve_field_name(
-        config
-            .fields()
-            .get(field)
-            .and_then(|field| field.field_name.as_deref()),
-        name,
-    ))
-    .ok()
-}
+mod query;
 
 fn bind_member_filter(
     params: &ListOrganizationMembersParams,
@@ -46,10 +27,17 @@ fn bind_member_filter(
     policy: &better_auth_core::id::IdGeneration,
     runtime: &better_auth_core::plugin_runtime::ModelFields,
 ) -> AuthResult<Option<(super::value_filter::BoundQueryField, bool)>> {
-    let (Some(field), Some(value)) = (params.filter_field.as_deref(), params.filter_value.as_ref())
+    let Some(field) = params
+        .filter_field
+        .as_deref()
+        .filter(|field| !field.is_empty())
     else {
         return Ok(None);
     };
+    let value = params
+        .filter_value
+        .as_ref()
+        .unwrap_or(&FieldValue::Undefined);
     let operator = params.filter_operator.as_deref().unwrap_or("eq");
     if operator == "in" && value.as_array().is_none() {
         return Err(better_auth_core::AuthError::internal(
@@ -147,24 +135,6 @@ fn apply_member_filter<M: SeaOrmOrganizationModel>(
         _ => query,
     };
     Ok(query)
-}
-
-fn apply_member_sort<M: SeaOrmOrganizationModel>(
-    query: Select<Entity<M>>,
-    params: &ListOrganizationMembersParams,
-    config: &better_auth_core::user_fields::UserConfig,
-) -> AuthResult<Select<Entity<M>>> {
-    let column = params
-        .sort_by
-        .as_deref()
-        .and_then(|field| member_column::<M>(field, config))
-        .unwrap_or(M::column("created_at")?);
-    let column = Expr::col(column);
-    Ok(if params.sort_direction.as_deref() == Some("desc") {
-        query.order_by_desc(column)
-    } else {
-        query.order_by_asc(column)
-    })
 }
 
 #[async_trait]
@@ -397,79 +367,16 @@ where
         &self,
         params: &ListOrganizationMembersParams,
     ) -> AuthResult<(Vec<Member>, usize)> {
-        let organization = self.bind_organization_query_field(
-            better_auth_core::store::schema::EntityRole::Member,
-            "organizationId",
-            &params.organization_id.field_value(),
-        )?;
-        let filter = bind_member_filter(
-            params,
-            &self.organization_fields()?.member,
-            self.connection().get_database_backend(),
-            self.config().advanced.database.generate_id(),
-            &self.model_fields,
-        )?;
-        let (column, value) = self.resolve_organization_query_field::<O::Member>(
-            better_auth_core::store::schema::EntityRole::Member,
-            organization,
-        )?;
-        let base_query = Entity::<O::Member>::find().filter(super::value_filter::equals(
-            column,
-            &value,
-            self.connection().get_database_backend(),
-        )?);
-        let filtered_query = apply_member_filter::<O::Member>(
-            base_query,
-            params,
-            &self.organization_fields()?.member,
-            self.connection().get_database_backend(),
-            self.config().advanced.database.generate_id(),
-            filter,
-        )?;
-        let total = filtered_query
-            .clone()
-            .count(self.connection())
-            .await
-            .map_err(map_db_err)? as usize;
-
-        let mut query = apply_member_sort::<O::Member>(
-            filtered_query,
-            params,
-            &self.organization_fields()?.member,
-        )?;
-        let (limit, offset) = super::pagination::sql_pagination(
-            self.connection().get_database_backend(),
-            params.limit,
-            params.offset,
-        )?;
-        let unbounded_offset = if limit.is_none() {
-            offset.unwrap_or(0)
-        } else {
-            0
-        };
-        if let Some(offset) = offset.filter(|_| limit.is_some()) {
-            query = query.offset(offset);
-        }
-        if let Some(limit) = limit {
-            query = query.limit(limit);
-        }
-
-        let rows = super::plugin_rows::all(self.connection(), query).await?;
-        let skip = std::cmp::min(unbounded_offset, rows.len() as u64) as usize;
-        let rows = rows.into_iter().skip(skip).collect();
-        Ok((
-            models::project::<O::Member>(
-                rows,
-                &self.organization_fields()?.member,
-                self.connection().get_database_backend(),
-                (
-                    &self.model_fields,
-                    better_auth_core::store::schema::EntityRole::Member,
-                ),
-            )
-            .await?,
-            total,
-        ))
+        let page_store = self.clone();
+        let page_params = params.clone();
+        let count_store = self.clone();
+        let count_params = params.clone();
+        better_auth_core::request_runtime::concurrent::pair(
+            "Member query task",
+            async move { page_store.member_query_page(&page_params).await },
+            async move { count_store.member_query_count(&count_params).await },
+        )
+        .await
     }
 
     async fn count_organization_members(&self, organization_id: &str) -> AuthResult<i64> {

@@ -90,7 +90,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 );
             }
         }
-        let count = tokens.len();
         let mut fields = FieldMap::from(user);
         let mut ordered = FieldMap::new();
         let configured = self.config.user.user_field_schema_with_plugins(
@@ -112,34 +111,20 @@ impl<S: AuthSchema> SecondaryStore<S> {
             let _ = ordered.insert("id".into(), id);
         }
         let user = FieldValue::from(ordered);
-        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
-        let runtime = self.clone();
-        // Promise.all rejects on the first failure while already-started peers continue.
-        let task = crate::request_runtime::spawn_with_request_context(async move {
-            let runtime = &runtime;
-            let user = &user;
-            let _ = futures_util::future::join_all(tokens.into_iter().map(|token| {
-                let sender = sender.clone();
+        crate::request_runtime::concurrent::all(
+            "User session refresh task",
+            tokens.into_iter().map(|token| {
+                let runtime = self.clone();
+                let user = user.clone();
                 async move {
-                    let result = runtime.refresh_cached_user_session(&token, user, now).await;
-                    let _ = sender.send(result);
+                    runtime
+                        .refresh_cached_user_session(&token, &user, now)
+                        .await
                 }
-            }))
-            .await;
-        });
-        for _ in 0..count {
-            let Some(result) = receiver.recv().await else {
-                break;
-            };
-            result?;
-        }
-        match task.await {
-            Ok(()) => Ok(()),
-            Err(error) if error.is_panic() => std::panic::resume_unwind(error.into_panic()),
-            Err(error) => Err(AuthError::internal(format!(
-                "User session refresh task: {error}"
-            ))),
-        }
+            }),
+        )
+        .await
+        .map(|_| ())
     }
 
     async fn refresh_cached_user_session(

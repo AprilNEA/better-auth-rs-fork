@@ -6,12 +6,12 @@
 use super::{Trace, date, record, take_trace};
 use better_auth_core::{
     AuthConfig, AuthError, AuthRecordFields, AuthResult, AuthStore, CreateMember, CreateUser,
-    FieldMap, FieldValue, ListUsersParams, StatelessSchema,
+    FieldMap, FieldValue, ListUsersParams,
     id::{IdGeneration, IdGenerator},
     organization_fields::OrganizationFields,
     store::{
         EphemeralStore, ListOrganizationMembersParams, MemberStore, OrganizationStore,
-        RuntimeStore, UserStore, schema::EntityRole,
+        RuntimeStore, StatelessSchema, UserStore, schema::EntityRole,
     },
     user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType},
 };

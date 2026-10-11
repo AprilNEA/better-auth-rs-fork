@@ -1,5 +1,7 @@
 //! Request-specific URL, trust, and cookie policy.
 
+#[doc(hidden)]
+pub mod concurrent;
 mod config;
 mod cookies;
 mod scope;

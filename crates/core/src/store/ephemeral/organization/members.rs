@@ -1,5 +1,7 @@
 use super::*;
 
+mod query;
+
 #[async_trait]
 impl MemberStore for EphemeralStore {
     async fn get_member_with_user(
@@ -243,101 +245,16 @@ impl MemberStore for EphemeralStore {
         &self,
         params: &ListOrganizationMembersParams,
     ) -> AuthResult<(Vec<Member>, usize)> {
-        let schema = self.field_config(EntityRole::Member)?;
-        let organization_id = self.organization_query(
-            EntityRole::Member,
-            "organizationId",
-            params.organization_id.field_value(),
-        )?;
-        let value = |member: &FieldMap, field: &str| -> Option<Value> {
-            (field == "id" || schema.fields().contains_key(field))
-                .then(|| organization_value(member, &schema, field))
-        };
-        let filter =
-            if let (Some(field), Some(expected)) = (&params.filter_field, &params.filter_value) {
-                let operator =
-                    crate::query::where_operator(params.filter_operator.as_deref().unwrap_or("eq"));
-                crate::query::validate_where_operand(operator, expected)?;
-                let field = if matches!(field.as_str(), "id" | "_id") {
-                    "id"
-                } else {
-                    crate::user_query::declared_field(field, &schema)
-                        .map(|(logical, _)| logical)
-                        .ok_or_else(|| {
-                            AuthError::config(format!("Field {field} not found in model member"))
-                        })?
-                };
-                self.model_fields.begin_id_query(EntityRole::Member)?;
-                let expected = if field == "id" {
-                    self.memory_primary_id_query(expected)?
-                } else {
-                    self.memory_field_query(&schema, field, expected.clone())?
-                };
-                Some((schema.record_storage_key(field), operator, expected))
-            } else {
-                None
-            };
-        let organization_column = schema.record_storage_key("organizationId");
-        let organization_id = organization_id.field_value();
-        let (sources, total) = crate::observability::database::with_database_operation(
-            &self.config,
-            "member",
-            "findMany",
-            async {
-                let members = {
-                    let state = self.lock()?;
-                    state
-                        .members
-                        .select_refs(|_| true)?
-                        .into_iter()
-                        .map(|source| {
-                            let snapshot = source.read(|row| Ok(row.clone()))?;
-                            Ok((snapshot, source))
-                        })
-                        .collect::<AuthResult<Vec<_>>>()?
-                };
-                let mut selected = Vec::with_capacity(members.len());
-                for member in members {
-                    let clauses = std::iter::once((
-                        organization_column,
-                        crate::WhereOperator::Eq,
-                        &organization_id,
-                    ))
-                    .chain(
-                        filter
-                            .as_ref()
-                            .map(|(field, operator, expected)| (*field, *operator, expected)),
-                    );
-                    if crate::memory_query::matches_all(clauses, |(field, operator, expected)| {
-                        crate::memory_query::matches(
-                            member.0.get(field),
-                            expected,
-                            operator,
-                            crate::WhereMode::Sensitive,
-                        )
-                    })? {
-                        selected.push(member);
-                    }
-                }
-                let mut members = selected;
-                let field = params.sort_by.as_deref().unwrap_or("createdAt");
-                let descending = params.sort_direction.as_deref() == Some("desc");
-                crate::memory_sort::sort(&mut members, descending, |(member, _)| {
-                    Ok(value(member, field).unwrap_or(Value::Null))
-                })?;
-                let total = members.len();
-                let sources = crate::query::paginate_memory(members, params.limit, params.offset)
-                    .into_iter()
-                    .map(|(_, source)| source)
-                    .collect();
-                Ok((sources, total))
-            },
+        let page_store = self.clone();
+        let page_params = params.clone();
+        let count_store = self.clone();
+        let count_params = params.clone();
+        crate::request_runtime::concurrent::pair(
+            "Member query task",
+            async move { page_store.member_query_page(&page_params).await },
+            async move { count_store.member_query_count(&count_params).await },
         )
-        .await?;
-        Ok((
-            self.output_record_refs(EntityRole::Member, sources).await?,
-            total,
-        ))
+        .await
     }
     async fn count_organization_members(&self, org: &str) -> AuthResult<i64> {
         let schema = self.field_config(EntityRole::Member)?;

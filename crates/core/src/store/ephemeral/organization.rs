@@ -2,6 +2,8 @@ use super::*;
 use better_auth_schema_registry::EntityRole;
 
 mod invitations;
+#[cfg(test)]
+mod member_query_schedule_tests;
 mod members;
 #[cfg(test)]
 mod query_tests;

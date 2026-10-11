@@ -17,6 +17,8 @@ mod member_hook_routes;
 mod member_native_routes;
 #[path = "organization/member_point_reads.rs"]
 mod member_point_reads;
+#[path = "organization/member_query_schedule.rs"]
+mod member_query_schedule;
 #[path = "organization/organization_id_predicates.rs"]
 mod organization_id_predicates;
 #[path = "organization/organization_live_business.rs"]

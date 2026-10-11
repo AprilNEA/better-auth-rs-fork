@@ -248,20 +248,27 @@ run_stage() {
         ./compat-tests/reference-server/contracts/device-reference-values.test.ts \
         ./compat-tests/reference-server/contracts/device-reference-defaults.test.ts \
         ./compat-tests/reference-server/contracts/organization-query-limits.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-query-scheduling.test.ts \
         ./compat-tests/reference-server/contracts/organization-physical-fields.test.ts \
         ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-input.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-output.test.ts \
-        ./compat-tests/reference-server/contracts/memory-user-live-reads.test.ts || query_status=1
+        ./compat-tests/reference-server/contracts/memory-user-live-reads.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-user-refresh.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-user-refresh-values.test.ts || query_status=1
       cargo clippy --workspace --locked --features axum,seaorm2,redis-cache -- -D warnings || query_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests --test query_binding_order_tests \
+        --test nullable_user_update_tests --test telemetry_options_tests -- -D warnings || query_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        store::ephemeral:: user_query:: store::joins:: || query_status=1
+        store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: || query_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test device_runtime_transaction_tests --test device_where_tests \
         --test organization_query_limits_tests --test organization_native_fields_tests \
         --test organization_serial_reference_tests --test query_binding_order_tests \
         --test plugin_model_fields_tests --test user_runtime_input_tests \
-        --test user_record_values_tests --test memory_user_live_reads_tests || query_status=1
+        --test user_record_values_tests --test memory_user_live_reads_tests \
+        --test nullable_user_update_tests --test telemetry_options_tests || query_status=1
       return "$query_status"
       ;;
     memory-sorting)
