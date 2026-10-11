@@ -141,9 +141,18 @@ fn model_fields(organization: Option<(OrganizationFields, UserConfig)>) -> AuthR
 pub(super) fn memory_store(target: Target) -> AuthResult<EphemeralStore> {
     let organization = matches!(target, Target::Team)
         .then(|| (OrganizationFields::default(), UserConfig::default()));
+    let mut fields = model_fields(organization)?;
+    let (parent, child) = target.roles();
+    // Upstream preinitializes both physical tables. Membership setup reads the child table before inserting rows.
+    for (role, logical) in fields.active_models() {
+        if role == parent || role == child {
+            let table = fields.storage_model_name(role, logical).to_owned();
+            fields.register_custom_model(table, None, UserConfig::default())?;
+        }
+    }
     Ok(EphemeralStore::from_schema(
         Arc::new(AuthConfig::default()),
-        &model_fields(organization)?,
+        &fields,
     ))
 }
 
