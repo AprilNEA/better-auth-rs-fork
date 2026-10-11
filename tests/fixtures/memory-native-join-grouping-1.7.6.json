@@ -1,0 +1,4116 @@
+{
+  "version": "1.7.6",
+  "scenarios": [
+    {
+      "name": "account-duplicate-owner",
+      "model": "account",
+      "operation": "owner",
+      "parentIds": [
+        "shared",
+        "shared"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b"
+      ]
+    },
+    {
+      "name": "account-number-string-owner",
+      "model": "account",
+      "operation": "owner",
+      "parentIds": [
+        1,
+        "1"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b"
+      ]
+    },
+    {
+      "name": "account-page-limit-after-grouping",
+      "model": "account",
+      "operation": "page",
+      "parentIds": [
+        "shared",
+        "other",
+        "shared"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-c",
+        "user-b"
+      ],
+      "offset": 0,
+      "limit": 1
+    },
+    {
+      "name": "account-page-offset-after-grouping",
+      "model": "account",
+      "operation": "page",
+      "parentIds": [
+        "shared",
+        "shared",
+        "other"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b",
+        "user-c"
+      ],
+      "offset": 1,
+      "limit": 1
+    },
+    {
+      "name": "account-first-parent-snapshot",
+      "model": "account",
+      "operation": "owner",
+      "parentIds": [
+        "shared",
+        {
+          "effect": "mutate-first",
+          "value": "shared"
+        }
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b"
+      ]
+    },
+    {
+      "name": "account-late-key-error",
+      "model": "account",
+      "operation": "owner",
+      "parentIds": [
+        "first",
+        "second",
+        {
+          "effect": "throw"
+        }
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b",
+        "user-c"
+      ]
+    },
+    {
+      "name": "session-duplicate-owner",
+      "model": "session",
+      "operation": "session",
+      "parentIds": [
+        "shared",
+        "shared"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b"
+      ]
+    },
+    {
+      "name": "session-number-string-owner",
+      "model": "session",
+      "operation": "session",
+      "parentIds": [
+        1,
+        "1"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b"
+      ]
+    },
+    {
+      "name": "session-many-limit-after-grouping",
+      "model": "session",
+      "operation": "sessions",
+      "parentIds": [
+        "shared",
+        "other",
+        "shared"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-c",
+        "user-b"
+      ],
+      "defaultLimit": 1
+    },
+    {
+      "name": "session-page-offset-after-grouping",
+      "model": "session",
+      "operation": "page",
+      "parentIds": [
+        "shared",
+        "shared",
+        "other"
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b",
+        "user-c"
+      ],
+      "offset": 1,
+      "limit": 1
+    },
+    {
+      "name": "session-late-key-error",
+      "model": "session",
+      "operation": "session",
+      "parentIds": [
+        "first",
+        "second",
+        {
+          "effect": "throw"
+        }
+      ],
+      "ownerIds": [
+        "user-a",
+        "user-b",
+        "user-c"
+      ]
+    },
+    {
+      "name": "user-many-duplicate-parents",
+      "model": "user",
+      "operation": "accounts",
+      "parentIds": [
+        "user-a",
+        "user-a"
+      ],
+      "childIds": [
+        "account-a",
+        "account-a",
+        "account-b"
+      ],
+      "defaultLimit": 1
+    }
+  ],
+  "cases": [
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-duplicate-owner",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "account.accessToken",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "shared"
+        }
+      },
+      "json": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "shared"
+        }
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "kind",
+            "user",
+            "account"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "account"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-number-string-owner",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": 1,
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "1",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "account.accessToken",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "1"
+        }
+      },
+      "json": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "1"
+        }
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "kind",
+            "user",
+            "account"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "account"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": 1,
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "1",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-page-limit-after-grouping",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "other",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "account.accessToken",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": [
+        {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "shared",
+          "user": {
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "user-b"
+          }
+        }
+      ],
+      "json": [
+        {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "shared",
+          "user": {
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "user-b"
+          }
+        }
+      ],
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "0"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "0",
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "other",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-page-offset-after-grouping",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "other",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "account.accessToken",
+          "parent-2"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 2"
+        ]
+      ],
+      "returned": true,
+      "result": [
+        {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-c",
+          "accessToken": "parent-2",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "other",
+          "user": {
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "user-c"
+          }
+        }
+      ],
+      "json": [
+        {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-c",
+          "accessToken": "parent-2",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "other",
+          "user": {
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "user-c"
+          }
+        }
+      ],
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "0"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "0",
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "other",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-first-parent-snapshot",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": {
+              "effect": "mutate-first"
+            },
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "group-id",
+          1
+        ],
+        [
+          "mutate-first",
+          "account.accessToken",
+          "parent-0-after"
+        ],
+        [
+          "output",
+          "account.accessToken",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "shared"
+        }
+      },
+      "json": {
+        "kind": "owned",
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-b"
+        },
+        "account": {
+          "accountId": "external-owner",
+          "providerId": "provider",
+          "userId": "user-a",
+          "accessToken": "parent-0",
+          "refreshToken": null,
+          "idToken": null,
+          "accessTokenExpiresAt": null,
+          "refreshTokenExpiresAt": null,
+          "scope": null,
+          "password": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "shared"
+        }
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "kind",
+            "user",
+            "account"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "account"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "shared",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0-after",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": {
+              "effect": "mutate-first"
+            },
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": false,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "account-late-key-error",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "first",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "second",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": {
+              "effect": "throw"
+            },
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "group-id",
+          2
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "Error",
+        "message": "Native parent ID conversion failed",
+        "properties": {},
+        "keys": []
+      },
+      "originalError": true,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "first",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "second",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-b",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": {
+              "effect": "throw"
+            },
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-c",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "session-duplicate-owner",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "session.userAgent",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "session": {
+          "expiresAt": {
+            "type": "date",
+            "value": "2099-01-02T03:04:05.000Z"
+          },
+          "token": "shared-token",
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "ipAddress": null,
+          "userAgent": "parent-0",
+          "userId": "user-a",
+          "id": "shared"
+        },
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-b"
+        }
+      },
+      "json": {
+        "session": {
+          "expiresAt": "2099-01-02T03:04:05.000Z",
+          "token": "shared-token",
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "ipAddress": null,
+          "userAgent": "parent-0",
+          "userId": "user-a",
+          "id": "shared"
+        },
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-b"
+        }
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "session",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "session"
+          ],
+          "keys": [
+            "expiresAt",
+            "token",
+            "createdAt",
+            "updatedAt",
+            "ipAddress",
+            "userAgent",
+            "userId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "session-number-string-owner",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": 1,
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "1",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "session.userAgent",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "session": {
+          "expiresAt": {
+            "type": "date",
+            "value": "2099-01-02T03:04:05.000Z"
+          },
+          "token": "shared-token",
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "ipAddress": null,
+          "userAgent": "parent-0",
+          "userId": "user-a",
+          "id": "1"
+        },
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-b"
+        }
+      },
+      "json": {
+        "session": {
+          "expiresAt": "2099-01-02T03:04:05.000Z",
+          "token": "shared-token",
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "ipAddress": null,
+          "userAgent": "parent-0",
+          "userId": "user-a",
+          "id": "1"
+        },
+        "user": {
+          "name": "User 1",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-b"
+        }
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "session",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "session"
+          ],
+          "keys": [
+            "expiresAt",
+            "token",
+            "createdAt",
+            "updatedAt",
+            "ipAddress",
+            "userAgent",
+            "userId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": 1,
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "1",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "session-many-limit-after-grouping",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "other",
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "session.userAgent",
+          "parent-0"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 1"
+        ]
+      ],
+      "returned": true,
+      "result": [
+        {
+          "session": {
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "token": "shared-token",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0",
+            "userId": "user-a",
+            "id": "shared"
+          },
+          "user": {
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "user-b"
+          }
+        }
+      ],
+      "json": [
+        {
+          "session": {
+            "expiresAt": "2099-01-02T03:04:05.000Z",
+            "token": "shared-token",
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "ipAddress": null,
+            "userAgent": "parent-0",
+            "userId": "user-a",
+            "id": "shared"
+          },
+          "user": {
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "user-b"
+          }
+        }
+      ],
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "0"
+          ],
+          "keys": [
+            "session",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "0",
+            "session"
+          ],
+          "keys": [
+            "expiresAt",
+            "token",
+            "createdAt",
+            "updatedAt",
+            "ipAddress",
+            "userAgent",
+            "userId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "0",
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "other",
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "session-page-offset-after-grouping",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": "other",
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "session.userAgent",
+          "parent-2"
+        ],
+        [
+          "output",
+          "user.name",
+          "User 2"
+        ]
+      ],
+      "returned": true,
+      "result": [
+        {
+          "expiresAt": {
+            "type": "date",
+            "value": "2099-01-02T03:04:05.000Z"
+          },
+          "token": "shared-token",
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "ipAddress": null,
+          "userAgent": "parent-2",
+          "userId": "user-c",
+          "id": "other",
+          "user": {
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "user-c"
+          }
+        }
+      ],
+      "json": [
+        {
+          "expiresAt": "2099-01-02T03:04:05.000Z",
+          "token": "shared-token",
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "ipAddress": null,
+          "userAgent": "parent-2",
+          "userId": "user-c",
+          "id": "other",
+          "user": {
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "user-c"
+          }
+        }
+      ],
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "0"
+          ],
+          "keys": [
+            "expiresAt",
+            "token",
+            "createdAt",
+            "updatedAt",
+            "ipAddress",
+            "userAgent",
+            "userId",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "0",
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "shared",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": "other",
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "session-late-key-error",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "first",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "second",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": {
+              "effect": "throw"
+            },
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "events": [
+        [
+          "group-id",
+          2
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "Error",
+        "message": "Native parent ID conversion failed",
+        "properties": {},
+        "keys": []
+      },
+      "originalError": true,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-b",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-c",
+            "name": "User 2",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [
+          {
+            "id": "first",
+            "token": "shared-token",
+            "userId": "user-a",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-0"
+          },
+          {
+            "id": "second",
+            "token": "shared-token",
+            "userId": "user-b",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-1"
+          },
+          {
+            "id": {
+              "effect": "throw"
+            },
+            "token": "shared-token",
+            "userId": "user-c",
+            "expiresAt": {
+              "type": "date",
+              "value": "2099-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "ipAddress": null,
+            "userAgent": "parent-2"
+          }
+        ],
+        "account": [],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    },
+    {
+      "backend": "memory",
+      "joins": true,
+      "scenario": "user-many-duplicate-parents",
+      "before": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-a",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "account-a",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "account-a",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "account-b",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "events": [
+        [
+          "output",
+          "user.name",
+          "User 0"
+        ],
+        [
+          "output",
+          "account.accessToken",
+          "parent-0"
+        ],
+        [
+          "output",
+          "account.accessToken",
+          "parent-2"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "user": {
+          "name": "User 0",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "updatedAt": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "id": "user-a"
+        },
+        "accounts": [
+          {
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "account-a"
+          },
+          {
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "account-b"
+          }
+        ]
+      },
+      "json": {
+        "user": {
+          "name": "User 0",
+          "email": "owner@memory-native-join-grouping.test",
+          "emailVerified": true,
+          "image": null,
+          "createdAt": "2030-01-02T03:04:05.000Z",
+          "updatedAt": "2030-01-02T03:04:05.000Z",
+          "id": "user-a"
+        },
+        "accounts": [
+          {
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "account-a"
+          },
+          {
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": "2030-01-02T03:04:05.000Z",
+            "updatedAt": "2030-01-02T03:04:05.000Z",
+            "id": "account-b"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "user",
+            "accounts"
+          ]
+        },
+        {
+          "path": [
+            "user"
+          ],
+          "keys": [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "accounts"
+          ],
+          "keys": [
+            "0",
+            "1"
+          ]
+        },
+        {
+          "path": [
+            "accounts",
+            "0"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "accounts",
+            "1"
+          ],
+          "keys": [
+            "accountId",
+            "providerId",
+            "userId",
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "password",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "originalError": false,
+      "after": {
+        "user": [
+          {
+            "id": "user-a",
+            "name": "User 0",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "user-a",
+            "name": "User 1",
+            "email": "owner@memory-native-join-grouping.test",
+            "emailVerified": true,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "session": [],
+        "account": [
+          {
+            "id": "account-a",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-0",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "account-a",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-1",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          },
+          {
+            "id": "account-b",
+            "accountId": "external-owner",
+            "providerId": "provider",
+            "userId": "user-a",
+            "accessToken": "parent-2",
+            "refreshToken": null,
+            "idToken": null,
+            "accessTokenExpiresAt": null,
+            "refreshTokenExpiresAt": null,
+            "scope": null,
+            "password": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        ],
+        "verification": []
+      },
+      "storageUnchanged": true,
+      "identities": {
+        "tables": true,
+        "rows": true
+      }
+    }
+  ]
+}

@@ -250,6 +250,7 @@ run_stage() {
       cargo fmt --all -- --check
       local join_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/memory-native-join-grouping.test.ts \
         ./compat-tests/reference-server/contracts/account-user-selected-relations.test.ts \
         ./compat-tests/reference-server/contracts/native-core-joins.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts || join_status=1

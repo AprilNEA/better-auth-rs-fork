@@ -1,0 +1,47 @@
+//! Fixture objects preserve JavaScript non-enumerable methods and error properties.
+
+use super::*;
+use crate::{FieldObject, field_value::FieldObjectSource};
+
+struct Source {
+    enumerable: FieldMap,
+    hidden: FieldMap,
+}
+
+impl FieldObjectSource for Source {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(self.enumerable.keys().cloned().collect())
+    }
+
+    fn get(&self, name: &str) -> AuthResult<Option<Value>> {
+        Ok(self
+            .enumerable
+            .get(name)
+            .or_else(|| self.hidden.get(name))
+            .cloned())
+    }
+
+    fn has_property(&self, name: &str) -> AuthResult<bool> {
+        Ok(self.enumerable.contains_key(name) || self.hidden.contains_key(name))
+    }
+
+    fn set(&self, _: String, _: Value) -> AuthResult<Option<Value>> {
+        Err(AuthError::type_error("The fixture object is read-only"))
+    }
+
+    fn delete(&self, _: &str) -> AuthResult<Option<Value>> {
+        Err(AuthError::type_error("The fixture object is read-only"))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        Ok(self.enumerable.clone())
+    }
+
+    fn identity(&self) -> usize {
+        self as *const Self as usize
+    }
+}
+
+pub(super) fn object(enumerable: FieldMap, hidden: FieldMap) -> Value {
+    FieldObject::from_source(Arc::new(Source { enumerable, hidden })).into()
+}

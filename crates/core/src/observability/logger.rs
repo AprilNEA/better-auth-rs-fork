@@ -176,9 +176,9 @@ pub fn current() -> LoggerConfig {
 }
 
 #[cfg(test)]
-#[allow(
+#[expect(
     clippy::expect_used,
-    reason = "The synchronous recording callback cannot propagate mutex poisoning through LogSink."
+    reason = "The test sink and assertions must fail if the recording mutex is poisoned."
 )]
 mod tests {
     use super::*;

@@ -170,23 +170,6 @@ jobs:
             "BETTER_AUTH_TELEMETRY_OBSERVATION_DIR=$RUNNER_TEMP/telemetry-host-observations/rust" \
             "BETTER_AUTH_TELEMETRY_UPSTREAM_OBSERVATION=$RUNNER_TEMP/telemetry-host-observations/upstream.json.system-observation.json" \
             "TELEMETRY_CPU_ERROR_OUTPUT=$RUNNER_TEMP/telemetry-host-observations/cpu-errors.json" >> "$GITHUB_ENV"
-      - name: Capture Memory join grouping contract
-        id: join-capture
-        if: ${{ !cancelled() && env.CHECK_STAGE == 'memory-joins' && steps.dependencies.outcome == 'success' }}
-        run: |
-          mkdir -p "$RUNNER_TEMP/memory-native-join-grouping"
-          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/memory-native-join-grouping/source-sha.txt"
-          devenv shell -- bun --no-install compat-tests/reference-server/contracts/memory-native-join-grouping-capture.mjs "$RUNNER_TEMP/memory-native-join-grouping/first.json"
-          devenv shell -- bun --no-install compat-tests/reference-server/contracts/memory-native-join-grouping-capture.mjs "$RUNNER_TEMP/memory-native-join-grouping/second.json"
-          cmp "$RUNNER_TEMP/memory-native-join-grouping/first.json" "$RUNNER_TEMP/memory-native-join-grouping/second.json"
-      - name: Preserve Memory join grouping capture
-        if: always() && (steps.join-capture.outcome == 'success' || steps.join-capture.outcome == 'failure')
-        uses: actions/upload-artifact@v4
-        with:
-          name: memory-native-join-grouping-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/memory-native-join-grouping/
-          if-no-files-found: error
-          retention-days: 14
       - name: Check formatting
         if: ${{ !cancelled() && env.CHECK_STAGE == 'all' && steps.dependencies.outcome == 'success' }}
         run: devenv shell -- ./scripts/check.sh format

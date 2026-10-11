@@ -9,12 +9,20 @@ use crate::store::JoinValue;
 use crate::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform};
 use crate::{FieldDate, FieldFunction};
 
+mod contract;
+
 const EMAIL: &str = "owner@memory-native-join-grouping.test";
 const TABLES: [&str; 3] = ["user", "account", "session"];
 
 fn required<T>(value: Option<T>) -> AuthResult<T> {
     value
         .ok_or_else(|| AuthError::internal("The grouping fixture must contain its selected record"))
+}
+
+fn lock<T>(value: &Mutex<T>) -> AuthResult<std::sync::MutexGuard<'_, T>> {
+    value
+        .lock()
+        .map_err(|_| AuthError::internal("The native grouping fixture lock is poisoned"))
 }
 
 fn date() -> Value {
