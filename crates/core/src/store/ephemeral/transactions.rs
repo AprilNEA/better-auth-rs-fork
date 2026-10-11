@@ -5,6 +5,27 @@ pub(super) struct EphemeralTransaction {
     pub(super) store: EphemeralStore,
 }
 
+pub(super) struct PreparedTransactionCommit {
+    state: State,
+    consumed: Vec<super::device_codes::DeviceCodeConsumption>,
+}
+
+impl PreparedTransactionCommit {
+    pub(super) fn merge(self, live: &mut State, base: &State) -> AuthResult<()> {
+        for consumed in &self.consumed {
+            if !consumed.unchanged(&live.device_codes)? {
+                return Err(AuthError::internal(
+                    "Device code changed before transaction commit",
+                ));
+            }
+        }
+        let mut merged = live.clone();
+        merged.merge(base, self.state)?;
+        *live = merged;
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
     async fn get_member_value(
@@ -388,14 +409,9 @@ impl EphemeralStore {
         Ok((base, isolated, queue))
     }
 
-    pub(super) async fn commit_transaction(
-        &self,
-        base: State,
-        isolated: Self,
-        pending_hooks: Arc<PendingHookQueue>,
-    ) -> AuthResult<()> {
-        let committed = isolated.lock()?.clone();
-        let consumed = isolated
+    pub(super) fn prepare_transaction_commit(&self) -> AuthResult<PreparedTransactionCommit> {
+        let state = self.lock()?.clone();
+        let consumed = self
             .device_code_transaction
             .as_ref()
             .map(|consumed| {
@@ -408,19 +424,13 @@ impl EphemeralStore {
             })
             .transpose()?
             .unwrap_or_default();
-        {
-            let mut live = self.lock()?;
-            for consumed in &consumed {
-                if !consumed.unchanged(&live.device_codes)? {
-                    return Err(AuthError::internal(
-                        "Device code changed before transaction commit",
-                    ));
-                }
-            }
-            let mut merged = live.clone();
-            merged.merge(&base, committed)?;
-            *live = merged;
-        }
+        Ok(PreparedTransactionCommit { state, consumed })
+    }
+
+    pub(super) async fn drain_transaction_hooks(
+        &self,
+        pending_hooks: &Arc<PendingHookQueue>,
+    ) -> AuthResult<()> {
         loop {
             let pending = std::mem::take(&mut *pending_hooks.lock().map_err(|_| {
                 AuthError::internal("Ephemeral transaction hook queue lock poisoned")
@@ -433,6 +443,20 @@ impl EphemeralStore {
             }
         }
         Ok(())
+    }
+
+    pub(super) async fn commit_transaction(
+        &self,
+        base: State,
+        isolated: Self,
+        pending_hooks: Arc<PendingHookQueue>,
+    ) -> AuthResult<()> {
+        let committed = isolated.prepare_transaction_commit()?;
+        {
+            let mut live = self.lock()?;
+            committed.merge(&mut live, &base)?;
+        }
+        self.drain_transaction_hooks(&pending_hooks).await
     }
 }
 

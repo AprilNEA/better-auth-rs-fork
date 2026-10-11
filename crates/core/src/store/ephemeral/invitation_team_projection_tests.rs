@@ -536,3 +536,294 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
     }
     Ok(())
 }
+
+struct SessionAcceptanceHooks {
+    writer: EphemeralStore,
+    events: Events,
+    mode: &'static str,
+}
+
+#[crate::database_hooks()]
+impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcceptanceHooks {
+    async fn before_update_session(
+        &self,
+        fields: &mut FieldMap,
+        context: &crate::store::database_hooks::DatabaseHookContext<'_, StatelessSchema>,
+    ) -> AuthResult<crate::store::database_hooks::DatabaseHookUpdate<FieldMap>> {
+        use crate::store::database_hooks::DatabaseHookUpdate;
+        let team = fields.contains_key("activeTeamId");
+        let phase = if team { "team" } else { "organization" };
+        event(&self.events, "before", phase.into())?;
+        let transaction = required(context.transaction)?;
+        assert_eq!(self.writer.lock()?.members.len(), 0);
+        assert_eq!(self.writer.lock()?.users.len(), 0);
+        assert_eq!(
+            required(self.writer.lock()?.teams.snapshot()?.first())?.get("memberCount"),
+            Some(&Value::Number(0.0))
+        );
+        assert_eq!(
+            required(transaction.get_team_value(&"team".into()).await?)?
+                .additional_fields
+                .get("memberCount"),
+            Some(&Value::Number(1.0))
+        );
+        assert_eq!(
+            transaction
+                .count_organization_members_value(&"organization".into())
+                .await?,
+            i64::from(!team)
+        );
+        if team {
+            let _ = required(
+                transaction
+                    .create_user_fields_optional(
+                        [
+                            ("name".into(), "Created by Session hook".into()),
+                            ("email".into(), "hook@example.com".into()),
+                        ]
+                        .into(),
+                    )
+                    .await?,
+            )?;
+        }
+        if self.mode == "before" && !team {
+            return Err(AuthError::type_error("before-session"));
+        }
+        if (self.mode == "cancel-team" && team) || (self.mode == "cancel-organization" && !team) {
+            return Ok(DatabaseHookUpdate::Cancel);
+        }
+        Ok(DatabaseHookUpdate::Patch(
+            [("ipAddress".into(), phase.into())].into(),
+        ))
+    }
+
+    async fn after_create_user(
+        &self,
+        user: Option<&UserView>,
+        context: &crate::store::database_hooks::DatabaseHookContext<'_, StatelessSchema>,
+    ) -> AuthResult<()> {
+        assert!(context.transaction.is_none());
+        assert_eq!(required(user)?.email, "hook@example.com");
+        assert_eq!(self.writer.lock()?.members.len(), 1);
+        assert_eq!(self.writer.lock()?.users.len(), 1);
+        event(&self.events, "after.user", "committed".into())
+    }
+
+    async fn after_update_session(
+        &self,
+        session: Option<&SessionView>,
+        context: &crate::store::database_hooks::DatabaseHookContext<'_, StatelessSchema>,
+    ) -> AuthResult<()> {
+        assert!(context.transaction.is_none());
+        assert_eq!(self.writer.lock()?.members.len(), 1);
+        assert_eq!(self.writer.lock()?.team_members.len(), 1);
+        assert_eq!(
+            required(self.writer.lock()?.invitations.snapshot()?.first())?.get("status"),
+            Some(&Value::from("accepted"))
+        );
+        event(
+            &self.events,
+            "after.session",
+            required(session)?.ip_address.field_value(),
+        )?;
+        if self.mode == "after" {
+            return Err(AuthError::type_error("after-session"));
+        }
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn acceptance_session_writes_share_transaction_hooks_projection_and_ownership()
+-> AuthResult<()> {
+    for mode in [
+        "commit",
+        "before",
+        "output",
+        "after",
+        "external",
+        "cancel-team",
+        "cancel-organization",
+    ] {
+        let writer = EphemeralStore::new(test_config());
+        let _ = seed_team(&writer, "team".into(), "Team", "organization".into(), 0.0)?;
+        let claimed = invitation(&writer, "organization", "team").await?;
+        let session = writer
+            .create_session(CreateSession {
+                inherited_fields: FieldMap::new(),
+                additional_fields: [
+                    ("token".into(), "accept-session".into()),
+                    ("activeOrganizationId".into(), Value::Null),
+                ]
+                .into(),
+                user_id: "recipient".into(),
+                expires_at: (Utc::now() + chrono::Duration::days(1)).into(),
+                ip_address: Some("initial".into()),
+                user_agent: Some("initial-agent".into()),
+                impersonated_by: None,
+                active_organization_id: None,
+            })
+            .await?;
+        let original = required(writer.lock()?.sessions.first_ref(|_| true)?)?;
+        let original_fields = original.read(|fields| Ok(fields.clone()))?;
+        let events = Events::default();
+        let mut reader = writer
+            .clone()
+            .with_hooks(vec![Arc::new(SessionAcceptanceHooks {
+                writer: writer.clone(),
+                events: events.clone(),
+                mode,
+            })]);
+        let _ = reader.session_config.fields_mut().insert(
+            "ipAddress".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(UserFieldTransform::new({
+                        let events = events.clone();
+                        let original = original.clone();
+                        move |value| {
+                            event(&events, "output.ip", value.clone())?;
+                            if mode == "output" && value == Value::from("organization") {
+                                return Err(AuthError::type_error("output-session"));
+                            }
+                            if mode == "external" && value == Value::from("team") {
+                                original.write(|fields| {
+                                    let _ =
+                                        fields.insert("userAgent".into(), "external-agent".into());
+                                    Ok(())
+                                })?;
+                            }
+                            Ok(format!("{}:projected", required(value.as_str())?).into())
+                        }
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let _ = reader.session_config.fields_mut().insert(
+            "userAgent".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(UserFieldTransform::new({
+                        let events = events.clone();
+                        move |value| {
+                            event(&events, "output.agent", value.clone())?;
+                            Ok(value)
+                        }
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let result = reader
+            .accept_invitation_with_teams(
+                claimed.id.typed()?,
+                "recipient",
+                Some(session.token.typed()?),
+                true,
+                TeamMemberLimits::Fixed(Some(1)),
+            )
+            .await;
+        let committed = matches!(mode, "commit" | "after" | "cancel-organization");
+        match mode {
+            "commit" | "cancel-organization" => {
+                let (_, accepted, cookie) = result?;
+                assert_eq!(accepted.status, InvitationStatus::Accepted);
+                let cookie = required(cookie)?;
+                assert_eq!(
+                    cookie.ip_address.field_value(),
+                    Value::from("team:projected")
+                );
+                assert_eq!(
+                    cookie.user_agent.field_value(),
+                    Value::from("initial-agent")
+                );
+                assert_eq!(cookie.active_team_id.field_value(), Value::from("team"));
+                assert_eq!(cookie.active_organization_id.field_value(), Value::Null);
+            }
+            "external" => assert!(matches!(result, Err(AuthError::Conflict(_)))),
+            "cancel-team" => assert!(
+                matches!(result, Err(AuthError::TypeError(message)) if message == "Cannot read properties of null (reading 'token')")
+            ),
+            _ => assert!(
+                matches!(result, Err(AuthError::TypeError(message)) if message == format!("{mode}-session"))
+            ),
+        }
+        let mut expected = vec![("before", "team".into())];
+        if mode != "cancel-team" {
+            expected.extend([
+                ("output.ip", "team".into()),
+                ("output.agent", "initial-agent".into()),
+                ("before", "organization".into()),
+            ]);
+            if mode != "before" && mode != "cancel-organization" {
+                expected.push(("output.ip", "organization".into()));
+                if mode != "output" {
+                    expected.push(("output.agent", "initial-agent".into()));
+                }
+            }
+        }
+        if committed {
+            expected.extend([
+                ("after.user", "committed".into()),
+                ("after.session", "team:projected".into()),
+            ]);
+            if mode == "commit" {
+                expected.push(("after.session", "organization:projected".into()));
+            }
+        }
+        assert_eq!(events_snapshot(&events)?, expected, "{mode}");
+        let state = writer.lock()?;
+        assert_eq!(state.members.len(), usize::from(committed), "{mode}");
+        assert_eq!(state.team_members.len(), usize::from(committed), "{mode}");
+        assert_eq!(state.users.len(), usize::from(committed), "{mode}");
+        assert_eq!(state.sessions.contains_ref(&original), !committed, "{mode}");
+        assert_eq!(
+            required(state.teams.snapshot()?.first())?.get("memberCount"),
+            Some(&Value::Number(if committed { 1.0 } else { 0.0 })),
+            "{mode}"
+        );
+        assert_eq!(
+            required(state.invitations.snapshot()?.first())?.get("status"),
+            Some(&Value::from(
+                if matches!(mode, "commit" | "cancel-organization") {
+                    "accepted"
+                } else {
+                    "pending"
+                }
+            )),
+            "{mode}"
+        );
+        let stored = required(state.sessions.snapshot()?.into_iter().next())?;
+        if committed {
+            assert_eq!(stored.get("activeTeamId"), Some(&Value::from("team")));
+            assert_eq!(
+                stored.get("activeOrganizationId"),
+                Some(&if mode == "cancel-organization" {
+                    Value::Null
+                } else {
+                    "organization".into()
+                })
+            );
+            assert_eq!(
+                stored.get("ipAddress"),
+                Some(&Value::from(if mode == "cancel-organization" {
+                    "team"
+                } else {
+                    "organization"
+                }))
+            );
+            assert_eq!(stored.get("userAgent"), Some(&Value::from("initial-agent")));
+            assert_eq!(original.read(|fields| Ok(fields.clone()))?, original_fields);
+        } else {
+            let mut expected = original_fields;
+            if mode == "external" {
+                let _ = expected.insert("userAgent".into(), "external-agent".into());
+            }
+            assert_eq!(stored, expected, "{mode}");
+        }
+    }
+    Ok(())
+}

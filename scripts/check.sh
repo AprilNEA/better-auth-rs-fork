@@ -77,6 +77,20 @@ run_stage() {
         --test cookie_expires_tests --test cookie_cleanup_tests \
         --test cookie_lifetime_tests --test cookie_session_precision_tests
       ;;
+    organization-transactions)
+      cargo fmt --all -- --check
+      local organization_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/organization-invitation-session-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-plugin-fields.test.ts || organization_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -- -D warnings || organization_status=1
+      cargo test --locked -p better-auth-core --lib || organization_status=1
+      cargo test --locked -p better-auth-api --lib plugins::organization:: || organization_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test organization_native_fields_tests --test organization_invitation_fields_tests \
+        --test organization_native_team_tests || organization_status=1
+      return "$organization_status"
+      ;;
     organization-details)
       cargo fmt --all -- --check
       local organization_status=0

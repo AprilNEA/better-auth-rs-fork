@@ -3,6 +3,7 @@ use super::sessions::session_token_matches;
 use super::*;
 use crate::SchemaValue;
 use crate::store::TeamMemberLimits;
+use crate::store::database_hooks::SessionUpdate;
 use better_auth_schema_registry::EntityRole;
 
 struct InvitationClaim {
@@ -169,7 +170,7 @@ impl EphemeralStore {
     ) -> AuthResult<(Member, Option<SessionView>)> {
         let member_schema = self.field_config(EntityRole::Member)?;
         let team_schema = self.field_config(EntityRole::Team)?;
-        let session_token = session_token
+        let session_selector = session_token
             .map(|token| self.memory_session_token_query(token.clone()))
             .transpose()?;
         let member_user = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
@@ -194,8 +195,8 @@ impl EphemeralStore {
         } else {
             Vec::new()
         };
-        let (membership_base, staged_memberships, _membership_queue) = self.begin_transaction()?;
-        let mut membership_base = membership_base.team_members;
+        let (mut transaction_base, staged, pending_hooks) = self.begin_adapter_transaction()?;
+        let mut membership_base = transaction_base.team_members.clone();
         let mut allocated_memberships = Vec::new();
         let mut team_checks = Vec::new();
         let mut reservations: Vec<(
@@ -246,13 +247,10 @@ impl EphemeralStore {
                 validate_membership_allocations(&observed, &allocated_memberships)?;
             }
             let mut memberships = observed.clone();
-            memberships.merge(
-                &membership_base,
-                staged_memberships.lock()?.team_members.clone(),
-            )?;
+            memberships.merge(&membership_base, staged.lock()?.team_members.clone())?;
             membership_base = observed;
-            staged_memberships.lock()?.team_members = memberships;
-            if staged_memberships
+            staged.lock()?.team_members = memberships;
+            if staged
                 .find_team_member_by_key_or_pair(&selector, user_id, &key)
                 .await?
                 .is_some()
@@ -282,8 +280,8 @@ impl EphemeralStore {
             if !prepared.reserved {
                 return Err(AuthError::forbidden("Team member limit reached"));
             }
-            let before_create = staged_memberships.lock()?.team_members.clone();
-            let (_, created) = match staged_memberships
+            let before_create = staged.lock()?.team_members.clone();
+            let (_, created) = match staged
                 .create_team_member_with_key(&selector, user_id, &key)
                 .await
             {
@@ -296,7 +294,7 @@ impl EphemeralStore {
                 }
             };
             allocated_memberships.extend(
-                staged_memberships
+                staged
                     .lock()?
                     .team_members
                     .select_refs(|_| true)?
@@ -324,7 +322,7 @@ impl EphemeralStore {
             }) {
                 return Err(AuthError::bad_request("User is already a member"));
             }
-            if let Some((column, token)) = &session_token {
+            if let Some((column, token)) = &session_selector {
                 let _ = state
                     .sessions
                     .find(|row| session_token_matches(row, column, token))?
@@ -332,38 +330,54 @@ impl EphemeralStore {
             }
             state.members.len()
         };
-        let team_patch = if session_token.is_some() {
-            if let [team_id] = team_ids.as_slice() {
-                Some(
-                    self.bind_session_update_fields(
-                        [("activeTeamId".into(), team_id.as_str().into())].into(),
-                    )
-                    .await?,
-                )
-            } else {
-                None
+        let mut copies = crate::StructuredCloneContext::new();
+        for (_, prepared, _) in &reservations {
+            let (source, patch) = prepared.pending_write();
+            let mut fields = RecordSource::Live(source).read(|fields| copies.clone_map(fields))?;
+            fields.extend(patch);
+            let id = fields.get("id").cloned().unwrap_or_default();
+            let mut state = staged.lock()?;
+            match state.teams.first_ref(|row| {
+                row.get("id")
+                    .unwrap_or(&Value::Undefined)
+                    .same_value_zero(&id)
+            })? {
+                Some(source) => source.write(|row| {
+                    *row = fields;
+                    Ok(())
+                })?,
+                None => state.teams.push(fields),
             }
-        } else {
-            None
-        };
-        let mut prepared_session = if let Some((column, token)) = &session_token {
+        }
+        let prepared_session = if let Some((column, token)) = &session_selector {
             let source = self
                 .lock()?
                 .sessions
                 .first_ref(|row| session_token_matches(row, column, token))?
                 .ok_or(AuthError::SessionNotFound)?;
             let original = source.read(|row| Ok(row.clone()))?;
-            let mut fields = original.clone();
-            let cookie = if let Some(patch) = &team_patch {
-                fields.extend(patch.clone());
-                Some(
-                    self.output_session(RecordSource::Snapshot(Box::new(fields.clone())))
-                        .await?,
-                )
-            } else {
-                None
-            };
-            Some((source, original, fields, cookie))
+            Some((source, original))
+        } else {
+            None
+        };
+        let cookie_session = if let (Some(token), [team_id]) = (session_token, team_ids.as_slice())
+        {
+            Some(
+                staged
+                    .update_session_with_writer_by_token_value(
+                        token,
+                        SessionUpdate {
+                            additional_fields: [("activeTeamId".into(), team_id.as_str().into())]
+                                .into(),
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .await?
+                    .ok_or_else(|| {
+                        AuthError::type_error("Cannot read properties of null (reading 'token')")
+                    })?,
+            )
         } else {
             None
         };
@@ -376,148 +390,143 @@ impl EphemeralStore {
             role: invitation.role.clone(),
             created_at: Utc::now().into(),
         };
-        let mut member = self
+        let mut member = staged
             .create_record(EntityRole::Member, member, FieldMap::new())
             .await?;
-        if let Some(id) = self.next_serial_id(member_count) {
-            let _ = member.insert("id".into(), id);
-        }
-        let output = self.output_member(member.clone()).await?;
-        if let Some((_, _, fields, _)) = &mut prepared_session {
-            let patch = self
-                .bind_session_update_fields(
-                    [(
-                        "activeOrganizationId".into(),
-                        invitation.organization_id.field_value(),
-                    )]
-                    .into(),
+        let member = {
+            let mut state = staged.lock()?;
+            if let Some(id) = staged.next_serial_id(state.members.len()) {
+                let _ = member.insert("id".into(), id);
+            }
+            state.members.push_ref(member)
+        };
+        let output = staged
+            .output_record_refs(EntityRole::Member, vec![member])
+            .await?
+            .remove(0);
+        if let Some(token) = session_token {
+            let _ = staged
+                .update_session_with_writer_by_token_value(
+                    token,
+                    SessionUpdate {
+                        additional_fields: [(
+                            "activeOrganizationId".into(),
+                            invitation.organization_id.field_value(),
+                        )]
+                        .into(),
+                        ..Default::default()
+                    },
+                    None,
                 )
                 .await?;
-            fields.extend(patch);
-            let _ = self
-                .output_session(RecordSource::Snapshot(Box::new(fields.clone())))
-                .await?;
         }
-        let mut state = self.lock()?;
-        claim.validate(
-            &state,
-            "Invitation changed while field transforms were pending",
-        )?;
-        if state.members.snapshot()?.iter().any(|row| {
-            organization_value(row, &member_schema, "organizationId")
-                .strict_equals(&member_org.field_value())
-                && organization_value(row, &member_schema, "userId")
-                    .strict_equals(&member_user.field_value())
-        }) {
-            return Err(AuthError::bad_request("User is already a member"));
-        }
-        if let Some((source, original, _, _)) = &prepared_session {
-            if !state.sessions.contains_ref(source) {
-                return Err(AuthError::SessionNotFound);
-            }
-            let unchanged = source.read(|row| {
-                Ok(row.keys().eq(original.keys())
-                    && row.iter().all(|(name, value)| {
-                        original
-                            .get(name)
-                            .is_some_and(|original| value.same_value_zero(original))
-                    }))
-            })?;
-            if !unchanged {
-                return Err(AuthError::conflict(
-                    "Session changed while field transforms were pending",
-                ));
-            }
-        }
-        let current_members = state.team_members.snapshot()?;
-        for (id, team_id) in &team_checks {
-            let team = state
-                .teams
-                .first_ref(|team| {
-                    organization_id(team) == *team_id
-                        && organization_value(team, &team_schema, "organizationId")
-                            .strict_equals(&team_org.field_value())
-                })?
-                .ok_or_else(|| AuthError::bad_request("Team not found"))?;
-            let selector = Value::from(id.as_str());
-            let key = crate::organization_fields::team_membership_key_values(&selector, user_id)?;
-            if !reservations
-                .iter()
-                .any(|(_, prepared, _)| prepared.same_team(&team))
-                && self
-                    .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
-                    .is_none()
-            {
-                return Err(AuthError::conflict(
-                    "Team membership changed while field transforms were pending",
-                ));
-            }
-        }
-        let mut teams = Vec::new();
-        for (id, prepared, maximum) in reservations {
-            let team = prepared.current(&state.teams)?;
-            if !organization_value(&team, &team_schema, "organizationId")
-                .strict_equals(&team_org.field_value())
-            {
-                return Err(AuthError::bad_request("Team not found"));
-            }
-            let selector = Value::from(id.as_str());
-            let selectors = self.team_member_selectors(&selector, None)?;
-            let actual = current_members
-                .iter()
-                .filter(|row| Self::matches_team_member(row, &selectors))
-                .count();
-            let key = crate::organization_fields::team_membership_key_values(&selector, user_id)?;
-            if self
-                .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
-                .is_some()
-            {
-                return Err(AuthError::conflict(
-                    "Team membership changed while field transforms were pending",
-                ));
-            }
-            if maximum.is_some_and(|limit| actual >= limit) {
-                return Err(AuthError::forbidden("Team member limit reached"));
-            }
-            teams.push(prepared.apply(&state.teams, actual)?);
-        }
-        // Validate the complete staged result before publishing any member, seat, or session delta.
-        if matches!(
-            self.config.advanced.database.generate_id(),
-            crate::id::IdGeneration::Serial
-        ) && (state.members.len() != member_count
-            || state.team_members.len() != membership_base.len())
+        let committed = staged.prepare_transaction_commit()?;
         {
-            return Err(AuthError::conflict(
-                "Member allocation changed while field transforms were pending",
-            ));
+            let mut state = self.lock()?;
+            claim.validate(
+                &state,
+                "Invitation changed while field transforms were pending",
+            )?;
+            if state.members.snapshot()?.iter().any(|row| {
+                organization_value(row, &member_schema, "organizationId")
+                    .strict_equals(&member_org.field_value())
+                    && organization_value(row, &member_schema, "userId")
+                        .strict_equals(&member_user.field_value())
+            }) {
+                return Err(AuthError::bad_request("User is already a member"));
+            }
+            if let Some((source, original)) = &prepared_session {
+                if !state.sessions.contains_ref(source) {
+                    return Err(AuthError::SessionNotFound);
+                }
+                let unchanged = source.read(|row| {
+                    Ok(row.keys().eq(original.keys())
+                        && row.iter().all(|(name, value)| {
+                            original
+                                .get(name)
+                                .is_some_and(|original| value.same_value_zero(original))
+                        }))
+                })?;
+                if !unchanged {
+                    return Err(AuthError::conflict(
+                        "Session changed while field transforms were pending",
+                    ));
+                }
+            }
+            let current_members = state.team_members.snapshot()?;
+            for (id, team_id) in &team_checks {
+                let team = state
+                    .teams
+                    .first_ref(|team| {
+                        organization_id(team) == *team_id
+                            && organization_value(team, &team_schema, "organizationId")
+                                .strict_equals(&team_org.field_value())
+                    })?
+                    .ok_or_else(|| AuthError::bad_request("Team not found"))?;
+                let selector = Value::from(id.as_str());
+                let key =
+                    crate::organization_fields::team_membership_key_values(&selector, user_id)?;
+                if !reservations
+                    .iter()
+                    .any(|(_, prepared, _)| prepared.same_team(&team))
+                    && self
+                        .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
+                        .is_none()
+                {
+                    return Err(AuthError::conflict(
+                        "Team membership changed while field transforms were pending",
+                    ));
+                }
+            }
+            for (id, prepared, maximum) in reservations {
+                let team = prepared.current(&state.teams)?;
+                if !organization_value(&team, &team_schema, "organizationId")
+                    .strict_equals(&team_org.field_value())
+                {
+                    return Err(AuthError::bad_request("Team not found"));
+                }
+                let selector = Value::from(id.as_str());
+                let selectors = self.team_member_selectors(&selector, None)?;
+                let actual = current_members
+                    .iter()
+                    .filter(|row| Self::matches_team_member(row, &selectors))
+                    .count();
+                let key =
+                    crate::organization_fields::team_membership_key_values(&selector, user_id)?;
+                if self
+                    .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
+                    .is_some()
+                {
+                    return Err(AuthError::conflict(
+                        "Team membership changed while field transforms were pending",
+                    ));
+                }
+                if maximum.is_some_and(|limit| actual >= limit) {
+                    return Err(AuthError::forbidden("Team member limit reached"));
+                }
+                let _ = prepared.apply(&state.teams, actual)?;
+            }
+            // Validate the complete staged result before publishing any member, seat, or session delta.
+            if matches!(
+                self.config.advanced.database.generate_id(),
+                crate::id::IdGeneration::Serial
+            ) && (state.members.len() != member_count
+                || state.team_members.len() != membership_base.len())
+            {
+                return Err(AuthError::conflict(
+                    "Member allocation changed while field transforms were pending",
+                ));
+            }
+            if matches!(
+                self.config.advanced.database.generate_id(),
+                crate::id::IdGeneration::Serial
+            ) {
+                validate_membership_allocations(&state.team_members, &allocated_memberships)?;
+            }
+            transaction_base.team_members = membership_base;
+            committed.merge(&mut state, &transaction_base)?;
         }
-        if matches!(
-            self.config.advanced.database.generate_id(),
-            crate::id::IdGeneration::Serial
-        ) {
-            validate_membership_allocations(&state.team_members, &allocated_memberships)?;
-        }
-        state.team_members.merge(
-            &membership_base,
-            staged_memberships.lock()?.team_members.clone(),
-        )?;
-        for (source, fields) in teams {
-            source.write(|row| {
-                *row = fields;
-                Ok(())
-            })?;
-        }
-        state.members.push(member);
-        let cookie_session = if let Some((source, _, fields, cookie)) = prepared_session {
-            source.write(|row| {
-                *row = fields;
-                Ok(())
-            })?;
-            cookie
-        } else {
-            None
-        };
+        self.drain_transaction_hooks(&pending_hooks).await?;
         Ok((output, cookie_session))
     }
 }
