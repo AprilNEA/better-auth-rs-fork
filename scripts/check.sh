@@ -254,6 +254,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/generic-profile-results.test.ts \
         ./compat-tests/reference-server/contracts/social-http-providers.test.ts \
         ./compat-tests/reference-server/contracts/social-native-defaults.test.mjs \
+        ./compat-tests/reference-server/contracts/social-http-envelope.test.mjs \
         ./compat-tests/reference-server/contracts/vk.test.ts \
         ./compat-tests/reference-server/contracts/tiktok.test.ts \
         ./compat-tests/reference-server/contracts/salesforce.test.ts \
@@ -538,7 +539,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        utils::json::runtime:: field_value:: schema_value:: wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: utils::json::runtime:: field_value:: schema_value:: wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: || cache_status=1
       return "$cache_status"

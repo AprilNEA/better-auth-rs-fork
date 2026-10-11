@@ -41,16 +41,23 @@ async fn report<T>(
     }
 }
 
-pub(crate) struct FailureReporter(UnboundedSender<Progress>);
+/// Report collector failures to the supervisor without cancelling started operations.
+#[doc(hidden)]
+pub struct FailureReporter(UnboundedSender<Progress>);
 
 impl FailureReporter {
-    pub(crate) fn failed(&self, error: AuthError) {
+    /// Report the original error immediately and retain ownership of remaining work.
+    /// Later failures do not replace the first error returned to the caller.
+    pub fn failed(&self, error: AuthError) {
         let _ = self.0.send(Progress::Failed(error));
     }
 }
 
 /// Retain an owned collector after its first reported error without changing its scheduling.
-pub(crate) async fn retain<T: Send + 'static, F>(
+/// The collector must own its captures and complete all started operations after reporting errors.
+/// Return `Some(result)` on success, or `None` after reporting a failure.
+#[doc(hidden)]
+pub async fn retain<T: Send + 'static, F>(
     name: &'static str,
     work: impl FnOnce(FailureReporter) -> F + Send + 'static,
 ) -> AuthResult<T>

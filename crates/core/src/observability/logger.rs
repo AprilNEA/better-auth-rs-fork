@@ -69,13 +69,9 @@ impl fmt::Display for LogArgument<'_> {
                 &Self::Native(&crate::FieldValue::from((*value).clone())),
                 formatter,
             ),
-            Self::Native(value) => formatter.write_str(
-                &value
-                    .display_utf16()
-                    .map_err(|_| fmt::Error)?
-                    .to_utf8()
-                    .map_err(|_| fmt::Error)?,
-            ),
+            Self::Native(value) => formatter.write_str(&String::from_utf16_lossy(
+                value.display_utf16().map_err(|_| fmt::Error)?.as_utf16(),
+            )),
             Self::Error(error) => fmt::Display::fmt(error, formatter),
         }
     }
@@ -268,16 +264,15 @@ mod tests {
     #[test]
     fn native_arguments_reach_custom_sink_without_coercion_or_identity_loss() {
         #[derive(Default)]
-        struct NativeCapture(Mutex<Option<(crate::FieldValue, crate::FieldValue)>>);
+        struct NativeCapture(Mutex<Option<crate::FieldValue>>);
         impl LogSink for NativeCapture {
             fn log(&self, _: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
-                let (LogArgument::Native(message), [LogArgument::Native(argument)]) =
+                let (LogArgument::Text("native fields"), [LogArgument::Native(argument)]) =
                     (message, arguments)
                 else {
                     panic!("native arguments must retain their representation");
                 };
-                *self.0.lock().expect("capture mutex is not poisoned") =
-                    Some((message.clone(), (*argument).clone()));
+                *self.0.lock().expect("capture mutex is not poisoned") = Some((*argument).clone());
             }
         }
         let message: crate::FieldValue = crate::Utf16String::from_units(vec![0xd800]).into();
@@ -293,18 +288,25 @@ mod tests {
         };
         logger.log(
             LogLevel::Error,
-            LogArgument::Native(&message),
+            "native fields",
             &[LogArgument::Native(&argument)],
         );
         let observed = sink.0.lock().expect("capture mutex is not poisoned");
-        let (observed_message, observed_argument) = observed.as_ref().expect("logger was called");
-        assert!(observed_message.strict_equals(&message));
+        let observed_argument = observed.as_ref().expect("logger was called");
         assert!(observed_argument.strict_equals(&argument));
+        assert!(
+            observed_argument
+                .model_property("message")
+                .expect("native object is readable")
+                .strict_equals(&message)
+        );
         assert!(
             observed_argument
                 .model_property("missing")
                 .expect("native object is readable")
                 .is_undefined()
         );
+        assert_eq!(LogArgument::Native(&message).to_string(), "\u{fffd}");
+        LoggerConfig::default().log(LogLevel::Error, LogArgument::Native(&message), &[]);
     }
 }

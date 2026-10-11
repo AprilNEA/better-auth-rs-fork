@@ -583,6 +583,7 @@ dependencies = [
  "hex",
  "hkdf",
  "hmac 0.12.1",
+ "hyper",
  "indexmap 2.14.2",
  "josekit",
  "jsonwebtoken",

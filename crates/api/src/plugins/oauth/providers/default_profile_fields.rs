@@ -204,10 +204,11 @@ pub(super) fn naver(profile: &FieldValue) -> AuthResult<FieldMap> {
 }
 
 pub(super) fn linear(profile: &FieldValue) -> AuthResult<FieldMap> {
+    let viewer = || profile.model_property("data")?.model_property("viewer");
     Ok(literal([
-        ("name", profile.model_property("name")?),
-        ("email", profile.model_property("email")?),
-        ("image", profile.model_property("avatarUrl")?),
+        ("name", viewer()?.model_property("name")?),
+        ("email", viewer()?.model_property("email")?),
+        ("image", viewer()?.model_property("avatarUrl")?),
         ("emailVerified", false.into()),
     ]))
 }

@@ -34,9 +34,13 @@ async fn default_email_verified_presence_matches_upstream() {
         } else {
             profile[field] = serde_json::from_str(case["raw"].as_str().unwrap()).unwrap();
         }
-        let profile = provider.http_profile_data(profile).unwrap().unwrap();
+        let source = FieldValue::from_json(profile).unwrap();
+        let profile = provider
+            .http_profile_data(&source, &FieldValue::Null)
+            .unwrap()
+            .unwrap();
         let response = provider
-            .native_default_profile(&FieldValue::from_json(profile).unwrap())
+            .native_default_profile(&profile, &source)
             .await
             .unwrap()
             .unwrap();

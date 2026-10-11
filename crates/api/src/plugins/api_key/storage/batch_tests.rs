@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthRequest, AuthResult, AuthSchema, AuthStore, CreateUser,
-    HttpMethod,
+    FieldMap, FieldValue, HttpMethod,
     hooks::{RequestHookContext, current_request_hook_context, with_request_hook_context_value},
     store::EphemeralStore,
 };
@@ -27,6 +27,17 @@ enum Mode {
     Get,
     Refill,
     Remove,
+}
+
+fn assert_request_context(mode: Mode) {
+    assert_eq!(
+        current_request_hook_context().unwrap().path.as_deref(),
+        Some(if mode == Mode::Remove {
+            "/api-key/delete"
+        } else {
+            "/api-key/list"
+        })
+    );
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -107,14 +118,7 @@ impl Storage {
             if state.mode == Some(mode)
                 && let Some(row) = row
             {
-                assert_eq!(
-                    current_request_hook_context().unwrap().path.as_deref(),
-                    Some(if mode == Mode::Remove {
-                        "/api-key/delete"
-                    } else {
-                        "/api-key/list"
-                    })
-                );
+                assert_request_context(mode);
                 let (release, permit) = oneshot::channel();
                 let (finished, completion) = oneshot::channel();
                 state
@@ -140,6 +144,7 @@ impl Storage {
             return Ok(action(&mut self.0.lock().unwrap()));
         };
         let result = permit.await.unwrap();
+        assert_request_context(mode);
         let mut state = self.0.lock().unwrap();
         let result = result.map(|()| action(&mut state));
         state.completed += 1;
@@ -276,7 +281,7 @@ async fn exercise_batch<S: AuthSchema>(
             .unwrap();
     }
     let mut calls = storage.arm(mode);
-    let mut task = tokio::spawn(with_request_hook_context_value(
+    let task = tokio::spawn(with_request_hook_context_value(
         RequestHookContext::from_request(&AuthRequest::new(HttpMethod::Get, "/api-key/list"))
             .unwrap(),
         async move { super::list(&config, &context, owner.id.typed().unwrap(), None).await },
@@ -291,16 +296,35 @@ async fn exercise_batch<S: AuthSchema>(
     assert!(storage.0.lock().unwrap().index_writes.is_empty());
 
     if reject != Rejection::None {
+        let original: FieldValue = FieldMap::from([
+            ("name".into(), "Error".into()),
+            ("message".into(), "ordinary storage rejection".into()),
+        ])
+        .into();
+        let failure = if reject == Rejection::Multiple {
+            AuthError::from_thrown(original.clone())
+        } else {
+            AuthError::validation("ordinary storage rejection")
+        };
         let position = pending
             .iter()
             .position(|call| call.row == 0 && call.by_id)
             .unwrap();
-        pending
-            .remove(position)
-            .finish(Err(AuthError::validation("ordinary storage rejection")))
-            .await;
-        // This adapter drains already-started callbacks; the original error is retained.
-        assert!(!task.is_finished());
+        pending.remove(position).finish(Err(failure)).await;
+        let error = task.await.unwrap().unwrap_err();
+        if reject == Rejection::Multiple {
+            assert!(error.raw_value().unwrap().strict_equals(&original));
+        } else {
+            assert!(
+                matches!(&error, AuthError::Validation(message) if message == "ordinary storage rejection")
+            );
+        }
+        assert!(calls.try_recv().is_err());
+        {
+            let state = storage.0.lock().unwrap();
+            assert_eq!((state.completed, state.active), (1, 10 * width - 1));
+            assert!(state.index_writes.is_empty());
+        }
         if mode == Mode::Refill {
             // Another key completes while the failed key's other write is still pending.
             // A failure must stop new keys before all writes for that key finish.
@@ -330,16 +354,10 @@ async fn exercise_batch<S: AuthSchema>(
         for call in pending {
             call.finish(Ok(())).await;
         }
-        let result = loop {
-            tokio::select! {
-                result = &mut task => break result,
-                call = calls.recv() => call.unwrap().finish(Ok(())).await,
-            }
-        };
-        let error = result.unwrap().unwrap_err();
-        assert!(
-            matches!(error, AuthError::Validation(message) if message == "ordinary storage rejection")
-        );
+        assert!(calls.try_recv().is_err());
+        if reject == Rejection::Multiple {
+            assert!(error.raw_value().unwrap().strict_equals(&original));
+        }
         let state = storage.0.lock().unwrap();
         assert_eq!(state.starts.len(), 10 * width);
         assert!(state.starts.iter().all(|row| *row < 10));
@@ -426,7 +444,7 @@ async fn cached_lists_and_database_refills_preserve_order_with_ten_concurrent_ke
 }
 
 #[tokio::test]
-async fn failed_cache_batches_drain_started_keys_and_skip_queued_keys_and_index_publish() {
+async fn failed_cache_batches_return_before_peers_and_skip_queued_keys_and_index_publish() {
     for (mode, fallback) in [(Mode::Get, false), (Mode::Get, true), (Mode::Refill, true)] {
         exercise(
             Arc::new(EphemeralStore::default()),
@@ -446,7 +464,7 @@ async fn failed_cache_batches_drain_started_keys_and_skip_queued_keys_and_index_
 }
 
 #[tokio::test]
-async fn failed_refill_preserves_first_error_across_writes_and_keys_while_draining() {
+async fn failed_refill_preserves_first_error_across_retained_writes_and_keys() {
     exercise(
         Arc::new(EphemeralStore::default()),
         Mode::Refill,
@@ -461,6 +479,65 @@ async fn failed_refill_preserves_first_error_across_writes_and_keys_while_draini
         Rejection::Multiple,
     )
     .await;
+}
+
+#[tokio::test]
+async fn cache_writes_return_original_error_before_retained_peer_without_publishing_reference() {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        for fallback in [false, true] {
+            for first_by_id in [false, true] {
+                let storage = Arc::new(Storage::default());
+                let key = super::deserialize(Some(r#"{"id":"written","key":"hash","referenceId":"owner","createdAt":"2030-01-02T03:04:05.000Z","updatedAt":"2030-01-02T03:04:05.000Z"}"#.into())).unwrap();
+                let encoded = super::serialize(&key).unwrap();
+                let mut calls = storage.arm(Mode::Refill);
+                {
+                    let mut state = storage.0.lock().unwrap();
+                    let _ = state.rows.insert("written".into(), 0);
+                    let _ = state.values.insert("api-key:by-ref:owner".into(), r#"["kept"]"#.into());
+                    let _ = state.values.insert("unrelated".into(), "preserved".into());
+                }
+                let mut expected = storage.0.lock().unwrap().values.clone();
+                if fallback {
+                    let _ = expected.remove("api-key:by-ref:owner");
+                }
+                let current_storage = storage.clone();
+                let task = tokio::spawn(with_request_hook_context_value(
+                    RequestHookContext::from_request(&AuthRequest::new(HttpMethod::Get, "/api-key/list")).unwrap(),
+                    async move { super::put(current_storage, &key, fallback).await },
+                ));
+                let mut pending = Vec::new();
+                for _ in 0..2 {
+                    pending.push(calls.recv().await.unwrap());
+                }
+                assert!(calls.try_recv().is_err());
+                let original: FieldValue = FieldMap::from([
+                    ("name".into(), "Error".into()),
+                    ("message".into(), "first write failure".into()),
+                ]).into();
+                let position = pending.iter().position(|call| call.by_id == first_by_id).unwrap();
+                pending.remove(position).finish(Err(AuthError::from_thrown(original.clone()))).await;
+                let error = task.await.unwrap().unwrap_err();
+                assert!(error.raw_value().unwrap().strict_equals(&original));
+                {
+                    let state = storage.0.lock().unwrap();
+                    assert_eq!((state.completed, state.active, state.maximum), (1, 1, 2));
+                    assert_eq!(state.values, expected);
+                    assert!(state.index_writes.is_empty());
+                }
+                let peer = pending.pop().unwrap();
+                let peer_key = if peer.by_id { "api-key:by-id:written" } else { "api-key:hash" };
+                let _ = expected.insert(peer_key.into(), encoded);
+                peer.finish(Ok(())).await;
+                assert!(calls.try_recv().is_err());
+                assert!(error.raw_value().unwrap().strict_equals(&original));
+                let state = storage.0.lock().unwrap();
+                assert_eq!(state.starts, [0, 0]);
+                assert_eq!((state.completed, state.active, state.maximum), (2, 0, 2));
+                assert_eq!(state.values, expected);
+                assert!(state.index_writes.is_empty());
+            }
+        }
+    }).await.unwrap();
 }
 
 #[tokio::test]
@@ -515,7 +592,13 @@ async fn failed_groups_preserve_first_error_without_stopping_independent_workers
             pending.push(group);
         }
         pending.get_mut(1).unwrap().remove(0).finish(Err(AuthError::validation("first group failure"))).await;
-        assert!(!task.is_finished());
+        assert!(matches!(task.await.unwrap().unwrap_err(), AuthError::Validation(message) if message == "first group failure"));
+        for (group, storage) in storages.iter().enumerate() {
+            let state = storage.0.lock().unwrap();
+            let completed = usize::from(group == 1);
+            assert_eq!((state.completed, state.active), (completed, 10 - completed));
+            assert!(state.index_writes.is_empty());
+        }
         pending.get_mut(0).unwrap().remove(0).finish(Err(AuthError::Forbidden("later group failure".into()))).await;
         for group in pending.iter_mut().take(2) {
             for call in group.drain(..) {
@@ -532,7 +615,6 @@ async fn failed_groups_preserve_first_error_without_stopping_independent_workers
             assert_eq!(call.row, row);
             call.finish(Ok(())).await;
         }
-        assert!(matches!(task.await.unwrap().unwrap_err(), AuthError::Validation(message) if message == "first group failure"));
         for (group, (storage, before)) in storages.iter().zip(before).enumerate() {
             let state = storage.0.lock().unwrap();
             let count = if group == 2 { COUNT } else { 10 };
@@ -545,7 +627,7 @@ async fn failed_groups_preserve_first_error_without_stopping_independent_workers
 }
 
 #[tokio::test]
-async fn cache_removal_preserves_first_error_and_drains_reference_and_record_changes() {
+async fn cache_removal_returns_first_error_before_retained_reference_and_record_changes() {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         for fallback in [false, true] {
             for first_row in [1, 2] {
@@ -568,7 +650,7 @@ async fn cache_removal_preserves_first_error_and_drains_reference_and_record_cha
                 let current_storage = storage.clone();
                 let task = tokio::spawn(with_request_hook_context_value(
                     RequestHookContext::from_request(&AuthRequest::new(HttpMethod::Post, "/api-key/delete")).unwrap(),
-                    async move { super::remove_cached(current_storage.as_ref(), &key, fallback).await },
+                    async move { super::remove_cached(current_storage, &key, fallback).await },
                 ));
                 let mut pending = Vec::new();
                 for _ in 0..3 {
@@ -577,7 +659,13 @@ async fn cache_removal_preserves_first_error_and_drains_reference_and_record_cha
                 assert!(calls.try_recv().is_err());
                 let position = pending.iter().position(|call| call.row == first_row).unwrap();
                 pending.remove(position).finish(Err(AuthError::validation("first removal failure"))).await;
-                assert!(!task.is_finished());
+                assert!(matches!(task.await.unwrap().unwrap_err(), AuthError::Validation(message) if message == "first removal failure"));
+                {
+                    let state = storage.0.lock().unwrap();
+                    assert_eq!((state.completed, state.active), (1, 2));
+                    assert_eq!(state.values, expected);
+                    assert!(state.removal_changes.is_empty());
+                }
                 let position = pending.iter().position(|call| call.row == 0).unwrap();
                 pending.remove(position).finish(Err(AuthError::Forbidden("later removal failure".into()))).await;
                 let successful = pending.pop().unwrap();
@@ -586,7 +674,6 @@ async fn cache_removal_preserves_first_error_and_drains_reference_and_record_cha
                     Some(r#"["kept"]"#.to_owned())
                 } else { None };
                 successful.finish(Ok(())).await;
-                assert!(matches!(task.await.unwrap().unwrap_err(), AuthError::Validation(message) if message == "first removal failure"));
                 if let Some(value) = &changed_value {
                     let _ = expected.insert(changed_key.clone(), value.clone());
                 } else {

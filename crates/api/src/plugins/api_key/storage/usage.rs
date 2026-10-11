@@ -4,17 +4,18 @@ use better_auth_core::{
     query::{field_add, field_compare, field_date, field_number},
 };
 use chrono::Utc;
+use std::sync::Arc;
 
 use super::{ApiKeyConfig, ApiKeyStorage, cached, now, put, required_backend};
 
 async fn merge_usage(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     snapshot: &ApiKey,
     lookup_hash: &str,
     changed_rate: bool,
     changed_count: bool,
 ) -> AuthResult<ApiKey> {
-    let mut fresh = cached(storage, &format!("api-key:{lookup_hash}"))
+    let mut fresh = cached(storage.as_ref(), &format!("api-key:{lookup_hash}"))
         .await?
         .ok_or_else(|| AuthError::internal("Failed to update API key"))?;
     fresh.remaining.clone_from(&snapshot.remaining);
@@ -50,7 +51,7 @@ pub(in crate::plugins::api_key) async fn consume(
         if config.storage == ApiKeyStorage::SecondaryStorage
             && let ConsumeApiKeyResult::Allowed(key) = &result
         {
-            put(required_backend(config, ctx)?.as_ref(), key, true).await?;
+            put(required_backend(config, ctx)?.clone(), key, true).await?;
         }
         return Ok(result);
     }
@@ -125,7 +126,7 @@ pub(in crate::plugins::api_key) async fn consume(
         let lookup_hash = lookup_hash.to_owned();
         let _task = tokio::spawn(async move {
             if let Err(error) = merge_usage(
-                storage.as_ref(),
+                storage,
                 &deferred,
                 &lookup_hash,
                 changed_rate,
@@ -142,13 +143,6 @@ pub(in crate::plugins::api_key) async fn consume(
         return Ok(ConsumeApiKeyResult::Allowed(Box::new(snapshot)));
     }
     Ok(ConsumeApiKeyResult::Allowed(Box::new(
-        merge_usage(
-            storage.as_ref(),
-            &snapshot,
-            lookup_hash,
-            changed_rate,
-            changed_count,
-        )
-        .await?,
+        merge_usage(storage, &snapshot, lookup_hash, changed_rate, changed_count).await?,
     )))
 }

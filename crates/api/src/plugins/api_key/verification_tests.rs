@@ -127,7 +127,7 @@ async fn cached_dynamic_enabled_values_control_verification_before_consuming_usa
         let mut row = seed.clone();
         row.enabled = SchemaValue::from_field(value.clone());
         row.remaining = Some(2.0).into();
-        storage::put(cache.as_ref(), &row, false).await.unwrap();
+        storage::put(cache.clone(), &row, false).await.unwrap();
         let before = cache.get(&cache_key).await.unwrap();
         let result = plugin
             .verify_api_key(
@@ -621,7 +621,7 @@ async fn secondary_usage_retains_dynamic_counter_arithmetic_and_strict_rate_limi
         key.rate_limit_max = SchemaValue::from_field("0".into());
         key.rate_limit_time_window = Some(1_000_000.0).into();
         key.last_request = Some(chrono::Utc::now().into()).into();
-        storage::put(cache.as_ref(), &key, false).await.unwrap();
+        storage::put(cache.clone(), &key, false).await.unwrap();
         let input = VerifyApiKey {
             key: &raw_key,
             config_id: None,
@@ -654,7 +654,7 @@ async fn secondary_usage_retains_dynamic_counter_arithmetic_and_strict_rate_limi
     key.rate_limit_max = SchemaValue::from_field("3".into());
     key.rate_limit_time_window = Some(1_000_000.0).into();
     key.last_request = Some(chrono::Utc::now().into()).into();
-    storage::put(cache.as_ref(), &key, false).await.unwrap();
+    storage::put(cache.clone(), &key, false).await.unwrap();
     let verified = plugin
         .verify_api_key(
             &VerifyApiKey {

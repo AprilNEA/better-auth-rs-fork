@@ -2,7 +2,8 @@
 
 use super::*;
 use better_auth_core::{
-    FieldMap, FieldObject, FieldObjectSource, FieldPropertyDescriptor, FieldValue,
+    FieldMap, FieldObject, FieldValue,
+    field_value::{FieldObjectSource, FieldPropertyDescriptor},
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 

@@ -66,6 +66,7 @@ futures-util = "0.3.34"
 sha1.workspace = true
 hex.workspace = true
 regex.workspace = true
+hyper = { version = "1", default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true }

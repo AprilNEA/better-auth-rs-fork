@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
+#[path = "http_envelope_tests.rs"]
+mod envelope;
 #[path = "http_provider_native_tests.rs"]
 mod native;
 
@@ -332,6 +334,25 @@ impl ProfileServer {
         expected_body: Option<Value>,
         status: &'static str,
     ) -> Self {
+        Self::with_body(
+            profile.to_string(),
+            events,
+            method,
+            expected_body,
+            status,
+            "application/json",
+        )
+        .await
+    }
+
+    async fn with_body(
+        body: String,
+        events: Arc<Mutex<Vec<&'static str>>>,
+        method: &str,
+        expected_body: Option<Value>,
+        status: &'static str,
+        content_type: &'static str,
+    ) -> Self {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", listener.local_addr().unwrap());
         let method = method.to_ascii_lowercase();
@@ -358,18 +379,20 @@ impl ProfileServer {
                 .find_map(|line| line.strip_prefix("content-length: "))
                 .map(|length| length.parse::<usize>().unwrap())
                 .unwrap_or(0);
-            let mut body = vec![0; length];
-            socket.read_exact(&mut body).await.unwrap();
+            let mut request_body = vec![0; length];
+            socket.read_exact(&mut request_body).await.unwrap();
             if let Some(expected) = expected_body {
                 assert!(request.contains("content-type: application/json"));
-                assert_eq!(serde_json::from_slice::<Value>(&body).unwrap(), expected);
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&request_body).unwrap(),
+                    expected
+                );
             } else {
-                assert!(body.is_empty());
+                assert!(request_body.is_empty());
             }
             events.lock().unwrap().push("http");
-            let body = profile.to_string();
             let response = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
                 body.len()
             );
             socket

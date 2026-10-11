@@ -9,6 +9,10 @@ use super::resolved::ResolvedProvider;
 mod native;
 pub(super) use native::{LegacySubject, ProviderProfile};
 
+#[path = "social_http.rs"]
+mod http;
+pub(super) use http::fetch_http_profile;
+
 pub(super) async fn resolve_account_subject(
     provider: &ResolvedProvider,
     subject_tokens: &OAuthTokenSet,
@@ -446,53 +450,29 @@ async fn fetch_default_user_info(
             let request = provider
                 .config
                 .user_info_request(user_info_url, &access_token)?;
-            let Some(profile) = fetch_http_profile(request).await? else {
-                return Ok(ProviderProfile::default());
-            };
+            let response = http::fetch_native(request).await?;
             let Some(profile) = provider
                 .config
-                .http_profile_data(profile)
-                .map_err(AuthError::internal)?
+                .http_profile_data(&response.data, &response.error)?
             else {
                 return Ok(ProviderProfile::default());
             };
+            if let Some(result) = provider
+                .config
+                .native_default_profile(&profile, &response.data)
+                .await?
+            {
+                return Ok(result);
+            }
             profile
+                .json()?
+                .ok_or_else(|| AuthError::internal("Legacy JSON provider profile is undefined"))?
         }
     };
-    if let Some(response) = provider
-        .config
-        .native_default_profile(&FieldValue::from_json(data.clone())?)
-        .await?
-    {
-        return Ok(response);
-    }
     match provider.config.decode_profile(data.clone())? {
         Some(user) => map_legacy_profile(provider, OAuthUserInfoResponse { user, data }).await,
         None => Ok(ProviderProfile::default()),
     }
-}
-
-pub(super) async fn fetch_http_profile(
-    request: reqwest::RequestBuilder,
-) -> AuthResult<Option<serde_json::Value>> {
-    let response = request.send().await.map_err(|error| {
-        AuthError::internal(format!(
-            "Failed to fetch user info: {}",
-            error.without_url()
-        ))
-    })?;
-    if !response.status().is_success() {
-        let _ = response.text().await.map_err(|error| {
-            AuthError::internal(format!("Failed to read user info: {}", error.without_url()))
-        })?;
-        return Ok(None);
-    }
-    response.json().await.map(Some).map_err(|error| {
-        AuthError::internal(format!(
-            "Failed to parse user info: {}",
-            error.without_url()
-        ))
-    })
 }
 
 pub(super) fn missing_profile() -> AuthError {

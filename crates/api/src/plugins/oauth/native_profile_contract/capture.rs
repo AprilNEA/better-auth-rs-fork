@@ -112,43 +112,76 @@ impl Before {
 }
 
 pub(super) fn assert_complete(actual: &Value, expected: &Value, scenario: &str) {
-    fn difference(actual: &Value, expected: &Value, path: &str) -> Option<String> {
-        if actual == expected {
-            return None;
+    const LIMIT: usize = 32;
+    fn describe(value: &Value) -> String {
+        let text = value.to_string();
+        let mut characters = text.chars();
+        let mut result: String = characters.by_ref().take(512).collect();
+        if characters.next().is_some() {
+            result.push_str("…");
+        }
+        result
+    }
+    fn differences(actual: &Value, expected: &Value, path: &str, output: &mut Vec<String>) {
+        if output.len() == LIMIT || actual == expected {
+            return;
         }
         match (actual, expected) {
             (Value::Object(actual), Value::Object(expected)) => {
-                if actual.len() != expected.len()
-                    || actual.keys().any(|key| !expected.contains_key(key))
-                {
-                    return Some(format!(
-                        "{path}: keys {:?} != {:?}",
-                        actual.keys().collect::<Vec<_>>(),
-                        expected.keys().collect::<Vec<_>>()
-                    ));
-                }
-                expected.iter().find_map(|(key, value)| {
-                    difference(&actual[key], value, &format!("{path}.{key}"))
-                })
-            }
-            (Value::Array(actual), Value::Array(expected)) => {
-                for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
-                    if let Some(difference) =
-                        difference(actual, expected, &format!("{path}[{index}]"))
-                    {
-                        return Some(difference);
+                for (key, expected) in expected {
+                    if output.len() == LIMIT {
+                        return;
+                    }
+                    let path = format!("{path}.{key}");
+                    if let Some(actual) = actual.get(key) {
+                        differences(actual, expected, &path, output);
+                    } else {
+                        output.push(format!(
+                            "{path}: missing actual key; expected {}",
+                            describe(expected)
+                        ));
                     }
                 }
-                Some(format!(
-                    "{path}: array length {} != {}",
-                    actual.len(),
-                    expected.len()
-                ))
+                for (key, actual) in actual {
+                    if output.len() == LIMIT {
+                        return;
+                    }
+                    if !expected.contains_key(key) {
+                        output.push(format!(
+                            "{path}.{key}: unexpected actual key with {}",
+                            describe(actual)
+                        ));
+                    }
+                }
             }
-            _ => Some(format!("{path}: actual {actual}, expected {expected}")),
+            (Value::Array(actual), Value::Array(expected)) => {
+                if actual.len() != expected.len() {
+                    output.push(format!(
+                        "{path}: array length {} != {}",
+                        actual.len(),
+                        expected.len()
+                    ));
+                }
+                for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+                    if output.len() == LIMIT {
+                        return;
+                    }
+                    differences(actual, expected, &format!("{path}[{index}]"), output);
+                }
+            }
+            _ => output.push(format!(
+                "{path}: actual {}, expected {}",
+                describe(actual),
+                describe(expected)
+            )),
         }
     }
-    if let Some(difference) = difference(actual, expected, scenario) {
-        panic!("{difference}");
+    if actual != expected {
+        let mut output = Vec::new();
+        differences(actual, expected, scenario, &mut output);
+        panic!(
+            "{scenario}: complete case differs (at most {LIMIT} paths shown)\n{}",
+            output.join("\n")
+        );
     }
 }

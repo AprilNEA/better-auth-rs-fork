@@ -6,12 +6,15 @@ use super::ProviderKind;
 
 #[path = "default_profile_fields.rs"]
 mod fields;
+#[path = "http_profile.rs"]
+mod http;
 use crate::plugins::oauth::{OAuthProfileMapper, social_profile::ProviderProfile};
 
 impl ProviderKind {
     pub(in crate::plugins::oauth) async fn native_default_profile(
         &self,
         profile: &FieldValue,
+        source: &FieldValue,
         mapper: Option<&dyn OAuthProfileMapper>,
     ) -> AuthResult<Option<ProviderProfile>> {
         let construct: fn(&FieldValue) -> AuthResult<FieldMap> = match self {
@@ -82,7 +85,12 @@ impl ProviderKind {
         {
             return Ok(Some(ProviderProfile::default()));
         }
-        let user = spread(construct(profile)?, &mapped)?;
+        let literal_source = if matches!(self, Self::Linear) {
+            source
+        } else {
+            profile
+        };
+        let user = spread(construct(literal_source)?, &mapped)?;
         let data = if matches!(self, Self::Roblox | Self::Zoom { .. }) {
             profile.enumerable_fields()?.into()
         } else {

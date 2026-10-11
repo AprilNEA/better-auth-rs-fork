@@ -60,7 +60,7 @@ async fn check_list_default_limit(ctx: &AuthContext<impl better_auth_core::AuthS
 
     let cache = Arc::new(better_auth_core::store::MemoryCacheAdapter::new());
     for key in &keys {
-        storage::put(cache.as_ref(), key, false).await.unwrap();
+        storage::put(cache.clone(), key, false).await.unwrap();
     }
     let plugin = ApiKeyPlugin::with_config(ApiKeyConfig {
         storage: ApiKeyStorage::SecondaryStorage,
@@ -116,7 +116,7 @@ async fn check_list_default_limit(ctx: &AuthContext<impl better_auth_core::AuthS
     {
         key.name = name.map(str::to_owned).into();
         key.remaining = remaining.into();
-        storage::put(cache.as_ref(), &key, false).await.unwrap();
+        storage::put(cache.clone(), &key, false).await.unwrap();
     }
     let plugin = ApiKeyPlugin::with_config(ApiKeyConfig {
         storage: ApiKeyStorage::SecondaryStorage,
@@ -256,7 +256,7 @@ async fn check_list_default_limit(ctx: &AuthContext<impl better_auth_core::AuthS
             key.id = format!("dynamic-{index}").into();
             key.key_hash = format!("dynamic-secret-{index}").into();
             key.name = better_auth_core::SchemaValue::from_json(name.clone()).unwrap();
-            storage::put(cache.as_ref(), &key, false).await.unwrap();
+            storage::put(cache.clone(), &key, false).await.unwrap();
         }
         let plugin = ApiKeyPlugin::with_config(ApiKeyConfig {
             storage: ApiKeyStorage::SecondaryStorage,
@@ -307,7 +307,7 @@ async fn check_list_default_limit(ctx: &AuthContext<impl better_auth_core::AuthS
             let mut key = keys[0].clone();
             key.id = format!("date-{index}").into();
             key.key_hash = format!("date-secret-{index}").into();
-            storage::put(cache.as_ref(), &key, false).await.unwrap();
+            storage::put(cache.clone(), &key, false).await.unwrap();
             let mut row = serde_json::to_value(&key).unwrap();
             row[field] = json!(date);
             better_auth_core::store::SecondaryStorage::set(
@@ -382,7 +382,7 @@ async fn check_cached_object_conversion_errors(
                 key.id = format!("object-{index}").into();
                 key.key_hash = format!("object-secret-{index}").into();
                 key.name = better_auth_core::SchemaValue::from_json(Some(name.clone())).unwrap();
-                storage::put(cache.as_ref(), &key, false).await.unwrap();
+                storage::put(cache.clone(), &key, false).await.unwrap();
             }
             let mut stored = Vec::new();
             for key in [

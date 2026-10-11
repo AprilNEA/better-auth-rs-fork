@@ -1,8 +1,9 @@
 #[cfg(test)]
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
 
+use better_auth_core::request_runtime::concurrent::{self, FailureReporter};
 use better_auth_core::store::SecondaryStorage;
 #[cfg(test)]
 use better_auth_core::wire::ApiKeyView;
@@ -20,14 +21,14 @@ use super::ApiKeyConfig;
 const STORAGE_CONCURRENCY: usize = 10;
 
 struct StorageBatch<'a> {
-    first_error: &'a OnceLock<AuthError>,
+    reporter: &'a FailureReporter,
     failed: AtomicBool,
 }
 
 impl<'a> StorageBatch<'a> {
-    fn new(first_error: &'a OnceLock<AuthError>) -> Self {
+    fn new(reporter: &'a FailureReporter) -> Self {
         Self {
-            first_error,
+            reporter,
             failed: AtomicBool::new(false),
         }
     }
@@ -37,7 +38,7 @@ impl<'a> StorageBatch<'a> {
             Ok(value) => Some(value),
             Err(error) => {
                 self.failed.store(true, Ordering::Relaxed);
-                let _ = self.first_error.set(error);
+                self.reporter.failed(error);
                 None
             }
         }
@@ -45,16 +46,6 @@ impl<'a> StorageBatch<'a> {
 
     fn failed(&self) -> bool {
         self.failed.load(Ordering::Relaxed)
-    }
-}
-
-fn complete_batch<T>(
-    first_error: OnceLock<AuthError>,
-    outcomes: impl IntoIterator<Item = Option<T>>,
-) -> AuthResult<Vec<T>> {
-    match first_error.into_inner() {
-        Some(error) => Err(error),
-        None => Ok(outcomes.into_iter().flatten().collect()),
     }
 }
 
@@ -210,14 +201,16 @@ async fn cached_native_fields(
 }
 
 pub(super) async fn put(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &ApiKey,
     fallback: bool,
 ) -> AuthResult<()> {
-    let first_error = OnceLock::new();
-    let batch = StorageBatch::new(&first_error);
-    let outcome = put_in_batch(storage, key, fallback, &batch).await;
-    complete_batch(first_error, [outcome]).map(|_| ())
+    let key = key.clone();
+    concurrent::retain("API key cache write", move |reporter| async move {
+        let batch = StorageBatch::new(&reporter);
+        put_in_batch(storage.as_ref(), &key, fallback, &batch).await
+    })
+    .await
 }
 
 async fn put_in_batch(
@@ -236,7 +229,6 @@ async fn put_in_batch(
     ))?;
     let ttl = ttl.map(|seconds| seconds as f64);
     if fallback {
-        // Record failures before draining peers so later failures cannot replace the first error.
         let (hashed, id, reference) = tokio::join!(
             storage
                 .set_native(&hashed, &value, ttl)
@@ -267,32 +259,37 @@ async fn put_in_batch(
 }
 
 async fn remove_cached(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &ApiKey,
     fallback: bool,
 ) -> AuthResult<()> {
     let hashed = cache_key("api-key:", &key.key_hash.field_value())?;
     let id = cache_key("api-key:by-id:", &key.id.field_value())?;
     let reference = cache_key("api-key:by-ref:", &key.reference_id.field_value())?;
-    let first_error = OnceLock::new();
-    let batch = StorageBatch::new(&first_error);
-    let reference = async {
-        if fallback {
-            storage.delete_native(&reference).await
-        } else {
-            modify_reference(storage, key, false).await
-        }
-    };
-    let (hashed, id, reference) = tokio::join!(
-        storage
-            .delete_native(&hashed)
-            .map(|result| batch.observe(result)),
-        storage
-            .delete_native(&id)
-            .map(|result| batch.observe(result)),
-        reference.map(|result| batch.observe(result))
-    );
-    complete_batch(first_error, [hashed, id, reference]).map(|_| ())
+    let key = key.clone();
+    concurrent::retain("API key cache removal", move |reporter| async move {
+        let batch = StorageBatch::new(&reporter);
+        let reference = async {
+            if fallback {
+                storage.delete_native(&reference).await
+            } else {
+                modify_reference(storage.as_ref(), &key, false).await
+            }
+        };
+        let (hashed, id, reference) = tokio::join!(
+            storage
+                .delete_native(&hashed)
+                .map(|result| batch.observe(result)),
+            storage
+                .delete_native(&id)
+                .map(|result| batch.observe(result)),
+            reference.map(|result| batch.observe(result))
+        );
+        hashed?;
+        id?;
+        reference
+    })
+    .await
 }
 
 pub(crate) async fn get_by_id(
@@ -341,7 +338,7 @@ async fn get(
     if config.storage == ApiKeyStorage::SecondaryStorage
         && let (Some(storage), Some(key)) = (storage, key.as_ref())
     {
-        put(storage.as_ref(), key, config.fallback_to_database).await?;
+        put(storage.clone(), key, config.fallback_to_database).await?;
     }
     Ok(key)
 }
@@ -379,7 +376,7 @@ pub(super) async fn create(
             AuthError::internal("Cannot read properties of null (reading 'expiresAt')")
         })?;
         put(
-            required_backend(config, ctx)?.as_ref(),
+            required_backend(config, ctx)?.clone(),
             key,
             config.fallback_to_database,
         )
@@ -442,7 +439,7 @@ pub(super) async fn update(
     }
     if config.storage == ApiKeyStorage::SecondaryStorage {
         put(
-            required_backend(config, ctx)?.as_ref(),
+            required_backend(config, ctx)?.clone(),
             &key,
             config.fallback_to_database,
         )
@@ -458,7 +455,7 @@ pub(super) async fn delete(
 ) -> AuthResult<()> {
     if config.storage == ApiKeyStorage::SecondaryStorage {
         remove_cached(
-            required_backend(config, ctx)?.as_ref(),
+            required_backend(config, ctx)?.clone(),
             key,
             config.fallback_to_database,
         )
@@ -490,7 +487,7 @@ pub(super) async fn delete_for_verification(
                         "Secondary storage is required when storage mode is 'secondary-storage'",
                     )
                 })?;
-                remove_cached(storage.as_ref(), &key, config.fallback_to_database).await?;
+                remove_cached(storage, &key, config.fallback_to_database).await?;
             }
             if config.storage == ApiKeyStorage::Database || config.fallback_to_database {
                 database.delete_api_key(&key.id).await?;
@@ -514,17 +511,28 @@ pub(super) async fn list_groups(
     reference: &FieldValue,
     sort: Option<(&str, &str)>,
 ) -> AuthResult<Vec<FieldValue>> {
-    let first_error = OnceLock::new();
-    let groups = futures_util::future::join_all(
-        configurations
-            .iter()
-            .map(|config| list_in_batch(config, ctx, reference, sort, &first_error)),
-    )
-    .await;
-    Ok(complete_batch(first_error, groups)?
+    let configurations = configurations
+        .iter()
+        .map(|config| (*config).clone())
+        .collect::<Vec<_>>();
+    let ctx = ctx.clone();
+    let reference = reference.clone();
+    let sort = sort.map(|(field, direction)| (field.to_owned(), direction.to_owned()));
+    concurrent::retain("API key cache list", move |reporter| async move {
+        let sort = sort
+            .as_ref()
+            .map(|(field, direction)| (field.as_str(), direction.as_str()));
+        let groups = futures_util::future::join_all(
+            configurations
+                .iter()
+                .map(|config| list_in_batch(config, &ctx, &reference, sort, &reporter)),
+        )
+        .await
         .into_iter()
-        .flatten()
-        .collect())
+        .collect::<Option<Vec<_>>>()?;
+        Some(groups.into_iter().flatten().collect())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -542,10 +550,10 @@ async fn list_in_batch(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     reference: &FieldValue,
     sort: Option<(&str, &str)>,
-    first_error: &OnceLock<AuthError>,
+    reporter: &FailureReporter,
 ) -> Option<Vec<FieldValue>> {
     // A failed group stops its own workers; independent groups keep running.
-    let batch = StorageBatch::new(first_error);
+    let batch = StorageBatch::new(reporter);
     let storage = backend(config, ctx);
     if config.storage == ApiKeyStorage::SecondaryStorage {
         if let Some(storage) = storage {
@@ -584,8 +592,6 @@ async fn list_in_batch(
                                 }
                             })
                             .buffer_unordered(concurrency)
-                            // Keep started callbacks in this request's scope. Unlike a JS promise,
-                            // the Rust result waits for these peers before returning the first error.
                             .collect::<Vec<_>>()
                             .await
                             .into_iter()

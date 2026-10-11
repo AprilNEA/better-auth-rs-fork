@@ -501,39 +501,12 @@ impl OAuthProvider {
         )
     }
 
-    pub(super) fn http_profile_data(&self, mut response: Value) -> Result<Option<Value>, String> {
-        if matches!(self.kind, ProviderKind::Atlassian | ProviderKind::Kakao) && response.is_null()
-        {
-            Ok(None)
-        } else if matches!(self.kind, ProviderKind::Discord) {
-            defaults::prepare_discord_profile(&mut response)?;
-            Ok(Some(response))
-        } else if matches!(self.kind, ProviderKind::Kick) {
-            response
-                .pointer_mut("/data/0")
-                .map(|profile| Some(profile.take()))
-                .ok_or_else(|| "Kick user info response did not contain a profile".into())
-        } else if matches!(self.kind, ProviderKind::Linear) {
-            Ok(response
-                .pointer_mut("/data/viewer")
-                .filter(|profile| !profile.is_null())
-                .map(Value::take))
-        } else if matches!(self.kind, ProviderKind::Notion) {
-            Ok(response
-                .pointer_mut("/bot/owner/user")
-                .filter(|profile| crate::plugins::json_body::is_truthy(profile))
-                .map(Value::take))
-        } else if matches!(self.kind, ProviderKind::Cloudflare) {
-            if response.get("success").and_then(Value::as_bool) != Some(true) {
-                return Ok(None);
-            }
-            Ok(response
-                .get_mut("result")
-                .filter(|profile| !profile.is_null())
-                .map(Value::take))
-        } else {
-            Ok(Some(response))
-        }
+    pub(super) fn http_profile_data(
+        &self,
+        response: &FieldValue,
+        error: &FieldValue,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.kind.http_profile_data(response, error)
     }
 
     pub(super) fn is_cloudflare(&self) -> bool {
@@ -654,12 +627,13 @@ impl OAuthProvider {
     pub(super) async fn native_default_profile(
         &self,
         profile: &FieldValue,
+        source: &FieldValue,
     ) -> AuthResult<Option<super::social_profile::ProviderProfile>> {
         if self.map_user_info.is_some() {
             return Ok(None);
         }
         self.kind
-            .native_default_profile(profile, self.map_profile_to_user.as_deref())
+            .native_default_profile(profile, source, self.map_profile_to_user.as_deref())
             .await
     }
 

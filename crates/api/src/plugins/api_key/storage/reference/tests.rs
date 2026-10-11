@@ -161,19 +161,21 @@ async fn reference_mutations_compare_object_identity_and_native_numbers() {
 
 #[tokio::test]
 async fn valid_non_arrays_fail_at_the_method_without_rewriting_the_index() {
-    let cache = Cache::default();
+    let cache = Arc::new(Cache::default());
     let key = record("key".into());
     for source in ["null", "{}", "7", "false"] {
         for insert in [true, false] {
             cache.seed(INDEX, source.into());
-            let error = modify_reference(&cache, &key, insert).await.unwrap_err();
+            let error = modify_reference(cache.as_ref(), &key, insert)
+                .await
+                .unwrap_err();
             let method = if insert { "includes" } else { "filter" };
             assert!(error.to_string().contains(method), "{source}: {error}");
             assert_eq!(cache.value(INDEX), Some(source.into()));
             assert!(cache.writes.lock().unwrap().is_empty());
         }
         cache.seed(INDEX, source.into());
-        assert!(put(&cache, &key, false).await.is_err());
+        assert!(put(cache.clone(), &key, false).await.is_err());
         assert_eq!(cache.value(INDEX), Some(source.into()));
         let serialized = super::super::serialize(&key).unwrap();
         assert_eq!(
@@ -184,7 +186,7 @@ async fn valid_non_arrays_fail_at_the_method_without_rewriting_the_index() {
             ]
         );
         cache.writes.lock().unwrap().clear();
-        assert!(remove_cached(&cache, &key, false).await.is_err());
+        assert!(remove_cached(cache.clone(), &key, false).await.is_err());
         assert_eq!(cache.value(INDEX), Some(source.into()));
         assert_eq!(
             *cache.writes.lock().unwrap(),
@@ -196,11 +198,11 @@ async fn valid_non_arrays_fail_at_the_method_without_rewriting_the_index() {
     }
     for source in ["malformed", ""] {
         cache.seed(INDEX, source.into());
-        modify_reference(&cache, &key, true).await.unwrap();
+        modify_reference(cache.as_ref(), &key, true).await.unwrap();
         assert_eq!(cache.value(INDEX), Some(r#"["key"]"#.into()));
     }
     cache.seed(INDEX, FieldMap::new().into());
-    modify_reference(&cache, &key, true).await.unwrap();
+    modify_reference(cache.as_ref(), &key, true).await.unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["key"]"#.into()));
 }
 
@@ -235,7 +237,7 @@ async fn escaped_surrogate_ids_survive_cache_writes_lists_and_removal() {
     let mut key = record(Utf16String::from_units(vec![0xd800]).into());
     key.key_hash = SchemaValue::from_field(Utf16String::from_units(vec![0xdc00]).into());
     cache.seed(INDEX, r#"["\ud800"]"#.into());
-    put(cache.as_ref(), &key, false).await.unwrap();
+    put(cache.clone(), &key, false).await.unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["\ud800"]"#.into()));
     let keys = list(&config, &ctx, "owner", None).await.unwrap();
     assert_eq!(keys.len(), 1);
@@ -247,17 +249,17 @@ async fn escaped_surrogate_ids_survive_cache_writes_lists_and_removal() {
         property(keys.first().unwrap(), "key").unwrap(),
         key.key_hash.field_value()
     );
-    remove_cached(cache.as_ref(), &key, false).await.unwrap();
+    remove_cached(cache.clone(), &key, false).await.unwrap();
     assert!(cache.values.lock().unwrap().is_empty());
 
     key.reference_id = SchemaValue::from_field(Utf16String::from_units(vec![0xdfff]).into());
-    put(cache.as_ref(), &key, false).await.unwrap();
+    put(cache.clone(), &key, false).await.unwrap();
     let index = cache_key("api-key:by-ref:", &key.reference_id.field_value()).unwrap();
     assert_eq!(
         cache.get_native(&index).await.unwrap(),
         Some(r#"["\ud800"]"#.into())
     );
-    remove_cached(cache.as_ref(), &key, false).await.unwrap();
+    remove_cached(cache.clone(), &key, false).await.unwrap();
     assert!(cache.values.lock().unwrap().is_empty());
 }
 
@@ -336,7 +338,7 @@ async fn raw_utf16_cache_json_preserves_records_and_reference_mutation() {
     assert!(cache.writes.lock().unwrap().is_empty());
     modify_reference(cache.as_ref(), &key, true).await.unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["\ud800"]"#.into()));
-    remove_cached(cache.as_ref(), &key, false).await.unwrap();
+    remove_cached(cache.clone(), &key, false).await.unwrap();
     assert!(cache.values.lock().unwrap().is_empty());
 
     let native = vec![key.id.field_value()].into();
@@ -363,7 +365,7 @@ async fn list_consumes_length_and_index_properties_without_array_normalization()
     for name in ["A", "B"] {
         let mut key = record(name.into());
         key.key_hash = name.to_owned().into();
-        put(cache.as_ref(), &key, false).await.unwrap();
+        put(cache.clone(), &key, false).await.unwrap();
     }
     for fallback in [false, true] {
         let (config, ctx) = context(cache.clone(), fallback);
@@ -512,7 +514,7 @@ async fn explicit_configuration_preserves_duplicate_cache_rows_and_paginates_aft
     let (config, ctx) = context(cache.clone(), false);
     let plugin = ApiKeyPlugin::with_config(config);
     let key = record("duplicate".into());
-    put(cache.as_ref(), &key, false).await.unwrap();
+    put(cache.clone(), &key, false).await.unwrap();
     cache.seed(INDEX, r#"["duplicate","duplicate","duplicate"]"#.into());
     let before = cache.values.lock().unwrap().clone();
     for config_id in [None, Some("default".into())] {
