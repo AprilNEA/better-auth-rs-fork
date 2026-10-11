@@ -683,8 +683,6 @@ async fn link_with_id_token_core(
             url: Some(String::new()),
             redirect: false,
             status: Some(true),
-            token: better_auth_core::FieldValue::Undefined,
-            user: None,
         });
     }
     if account.is_some() {
@@ -799,8 +797,6 @@ async fn link_with_id_token_core(
         url: Some(String::new()),
         redirect: false,
         status: Some(true),
-        token: better_auth_core::FieldValue::Undefined,
-        user: None,
     })
 }
 
@@ -1052,8 +1048,6 @@ pub(super) async fn initiate_oauth_flow_core(
             url: Some(url),
             redirect: !request.disable_redirect,
             status: None,
-            token: better_auth_core::FieldValue::Undefined,
-            user: None,
         },
         state: flow.state,
         payload: flow.payload,
