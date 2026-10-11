@@ -116,8 +116,8 @@ function configure(scenario, options, record) {
     ...(scenario.invocation === "native" ? { async invokeNative(auth, request) {
       try {
         const result = scenario.callback
-          ? await auth.api.callbackOAuth({ method: "GET", params: { id: "google" }, query: Object.fromEntries(new URL(request.url).searchParams), request, headers: request.headers, returnHeaders: true, returnStatus: true })
-          : await auth.api.linkSocialAccount({ body: await request.clone().json(), request, headers: request.headers, returnHeaders: true, returnStatus: true });
+          ? await auth.api.callbackOAuth({ method: "GET", params: { id: "google" }, query: Object.fromEntries(new URL(request.url).searchParams), request, headers: request.headers, asResponse: false, returnHeaders: true, returnStatus: true })
+          : await auth.api.linkSocialAccount({ body: await request.clone().json(), request, headers: request.headers, asResponse: false, returnHeaders: true, returnStatus: true });
         return { rejected: false, value: observeValue(result.response), status: observeValue(result.status), headers: headers(result.headers) };
       } catch (error) {
         return { rejected: true, error: errorObservation(error, failure) };
