@@ -203,9 +203,17 @@ async fn assert_token_refresh_cookie_spread(path: &str, selection: RefreshSelect
     let sequence = Arc::new(std::sync::Mutex::new(vec![(
         "old-refresh-token".into(),
         OAuthTokenSet {
-            access_token: ((!no_id).then(|| "rotated-access-token".into())).into(),
+            access_token: if no_id {
+                Default::default()
+            } else {
+                Some("rotated-access-token".into()).into()
+            },
             refresh_token: (Some("rotated-refresh-token".into())).into(),
-            access_token_expires_at: ((!no_id).then_some(next_expiry)).into(),
+            access_token_expires_at: if no_id {
+                Default::default()
+            } else {
+                Some(next_expiry).into()
+            },
             ..Default::default()
         },
     )]));

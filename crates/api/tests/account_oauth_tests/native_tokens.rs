@@ -108,7 +108,11 @@ async fn test_account_info_preserves_number_expiry_and_native_token_identity() {
         let mut oauth_config = OAuthConfig::default();
         let _ = oauth_config.providers.insert("google".into(), provider);
         let plugin = OAuthPlugin::with_config(oauth_config);
-        let context = AuthContext::new(Arc::new(config), db.clone())
+        let config = Arc::new(config);
+        let runtime = db
+            .with_runtime(config.clone(), Vec::new(), Default::default())
+            .unwrap();
+        let context = AuthContext::new(config, runtime)
             .initialize_request_context()
             .await
             .unwrap();

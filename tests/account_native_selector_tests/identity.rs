@@ -13,7 +13,11 @@ async fn memory_identity_queries_preserve_native_object_identity() -> AuthResult
         let config = Arc::new(config);
         let inner = EphemeralStore::new(config.clone());
         let user = inner
-            .create_user(CreateUser::new().with_email("object-provider@example.test"))
+            .create_user(
+                CreateUser::new()
+                    .with_email("object-provider@example.test")
+                    .with_name("Object provider owner"),
+            )
             .await?;
         let provider = FieldValue::from(FieldMap::from([("name".into(), "native".into())]));
         let distinct = FieldValue::from(FieldMap::from([("name".into(), "native".into())]));
@@ -112,7 +116,11 @@ async fn check_json_identity<S: AuthSchema>(
     mut config: AuthConfig,
 ) -> AuthResult<()> {
     let user = base
-        .create_user(CreateUser::new().with_email("json-provider@example.test"))
+        .create_user(
+            CreateUser::new()
+                .with_email("json-provider@example.test")
+                .with_name("JSON provider owner"),
+        )
         .await?;
     let seed = |id: &str| CreateAccount {
         id: id.into(),

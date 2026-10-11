@@ -5,7 +5,7 @@
 )]
 
 use super::*;
-use better_auth_core::{AuthError, SchemaValue};
+use better_auth_core::{AuthError, FieldMap, FieldValue, SchemaValue};
 use serde_json::{Value, json};
 use std::sync::Mutex;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -363,12 +363,24 @@ async fn paypal_profiles_preserve_http_data_mapping_and_optional_verified_token(
         } else {
             None
         };
-        let profile_request = OAuthUserInfoRequest {
-            access_token: ((sample["missingAccess"] != true).then(|| "ordinary-access".into()))
-                .into(),
-            id_token: (signed.as_ref().map(|s| s.token.clone())).into(),
-            ..Default::default()
-        };
+        // The capture supplies both token properties, including explicit undefined values.
+        let profile_request = OAuthUserInfoRequest::from_fields(FieldMap::from([
+            (
+                "accessToken".into(),
+                if sample["missingAccess"] == true {
+                    FieldValue::Undefined
+                } else {
+                    "ordinary-access".into()
+                },
+            ),
+            (
+                "idToken".into(),
+                signed
+                    .as_ref()
+                    .map(|signed| signed.token.clone().into())
+                    .unwrap_or_default(),
+            ),
+        ]));
         let result = social_profile::fetch_user_info_for_code(
             &resolved(config),
             &OAuthTokenSet::from_fields(profile_request.fields()),
@@ -531,6 +543,7 @@ impl OAuthRefreshTokenHandler for Custom {
         }
         Ok(OAuthTokenSet {
             access_token: (Some("custom-access".into())).into(),
+            scopes: Vec::new().into(),
             ..Default::default()
         })
     }

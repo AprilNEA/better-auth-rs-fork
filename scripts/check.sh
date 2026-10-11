@@ -1074,8 +1074,9 @@ run_stage() {
       bun --no-install test ./compat-tests/reference-server/contracts/oauth-token-duration.test.ts
       ;;
     provider-options)
-      cargo clippy --locked -p better-auth-api --features axum -- -D warnings
-      cargo clippy --locked --features axum,seaorm2,redis-cache --test oauth_token_duration_tests -- -D warnings
+      local provider_status=0
+      cargo clippy --locked -p better-auth-api --features axum -- -D warnings || provider_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test oauth_token_duration_tests -- -D warnings || provider_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
         plugins::oauth::google_client_ids_tests:: \
         plugins::oauth::verifier_context_tests:: \
@@ -1088,13 +1089,13 @@ run_stage() {
         plugins::oauth::state::raw_state_tests:: \
         plugins::oauth::providers::twitch::tests:: \
         plugins::oauth::signin::override_tests:: \
-        plugins::oauth::generic_profile::result_tests::
+        plugins::oauth::generic_profile::result_tests:: || provider_status=1
       cargo test --locked -p better-auth-api --features axum \
-        --test account_oauth_tests --test oauth_session_revocation_tests
-      cargo test --locked --test social_refresh_context_tests
-      cargo test --locked --features axum,seaorm2,redis-cache --test oauth_token_duration_tests
-      cargo test --locked --test telemetry_options_tests
-      cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml
+        --no-fail-fast --test account_oauth_tests --test oauth_session_revocation_tests || provider_status=1
+      cargo test --locked --test social_refresh_context_tests || provider_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --test oauth_token_duration_tests || provider_status=1
+      cargo test --locked --test telemetry_options_tests || provider_status=1
+      cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || provider_status=1
       bun --no-install test \
         ./compat-tests/reference-server/contracts/google-client-ids.test.ts \
         ./compat-tests/reference-server/contracts/gitlab-issuer.test.ts \
@@ -1107,7 +1108,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/oauth-token-duration.test.ts \
         ./compat-tests/reference-server/contracts/social-verifier-context.test.ts \
         ./compat-tests/reference-server/contracts/telemetry-options.test.ts \
-        ./compat-tests/reference-server/contracts/generic-profile-results.test.ts
+        ./compat-tests/reference-server/contracts/generic-profile-results.test.ts || provider_status=1
+      return "$provider_status"
       ;;
     *) echo "Unknown check stage: $1" >&2; exit 1 ;;
   esac
