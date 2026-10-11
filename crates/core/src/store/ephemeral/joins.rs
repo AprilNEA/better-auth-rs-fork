@@ -1,6 +1,6 @@
 //! Native joins retain child row references selected by the original raw query.
 
-use super::account_joins::native_relation;
+use super::native_joins::native_relationships;
 use super::rows::RecordSource;
 use super::rows::RowRef;
 use super::*;
@@ -51,7 +51,7 @@ impl EphemeralStore {
                 "session",
                 if single { "findOne" } else { "findMany" },
                 |op| {
-                    let sessions = crate::query::paginate_memory(
+                    let sessions =
                         op.capture_table(EntityRole::Session)?
                             .select_refs(|session| {
                                 let clauses = std::iter::once((
@@ -77,36 +77,41 @@ impl EphemeralStore {
                                         )
                                     },
                                 )
-                            })?,
-                        Some(if single {
-                            1.0
-                        } else {
-                            self.config.advanced.database.find_many_limit()
-                        }),
-                        None,
-                    );
-                    sessions
+                            })?
+                            .into_iter()
+                            .map(RecordSource::Live)
+                            .collect();
+                    let limit = Some(if single {
+                        1.0
+                    } else {
+                        self.config.advanced.database.find_many_limit()
+                    });
+                    if !native {
+                        return Ok(crate::query::paginate_memory(sessions, limit, None)
+                            .into_iter()
+                            .map(|source| (source, None))
+                            .collect::<Vec<_>>());
+                    }
+                    let groups = native_relationships(
+                        sessions,
+                        &[(
+                            EntityRole::User,
+                            &relation,
+                            self.config.advanced.database.find_many_limit(),
+                        )],
+                        |role| op.capture_join_table(role),
+                    )?;
+                    Ok(crate::query::paginate_memory(groups, limit, None)
                         .into_iter()
-                        .map(|source| {
-                            if !native {
-                                return Ok((RecordSource::Live(source), None));
-                            }
-                            let session = source.shallow_fields()?;
-                            let value = session.get(&relation.from).cloned().unwrap_or_default();
-                            let users = native_relation(
-                                op.capture_join_table(EntityRole::User)?
-                                    .select_refs(|user| {
-                                        Ok(user
-                                            .field(&relation.to)?
-                                            .unwrap_or_default()
-                                            .strict_equals(&value))
-                                    })?,
-                                &relation,
-                                self.config.advanced.database.find_many_limit(),
-                                |user| user.get("id").cloned().unwrap_or_default(),
-                            )?;
+                        .map(|mut group| {
+                            let users = group.children.remove(0);
+                            let users = if relation.many {
+                                JoinValue::Many(users)
+                            } else {
+                                JoinValue::One(users.into_iter().next())
+                            };
                             let source = RecordSource::joined(
-                                session,
+                                group.parent,
                                 [(
                                     self.model_fields
                                         .storage_model_name(EntityRole::User, "user")
@@ -114,9 +119,9 @@ impl EphemeralStore {
                                     users.raw_value(),
                                 )],
                             );
-                            Ok((source, Some(users)))
+                            (source, Some(users))
                         })
-                        .collect::<AuthResult<Vec<_>>>()
+                        .collect::<Vec<_>>())
                 },
             )
             .await?;

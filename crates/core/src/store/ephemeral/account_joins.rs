@@ -1,3 +1,4 @@
+use super::native_joins::native_relationships;
 use super::rows::{RecordSource, RowRef};
 use super::*;
 use crate::store::schema::EntityRole;
@@ -6,30 +7,6 @@ use crate::store::{AccountOwner, JoinValue, ResolvedJoin, UserAccounts};
 type UserRef = RowRef<FieldMap>;
 type UserPage = (Arc<[UserRef]>, usize);
 type AccountRef = RowRef<FieldMap>;
-
-pub(super) fn native_relation<T: Clone>(
-    rows: Vec<RowRef<T>>,
-    relation: &ResolvedJoin,
-    limit: f64,
-    id: impl Fn(&T) -> Value,
-) -> AuthResult<JoinValue<RowRef<T>>> {
-    if !relation.many {
-        return Ok(JoinValue::One(rows.into_iter().next()));
-    }
-    let mut selected = Vec::new();
-    let mut seen = Vec::new();
-    for row in rows {
-        if selected.len() as f64 >= limit {
-            break;
-        }
-        let id = id(&row.snapshot()?);
-        if !seen.iter().any(|seen: &Value| seen.same_value_zero(&id)) {
-            seen.push(id);
-            selected.push(row);
-        }
-    }
-    Ok(JoinValue::Many(selected))
-}
 
 fn fallback_relation<T>(rows: Vec<T>, many: bool, limit: f64) -> JoinValue<T> {
     if many {
@@ -78,7 +55,7 @@ impl EphemeralStore {
         let (mut user, accounts) = if native {
             let selected = self
                 .raw("user", "findOne", |op| {
-                    let Some(user) = op
+                    let users = op
                         .capture_table(EntityRole::User)?
                         .select_refs(|user| {
                             Ok(user
@@ -87,26 +64,29 @@ impl EphemeralStore {
                                 .strict_equals(&Value::from(email.to_lowercase())))
                         })?
                         .into_iter()
-                        .next()
-                    else {
+                        .map(RecordSource::Live)
+                        .collect();
+                    let Some(mut group) = native_relationships(
+                        users,
+                        &[(
+                            EntityRole::Account,
+                            relation,
+                            self.config.advanced.database.find_many_limit(),
+                        )],
+                        |role| op.capture_join_table(role),
+                    )?
+                    .into_iter()
+                    .next() else {
                         return Ok(None);
                     };
-                    let user = user.shallow_fields()?;
-                    let value = user.get(&relation.from).cloned().unwrap_or_default();
-                    let accounts = native_relation(
-                        op.capture_join_table(EntityRole::Account)?
-                            .select_refs(|row| {
-                                Ok(row
-                                    .field(&relation.to)?
-                                    .unwrap_or_default()
-                                    .strict_equals(&value))
-                            })?,
-                        relation,
-                        self.config.advanced.database.find_many_limit(),
-                        |row| row.get("id").cloned().unwrap_or_default(),
-                    )?;
+                    let accounts = group.children.remove(0);
+                    let accounts = if relation.many {
+                        JoinValue::Many(accounts)
+                    } else {
+                        JoinValue::One(accounts.into_iter().next())
+                    };
                     let source = RecordSource::joined(
-                        user,
+                        group.parent,
                         [(
                             self.model_fields
                                 .storage_model_name(EntityRole::Account, "account")
@@ -208,49 +188,43 @@ impl EphemeralStore {
             let selectors = self.account_identity_selectors(provider, account_id)?;
             let rows = self
                 .raw("account", "findMany", |op| {
-                    let mut selected = Vec::new();
-                    let mut parent_ids = Vec::new();
-                    for account in op
+                    let accounts = op
                         .capture_table(EntityRole::Account)?
                         .select_refs(|row| Self::account_matches_selectors(row, &selectors))?
-                    {
-                        let account = account.shallow_fields()?;
-                        let id = account.get("id").cloned().unwrap_or_default();
-                        if parent_ids
-                            .iter()
-                            .any(|seen: &Value| seen.same_value_zero(&id))
-                        {
-                            continue;
-                        }
-                        parent_ids.push(id);
-                        let value = account.get(&relation.from).cloned().unwrap_or_default();
-                        let users = native_relation(
-                            op.capture_join_table(EntityRole::User)?
-                                .select_refs(|user| {
-                                    Ok(user
-                                        .field(&relation.to)?
-                                        .unwrap_or_default()
-                                        .strict_equals(&value))
-                                })?,
+                        .into_iter()
+                        .map(RecordSource::Live)
+                        .collect();
+                    let groups = native_relationships(
+                        accounts,
+                        &[(
+                            EntityRole::User,
                             relation,
                             self.config.advanced.database.find_many_limit(),
-                            |user| user.get("id").cloned().unwrap_or_default(),
-                        )?;
-                        let source = RecordSource::joined(
-                            account,
-                            [(
-                                self.model_fields
-                                    .storage_model_name(EntityRole::User, "user")
-                                    .to_owned(),
-                                users.raw_value(),
-                            )],
-                        );
-                        selected.push((source, users));
-                        if selected.len() == 2 {
-                            break;
-                        }
-                    }
-                    Ok(selected)
+                        )],
+                        |role| op.capture_join_table(role),
+                    )?;
+                    Ok(groups
+                        .into_iter()
+                        .take(2)
+                        .map(|mut group| {
+                            let users = group.children.remove(0);
+                            let users = if relation.many {
+                                JoinValue::Many(users)
+                            } else {
+                                JoinValue::One(users.into_iter().next())
+                            };
+                            let source = RecordSource::joined(
+                                group.parent,
+                                [(
+                                    self.model_fields
+                                        .storage_model_name(EntityRole::User, "user")
+                                        .to_owned(),
+                                    users.raw_value(),
+                                )],
+                            );
+                            (source, users)
+                        })
+                        .collect::<Vec<_>>())
                 })
                 .await?;
             let (records, users): (Vec<_>, Vec<_>) = rows.into_iter().unzip();

@@ -53,6 +53,9 @@ mod memory_json_tests;
 #[cfg(test)]
 mod memory_query_tests;
 #[cfg(test)]
+mod native_join_grouping_tests;
+mod native_joins;
+#[cfg(test)]
 mod native_relation_property_tests;
 mod operation;
 #[cfg(test)]
