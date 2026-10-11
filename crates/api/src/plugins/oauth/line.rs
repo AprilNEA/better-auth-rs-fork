@@ -52,21 +52,28 @@ impl GenericOAuthUserInfoHandler for LineProfile {
             return profile(claims.as_value()).map(Some);
         }
         let client = reqwest::Client::new();
-        let request =
-            if let Some(token) = tokens.id_token.as_deref().filter(|token| !token.is_empty()) {
-                let mut form = vec![("id_token", token), ("client_id", context.client_id())];
-                if let Some(nonce) = context.expected_nonce() {
-                    form.push(("nonce", nonce));
-                }
-                client.post(&self.verify_url).form(&form)
-            } else {
-                let endpoint = context
-                    .user_info_url()
-                    .ok_or_else(|| AuthError::internal("Missing LINE userinfo endpoint"))?;
-                client
-                    .get(endpoint)
-                    .bearer_auth(tokens.access_token.as_deref().unwrap_or("undefined"))
-            };
+        let request = if tokens.id_token.is_truthy()? {
+            let token = super::providers::token_http::form_string(&tokens.id_token.field_value())?;
+            let mut form = vec![
+                ("id_token", token.as_str()),
+                ("client_id", context.client_id()),
+            ];
+            if let Some(nonce) = context.expected_nonce() {
+                form.push(("nonce", nonce));
+            }
+            client.post(&self.verify_url).form(&form)
+        } else {
+            let endpoint = context
+                .user_info_url()
+                .ok_or_else(|| AuthError::internal("Missing LINE userinfo endpoint"))?;
+            client.get(endpoint).header(
+                reqwest::header::AUTHORIZATION,
+                super::providers::token_http::authorization(
+                    "Bearer",
+                    &tokens.access_token.field_value(),
+                )?,
+            )
+        };
         let response = request
             .send()
             .await

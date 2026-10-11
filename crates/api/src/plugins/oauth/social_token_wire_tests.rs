@@ -41,31 +41,7 @@ async fn token(
 }
 
 fn token_json(token: OAuthTokenSet) -> Value {
-    let mut fields = serde_json::Map::from_iter([("scopes".into(), json!(token.scopes))]);
-    for (name, value) in [
-        ("tokenType", token.token_type.map(Value::String)),
-        ("accessToken", token.access_token.map(Value::String)),
-        ("refreshToken", token.refresh_token.map(Value::String)),
-        ("idToken", token.id_token.map(Value::String)),
-        (
-            "accessTokenExpiresAt",
-            token
-                .access_token_expires_at
-                .map(|value| json!(better_auth_core::SchemaValue::Typed(value))),
-        ),
-        (
-            "refreshTokenExpiresAt",
-            token
-                .refresh_token_expires_at
-                .map(|value| json!(better_auth_core::SchemaValue::Typed(value))),
-        ),
-        ("raw", token.raw),
-    ] {
-        if let Some(value) = value {
-            let _ = fields.insert(name.into(), value);
-        }
-    }
-    Value::Object(fields)
+    Value::Object(token.fields().json().unwrap())
 }
 
 pub(super) async fn grants(
@@ -96,7 +72,7 @@ pub(super) async fn grants(
         .await?;
         let refresh = refresh_tokens_via_provider(
             &provider,
-            "ordinary-refresh",
+            &"ordinary-refresh".into(),
             &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
         )
         .await?;

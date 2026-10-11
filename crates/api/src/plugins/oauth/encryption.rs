@@ -1,6 +1,8 @@
 //! Upstream-compatible OAuth token encryption and plaintext transition behavior.
 
-use better_auth_core::{AuthContext, AuthResult, AuthSchema, SecretKey};
+use better_auth_core::{
+    AuthContext, AuthError, AuthResult, AuthSchema, FieldValue, SchemaValue, SecretKey,
+};
 
 /// Encrypt a token with Better Auth's shared record codec.
 pub fn encrypt_token<'a>(plaintext: &str, secret: impl Into<SecretKey<'a>>) -> AuthResult<String> {
@@ -31,37 +33,81 @@ pub fn maybe_decrypt<'a>(
     secret: impl Into<SecretKey<'a>>,
 ) -> AuthResult<Option<String>> {
     match value {
-        Some(value)
-            if encrypt
-                && (value.starts_with("$ba$")
-                    || (!value.is_empty()
-                        && value.len().is_multiple_of(2)
-                        && value.bytes().all(|byte| byte.is_ascii_hexdigit()))) =>
-        {
+        Some(value) if encrypt && is_likely_encrypted(value) => {
             decrypt_token(value, secret).map(Some)
         }
         value => Ok(value.map(str::to_owned)),
     }
 }
 
+fn is_likely_encrypted(value: &str) -> bool {
+    value.starts_with("$ba$")
+        || (!value.is_empty()
+            && value.len().is_multiple_of(2)
+            && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+}
+
 /// A set of OAuth tokens after conditional encryption.
 pub struct EncryptedTokenSet {
-    pub access_token: Option<String>,
-    pub refresh_token: Option<String>,
-    pub id_token: Option<String>,
+    pub access_token: SchemaValue<Option<String>>,
+    pub refresh_token: SchemaValue<Option<String>>,
+    pub id_token: SchemaValue<Option<String>>,
+}
+
+/// Preserve native values until the cipher requires a string.
+pub(super) fn encrypt_value<'a>(
+    value: SchemaValue<Option<String>>,
+    encrypt: bool,
+    secret: impl Into<SecretKey<'a>>,
+) -> AuthResult<SchemaValue<Option<String>>> {
+    if !encrypt || !value.is_truthy()? {
+        return Ok(value);
+    }
+    let value = value.into_field_value();
+    let plaintext = match &value {
+        FieldValue::String(value) => std::borrow::Cow::Borrowed(value.as_str()),
+        FieldValue::Utf16String(value) => {
+            std::borrow::Cow::Owned(String::from_utf16_lossy(value.as_utf16()))
+        }
+        _ => return Err(AuthError::type_error("string expected")),
+    };
+    Ok(Some(encrypt_token(&plaintext, secret)?).into())
+}
+
+pub(super) fn decrypt_value<'a>(
+    value: &SchemaValue<Option<String>>,
+    encrypt: bool,
+    secret: impl Into<SecretKey<'a>>,
+) -> AuthResult<SchemaValue<Option<String>>> {
+    if !encrypt || !value.is_truthy()? {
+        return Ok(value.clone());
+    }
+    let native = value.field_value();
+    let text = match &native {
+        FieldValue::String(value) => std::borrow::Cow::Borrowed(value.as_str()),
+        FieldValue::Utf16String(value) => {
+            std::borrow::Cow::Owned(String::from_utf16_lossy(value.as_utf16()))
+        }
+        _ => return Err(AuthError::type_error("token.startsWith is not a function")),
+    };
+    if is_likely_encrypted(&text) {
+        Ok(Some(decrypt_token(&text, secret)?).into())
+    } else {
+        Ok(value.clone())
+    }
 }
 
 pub fn encrypt_token_set(
     ctx: &AuthContext<impl AuthSchema>,
-    access_token: Option<String>,
-    refresh_token: Option<String>,
-    id_token: Option<String>,
+    access_token: SchemaValue<Option<String>>,
+    refresh_token: SchemaValue<Option<String>>,
+    id_token: SchemaValue<Option<String>>,
 ) -> AuthResult<EncryptedTokenSet> {
     let encrypt = ctx.config.account.encrypt_oauth_tokens();
     let secret = ctx.config.encryption_secret();
     Ok(EncryptedTokenSet {
-        access_token: maybe_encrypt(access_token, encrypt, secret)?,
-        refresh_token: maybe_encrypt(refresh_token, encrypt, secret)?,
+        access_token: encrypt_value(access_token, encrypt, secret)?,
+        refresh_token: encrypt_value(refresh_token, encrypt, secret)?,
         id_token,
     })
 }
@@ -69,6 +115,45 @@ pub fn encrypt_token_set(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_tokens_remain_unchanged_until_the_cipher_boundary() -> AuthResult<()> {
+        let native: FieldValue =
+            better_auth_core::FieldMap::from([("token".into(), 7.0.into())]).into();
+        let input = SchemaValue::Dynamic(native.clone());
+        assert!(
+            encrypt_value(input.clone(), false, "secret")?
+                .field_value()
+                .strict_equals(&native)
+        );
+        assert!(
+            decrypt_value(&input, false, "secret")?
+                .field_value()
+                .strict_equals(&native)
+        );
+        let falsey = SchemaValue::Dynamic(0.0.into());
+        assert_eq!(
+            encrypt_value(falsey.clone(), true, "secret")?.field_value(),
+            0.0.into()
+        );
+        assert_eq!(
+            decrypt_value(&falsey, true, "secret")?.field_value(),
+            0.0.into()
+        );
+        let error = match encrypt_value(input, true, "secret") {
+            Err(error) => error,
+            Ok(_) => return Err(AuthError::internal("Expected a cipher string type error")),
+        };
+        assert_eq!(error.message_value()?, "string expected".into());
+        let plaintext =
+            SchemaValue::Dynamic(better_auth_core::Utf16String::from_units(vec![0xd800]).into());
+        assert!(
+            decrypt_value(&plaintext, true, "secret")?
+                .field_value()
+                .strict_equals(&plaintext.field_value())
+        );
+        Ok(())
+    }
 
     // Upstream reference: packages/better-auth/src/api/routes/account.test.ts :: describe("account") and packages/better-auth/src/oauth2/utils.ts; adapted to the Rust OAuth token encryption helpers.
     #[test]

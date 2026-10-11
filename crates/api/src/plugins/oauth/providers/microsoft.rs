@@ -187,14 +187,12 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     let mut data = match claims {
         Some(claims) => claims,
         None => {
-            let Some(token) = request
-                .id_token
-                .as_deref()
-                .filter(|token| !token.is_empty())
-            else {
+            if !request.id_token.is_truthy()? {
                 return Ok(None);
-            };
-            decode_claims(token).ok_or_else(|| AuthError::internal("Invalid Microsoft ID token"))?
+            }
+            let token = request.id_token.field_value();
+            decode_claims(&crate::plugins::oauth::providers::jwt_string(&token)?)
+                .ok_or_else(|| AuthError::internal("Invalid Microsoft ID token"))?
         }
     };
     if data
@@ -207,12 +205,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         );
         return Ok(None);
     }
-    if !options.disable_profile_photo
-        && let Some(access_token) = request
-            .access_token
-            .as_deref()
-            .filter(|token| !token.is_empty())
-    {
+    if !options.disable_profile_photo && request.access_token.is_truthy()? {
         let photo_url = options.photo_endpoint();
         #[cfg(test)]
         let photo_url = options
@@ -222,7 +215,10 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             .to_owned();
         let response = reqwest::Client::new()
             .get(photo_url)
-            .bearer_auth(access_token)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                super::token_http::authorization("Bearer", &request.access_token.field_value())?,
+            )
             .send()
             .await
             .map_err(|error| {

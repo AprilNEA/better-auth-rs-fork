@@ -25,7 +25,10 @@ use super::super::{
     providers::{OAuthProvider, OAuthTokenSet, OAuthUserInfo},
     resolved::ResolvedProvider,
 };
-use super::{OAuthSignInError, OAuthSignInOptions, ProcessOAuthUserResult, process_oauth_sign_in};
+use super::{
+    OAuthSignInError, OAuthSignInOptions, ProcessOAuthUserResult, process_oauth_sign_in,
+    token_account,
+};
 use crate::plugins::test_helpers;
 
 const EMAIL: &str = "owner@oauth-flow.test";
@@ -203,10 +206,14 @@ async fn sign_in(
                 image: None,
                 email_verified: Some(true).into(),
             },
-            &OAuthTokenSet {
-                access_token: Some("new-access".into()),
-                ..Default::default()
-            },
+            &token_account(
+                "google",
+                "provider-owner",
+                &OAuthTokenSet {
+                    access_token: Some("new-access".into()).into(),
+                    ..Default::default()
+                },
+            )?,
             OAuthSignInOptions {
                 request,
                 profile: None,

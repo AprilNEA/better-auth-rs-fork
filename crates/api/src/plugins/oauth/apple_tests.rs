@@ -302,12 +302,13 @@ async fn apple_signed_profiles_preserve_callback_names_mapper_precedence_and_dat
                 generic: None,
             },
             OAuthUserInfoRequest {
-                id_token: Some(server.token.clone()),
+                id_token: (Some(server.token.clone())).into(),
                 user: sample
                     .get("user")
                     .cloned()
                     .map(serde_json::from_value)
-                    .transpose()?,
+                    .transpose()?
+                    .into(),
                 ..Default::default()
             },
             None,
@@ -380,7 +381,7 @@ async fn apple_valid_signed_tokens_use_audience_precedence_and_both_nonce_forms(
         let response = social_profile::fetch_user_info_with_claims(
             &provider,
             OAuthUserInfoRequest {
-                id_token: Some(server.token.clone()),
+                id_token: (Some(server.token.clone())).into(),
                 ..Default::default()
             },
             request.nonce.as_deref(),

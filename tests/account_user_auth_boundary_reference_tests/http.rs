@@ -43,6 +43,36 @@ pub(super) async fn auth_with_after<S: AuthSchema>(
     secondary: Option<Arc<dyn better_auth_core::store::SecondaryStorage>>,
     after: Option<Arc<dyn better_auth_core::observability::AfterEndpointHook<S>>>,
 ) -> TestResult<Harness<S>> {
+    auth_with_hooks(
+        store,
+        config,
+        scenario,
+        events,
+        secondary,
+        ContractHooks {
+            after,
+            admission: None,
+            on_error: None,
+        },
+    )
+    .await
+}
+
+pub(super) struct ContractHooks<S: AuthSchema> {
+    pub(super) after: Option<Arc<dyn better_auth_core::observability::AfterEndpointHook<S>>>,
+    pub(super) admission:
+        Option<Arc<dyn better_auth::plugins::user_admission::ValidateUserInfo<S>>>,
+    pub(super) on_error: Option<Arc<dyn better_auth_core::api_error::ApiErrorHandler<S>>>,
+}
+
+pub(super) async fn auth_with_hooks<S: AuthSchema>(
+    store: Arc<dyn AuthStore<S>>,
+    config: AuthConfig,
+    scenario: &Scenario,
+    events: &Events,
+    secondary: Option<Arc<dyn better_auth_core::store::SecondaryStorage>>,
+    hooks: ContractHooks<S>,
+) -> TestResult<Harness<S>> {
     let callbacks = Arc::new(callbacks::Callbacks {
         events: events.clone(),
         accounts_one: scenario.accounts_one,
@@ -95,11 +125,17 @@ pub(super) async fn auth_with_after<S: AuthSchema>(
     if let Some(secondary) = secondary {
         builder = builder.secondary_storage(secondary);
     }
-    if let Some(after) = after {
+    if let Some(after) = hooks.after {
         builder = builder.hooks(better_auth_core::observability::EndpointHooks {
             before: None,
             after: Some(after),
         });
+    }
+    if let Some(admission) = hooks.admission {
+        builder = builder.validate_user_info(admission);
+    }
+    if let Some(on_error) = hooks.on_error {
+        builder = builder.on_api_error(on_error);
     }
     let auth = Arc::new(builder.build().await?);
     Ok(Harness { auth, flow })

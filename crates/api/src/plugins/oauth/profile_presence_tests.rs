@@ -19,7 +19,7 @@ impl OAuthUserInfoHandler for EmptyProfile {
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
         assert_eq!(
-            request.access_token.as_deref(),
+            request.access_token.field_value().as_str(),
             Some("ordinary-profile-token")
         );
         self.0
@@ -73,7 +73,7 @@ async fn custom_null_skips_default_http_and_mapper() -> AuthResult<()> {
         let result = fetch_user_info_for_code(
             &provider,
             OAuthUserInfoRequest {
-                access_token: Some("ordinary-profile-token".into()),
+                access_token: (Some("ordinary-profile-token".into())).into(),
                 ..Default::default()
             },
             None,
@@ -214,7 +214,7 @@ mod discord {
             let response = fetch_user_info_for_code(
                 &provider,
                 OAuthUserInfoRequest {
-                    access_token: Some("ordinary-profile-token".into()),
+                    access_token: (Some("ordinary-profile-token".into())).into(),
                     ..Default::default()
                 },
                 None,

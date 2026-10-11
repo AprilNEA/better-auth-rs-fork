@@ -14,7 +14,7 @@ use crate::plugins::helpers::oauth_scope_whitespace;
 
 pub(super) async fn refresh_tokens_via_provider(
     provider: &ResolvedProvider,
-    refresh_token: &str,
+    refresh_token: &FieldValue,
     request: &AuthRequest,
 ) -> AuthResult<OAuthTokenSet> {
     let result = refresh_tokens(provider, refresh_token, request).await;
@@ -30,7 +30,7 @@ pub(super) async fn refresh_tokens_via_provider(
 
 async fn refresh_tokens(
     provider: &ResolvedProvider,
-    refresh_token: &str,
+    refresh_token: &FieldValue,
     request: &AuthRequest,
 ) -> AuthResult<OAuthTokenSet> {
     if let Some(handler) = &provider.config.refresh_access_token {
@@ -43,13 +43,19 @@ async fn refresh_tokens(
                 }),
             )
             .await
+            .map(|tokens| OAuthTokenSet::from_fields(tokens.fields()))
             .map_err(AuthError::internal);
     }
+    let refresh_token = super::providers::token_http::form_string(refresh_token)?;
     if provider.generic.is_none()
         && let Some(endpoint) = provider.config.wechat_refresh_url()
     {
-        return super::providers::wechat::refresh_tokens(&provider.config, endpoint, refresh_token)
-            .await;
+        return super::providers::wechat::refresh_tokens(
+            &provider.config,
+            endpoint,
+            &refresh_token,
+        )
+        .await;
     }
     let token_endpoint = token_endpoint(provider)?;
     let extra = match provider
@@ -67,12 +73,32 @@ async fn refresh_tokens(
         }
         None => HashMap::new(),
     };
-    let mut request = TokenRequest::refresh_token(refresh_token, &extra, &[]);
+    let mut request = TokenRequest::refresh_token(&refresh_token, &extra, &[]);
     authenticate_request(&mut request, provider, TokenGrantType::RefreshToken).await?;
     let value = request.send(token_endpoint).await?;
-    let mut tokens = parse_token_response(value)?;
-    tokens.raw = None;
-    apply_default_expiry(tokens, provider)
+    let tokens = parse_token_response(value)?;
+    let mut fields = better_auth_core::FieldMap::from([
+        ("accessToken".into(), tokens.access_token.field_value()),
+        ("refreshToken".into(), tokens.refresh_token.field_value()),
+        ("tokenType".into(), tokens.token_type.field_value()),
+        ("scopes".into(), tokens.scopes.field_value()),
+        ("idToken".into(), tokens.id_token.field_value()),
+    ]);
+    for (name, value) in [
+        (
+            "accessTokenExpiresAt",
+            tokens.access_token_expires_at.field_value(),
+        ),
+        (
+            "refreshTokenExpiresAt",
+            tokens.refresh_token_expires_at.field_value(),
+        ),
+    ] {
+        if !value.is_undefined() {
+            let _ = fields.insert(name.into(), value);
+        }
+    }
+    apply_default_expiry(OAuthTokenSet::from_fields(fields), provider)
 }
 
 pub(super) async fn validate_authorization_code_via_provider(
@@ -107,7 +133,7 @@ async fn exchange_code(
                 device_id,
             })
             .await?;
-        return apply_default_expiry(tokens, provider);
+        return apply_default_expiry(OAuthTokenSet::from_fields(tokens.fields()), provider);
     }
     if generic.is_none() && provider.config.wechat_refresh_url().is_some() {
         return super::providers::wechat::exchange_code(&provider.config, code).await;
@@ -218,43 +244,34 @@ fn authentication(
     }
 }
 
-fn expiry(
-    seconds: f64,
-    clock: impl FnOnce() -> DateTime<Utc>,
-) -> AuthResult<Option<better_auth_core::FieldDate>> {
-    if seconds == 0.0 {
-        return Ok(None);
-    }
-    expiry_from(clock(), seconds).map(Some)
-}
-
 pub(super) fn expiry_at(seconds: f64) -> AuthResult<FieldDate> {
     expiry_from(Utc::now(), seconds)
 }
 
 fn expiry_from(now: DateTime<Utc>, seconds: f64) -> AuthResult<FieldDate> {
-    let millis = seconds * 1000.0;
-    if !millis.is_finite() || millis.abs() > i64::MAX as f64 {
-        return Err(AuthError::internal("Invalid OAuth token lifetime"));
-    }
     // Date clips the sum; truncating the duration first loses negative submillisecond offsets.
-    better_auth_core::utils::date::from_milliseconds(now.timestamp_millis() as f64 + millis)
-        .map(Into::into)
-        .ok_or_else(|| AuthError::internal("OAuth token lifetime is out of range"))
+    Ok(FieldDate::from_milliseconds(
+        now.timestamp_millis() as f64 + seconds * 1000.0,
+    ))
 }
 
 fn apply_default_expiry(
     mut tokens: OAuthTokenSet,
     provider: &ResolvedProvider,
 ) -> AuthResult<OAuthTokenSet> {
-    if tokens.access_token_expires_at.is_none()
+    if !tokens.access_token_expires_at.is_truthy()?
         && let Some(seconds) = provider
             .generic
             .as_ref()
             .and_then(|generic| generic.config.access_token_expires_in)
             .filter(|seconds| FieldValue::Number(*seconds).is_truthy())
     {
-        tokens.access_token_expires_at = expiry(seconds, Utc::now)?;
+        let fields = tokens.fields();
+        tokens.field_order = fields.keys().cloned().collect();
+        if !fields.contains_key("accessTokenExpiresAt") {
+            tokens.field_order.push("accessTokenExpiresAt".into());
+        }
+        tokens.access_token_expires_at = Some(expiry_at(seconds)?).into();
     }
     Ok(tokens)
 }
@@ -267,16 +284,15 @@ fn parse_token_response_with_clock(
     value: Value,
     clock: impl Fn() -> DateTime<Utc>,
 ) -> AuthResult<OAuthTokenSet> {
-    let string = |key| value.get(key).and_then(Value::as_str).map(str::to_owned);
-    let date = |key| -> AuthResult<Option<better_auth_core::FieldDate>> {
-        value
-            .get(key)
-            .and_then(|value| value.as_f64().or_else(|| value.as_str()?.parse().ok()))
-            .map(|seconds| expiry(seconds, &clock))
-            .transpose()
-            .map(Option::flatten)
+    let raw = FieldValue::from_json(value.clone())?;
+    let date = |key| -> AuthResult<FieldValue> {
+        let seconds = raw.model_property(key)?;
+        if !seconds.is_truthy() {
+            return Ok(FieldValue::Undefined);
+        }
+        Ok(expiry_from(clock(), better_auth_core::query::field_number(&seconds)?)?.into())
     };
-    let scopes = match value.get("scope") {
+    let scopes: Vec<String> = match value.get("scope") {
         Some(Value::String(scope)) => scope
             .split(oauth_scope_whitespace)
             .filter(|scope| !scope.is_empty())
@@ -291,16 +307,24 @@ fn parse_token_response_with_clock(
             .collect(),
         _ => Vec::new(),
     };
-    Ok(OAuthTokenSet {
-        token_type: string("token_type"),
-        access_token: string("access_token"),
-        refresh_token: string("refresh_token"),
-        access_token_expires_at: date("expires_in")?,
-        refresh_token_expires_at: date("refresh_token_expires_in")?,
-        scopes,
-        id_token: string("id_token"),
-        raw: Some(value),
-    })
+    Ok(OAuthTokenSet::from_fields(
+        better_auth_core::FieldMap::from([
+            ("tokenType".into(), raw.model_property("token_type")?),
+            ("accessToken".into(), raw.model_property("access_token")?),
+            ("refreshToken".into(), raw.model_property("refresh_token")?),
+            ("accessTokenExpiresAt".into(), date("expires_in")?),
+            (
+                "refreshTokenExpiresAt".into(),
+                date("refresh_token_expires_in")?,
+            ),
+            (
+                "scopes".into(),
+                better_auth_core::SchemaValue::Typed(scopes).into_field_value(),
+            ),
+            ("idToken".into(), raw.model_property("id_token")?),
+            ("raw".into(), raw),
+        ]),
+    ))
 }
 
 #[cfg(test)]
@@ -350,7 +374,7 @@ mod tests {
             assert_eq!(request.device_id, Some("device"));
             assert_eq!(request.code_verifier, Some("verifier"));
             Ok(OAuthTokenSet {
-                access_token: Some("custom-access".to_string()),
+                access_token: Some("custom-access".to_string()).into(),
                 ..Default::default()
             })
         }
@@ -397,7 +421,7 @@ mod tests {
             .unwrap_err(),
             refresh_tokens_via_provider(
                 &provider,
-                "refresh",
+                &"refresh".into(),
                 &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
             )
             .await
@@ -424,27 +448,41 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(tokens.access_token.as_deref(), Some("custom-access"));
+        assert_eq!(
+            tokens.access_token.field_value().as_str(),
+            Some("custom-access")
+        );
     }
 
     #[test]
-    fn token_response_accepts_id_token_only_and_provider_scope_shapes() {
+    fn token_response_accepts_id_token_only_and_provider_scope_shapes() -> AuthResult<()> {
         let tokens = parse_token_response(
             json!({"id_token":"identity", "scope":[" openid ", "", 42, "email"], "expires_in":0}),
-        )
-        .unwrap();
-        assert!(tokens.access_token.is_none());
-        assert!(tokens.access_token_expires_at.is_none());
-        assert_eq!(tokens.scopes, ["openid", "email"]);
-        assert_eq!(tokens.id_token.as_deref(), Some("identity"));
+        )?;
+        assert!(tokens.access_token.field_value().is_undefined());
+        assert!(tokens.access_token_expires_at.field_value().is_undefined());
+        assert_eq!(
+            tokens.scopes.field_value().json()?,
+            Some(json!(["openid", "email"]))
+        );
+        assert_eq!(tokens.id_token.field_value().as_str(), Some("identity"));
         let before = Utc::now();
-        let tokens =
-            parse_token_response(json!({"scope":"email\tprofile,audit  openid", "expires_in":0.5}))
-                .unwrap();
-        assert_eq!(tokens.scopes, ["email", "profile,audit", "openid"]);
+        let tokens = parse_token_response(
+            json!({"scope":"email\tprofile,audit  openid", "expires_in":0.5}),
+        )?;
+        assert_eq!(
+            tokens.scopes.field_value().json()?,
+            Some(json!(["email", "profile,audit", "openid"]))
+        );
         assert!(
-            tokens.access_token_expires_at.unwrap().milliseconds()
+            tokens
+                .access_token_expires_at
+                .field_value()
+                .as_date()
+                .ok_or_else(|| AuthError::internal("Expected token expiry Date"))?
+                .milliseconds()
                 >= (before + Duration::milliseconds(500)).timestamp_millis() as f64
         );
+        Ok(())
     }
 }

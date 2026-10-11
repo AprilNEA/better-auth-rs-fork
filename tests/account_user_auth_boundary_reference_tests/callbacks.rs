@@ -41,47 +41,14 @@ impl OAuthUserInfoHandler for Callbacks {
         &self,
         tokens: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-        assert!(tokens.token_type.is_none());
-        assert!(tokens.access_token_expires_at.is_none());
-        assert!(tokens.refresh_token_expires_at.is_none());
-        assert!(tokens.scopes.is_empty());
-        assert_eq!(tokens.raw.is_some(), self.callback);
-        assert!(tokens.user.is_none());
-        let mut token_fields = FieldMap::from([
-            (
-                "idToken".into(),
-                tokens.id_token.map_or(FieldValue::Undefined, Into::into),
-            ),
-            (
-                "accessToken".into(),
-                tokens
-                    .access_token
-                    .map_or(FieldValue::Undefined, Into::into),
-            ),
-            (
-                "refreshToken".into(),
-                tokens
-                    .refresh_token
-                    .map_or(FieldValue::Undefined, Into::into),
-            ),
-            ("user".into(), FieldValue::Undefined),
-        ]);
-        if self.callback {
-            token_fields.extend([
-                ("tokenType".into(), FieldValue::Undefined),
-                ("accessTokenExpiresAt".into(), FieldValue::Undefined),
-                ("refreshTokenExpiresAt".into(), FieldValue::Undefined),
-                ("scopes".into(), FieldValue::from(Vec::<FieldValue>::new())),
-                (
-                    "raw".into(),
-                    FieldValue::from_json(
-                        tokens.raw.ok_or_else(|| {
-                            AuthError::internal("Missing token exchange response")
-                        })?,
-                    )?,
-                ),
-            ]);
-        }
+        assert!(tokens.user.field_value().is_undefined());
+        let token_fields = tokens.fields();
+        assert_eq!(
+            token_fields
+                .get("raw")
+                .is_some_and(|value| !value.is_undefined()),
+            self.callback
+        );
         self.events.push(
             json!({"kind": "provider.userInfo", "tokens": values::observe(&token_fields.into())?}),
         )?;

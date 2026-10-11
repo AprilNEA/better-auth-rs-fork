@@ -27,6 +27,9 @@ use better_auth_seaorm::{
 
 type Events = Arc<Mutex<Vec<String>>>;
 
+#[path = "account_native_selector_tests/identity.rs"]
+mod identity;
+
 struct ObserveDelete(Events);
 
 #[better_auth::database_hooks()]

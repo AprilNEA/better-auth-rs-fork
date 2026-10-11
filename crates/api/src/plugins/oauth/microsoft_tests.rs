@@ -303,8 +303,8 @@ async fn microsoft_profile_photo_and_mapper_match_pinned_results() -> TestResult
         let response = fetch_user_info_from_provider(
             &resolved(config),
             OAuthUserInfoRequest {
-                id_token: Some(token),
-                access_token: sample["accessToken"].as_str().map(str::to_owned),
+                id_token: (Some(token)).into(),
+                access_token: (sample["accessToken"].as_str().map(str::to_owned)).into(),
                 ..Default::default()
             },
             None,
@@ -372,7 +372,7 @@ async fn microsoft_custom_handler_precedes_the_profile_mapper() -> TestResult<()
     let response = fetch_user_info_from_provider(
         &resolved(config),
         OAuthUserInfoRequest {
-            access_token: Some("ordinary-access".into()),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         },
         None,
@@ -422,7 +422,7 @@ async fn microsoft_signed_ordinary_tenants_use_the_shared_oidc_boundary() -> Tes
         let response = super::social_profile::fetch_user_info_with_claims(
             &provider,
             OAuthUserInfoRequest {
-                id_token: Some(server.token.clone()),
+                id_token: (Some(server.token.clone())).into(),
                 ..Default::default()
             },
             Some("ordinary-nonce"),

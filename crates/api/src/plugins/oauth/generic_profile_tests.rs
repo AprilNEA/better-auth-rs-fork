@@ -57,14 +57,15 @@ async fn id_token_profile_is_preferred_and_mapping_cannot_change_account_subject
         true,
     );
     let tokens = OAuthUserInfoRequest {
-        id_token: Some(encoded_claims(json!({
+        id_token: (Some(encoded_claims(json!({
             "sub": "immutable-subject",
             "id": "profile-alias",
             "email": "original@example.com",
             "email_verified": false,
             "picture": "https://example.com/image.png",
             "name": "Original name"
-        }))),
+        }))))
+        .into(),
         ..Default::default()
     };
     let response = fetch_user_info(&provider, &tokens, None, None)
@@ -118,10 +119,11 @@ async fn mapped_null_omits_image_without_changing_raw_profile() {
         true,
     );
     let tokens = OAuthUserInfoRequest {
-        id_token: Some(encoded_claims(json!({
+        id_token: (Some(encoded_claims(json!({
             "sub": "subject", "email": "operator@example.com", "name": "Provider name",
             "picture": "https://example.com/provider-image.png"
-        }))),
+        }))))
+        .into(),
         ..Default::default()
     };
     let response = fetch_user_info(&provider, &tokens, None, None)
@@ -286,6 +288,105 @@ async fn generic_profile_preserves_name_presence_and_mapper_overrides() {
 
 struct AccountSubject;
 
+struct NativeTokenCallbacks {
+    expected: better_auth_core::FieldMap,
+    calls: AtomicUsize,
+}
+
+impl NativeTokenCallbacks {
+    fn observe(&self, request: &OAuthUserInfoRequest) {
+        let fields = request.fields();
+        assert_eq!(
+            fields.keys().collect::<Vec<_>>(),
+            self.expected.keys().collect::<Vec<_>>()
+        );
+        for (name, expected) in &self.expected {
+            assert!(fields[name].strict_equals(expected), "{name}");
+        }
+        assert!(
+            request
+                .user
+                .field_value()
+                .strict_equals(&self.expected["user"])
+        );
+        assert!(
+            request
+                .expected_id_token_nonce
+                .field_value()
+                .strict_equals(&self.expected["expectedIdTokenNonce"])
+        );
+        assert!(request.refresh_token.is_undefined());
+        let _ = self.calls.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[async_trait]
+impl GenericOAuthUserInfoHandler for NativeTokenCallbacks {
+    async fn get_user_info(&self, request: &OAuthUserInfoRequest) -> AuthResult<Option<Value>> {
+        self.observe(request);
+        Ok(Some(
+            json!({"id": "native-subject", "email": "native@example.com"}),
+        ))
+    }
+}
+
+#[async_trait]
+impl OAuthAccountSubject for NativeTokenCallbacks {
+    async fn resolve_subject(
+        &self,
+        request: &OAuthUserInfoRequest,
+        profile: &Value,
+    ) -> AuthResult<String> {
+        self.observe(request);
+        assert_eq!(
+            profile,
+            &json!({"id": "native-subject", "email": "native@example.com"})
+        );
+        Ok("native-subject".into())
+    }
+}
+
+#[tokio::test]
+async fn custom_generic_callbacks_preserve_complete_native_token_records() {
+    use better_auth_core::{FieldMap, FieldValue};
+    let shared: FieldValue = FieldMap::from([("claim".into(), true.into())]).into();
+    let fields = FieldMap::from([
+        ("extension".into(), shared.clone()),
+        ("user".into(), shared.clone()),
+        ("idToken".into(), shared.clone()),
+        ("expectedIdTokenNonce".into(), 17.0.into()),
+        ("scopes".into(), 9.0.into()),
+        ("accessToken".into(), FieldValue::Null),
+        ("accessTokenExpiresAt".into(), 4_102_444_800_000.0.into()),
+        ("tokenType".into(), FieldValue::Undefined),
+        ("raw".into(), shared),
+        ("tail".into(), FieldValue::Undefined),
+    ]);
+    let callbacks = Arc::new(NativeTokenCallbacks {
+        expected: fields.clone(),
+        calls: AtomicUsize::new(0),
+    });
+    let provider = provider(
+        GenericOAuthConfig {
+            get_user_info: Some(callbacks.clone()),
+            account_subject: Some(callbacks.clone()),
+            ..Default::default()
+        },
+        false,
+    );
+    let request = OAuthUserInfoRequest::from_fields(fields);
+    let response = fetch_user_info(&provider, &request, None, None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(response.user.id, "native-subject");
+    assert_eq!(
+        response.data,
+        json!({"id": "native-subject", "email": "native@example.com"})
+    );
+    assert_eq!(callbacks.calls.load(Ordering::SeqCst), 2);
+}
+
 #[async_trait]
 impl OAuthAccountSubject for AccountSubject {
     async fn resolve_subject(
@@ -293,7 +394,7 @@ impl OAuthAccountSubject for AccountSubject {
         tokens: &OAuthUserInfoRequest,
         profile: &Value,
     ) -> AuthResult<String> {
-        assert_eq!(tokens.access_token.as_deref(), Some("access"));
+        assert_eq!(tokens.access_token.field_value().as_str(), Some("access"));
         assert_eq!(profile["email"], "original@example.com");
         assert_eq!(profile["name"], "Original name");
         Ok(format!("tenant:{}", profile["id"]))
@@ -316,7 +417,7 @@ async fn custom_profile_and_subject_callbacks_receive_original_data() {
         false,
     );
     let tokens = OAuthUserInfoRequest {
-        access_token: Some("access".to_string()),
+        access_token: (Some("access".to_string())).into(),
         ..Default::default()
     };
     let response = fetch_user_info(&provider, &tokens, None, None)
@@ -376,8 +477,8 @@ async fn id_token_without_email_falls_back_to_userinfo_with_access_token() {
         true,
     );
     let tokens = OAuthUserInfoRequest {
-        access_token: Some("access-token".to_string()),
-        id_token: Some(encoded_claims(json!({ "sub": "id-token-subject" }))),
+        access_token: (Some("access-token".to_string())).into(),
+        id_token: (Some(encoded_claims(json!({ "sub": "id-token-subject" })))).into(),
         ..Default::default()
     };
     let response = fetch_user_info(&provider, &tokens, None, None)
@@ -420,7 +521,7 @@ async fn invalid_verified_id_token_cannot_fall_back_to_custom_profile() {
         .unwrap(),
     ));
     let tokens = OAuthUserInfoRequest {
-        id_token: Some("invalid-token".to_string()),
+        id_token: (Some("invalid-token".to_string())).into(),
         ..Default::default()
     };
     let error = fetch_user_info(&provider, &tokens, Some("expected-nonce"), None)

@@ -84,22 +84,21 @@ pub(crate) struct AccessTokenResponse {
         serialize_with = "better_auth_core::schema_value::serialize_optional_date"
     )]
     pub access_token_expires_at: better_auth_core::SchemaValue<Option<better_auth_core::FieldDate>>,
-    pub scopes: Vec<String>,
+    pub scopes: better_auth_core::SchemaValue<Vec<String>>,
     #[serde(skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted")]
     pub id_token: better_auth_core::SchemaValue<Option<String>>,
 }
 
 impl AccessTokenResponse {
     pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
-        use better_auth_core::{FieldMap, FieldValue};
-        let scopes: Vec<FieldValue> = self.scopes.into_iter().map(Into::into).collect();
+        use better_auth_core::FieldMap;
         FieldMap::from([
             ("accessToken".into(), self.access_token.into_field_value()),
             (
                 "accessTokenExpiresAt".into(),
                 self.access_token_expires_at.into_field_value(),
             ),
-            ("scopes".into(), scopes.into()),
+            ("scopes".into(), self.scopes.into_field_value()),
             ("idToken".into(), self.id_token.into_field_value()),
         ])
         .into()
@@ -109,14 +108,15 @@ impl AccessTokenResponse {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RefreshTokenResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub access_token: Option<String>,
-    pub refresh_token: String,
+    #[serde(skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted")]
+    pub access_token: better_auth_core::SchemaValue<Option<String>>,
+    #[serde(skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted")]
+    pub refresh_token: better_auth_core::SchemaValue<Option<String>>,
     #[serde(
-        skip_serializing_if = "Option::is_none",
-        serialize_with = "better_auth_core::field_value::serde::optional_date::serialize"
+        skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted",
+        serialize_with = "better_auth_core::schema_value::serialize_optional_date"
     )]
-    pub access_token_expires_at: Option<better_auth_core::FieldDate>,
+    pub access_token_expires_at: better_auth_core::SchemaValue<Option<better_auth_core::FieldDate>>,
     #[serde(
         skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted",
         serialize_with = "better_auth_core::schema_value::serialize_optional_date"
@@ -135,18 +135,13 @@ pub(crate) struct RefreshTokenResponse {
 
 impl RefreshTokenResponse {
     pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
-        use better_auth_core::{FieldMap, FieldValue};
+        use better_auth_core::FieldMap;
         FieldMap::from([
-            (
-                "accessToken".into(),
-                self.access_token.map(FieldValue::from).unwrap_or_default(),
-            ),
-            ("refreshToken".into(), self.refresh_token.into()),
+            ("accessToken".into(), self.access_token.into_field_value()),
+            ("refreshToken".into(), self.refresh_token.into_field_value()),
             (
                 "accessTokenExpiresAt".into(),
-                self.access_token_expires_at
-                    .map(FieldValue::from)
-                    .unwrap_or_default(),
+                self.access_token_expires_at.into_field_value(),
             ),
             (
                 "refreshTokenExpiresAt".into(),

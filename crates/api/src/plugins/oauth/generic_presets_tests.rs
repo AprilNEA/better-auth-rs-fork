@@ -251,7 +251,7 @@ impl OAuthProfileMapper for Mapper {
 async fn preset_requests_profiles_and_json_mapper_inputs_match_pinned_helpers() {
     let fixture = fixture();
     let tokens = OAuthUserInfoRequest {
-        access_token: fixture["tokens"]["accessToken"].as_str().map(str::to_owned),
+        access_token: (fixture["tokens"]["accessToken"].as_str().map(str::to_owned)).into(),
         ..Default::default()
     };
     for case in fixture["cases"].as_array().unwrap() {
@@ -353,7 +353,7 @@ struct Tokens;
 impl OAuthTokenHandler for Tokens {
     async fn get_token(&self, _: OAuthCodeExchange<'_>) -> AuthResult<OAuthTokenSet> {
         Ok(OAuthTokenSet {
-            access_token: Some("ordinary-profile-token".into()),
+            access_token: (Some("ordinary-profile-token".into())).into(),
             ..Default::default()
         })
     }

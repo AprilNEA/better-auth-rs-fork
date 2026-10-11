@@ -49,7 +49,8 @@ impl OAuthUserInfoHandler for Provider {
         &self,
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-        let data: Value = serde_json::from_str(request.id_token.as_deref().unwrap()).unwrap();
+        let data: Value =
+            serde_json::from_str(request.id_token.field_value().as_str().unwrap()).unwrap();
         Ok(Some(OAuthUserInfoResponse {
             user: OAuthUserInfo {
                 id: data["id"].as_str().unwrap().into(),

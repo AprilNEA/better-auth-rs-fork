@@ -125,6 +125,21 @@ impl FieldMap {
         fields
     }
 
+    /// Overlay present schema slots, preserve extension fields, and restore source order.
+    /// A missing slot leaves an extension value unchanged; an explicit Undefined is present.
+    pub fn with_schema_fields<'a>(
+        mut self,
+        order: &[String],
+        fields: impl IntoIterator<Item = (&'a str, Option<FieldValue>)>,
+    ) -> Self {
+        for (name, value) in fields {
+            if let Some(value) = value {
+                let _ = self.insert(name.into(), value);
+            }
+        }
+        self.in_field_order(order)
+    }
+
     /// Order array-index properties first and retain insertion order for other properties.
     pub(crate) fn sort_property_order(&mut self) {
         self.0.sort_by_key(|name, _| {

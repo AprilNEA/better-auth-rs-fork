@@ -215,6 +215,14 @@ impl Flow {
         let payload: Value = serde_json::from_str(&decrypted)?;
         assert_eq!(payload["oauthState"], state);
         assert_eq!(payload["callbackURL"], format!("{ORIGIN}/welcome"));
+        if setup.request.url.ends_with("/link-social") {
+            assert_eq!(
+                payload["link"],
+                json!({"userId": "user-a", "email": "a@account-user-auth-boundary.test"})
+            );
+        } else {
+            assert!(payload.get("link").is_none());
+        }
         let expiry = payload["expiresAt"]
             .as_f64()
             .ok_or("Missing OAuth state expiry")?;

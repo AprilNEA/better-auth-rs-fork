@@ -62,19 +62,21 @@ impl GenericOAuthUserInfoHandler for EntraProfile {
         let Some(token_profile) = profile(claims, None)? else {
             return Ok(None);
         };
-        let Some(access_token) = tokens
-            .access_token
-            .as_deref()
-            .filter(|value| !value.is_empty())
-        else {
+        if !tokens.access_token.is_truthy()? {
             return Ok(Some(token_profile));
-        };
+        }
         let endpoint = context
             .user_info_url()
             .ok_or_else(|| AuthError::internal("Missing Microsoft Graph userinfo endpoint"))?;
         let response = reqwest::Client::new()
             .get(endpoint)
-            .bearer_auth(access_token)
+            .header(
+                reqwest::header::AUTHORIZATION,
+                super::providers::token_http::authorization(
+                    "Bearer",
+                    &tokens.access_token.field_value(),
+                )?,
+            )
             .send()
             .await
             .map_err(|error| request_error("request failed", error))?;

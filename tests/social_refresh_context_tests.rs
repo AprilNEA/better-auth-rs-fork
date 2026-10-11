@@ -85,7 +85,7 @@ impl Refresh {
 impl OAuthRefreshTokenHandler for Refresh {
     async fn refresh_access_token(
         &self,
-        token: &str,
+        token: &better_auth_core::FieldValue,
         context: Option<NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         let request = context.and_then(|context| context.request).map(|request| {
@@ -103,11 +103,11 @@ impl OAuthRefreshTokenHandler for Refresh {
             }))
             .map_err(|error| error.to_string())?;
         Ok(OAuthTokenSet {
-            access_token: Some("ordinary-new-access".into()),
-            refresh_token: Some("ordinary-new-refresh".into()),
-            id_token: Some("ordinary-new-id".into()),
-            token_type: Some("Bearer".into()),
-            scopes: vec!["openid".into(), "email".into()],
+            access_token: (Some("ordinary-new-access".into())).into(),
+            refresh_token: (Some("ordinary-new-refresh".into())).into(),
+            id_token: (Some("ordinary-new-id".into())).into(),
+            token_type: (Some("Bearer".into())).into(),
+            scopes: (vec!["openid".into(), "email".into()]).into(),
             ..Default::default()
         })
     }
@@ -140,7 +140,7 @@ async fn observe(mode: Mode) -> Result<Case, Box<dyn Error>> {
             .refresh_access_token
             .as_ref()
             .unwrap()
-            .refresh_access_token(REFRESH_TOKEN, None)
+            .refresh_access_token(&REFRESH_TOKEN.into(), None)
             .await?;
         return Ok(Case {
             mode,

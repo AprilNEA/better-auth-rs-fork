@@ -28,6 +28,31 @@ impl Events {
     }
 }
 
+pub(super) fn object_keys(value: &Value) -> Option<Vec<String>> {
+    value
+        .as_object()
+        .map(|fields| fields.keys().cloned().collect())
+}
+
+pub(super) fn assert_provider_token_keys(
+    actual: &[Value],
+    expected: &[Value],
+    case: &impl std::fmt::Debug,
+) {
+    let token_keys = |events: &[Value]| {
+        events
+            .iter()
+            .filter(|event| event["kind"] == "provider.userInfo")
+            .map(|event| object_keys(&event["tokens"]))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        token_keys(actual),
+        token_keys(expected),
+        "{case:?}: provider token own-property order"
+    );
+}
+
 #[derive(Default)]
 struct SpanName(Option<String>);
 

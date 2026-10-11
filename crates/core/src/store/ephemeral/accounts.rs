@@ -71,21 +71,21 @@ impl EphemeralStore {
 
     pub(super) fn account_identity_selectors(
         &self,
-        provider: &str,
-        account_id: &str,
+        provider: &Value,
+        account_id: &Value,
     ) -> AuthResult<[(String, Value); 2]> {
         self.model_fields.begin_id_query(EntityRole::Account)?;
         let fields = self.config.account.field_schema();
         Ok([
-            self.account_field_selector(&fields, "providerId", provider.into())?,
-            self.account_field_selector(&fields, "accountId", account_id.into())?,
+            self.account_field_selector(&fields, "providerId", provider.clone())?,
+            self.account_field_selector(&fields, "accountId", account_id.clone())?,
         ])
     }
 
     pub(super) async fn account_records(
         &self,
-        provider: &str,
-        account_id: &str,
+        provider: &Value,
+        account_id: &Value,
     ) -> AuthResult<Vec<RecordSource>> {
         let selectors = self.account_identity_selectors(provider, account_id)?;
         self.raw("account", "findMany", |op| {
@@ -193,12 +193,21 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         provider: &str,
         account_id: &str,
     ) -> AuthResult<Option<AccountView>> {
+        self.get_account_value(&provider.into(), &account_id.into())
+            .await
+    }
+
+    async fn get_account_value(
+        &self,
+        provider: &Value,
+        account_id: &Value,
+    ) -> AuthResult<Option<AccountView>> {
         let records = self.account_records(provider, account_id).await?;
         let accounts = self.output_accounts(records).await?;
         if accounts.len() > 1 {
             return Err(AuthError::internal(format!(
                 "Multiple accounts match the same accountId for provider {}. Resolve duplicate account identities before continuing.",
-                serde_json::to_string(provider)?
+                provider.stringify()?.unwrap_or_else(|| "undefined".into())
             )));
         }
         Ok(accounts.into_iter().next())
@@ -208,6 +217,15 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         &self,
         provider: &str,
         account_id: &str,
+    ) -> AuthResult<Option<crate::store::AccountOwner>> {
+        self.get_account_owner_value(&provider.into(), &account_id.into())
+            .await
+    }
+
+    async fn get_account_owner_value(
+        &self,
+        provider: &Value,
+        account_id: &Value,
     ) -> AuthResult<Option<crate::store::AccountOwner>> {
         let relation = crate::store::AccountOwner::resolve_schema(
             &self.config,

@@ -334,8 +334,8 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
             let response = handlers::fetch_user_info_for_code(
                 config.providers.get(id).ok_or("missing provider")?,
                 OAuthUserInfoRequest {
-                    access_token: Some("normal-profile-token".into()),
-                    id_token: (id == "google").then(|| google.token.clone()),
+                    access_token: (Some("normal-profile-token".into())).into(),
+                    id_token: ((id == "google").then(|| google.token.clone())).into(),
                     ..Default::default()
                 },
                 None,
@@ -378,7 +378,7 @@ async fn google_stored_account_profile_keeps_access_token_userinfo()
     let response = handlers::fetch_user_info_from_provider(
         config.providers.get("google").ok_or("missing provider")?,
         OAuthUserInfoRequest {
-            access_token: Some("normal-account-info-token".into()),
+            access_token: (Some("normal-account-info-token".into())).into(),
             ..Default::default()
         },
         None,
@@ -442,8 +442,8 @@ async fn social_profile_callback_errors_propagate_without_running_later_callback
         let error = handlers::fetch_user_info_for_code(
             config.providers.get("google").ok_or("missing provider")?,
             OAuthUserInfoRequest {
-                access_token: Some("normal-profile-token".into()),
-                id_token: Some(google.token.clone()),
+                access_token: (Some("normal-profile-token".into())).into(),
+                id_token: (Some(google.token.clone())).into(),
                 ..Default::default()
             },
             None,

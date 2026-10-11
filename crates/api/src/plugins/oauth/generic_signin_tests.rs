@@ -343,10 +343,11 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
         config.account.update_account_on_sign_in = Some(update_on_sign_in);
         let ctx = test_helpers::create_test_context_with_config(config).await;
         let tokens = Arc::new(MutableTokens(Mutex::new(OAuthTokenSet {
-            access_token: Some("first-token".into()),
-            scopes: [" stored ", "common", "", "dup", "common"]
+            access_token: (Some("first-token".into())).into(),
+            scopes: ([" stored ", "common", "", "dup", "common"]
                 .map(str::to_owned)
-                .to_vec(),
+                .to_vec())
+            .into(),
             ..Default::default()
         })));
         let profile = Arc::new(MutableProfile(Mutex::new(json!({
@@ -371,8 +372,8 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
             Some("http://localhost:3000/welcome")
         );
         let incoming = OAuthTokenSet {
-            access_token: Some("second-token".into()),
-            scopes: [" new ", "common", "", "new"].map(str::to_owned).to_vec(),
+            access_token: (Some("second-token".into())).into(),
+            scopes: ([" new ", "common", "", "new"].map(str::to_owned).to_vec()).into(),
             ..Default::default()
         };
         *tokens.0.lock().unwrap() = incoming.clone();
@@ -422,7 +423,6 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
             &ctx,
         );
         let outcome = super::handlers::complete_link_social(
-            "generic",
             &super::providers::OAuthUserInfo {
                 id: "stable-subject".into(),
                 email: Some("owner@example.test".into()).into(),
@@ -431,7 +431,8 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
                 email_verified: Some(true).into(),
                 additional_fields: Default::default(),
             },
-            &incoming,
+            &super::signin::token_account("generic", "stable-subject", &incoming).unwrap(),
+            &incoming.scopes,
             &super::state::OAuthStateLink::new(
                 stored.user_id.field_value(),
                 "owner@example.test".into(),

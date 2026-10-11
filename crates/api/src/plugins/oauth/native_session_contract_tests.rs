@@ -190,36 +190,19 @@ impl OAuthUserInfoHandler for Profile {
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
         assert!(
-            request.token_type.is_none()
-                && request.access_token_expires_at.is_none()
-                && request.refresh_token_expires_at.is_none()
-                && request.scopes.is_empty()
-                && request.raw.is_none()
-                && request.user.is_none()
+            request.token_type.field_value().is_undefined()
+                && request.access_token_expires_at.field_value().is_undefined()
+                && request
+                    .refresh_token_expires_at
+                    .field_value()
+                    .is_undefined()
+                && request.scopes.field_value().is_undefined()
+                && request.raw.field_value().is_undefined()
+                && request.user.field_value().is_undefined()
         );
         self.0.push(object([
             ("kind", "profile".into()),
-            (
-                "tokens",
-                object([
-                    (
-                        "idToken",
-                        request.id_token.map_or(FieldValue::Undefined, Into::into),
-                    ),
-                    (
-                        "accessToken",
-                        request
-                            .access_token
-                            .map_or(FieldValue::Undefined, Into::into),
-                    ),
-                    (
-                        "refreshToken",
-                        request
-                            .refresh_token
-                            .map_or(FieldValue::Undefined, Into::into),
-                    ),
-                ]),
-            ),
+            ("tokens", request.fields().into()),
         ]))?;
         Ok(Some(OAuthUserInfoResponse {
             user: OAuthUserInfo {

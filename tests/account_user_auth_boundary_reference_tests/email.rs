@@ -185,6 +185,7 @@ fn assert_events(actual: &[Value], case: &Case, scenario: &Scenario) -> TestResu
         let expected_error = AuthError::internal(DIAGNOSTIC);
         event["args"] = json!([argument(&LogArgument::Error(&expected_error))]);
     }
+    recorder::assert_provider_token_keys(actual, &expected, case);
     assert_eq!(
         actual, expected,
         "{case:?}: complete Email callback and query sequence"

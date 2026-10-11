@@ -166,11 +166,9 @@ fn assert_state_consumed(store: &EphemeralStore, request: &AuthRequest) -> AuthR
     assert!(store.storage_rows(EntityRole::Session)?.is_empty());
     let headers = request.take_response_headers()?;
     let cookies: Vec<_> = headers.get_all("set-cookie").collect();
-    assert_eq!(cookies.len(), 1);
-    assert!(
-        cookies
-            .iter()
-            .all(|cookie| cookie.contains("oauth_state=") && cookie.contains("Max-Age=0"))
+    assert_eq!(
+        cookies,
+        ["better-auth.state=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"]
     );
     Ok(())
 }

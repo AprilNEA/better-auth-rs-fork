@@ -225,8 +225,8 @@ async fn signed_entra_direct_and_code_sign_in_verify_once_and_match_pinned_profi
             let url = url::Url::parse(body["url"].as_str().unwrap()).unwrap();
             let params: std::collections::HashMap<_, _> = url.query_pairs().into_owned().collect();
             *token_handler.0.lock().unwrap() = OAuthTokenSet {
-                id_token: Some(server.token(input, &params["nonce"])),
-                access_token: input.get("graph").map(|_| "ordinary-access".into()),
+                id_token: (Some(server.token(input, &params["nonce"]))).into(),
+                access_token: (input.get("graph").map(|_| "ordinary-access".into())).into(),
                 ..Default::default()
             };
             let mut callback = AuthRequest::new(HttpMethod::Get, "/callback/microsoft-entra-id");

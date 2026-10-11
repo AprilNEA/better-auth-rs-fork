@@ -80,16 +80,16 @@ fn observed_tokens(tokens: OAuthTokenSet, exchange: bool) -> AuthResult<Value> {
         ("accessTokenExpiresAt", tokens.access_token_expires_at),
         ("refreshTokenExpiresAt", tokens.refresh_token_expires_at),
     ] {
-        if let Some(date) = value {
+        if let Some(date) = value.field_value().as_date() {
             let _ = observed.insert(
                 name.into(),
-                json!({"type": "date", "value": FieldValue::Date(date).json()?}),
+                json!({"type": "date", "value": FieldValue::Date(date.clone()).json()?}),
             );
         } else if exchange {
             let _ = observed.insert(name.into(), json!({"type": "undefined"}));
         }
     }
-    if let Some(raw) = tokens.raw {
+    if let Some(raw) = tokens.raw.json()? {
         let _ = observed.insert("raw".into(), raw);
     }
     Ok(Value::Object(observed))
@@ -130,7 +130,7 @@ fn oauth_duration_helpers_match_all_captured_token_fields() -> AuthResult<()> {
             let mut tokens =
                 parse_token_response_with_clock(serde_json::from_str(response)?, || now)?;
             if !exchange {
-                tokens.raw = None;
+                tokens.raw = Default::default();
             }
             let tokens = apply_default_expiry(tokens, &provider(fallback))?;
             assert_eq!(
@@ -152,24 +152,29 @@ fn oauth_falsy_fallback_omits_expiry_without_replacing_supplied_dates() -> AuthR
     for fallback in [None, Some(0.0), Some(-0.0), Some(f64::NAN)] {
         let tokens = apply_default_expiry(
             OAuthTokenSet {
-                access_token: Some("duration-access".into()),
-                refresh_token_expires_at: Some(supplied.clone()),
+                access_token: (Some("duration-access".into())).into(),
+                refresh_token_expires_at: (Some(supplied.clone())).into(),
                 ..Default::default()
             },
             &provider(fallback),
         )?;
-        assert!(tokens.access_token_expires_at.is_none());
-        assert_eq!(tokens.access_token.as_deref(), Some("duration-access"));
+        assert!(tokens.access_token_expires_at.is_undefined());
+        assert_eq!(
+            tokens.access_token.field_value().as_str(),
+            Some("duration-access")
+        );
         assert!(
             tokens
                 .refresh_token_expires_at
+                .field_value()
+                .as_date()
                 .is_some_and(|date| date.same_object(&supplied))
         );
     }
     for fallback in [f64::NAN, f64::INFINITY, -0.0005, 300.0] {
         let tokens = apply_default_expiry(
             OAuthTokenSet {
-                access_token_expires_at: Some(supplied.clone()),
+                access_token_expires_at: (Some(supplied.clone())).into(),
                 ..Default::default()
             },
             &provider(Some(fallback)),
@@ -177,14 +182,20 @@ fn oauth_falsy_fallback_omits_expiry_without_replacing_supplied_dates() -> AuthR
         assert!(
             tokens
                 .access_token_expires_at
+                .field_value()
+                .as_date()
                 .is_some_and(|date| date.same_object(&supplied))
         );
     }
-    let error = apply_default_expiry(OAuthTokenSet::default(), &provider(Some(f64::INFINITY)))
-        .err()
-        .ok_or_else(|| AuthError::internal("Expected the existing lifetime validation error"))?;
+    let tokens = apply_default_expiry(OAuthTokenSet::default(), &provider(Some(f64::INFINITY)))?;
     assert!(
-        matches!(error, AuthError::Internal(message) if message == "Invalid OAuth token lifetime")
+        tokens
+            .access_token_expires_at
+            .field_value()
+            .as_date()
+            .unwrap()
+            .milliseconds()
+            .is_nan()
     );
     Ok(())
 }

@@ -698,15 +698,20 @@ run_stage() {
     oauth-signin-order)
       cargo fmt --all -- --check
       local signin_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/account-user-auth-order.test.ts \
+        ./compat-tests/reference-server/contracts/account-user-auth-link.test.ts || signin_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test account_user_auth_boundary_reference_tests --test observability_tests -- -D warnings || signin_status=1
+        --test account_user_auth_boundary_reference_tests --test account_native_selector_tests \
+        --test observability_tests -- -D warnings || signin_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
-        --test account_user_auth_boundary_reference_tests || signin_status=1
+        --test account_user_auth_boundary_reference_tests --test account_native_selector_tests || signin_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test observability_tests -- spans_preserve_dispatch_order_parentage_and_original_outcomes || signin_status=1
       cargo test --locked -p better-auth-api --lib -- \
-        plugins::oauth:: plugins::anonymous:: || signin_status=1
-      cargo test --locked -p better-auth-core --lib -- types_account:: || signin_status=1
+        plugins::oauth:: plugins::anonymous:: plugins::user_admission::provider_tests:: || signin_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        types_account:: field_value:: schema_value:: || signin_status=1
       return "$signin_status"
       ;;
     account-user-auth)
@@ -754,6 +759,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/account-user-auth-boundary.test.ts \
         ./compat-tests/reference-server/contracts/account-user-auth-email.test.ts \
         ./compat-tests/reference-server/contracts/account-user-auth-secondary.test.ts \
+        ./compat-tests/reference-server/contracts/account-user-auth-order.test.ts \
+        ./compat-tests/reference-server/contracts/account-user-auth-link.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/custom-model-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/adapter-id-slot.test.ts \

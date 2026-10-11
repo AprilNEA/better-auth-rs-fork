@@ -73,14 +73,10 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     claims: Option<Value>,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
     let logger = better_auth_core::observability::logger::current();
-    let Some(access_token) = request
-        .access_token
-        .as_deref()
-        .filter(|token| !token.is_empty())
-    else {
+    if !request.access_token.is_truthy()? {
         logger.error("Access token is required to fetch PayPal user info", &[]);
         return Ok(None);
-    };
+    }
     let result: AuthResult<Option<OAuthUserInfoResponse>> = async {
         let url = provider
             .user_info_url
@@ -88,7 +84,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             .ok_or_else(|| AuthError::internal("Missing PayPal user_info_url"))?;
         let profile = fetch_http_profile(
             provider
-                .user_info_request(url, access_token)
+                .user_info_request(url, &request.access_token.field_value())?
                 .query(&[("schema", "paypalv1.1")]),
         )
         .await?;
@@ -96,20 +92,18 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             logger.error("Failed to fetch user info from PayPal", &[]);
             return Ok(None);
         };
-        if let Some(token) = request
-            .id_token
-            .as_deref()
-            .filter(|token| !token.is_empty())
-        {
+        if request.id_token.is_truthy()? {
             let claims = match claims {
                 Some(claims) => claims,
                 None => {
+                    let token = request.id_token.field_value();
+                    let token = crate::plugins::oauth::providers::jwt_string(&token)?;
                     let verifier = provider.verify_id_token.as_deref().ok_or_else(|| {
                         AuthError::internal(
                             "PayPal ID token requires an explicit application verifier",
                         )
                     })?;
-                    AcceptedIdToken::verify(verifier, token, expected_nonce, None)
+                    AcceptedIdToken::verify(verifier, &token, expected_nonce, None)
                         .await
                         .ok_or_else(crate::plugins::oauth::id_token::invalid)?
                         .value()?

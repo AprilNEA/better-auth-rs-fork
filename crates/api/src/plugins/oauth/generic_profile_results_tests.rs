@@ -123,7 +123,7 @@ impl OAuthTokenHandler for Application {
     async fn get_token(&self, _: OAuthCodeExchange<'_>) -> AuthResult<OAuthTokenSet> {
         self.event("token")?;
         Ok(OAuthTokenSet {
-            access_token: Some("ordinary-profile-access".into()),
+            access_token: (Some("ordinary-profile-access".into())).into(),
             ..Default::default()
         })
     }
@@ -238,7 +238,7 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
             verifier: None,
         };
         let tokens = OAuthUserInfoRequest {
-            access_token: Some("ordinary-profile-access".into()),
+            access_token: (Some("ordinary-profile-access".into())).into(),
             ..Default::default()
         };
         let outcome = match fetch_user_info(&provider, &tokens, None, None).await {
@@ -377,7 +377,7 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
         line.user_info_url = Some(server.url.clone());
         let handler = line.get_user_info.as_ref().ok_or("Missing LINE handler")?;
         let tokens = OAuthUserInfoRequest {
-            access_token: Some("ordinary-profile-access".into()),
+            access_token: (Some("ordinary-profile-access".into())).into(),
             ..Default::default()
         };
         let result = handler

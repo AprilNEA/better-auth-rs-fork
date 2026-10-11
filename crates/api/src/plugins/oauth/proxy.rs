@@ -10,7 +10,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::{
-    OAuthProvider, OAuthTokenSet, OAuthUserInfo, OAuthUserInfoRequest, handlers,
+    OAuthProvider, OAuthUserInfo, handlers,
     state::{self, OAuthStatePayload},
 };
 use crate::plugins::{json_body, symmetric};
@@ -99,40 +99,17 @@ struct ProfileUser {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ProfileAccount {
-    account_id: String,
-    provider_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    access_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    refresh_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id_token: Option<String>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        with = "better_auth_core::field_value::serde::optional_date"
-    )]
-    access_token_expires_at: Option<better_auth_core::FieldDate>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        with = "better_auth_core::field_value::serde::optional_date"
-    )]
-    refresh_token_expires_at: Option<better_auth_core::FieldDate>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 struct Profile {
     user_info: ProfileUser,
-    account: ProfileAccount,
+    #[serde(with = "better_auth_core::field_value::serde::map")]
+    account: better_auth_core::FieldMap,
     #[serde(skip_serializing_if = "Option::is_none")]
     profile: Option<serde_json::Map<String, Value>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    scopes: Option<Vec<String>>,
+    #[serde(
+        default,
+        skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted"
+    )]
+    scopes: better_auth_core::SchemaValue<Vec<String>>,
     state: String,
     #[serde(rename = "callbackURL")]
     callback_url: String,
@@ -143,6 +120,78 @@ struct Profile {
     #[serde(skip_serializing_if = "Option::is_none")]
     disable_sign_up: Option<bool>,
     timestamp: f64,
+}
+
+impl Profile {
+    fn parse(plain: &str) -> AuthResult<Self> {
+        let native = better_auth_core::utils::json::parse_client_json(plain.into())?;
+        let account = native.model_property("account")?;
+        if !matches!(account, FieldValue::Object(_)) {
+            return Err(AuthError::bad_request("Invalid OAuth proxy account"));
+        }
+        let mut fields = account.enumerable_fields()?;
+        for name in ["providerId", "accountId"] {
+            if !fields.get(name).is_some_and(FieldValue::is_string) {
+                return Err(AuthError::bad_request("Invalid OAuth proxy account"));
+            }
+        }
+        for name in [
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "scope",
+            "password",
+        ] {
+            if fields.get(name).is_some_and(|value| {
+                !matches!(
+                    value,
+                    FieldValue::Null
+                        | FieldValue::Undefined
+                        | FieldValue::String(_)
+                        | FieldValue::Utf16String(_)
+                )
+            }) {
+                return Err(AuthError::bad_request("Invalid OAuth proxy token"));
+            }
+        }
+        for name in ["accessTokenExpiresAt", "refreshTokenExpiresAt"] {
+            if fields.get(name).is_some_and(|value| match value {
+                FieldValue::Null | FieldValue::Undefined => false,
+                FieldValue::Date(date) => !date.milliseconds().is_finite(),
+                _ => true,
+            }) {
+                return Err(AuthError::bad_request("Invalid OAuth proxy expiry"));
+            }
+        }
+        let scopes = native.model_property("scopes")?;
+        match &scopes {
+            FieldValue::Undefined => {}
+            FieldValue::Array(values) if values.every(|value| Ok(value.is_string()))? => {}
+            _ => return Err(AuthError::bad_request("Invalid OAuth proxy scopes")),
+        }
+        let mut profile: Self = serde_json::from_str(plain)?;
+        fields = fields.in_field_order(
+            &[
+                "providerId",
+                "accountId",
+                "accessToken",
+                "refreshToken",
+                "idToken",
+                "accessTokenExpiresAt",
+                "refreshTokenExpiresAt",
+                "scope",
+                "password",
+            ]
+            .map(str::to_owned),
+        );
+        profile.account = fields;
+        profile.scopes = if scopes.is_undefined() {
+            better_auth_core::SchemaValue::Undefined
+        } else {
+            better_auth_core::SchemaValue::from_field(scopes)
+        };
+        Ok(profile)
+    }
 }
 
 #[async_trait::async_trait]
@@ -581,17 +630,7 @@ impl OAuthProxyPlugin {
         };
         let info = match handlers::fetch_user_info_for_code(
             provider,
-            OAuthUserInfoRequest {
-                access_token: tokens.access_token.clone(),
-                refresh_token: tokens.refresh_token.clone(),
-                id_token: tokens.id_token.clone(),
-                access_token_expires_at: tokens.access_token_expires_at.clone(),
-                refresh_token_expires_at: tokens.refresh_token_expires_at.clone(),
-                token_type: tokens.token_type.clone(),
-                scopes: tokens.scopes.clone(),
-                raw: tokens.raw.clone(),
-                user: handlers::parse_callback_user_payload(params.get("user").map(String::as_str)),
-            },
+            handlers::callback_user_request(&tokens, params.get("user").map(String::as_str), None)?,
             state.id_token_nonce.as_deref(),
         )
         .await
@@ -627,18 +666,27 @@ impl OAuthProxyPlugin {
                 image: info.user.image,
                 email_verified: info.user.email_verified,
             },
-            account: ProfileAccount {
-                account_id: info.user.id,
-                provider_id: provider_id.to_owned(),
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
-                id_token: tokens.id_token,
-                access_token_expires_at: tokens.access_token_expires_at,
-                refresh_token_expires_at: tokens.refresh_token_expires_at,
-                scope: Some(tokens.scopes.join(",")),
-            },
+            account: better_auth_core::FieldMap::from([
+                ("providerId".into(), provider_id.into()),
+                ("accountId".into(), info.user.id.into()),
+                ("accessToken".into(), tokens.access_token.field_value()),
+                ("refreshToken".into(), tokens.refresh_token.field_value()),
+                ("idToken".into(), tokens.id_token.field_value()),
+                (
+                    "accessTokenExpiresAt".into(),
+                    tokens.access_token_expires_at.field_value(),
+                ),
+                (
+                    "refreshTokenExpiresAt".into(),
+                    tokens.refresh_token_expires_at.field_value(),
+                ),
+                (
+                    "scope".into(),
+                    super::providers::joined_scopes(&tokens.scopes)?,
+                ),
+            ]),
             profile: info.data.as_object().cloned(),
-            scopes: Some(tokens.scopes),
+            scopes: tokens.scopes,
             state: package.state,
             callback_url: final_url,
             new_user_url: state.new_user_url,
@@ -687,7 +735,7 @@ impl OAuthProxyPlugin {
             Ok(plain) => plain,
             Err(_) => return redirect_error(&default_error, "invalid_profile", None),
         };
-        let profile = match serde_json::from_str::<Profile>(&plain) {
+        let profile = match Profile::parse(&plain) {
             Ok(profile) if !profile.state.is_empty() && !profile.callback_url.is_empty() => profile,
             _ => return redirect_error(&default_error, "invalid_payload", None),
         };
@@ -696,7 +744,17 @@ impl OAuthProxyPlugin {
             .as_deref()
             .filter(|url| !url.is_empty())
             .unwrap_or(&default_error);
-        if provider.is_some_and(|provider| provider != profile.account.provider_id) {
+        let provider_id = profile
+            .account
+            .get("providerId")
+            .and_then(FieldValue::as_str)
+            .ok_or_else(|| AuthError::internal("OAuth proxy providerId is not a UTF-8 string"))?;
+        let account_id = profile
+            .account
+            .get("accountId")
+            .and_then(FieldValue::as_str)
+            .ok_or_else(|| AuthError::internal("OAuth proxy accountId is not a UTF-8 string"))?;
+        if provider.is_some_and(|provider| provider != provider_id) {
             return redirect_error(error_url, "provider_mismatch", None);
         }
         if self.profile_expired(profile.timestamp, Utc::now().timestamp_millis()) {
@@ -752,37 +810,39 @@ impl OAuthProxyPlugin {
         req.append_response_header("Set-Cookie", clear)?;
         let user = OAuthUserInfo {
             additional_fields: profile.user_info.additional_fields,
-            id: profile.account.account_id,
+            id: account_id.to_owned(),
             email: Some(profile.user_info.email.to_lowercase()).into(),
             name: Some(profile.user_info.name).into(),
             image: profile.user_info.image,
             email_verified: profile.user_info.email_verified,
         };
-        let tokens = OAuthTokenSet {
-            access_token: profile.account.access_token,
-            refresh_token: profile.account.refresh_token,
-            id_token: profile.account.id_token,
-            access_token_expires_at: profile.account.access_token_expires_at,
-            refresh_token_expires_at: profile.account.refresh_token_expires_at,
-            scopes: profile.scopes.unwrap_or_else(|| {
-                profile
-                    .account
-                    .scope
-                    .as_deref()
-                    .unwrap_or_default()
-                    .split(',')
-                    .map(str::to_owned)
-                    .collect()
-            }),
-            ..Default::default()
+        let scopes = if !profile.scopes.is_undefined() {
+            profile.scopes.clone()
+        } else {
+            match profile.account.get("scope") {
+                None | Some(FieldValue::Null | FieldValue::Undefined) => {
+                    better_auth_core::SchemaValue::Undefined
+                }
+                Some(scope) => {
+                    let units = scope.display_utf16()?;
+                    let scopes: Vec<FieldValue> = units
+                        .as_utf16()
+                        .split(|unit| *unit == u16::from(b','))
+                        .map(|units| {
+                            better_auth_core::Utf16String::from_units(units.to_vec()).into()
+                        })
+                        .collect();
+                    better_auth_core::SchemaValue::Dynamic(scopes.into())
+                }
+            }
         };
         let provider_profile = profile.profile.clone().map(Value::Object);
         if let Some(link) = state.link {
             if let handlers::OAuthLinkOutcome::Failed { code, description } =
                 handlers::complete_link_social(
-                    &profile.account.provider_id,
                     &user,
-                    &tokens,
+                    &profile.account,
+                    &scopes,
                     &link,
                     Some(provider_profile.as_ref().unwrap_or(&serde_json::json!({}))),
                     &crate::plugins::endpoint_context::EndpointContext::new(
@@ -808,13 +868,13 @@ impl OAuthProxyPlugin {
         let provider = ctx
             .extensions
             .get::<std::sync::Arc<super::resolved::ResolvedOAuthConfig>>()
-            .and_then(|config| config.providers.get(&profile.account.provider_id))
+            .and_then(|config| config.providers.get(provider_id))
             .unwrap_or(&fallback);
         let outcome = match super::signin::process_oauth_sign_in(
-            &profile.account.provider_id,
+            provider_id,
             provider,
             &user,
-            &tokens,
+            &profile.account,
             super::signin::OAuthSignInOptions {
                 request: req,
                 profile: provider_profile.as_ref(),

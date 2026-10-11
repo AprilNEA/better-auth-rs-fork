@@ -38,6 +38,12 @@ use serde_json::json;
 #[path = "account_oauth_tests/refresh_cookie.rs"]
 mod refresh_cookie;
 
+#[path = "account_oauth_tests/native_tokens.rs"]
+mod native_tokens;
+
+#[path = "account_oauth_tests/native_refresh.rs"]
+mod native_refresh;
+
 const TEST_SECRET: &str = "test-secret-key-that-is-at-least-32-characters-long";
 static LOCAL_PROXY_BYPASS: Once = Once::new();
 
@@ -188,14 +194,14 @@ struct RotatingRefreshHandler {
 impl OAuthRefreshTokenHandler for RotatingRefreshHandler {
     async fn refresh_access_token(
         &self,
-        refresh_token: &str,
+        refresh_token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         let mut sequence = self.sequence.lock().unwrap();
         let (expected, response) = sequence.remove(0);
-        if refresh_token != expected {
+        if refresh_token.as_str() != Some(expected.as_str()) {
             return Err(format!(
-                "unexpected refresh token: expected {expected}, got {refresh_token}"
+                "unexpected refresh token: expected {expected}, got {refresh_token:?}"
             ));
         }
         Ok(response)
@@ -599,10 +605,10 @@ async fn test_refresh_token_migrates_plaintext_when_encryption_is_enabled() {
         sequence: Arc::new(std::sync::Mutex::new(vec![(
             "plain-refresh-token".to_string(),
             OAuthTokenSet {
-                access_token: Some("rotated-access-token".to_string()),
-                refresh_token: Some("rotated-refresh-token".to_string()),
-                id_token: Some("plain-id-token".to_string()),
-                access_token_expires_at: Some((Utc::now() + Duration::minutes(30)).into()),
+                access_token: (Some("rotated-access-token".to_string())).into(),
+                refresh_token: (Some("rotated-refresh-token".to_string())).into(),
+                id_token: (Some("plain-id-token".to_string())).into(),
+                access_token_expires_at: (Some((Utc::now() + Duration::minutes(30)).into())).into(),
                 ..Default::default()
             },
         )])),
@@ -680,11 +686,11 @@ async fn test_refresh_token_persists_rotated_tokens_for_cookie_matched_account()
         sequence: Arc::new(std::sync::Mutex::new(vec![(
             "old-refresh-token".to_string(),
             OAuthTokenSet {
-                access_token: Some("rotated-access-token".to_string()),
-                refresh_token: Some("rotated-refresh-token".to_string()),
-                access_token_expires_at: Some((Utc::now() + Duration::minutes(30)).into()),
-                refresh_token_expires_at: Some((Utc::now() + Duration::hours(24)).into()),
-                scopes: vec!["email".to_string()],
+                access_token: (Some("rotated-access-token".to_string())).into(),
+                refresh_token: (Some("rotated-refresh-token".to_string())).into(),
+                access_token_expires_at: (Some((Utc::now() + Duration::minutes(30)).into())).into(),
+                refresh_token_expires_at: (Some((Utc::now() + Duration::hours(24)).into())).into(),
+                scopes: (vec!["email".to_string()]).into(),
                 ..Default::default()
             },
         )])),
@@ -761,11 +767,11 @@ async fn test_get_access_token_refresh_persists_rotated_tokens_for_cookie_matche
         sequence: Arc::new(std::sync::Mutex::new(vec![(
             "old-refresh-token".to_string(),
             OAuthTokenSet {
-                access_token: Some("rotated-access-token".to_string()),
-                refresh_token: Some("rotated-refresh-token".to_string()),
-                access_token_expires_at: Some((Utc::now() + Duration::minutes(30)).into()),
-                refresh_token_expires_at: Some((Utc::now() + Duration::hours(24)).into()),
-                scopes: vec!["email".to_string()],
+                access_token: (Some("rotated-access-token".to_string())).into(),
+                refresh_token: (Some("rotated-refresh-token".to_string())).into(),
+                access_token_expires_at: (Some((Utc::now() + Duration::minutes(30)).into())).into(),
+                refresh_token_expires_at: (Some((Utc::now() + Duration::hours(24)).into())).into(),
+                scopes: (vec!["email".to_string()]).into(),
                 ..Default::default()
             },
         )])),

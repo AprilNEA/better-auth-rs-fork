@@ -52,17 +52,19 @@ pub(in crate::plugins::oauth) async fn fetch_profile(
     provider: &OAuthProvider,
     request: &OAuthUserInfoRequest,
 ) -> AuthResult<Option<Value>> {
-    if let Some(claims) = request.id_token.as_deref().and_then(decode_claims) {
+    if let Some(claims) = super::jwt_string(&request.id_token.field_value())
+        .ok()
+        .and_then(|token| decode_claims(&token))
+    {
         return Ok(Some(claims));
     }
     let endpoint = provider
         .user_info_url
         .as_deref()
         .ok_or_else(|| AuthError::internal("Missing user_info_url for provider"))?;
-    let profile = fetch_http_profile(provider.user_info_request(
-        endpoint,
-        request.access_token.as_deref().unwrap_or("undefined"),
-    ))
+    let profile = fetch_http_profile(
+        provider.user_info_request(endpoint, &request.access_token.field_value())?,
+    )
     .await?;
     Ok(profile.filter(is_truthy))
 }

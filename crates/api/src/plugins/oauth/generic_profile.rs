@@ -78,13 +78,14 @@ pub(super) async fn fetch_profile(
 ) -> Result<Option<ProfileResponse>, GenericProfileError> {
     let verified_claims = if verified_claims.is_some() {
         verified_claims
-    } else if let (Some(token), Some(verifier)) = (
-        tokens.id_token.as_deref().filter(|token| !token.is_empty()),
-        &provider.verifier,
-    ) {
+    } else if tokens.id_token.is_truthy()?
+        && let Some(verifier) = &provider.verifier
+    {
+        let token = tokens.id_token.field_value();
+        let token = super::providers::jwt_string(&token).map_err(GenericProfileError::Identity)?;
         Some(
             verifier
-                .verify(token, expected_nonce)
+                .verify(&token, expected_nonce)
                 .await
                 .map_err(|error| {
                     GenericProfileError::Identity(AuthError::internal(format!(
@@ -154,7 +155,11 @@ async fn default_profile(
     tokens: &OAuthUserInfoRequest,
     verified_claims: Option<Value>,
 ) -> AuthResult<Option<Value>> {
-    let claims = verified_claims.or_else(|| tokens.id_token.as_deref().and_then(decode_claims));
+    let claims = verified_claims.or_else(|| {
+        super::providers::jwt_string(&tokens.id_token.field_value())
+            .ok()
+            .and_then(|token| decode_claims(&token))
+    });
     if let Some(Value::Object(claims)) = claims
         && claims.get("sub").is_some_and(truthy)
         && claims.get("email").is_some_and(truthy)
@@ -180,11 +185,15 @@ async fn default_profile(
     else {
         return Ok(None);
     };
-    // Upstream uses the literal `undefined` when a token set has no access token.
-    let access_token = tokens.access_token.as_deref().unwrap_or("undefined");
     let response = reqwest::Client::new()
         .get(endpoint)
-        .bearer_auth(access_token)
+        .header(
+            reqwest::header::AUTHORIZATION,
+            super::providers::token_http::authorization(
+                "Bearer",
+                &tokens.access_token.field_value(),
+            )?,
+        )
         .send()
         .await
         .map_err(|error| AuthError::internal(format!("User info request failed: {error}")))?;

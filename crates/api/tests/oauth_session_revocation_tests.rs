@@ -100,14 +100,14 @@ struct ProviderCalls {
 impl OAuthRefreshTokenHandler for ProviderCalls {
     async fn refresh_access_token(
         &self,
-        refresh_token: &str,
+        refresh_token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
-        assert_eq!(refresh_token, "provider-refresh");
+        assert_eq!(refresh_token.as_str(), Some("provider-refresh"));
         let _ = self.refresh.fetch_add(1, Ordering::SeqCst);
         Ok(OAuthTokenSet {
-            access_token: Some("refreshed-access".to_string()),
-            access_token_expires_at: Some((Utc::now() + Duration::hours(1)).into()),
+            access_token: (Some("refreshed-access".to_string())).into(),
+            access_token_expires_at: (Some((Utc::now() + Duration::hours(1)).into())).into(),
             ..Default::default()
         })
     }
@@ -119,7 +119,10 @@ impl OAuthUserInfoHandler for ProviderCalls {
         &self,
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-        assert_eq!(request.access_token.as_deref(), Some("refreshed-access"));
+        assert_eq!(
+            request.access_token.field_value().as_str(),
+            Some("refreshed-access")
+        );
         let _ = self.user_info.fetch_add(1, Ordering::SeqCst);
         Ok(Some(OAuthUserInfoResponse {
             user: OAuthUserInfo {
@@ -390,16 +393,24 @@ async fn sign_out_preserves_stored_id_token_and_revokes_session() {
         let raw_id_token = "header.provider-identity.signature";
         let encrypted = encrypt_token_set(
             &fixture.ctx,
-            Some("provider-access".to_string()),
-            Some("provider-refresh".to_string()),
-            Some(raw_id_token.to_string()),
+            Some("provider-access".to_string()).into(),
+            Some("provider-refresh".to_string()).into(),
+            Some(raw_id_token.to_string()).into(),
         )
         .unwrap();
-        assert_eq!(encrypted.id_token.as_deref(), Some(raw_id_token));
+        assert_eq!(
+            encrypted.id_token.field_value().as_str(),
+            Some(raw_id_token)
+        );
         let stored_id_token = if non_jwt_token {
             "invalid-ciphertext".to_string()
         } else {
-            encrypted.id_token.unwrap()
+            encrypted
+                .id_token
+                .field_value()
+                .as_str()
+                .unwrap()
+                .to_owned()
         };
         let _ = fixture
             .ctx
@@ -407,12 +418,8 @@ async fn sign_out_preserves_stored_id_token_and_revokes_session() {
             .update_account(
                 &fixture.account_id,
                 UpdateAccount {
-                    access_token: (encrypted.access_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    refresh_token: (encrypted.refresh_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
+                    access_token: encrypted.access_token,
+                    refresh_token: encrypted.refresh_token,
                     id_token: (Some(stored_id_token.clone())).into(),
                     ..Default::default()
                 },

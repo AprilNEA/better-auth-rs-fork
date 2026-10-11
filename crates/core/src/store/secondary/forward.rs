@@ -39,12 +39,28 @@ impl<S: AuthSchema> AccountStore<S> for SecondaryStore<S> {
     ) -> AuthResult<Option<crate::wire::AccountView>> {
         self.inner.get_account(provider, provider_account_id).await
     }
+    async fn get_account_value(
+        &self,
+        provider: &crate::FieldValue,
+        account_id: &crate::FieldValue,
+    ) -> AuthResult<Option<crate::wire::AccountView>> {
+        self.inner.get_account_value(provider, account_id).await
+    }
     async fn get_account_owner(
         &self,
         provider: &str,
         account_id: &str,
     ) -> AuthResult<Option<AccountOwner>> {
         self.inner.get_account_owner(provider, account_id).await
+    }
+    async fn get_account_owner_value(
+        &self,
+        provider: &crate::FieldValue,
+        account_id: &crate::FieldValue,
+    ) -> AuthResult<Option<AccountOwner>> {
+        self.inner
+            .get_account_owner_value(provider, account_id)
+            .await
     }
     async fn get_user_accounts(&self, user_id: &str) -> AuthResult<Vec<crate::wire::AccountView>> {
         self.inner.get_user_accounts(user_id).await

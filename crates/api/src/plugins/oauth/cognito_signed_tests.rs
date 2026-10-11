@@ -122,7 +122,7 @@ async fn signed_claims_match_pinned_profiles_on_code_direct_and_account_reads() 
         };
         for entry in ["code", "direct", "account"] {
             let request = OAuthUserInfoRequest {
-                id_token: Some(server.token.clone()),
+                id_token: (Some(server.token.clone())).into(),
                 ..Default::default()
             };
             let response = if entry == "direct" {
@@ -183,8 +183,8 @@ async fn signed_mapper_failure_uses_the_separate_http_mapper_stage() {
             generic: None,
         },
         OAuthUserInfoRequest {
-            id_token: Some(server.token.clone()),
-            access_token: Some("ordinary-access".into()),
+            id_token: (Some(server.token.clone())).into(),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         },
         None,
@@ -313,7 +313,7 @@ async fn application_verified_signed_claims_are_not_verified_a_second_time() {
     let response = social_profile::fetch_user_info_with_claims(
         &resolved,
         OAuthUserInfoRequest {
-            id_token: Some(server.token.clone()),
+            id_token: (Some(server.token.clone())).into(),
             ..Default::default()
         },
         Some("ordinary-nonce"),

@@ -130,7 +130,7 @@ async fn github_provider_get_user_info_uses_email_fallback_and_login_name() {
         user_url,
         emails_url,
         &OAuthUserInfoRequest {
-            access_token: Some("github-access-token".to_string()),
+            access_token: (Some("github-access-token".to_string())).into(),
             ..Default::default()
         },
     )
@@ -209,7 +209,7 @@ async fn github_provider_get_user_info_keeps_inline_email() {
         user_url,
         emails_url,
         &OAuthUserInfoRequest {
-            access_token: Some("github-access-token".to_string()),
+            access_token: (Some("github-access-token".to_string())).into(),
             ..Default::default()
         },
     )
@@ -244,7 +244,7 @@ async fn github_http_errors_distinguish_missing_profile_from_optional_email_data
             &user_url,
             &emails_url,
             &OAuthUserInfoRequest {
-                access_token: Some("ordinary-access-token".into()),
+                access_token: (Some("ordinary-access-token".into())).into(),
                 ..Default::default()
             },
         )
@@ -420,7 +420,7 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
         let response = crate::plugins::oauth::social_profile::fetch_user_info_for_code(
             &provider,
             OAuthUserInfoRequest {
-                access_token: Some("ordinary-github-token".into()),
+                access_token: (Some("ordinary-github-token".into())).into(),
                 ..Default::default()
             },
             None,
@@ -480,7 +480,7 @@ async fn github_rejects_nonstring_profile_email_before_using_fallback_values() {
         &user_url,
         &emails_url,
         &OAuthUserInfoRequest {
-            access_token: Some("ordinary-github-token".into()),
+            access_token: (Some("ordinary-github-token".into())).into(),
             ..Default::default()
         },
     )

@@ -44,15 +44,12 @@ impl OAuthProvider {
 pub(in crate::plugins::oauth) fn fetch_profile(
     request: &OAuthUserInfoRequest,
 ) -> AuthResult<Option<Value>> {
-    let Some(token) = request
-        .id_token
-        .as_deref()
-        .filter(|token| !token.is_empty())
-    else {
+    if !request.id_token.is_truthy()? {
         better_auth_core::observability::logger::current().error("No idToken found in token", &[]);
         return Ok(None);
-    };
-    decode_claims(token)
+    }
+    let token = request.id_token.field_value();
+    decode_claims(&crate::plugins::oauth::providers::jwt_string(&token)?)
         .map(Some)
         .ok_or_else(|| AuthError::internal("Invalid Twitch ID-token claims"))
 }

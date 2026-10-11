@@ -114,8 +114,8 @@ impl OneTapPlugin {
                 data: payload,
             },
             OAuthTokenSet {
-                id_token: Some(token.to_owned()),
-                scopes: vec!["openid".into(), "profile".into(), "email".into()],
+                id_token: (Some(token.to_owned())).into(),
+                scopes: (vec!["openid".into(), "profile".into(), "email".into()]).into(),
                 ..Default::default()
             },
             self.config.disable_signup || provider.disable_sign_up(),

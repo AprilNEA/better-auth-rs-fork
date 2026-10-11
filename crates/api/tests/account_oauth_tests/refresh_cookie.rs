@@ -11,15 +11,15 @@ use better_auth_core::{
     user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType},
 };
 
-pub(super) async fn dispatch(
+pub(super) async fn dispatch<S: better_auth_core::AuthSchema>(
     plugin: &OAuthPlugin,
     request: &AuthRequest,
-    context: &AuthContext<TestSchema>,
+    context: &AuthContext<S>,
 ) -> AuthResult<AuthResponse> {
     let dispatcher = EndpointDispatcher::new(
         Arc::new(Vec::new()),
         Default::default(),
-        AuthPlugin::<TestSchema>::routes(plugin),
+        AuthPlugin::<S>::routes(plugin),
     );
     let mut input = request.clone();
     let mut scope = better_auth_core::RequestHookContext::from_request(request)?;
@@ -203,9 +203,9 @@ async fn assert_token_refresh_cookie_spread(path: &str, selection: RefreshSelect
     let sequence = Arc::new(std::sync::Mutex::new(vec![(
         "old-refresh-token".into(),
         OAuthTokenSet {
-            access_token: (!no_id).then(|| "rotated-access-token".into()),
-            refresh_token: Some("rotated-refresh-token".into()),
-            access_token_expires_at: (!no_id).then_some(next_expiry),
+            access_token: ((!no_id).then(|| "rotated-access-token".into())).into(),
+            refresh_token: (Some("rotated-refresh-token".into())).into(),
+            access_token_expires_at: ((!no_id).then_some(next_expiry)).into(),
             ..Default::default()
         },
     )]));
@@ -389,8 +389,8 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
             vec![(
                 "old-refresh-token".into(),
                 OAuthTokenSet {
-                    access_token: Some("refreshed-access-token".into()),
-                    access_token_expires_at: Some(next_expiry.clone()),
+                    access_token: (Some("refreshed-access-token".into())).into(),
+                    access_token_expires_at: (Some(next_expiry.clone())).into(),
                     ..Default::default()
                 },
             )]
@@ -419,7 +419,7 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
         let calls = calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(
-            calls[0].access_token.as_deref(),
+            calls[0].access_token.field_value().as_str(),
             Some(if refresh {
                 "refreshed-access-token"
             } else {
@@ -429,12 +429,13 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
         assert_eq!(
             calls[0]
                 .access_token_expires_at
-                .as_ref()
+                .field_value()
+                .as_date()
                 .unwrap()
                 .milliseconds(),
             next_expiry.milliseconds()
         );
-        assert_eq!(calls[0].scopes, ["email profile"]);
+        assert_eq!(json!(calls[0].scopes), json!(["email profile"]));
     }
 }
 
@@ -512,9 +513,9 @@ async fn assert_refresh_cookie_survives_failure(profile: bool) {
     let sequence = Arc::new(std::sync::Mutex::new(vec![(
         "old-refresh-token".into(),
         OAuthTokenSet {
-            access_token: Some("rotated-access-token".into()),
-            refresh_token: Some("rotated-refresh-token".into()),
-            access_token_expires_at: Some(next_expiry.clone()),
+            access_token: (Some("rotated-access-token".into())).into(),
+            refresh_token: (Some("rotated-refresh-token".into())).into(),
+            access_token_expires_at: (Some(next_expiry.clone())).into(),
             ..Default::default()
         },
     )]));
@@ -571,18 +572,19 @@ async fn assert_refresh_cookie_survives_failure(profile: bool) {
         assert_eq!(calls.len(), usize::from(profile));
         if profile {
             assert_eq!(
-                calls[0].access_token.as_deref(),
+                calls[0].access_token.field_value().as_str(),
                 Some("rotated-access-token")
             );
             assert_eq!(
                 calls[0]
                     .access_token_expires_at
-                    .as_ref()
+                    .field_value()
+                    .as_date()
                     .unwrap()
                     .milliseconds(),
                 next_expiry.milliseconds()
             );
-            assert_eq!(calls[0].scopes, ["email profile"]);
+            assert_eq!(json!(calls[0].scopes), json!(["email profile"]));
         }
     }
     let expected_write = FieldMap::from([

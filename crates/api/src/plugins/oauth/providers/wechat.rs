@@ -1,5 +1,4 @@
-use better_auth_core::{AuthError, AuthResult};
-use serde::Deserialize;
+use better_auth_core::{AuthError, AuthResult, FieldMap, FieldValue};
 use serde_json::Value;
 
 use super::{
@@ -58,24 +57,42 @@ fn tokens(value: Value, grant: TokenGrantType) -> AuthResult<OAuthTokenSet> {
             "Failed to {operation}: {message}"
         )));
     }
-    #[derive(Deserialize)]
-    struct TokenResponse {
-        access_token: String,
-        refresh_token: String,
-        expires_in: f64,
-        scope: String,
+    let response = FieldValue::from_json(value)?;
+    let expires_in =
+        better_auth_core::query::field_number(&response.model_property("expires_in")?)?;
+    let scope = response.model_property("scope")?;
+    let scope = scope
+        .as_str()
+        .ok_or_else(|| AuthError::type_error("tokenData.scope.split is not a function"))?;
+    let mut fields = FieldMap::from([
+        ("tokenType".into(), "Bearer".into()),
+        (
+            "accessToken".into(),
+            response.model_property("access_token")?,
+        ),
+        (
+            "refreshToken".into(),
+            response.model_property("refresh_token")?,
+        ),
+        (
+            "accessTokenExpiresAt".into(),
+            FieldValue::Date(expiry_at(expires_in)?),
+        ),
+        (
+            "scopes".into(),
+            scope
+                .split(',')
+                .map(FieldValue::from)
+                .collect::<Vec<_>>()
+                .into(),
+        ),
+    ]);
+    if grant == TokenGrantType::AuthorizationCode {
+        for name in ["openid", "unionid"] {
+            let _ = fields.insert(name.into(), response.model_property(name)?);
+        }
     }
-    let response: TokenResponse = serde_json::from_value(value.clone())
-        .map_err(|error| AuthError::internal(format!("Invalid WeChat token response: {error}")))?;
-    Ok(OAuthTokenSet {
-        token_type: Some("Bearer".into()),
-        access_token: Some(response.access_token),
-        refresh_token: Some(response.refresh_token),
-        access_token_expires_at: Some(expiry_at(response.expires_in)?),
-        scopes: response.scope.split(',').map(str::to_owned).collect(),
-        raw: (grant == TokenGrantType::AuthorizationCode).then_some(value),
-        ..Default::default()
-    })
+    Ok(OAuthTokenSet::from_fields(fields))
 }
 
 fn provider_error(value: &Value) -> bool {
@@ -88,25 +105,27 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     provider: &OAuthProvider,
     request: &OAuthUserInfoRequest,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-    let Some(openid) = request
-        .raw
-        .as_ref()
-        .and_then(|raw| raw.get("openid"))
-        .and_then(Value::as_str)
-        .filter(|openid| !openid.is_empty())
-    else {
+    let openid = request
+        .additional_fields
+        .get("openid")
+        .cloned()
+        .unwrap_or_default();
+    if !openid.is_truthy() {
         return Ok(None);
-    };
+    }
     let endpoint = provider
         .user_info_url
         .as_deref()
         .ok_or_else(|| AuthError::internal("Missing user_info_url for provider"))?;
+    let access_token = if request.access_token.is_truthy()? {
+        super::token_http::form_string(&request.access_token.field_value())?
+    } else {
+        String::new()
+    };
+    let openid = super::token_http::form_string(&openid)?;
     let request = reqwest::Client::new().get(endpoint).query(&[
-        (
-            "access_token",
-            request.access_token.as_deref().unwrap_or_default(),
-        ),
-        ("openid", openid),
+        ("access_token", access_token.as_str()),
+        ("openid", openid.as_str()),
         ("lang", "zh_CN"),
     ]);
     let Some(data) = fetch_http_profile(request).await? else {

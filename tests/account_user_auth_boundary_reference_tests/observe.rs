@@ -142,7 +142,12 @@ pub(super) fn verify_dynamic(
         assert_eq!(text(completed, "id")?, id);
         assert_eq!(text(stored, "token")?, token);
         assert_eq!(text(completed, "token")?, token);
-        assert_eq!(stored.get("userId"), Some(selected_id));
+        let stored_id = if selected_id == &json!({"type": "undefined"}) {
+            None
+        } else {
+            Some(selected_id)
+        };
+        assert_eq!(stored.get("userId"), stored_id);
         assert_eq!(completed.get("userId"), Some(selected_id));
         for name in ["createdAt", "updatedAt", "expiresAt"] {
             assert_eq!(millis(&stored[name])?, anchors.session_dates[name]);
@@ -278,6 +283,7 @@ pub(super) fn assert_events(actual: &[Value], expected: &[Value], case: &Case) -
             })
             .collect::<Vec<_>>()
     };
+    recorder::assert_provider_token_keys(actual, expected, case);
     assert_eq!(
         paired(actual),
         paired(expected),

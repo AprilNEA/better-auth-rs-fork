@@ -5,11 +5,10 @@ use better_auth_core::{AuthContext, AuthError, AuthRequest, AuthResponse, AuthRe
 
 use super::handlers::{
     FlowStartRequest, attach_cookie_state_payload, attach_state_cookie, auth_base_url,
-    complete_link_social, fetch_user_info_for_code, initiate_oauth_flow_core,
-    parse_callback_user_payload, redirect_response,
+    callback_user_request, complete_link_social, fetch_user_info_for_code,
+    initiate_oauth_flow_core, redirect_response,
 };
 use super::provider_tokens::validate_authorization_code_via_provider;
-use super::providers::OAuthUserInfoRequest;
 use super::resolved::ResolvedOAuthConfig as OAuthConfig;
 use super::signin::{OAuthSignInOptions, process_oauth_sign_in};
 use super::state::{
@@ -282,17 +281,11 @@ pub(super) async fn handle_callback(
 
     let user_info = match fetch_user_info_for_code(
         provider,
-        OAuthUserInfoRequest {
-            token_type: tokens.token_type.clone(),
-            access_token: tokens.access_token.clone(),
-            refresh_token: tokens.refresh_token.clone(),
-            access_token_expires_at: tokens.access_token_expires_at.clone(),
-            refresh_token_expires_at: tokens.refresh_token_expires_at.clone(),
-            scopes: tokens.scopes.clone(),
-            id_token: tokens.id_token.clone(),
-            raw: tokens.raw.clone(),
-            user: parse_callback_user_payload(merged.get("user").map(String::as_str)),
-        },
+        callback_user_request(
+            &tokens,
+            merged.get("user").map(String::as_str),
+            payload.id_token_nonce.as_deref(),
+        )?,
         payload.id_token_nonce.as_deref(),
     )
     .await
@@ -313,12 +306,13 @@ pub(super) async fn handle_callback(
         ctx,
     );
     endpoint.path = Some(super::signin::callback_path(req));
+    let account = super::signin::token_account(provider_name, &user_info.user.id, &tokens)?;
     if let Some(link) = payload.link.as_ref() {
         if let super::handlers::OAuthLinkOutcome::Failed { code, description } =
             complete_link_social(
-                provider_name,
                 &user_info.user,
-                &tokens,
+                &account,
+                &tokens.scopes,
                 link,
                 Some(&user_info.data),
                 &endpoint,
@@ -341,7 +335,7 @@ pub(super) async fn handle_callback(
         provider_name,
         provider,
         &user_info.user,
-        &tokens,
+        &account,
         OAuthSignInOptions {
             request: req,
             profile: Some(&user_info.data),

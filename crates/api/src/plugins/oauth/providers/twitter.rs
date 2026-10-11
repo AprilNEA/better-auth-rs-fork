@@ -12,10 +12,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         .user_info_url
         .as_deref()
         .ok_or_else(|| AuthError::internal("Missing user_info_url for provider"))?;
-    let access_token = request
-        .access_token
-        .as_deref()
-        .ok_or_else(|| AuthError::internal("Missing access token for user-info lookup"))?;
+    let access_token = request.access_token.field_value();
     let mut url = url::Url::parse(endpoint)
         .map_err(|error| AuthError::internal(format!("Invalid Twitter user-info URL: {error}")))?;
     let _ = url
@@ -23,7 +20,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         .clear()
         .append_pair("user.fields", "profile_image_url");
     let Some(mut profile) =
-        fetch_http_profile(provider.user_info_request(url.as_str(), access_token)).await?
+        fetch_http_profile(provider.user_info_request(url.as_str(), &access_token)?).await?
     else {
         return Ok(None);
     };
@@ -32,7 +29,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         .clear()
         .append_pair("user.fields", "confirmed_email");
     let email_profile =
-        fetch_http_profile(provider.user_info_request(url.as_str(), access_token)).await?;
+        fetch_http_profile(provider.user_info_request(url.as_str(), &access_token)?).await?;
     let confirmed_email = email_profile
         .as_ref()
         .and_then(|profile| profile.pointer("/data/confirmed_email"))

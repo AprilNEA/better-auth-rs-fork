@@ -227,7 +227,7 @@ async fn fetch(config: OAuthProvider) -> AuthResult<Option<OAuthUserInfoResponse
     social_profile::fetch_user_info_for_code(
         &resolved(config),
         OAuthUserInfoRequest {
-            access_token: Some("ordinary-access".into()),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         },
         None,
@@ -265,16 +265,25 @@ async fn code_and_refresh_use_client_secret_post_and_keep_original_parameters() 
     .unwrap();
     let refresh = provider_tokens::refresh_tokens_via_provider(
         &provider,
-        "ordinary-refresh",
+        &"ordinary-refresh".into(),
         &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
     )
     .await
     .unwrap();
-    assert_eq!(code.access_token.as_deref(), Some("ordinary-access"));
-    assert_eq!(code.scopes, ["ordinary-scope"]);
-    assert_eq!(refresh.access_token.as_deref(), Some("rotated-access"));
-    assert_eq!(refresh.refresh_token.as_deref(), Some("rotated-refresh"));
-    assert_eq!(refresh.scopes, ["refreshed-scope"]);
+    assert_eq!(
+        code.access_token.field_value().as_str(),
+        Some("ordinary-access")
+    );
+    assert_eq!(json!(code.scopes), json!(["ordinary-scope"]));
+    assert_eq!(
+        refresh.access_token.field_value().as_str(),
+        Some("rotated-access")
+    );
+    assert_eq!(
+        refresh.refresh_token.field_value().as_str(),
+        Some("rotated-refresh")
+    );
+    assert_eq!(json!(refresh.scopes), json!(["refreshed-scope"]));
     let requests = server.requests.lock().unwrap();
     assert_eq!(requests.len(), 2);
     for request in requests.iter() {

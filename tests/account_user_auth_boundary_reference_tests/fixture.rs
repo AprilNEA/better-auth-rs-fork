@@ -24,6 +24,10 @@ pub(super) struct Scenario {
     pub(super) branch: String,
     #[serde(default)]
     pub(super) mode: String,
+    #[serde(default)]
+    pub(super) linking: bool,
+    #[serde(default)]
+    pub(super) invocation: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]

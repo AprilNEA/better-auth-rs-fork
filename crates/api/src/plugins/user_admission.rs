@@ -2,8 +2,8 @@
 
 use super::endpoint_context::EndpointContext;
 use async_trait::async_trait;
-use better_auth_core::FieldMap;
 use better_auth_core::{AuthError, AuthResponse, AuthResult, AuthSchema, CreateUser};
+use better_auth_core::{FieldMap, FieldValue, SchemaValue};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -21,7 +21,8 @@ pub enum UserValidationAction {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserValidationProvider {
-    pub provider_id: String,
+    #[serde(skip_serializing_if = "SchemaValue::is_json_omitted")]
+    pub provider_id: SchemaValue<String>,
     /// `None` preserves an absent profile; `Some(Value::Null)` preserves explicit null.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub profile: Option<Value>,
@@ -47,13 +48,13 @@ impl UserValidationSource {
         }
     }
     pub(crate) fn oauth(
-        provider: &str,
+        provider: &FieldValue,
         profile: Option<&Value>,
         action: UserValidationAction,
     ) -> Self {
         Self {
             oauth: Some(UserValidationProvider {
-                provider_id: provider.to_owned(),
+                provider_id: SchemaValue::from_field(provider.clone()),
                 profile: profile.cloned(),
             }),
             ..Self::new("oauth", action)
@@ -134,7 +135,7 @@ pub(crate) async fn validate<S: AuthSchema>(
             .source
             .oauth
             .as_ref()
-            .is_none_or(|provider| provider.provider_id.is_empty())
+            .is_none_or(|provider| !provider.provider_id.field_value().is_truthy())
     {
         Some("OAuth user validation source requires oauth.providerId")
     } else if matches!(data.source.method.as_str(), "sso-oidc" | "sso-saml")
@@ -142,7 +143,7 @@ pub(crate) async fn validate<S: AuthSchema>(
             .source
             .sso
             .as_ref()
-            .is_none_or(|provider| provider.provider_id.is_empty())
+            .is_none_or(|provider| !provider.provider_id.field_value().is_truthy())
     {
         Some("SSO user validation source requires sso.providerId")
     } else {
@@ -212,3 +213,7 @@ pub(crate) async fn create_user_optional<S: AuthSchema>(
 #[cfg(test)]
 #[path = "user_admission_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "user_admission_provider_tests.rs"]
+mod provider_tests;

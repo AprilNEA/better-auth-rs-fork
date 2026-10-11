@@ -39,24 +39,38 @@ impl OAuthUserInfoHandler for BodyTrace {
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
         self.current("oauth.userinfo", None);
-        let expires_at = request
-            .access_token_expires_at
-            .as_ref()
-            .map(|date| FieldValue::Date(date.clone()).json())
-            .transpose()?
-            .flatten();
+        let expires_at = request.access_token_expires_at.json()?;
+        let scopes = request
+            .scopes
+            .json()?
+            .filter(|value| !value.is_null())
+            .unwrap_or_else(|| json!([]));
+        let user = request.user.field_value();
+        let property = |value: &FieldValue, name: &str| {
+            if value.is_null() || value.is_undefined() {
+                Ok(FieldValue::Undefined)
+            } else {
+                value.model_property(name)
+            }
+        };
+        let first_name = property(&property(&user, "name")?, "firstName")?;
+        let last_name = property(&property(&user, "name")?, "lastName")?;
+        let email = property(&user, "email")?;
         self.1.lock().unwrap().push(json!({
             "kind":"oauth-userinfo", "accessToken":request.access_token,
             "refreshToken":request.refresh_token, "expiresAt":expires_at,
-            "scopes":request.scopes, "idToken":request.id_token,
-            "userPresent":request.user.is_some(),
-            "firstName":request.user.as_ref().and_then(|user|user.name.as_ref()).and_then(|name|name.first_name.as_deref()),
-            "lastName":request.user.as_ref().and_then(|user|user.name.as_ref()).and_then(|name|name.last_name.as_deref()),
-            "email":request.user.as_ref().and_then(|user|user.email.as_deref()),
+            "scopes":scopes, "idToken":request.id_token,
+            "userPresent":!user.is_undefined(),
+            "firstName":first_name.json()?,
+            "lastName":last_name.json()?,
+            "email":email.json()?,
         }));
         let email = request
             .access_token
-            .ok_or_else(|| better_auth_core::AuthError::internal("Missing fixture access token"))?;
+            .field_value()
+            .as_str()
+            .ok_or_else(|| better_auth_core::AuthError::internal("Missing fixture access token"))?
+            .to_owned();
         Ok(Some(OAuthUserInfoResponse {
             data: json!({"sub":email}),
             user: OAuthUserInfo {

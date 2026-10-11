@@ -851,23 +851,28 @@ pub(in crate::plugins::oauth) async fn github_profile(
     emails_url: &str,
     request: &OAuthUserInfoRequest,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-    let access_token = request
-        .access_token
-        .as_deref()
-        .ok_or_else(|| AuthError::internal("Missing access token for user-info lookup"))?;
     let client = reqwest::Client::new();
     let get = |url: &str| {
-        client
-            .get(url)
-            .bearer_auth(access_token)
-            .header("Accept", "application/json")
-            .header("User-Agent", "better-auth")
+        Ok::<_, AuthError>(
+            client
+                .get(url)
+                .header(
+                    reqwest::header::AUTHORIZATION,
+                    super::token_http::authorization(
+                        "Bearer",
+                        &request.access_token.field_value(),
+                    )?,
+                )
+                .header("Accept", "application/json")
+                .header("User-Agent", "better-auth"),
+        )
     };
-    let Some(mut profile) = super::super::social_profile::fetch_http_profile(get(user_url)).await?
+    let Some(mut profile) =
+        super::super::social_profile::fetch_http_profile(get(user_url)?).await?
     else {
         return Ok(None);
     };
-    let emails = super::super::social_profile::fetch_http_profile(get(emails_url))
+    let emails = super::super::social_profile::fetch_http_profile(get(emails_url)?)
         .await?
         .filter(|value| !value.is_null())
         .map(serde_json::from_value::<Vec<GitHubEmailAddress>>)

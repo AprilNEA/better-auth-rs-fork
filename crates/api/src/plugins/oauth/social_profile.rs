@@ -84,18 +84,21 @@ pub(super) async fn fetch_user_info_with_claims(
     if let Some(options) = provider.config.facebook_options() {
         let claims = match claims {
             Some(VerifiedIdToken::Facebook(claims)) => Some(claims),
-            None => match request
-                .id_token
-                .as_deref()
-                .filter(|token| token.split('.').count() == 3)
-            {
-                Some(token) => Some(
-                    options
-                        .verify(&provider.config.client_id, token, expected_nonce)
-                        .await?,
-                ),
-                None => None,
-            },
+            None if request.id_token.is_truthy()? => {
+                let token = request.id_token.field_value();
+                let token = super::providers::jwt_string(&token)
+                    .map_err(|_| AuthError::type_error("token.idToken.split is not a function"))?;
+                if token.split('.').count() == 3 {
+                    Some(
+                        options
+                            .verify(&provider.config.client_id, &token, expected_nonce)
+                            .await?,
+                    )
+                } else {
+                    None
+                }
+            }
+            None => None,
             Some(_) => {
                 return Err(AuthError::internal(
                     "Non-Facebook claims supplied to Facebook",
@@ -113,18 +116,16 @@ pub(super) async fn fetch_user_info_with_claims(
     if let Some(options) = provider.config.cognito_options() {
         let claims = match claims {
             Some(VerifiedIdToken::Cognito(claims)) => Some(claims),
-            None => match request
-                .id_token
-                .as_deref()
-                .filter(|token| !token.is_empty())
-            {
-                Some(token) => Some(
+            None if request.id_token.is_truthy()? => {
+                let token = request.id_token.field_value();
+                let token = super::providers::jwt_string(&token)?;
+                Some(
                     options
-                        .verify(&provider.config.client_id, token, expected_nonce)
+                        .verify(&provider.config.client_id, &token, expected_nonce)
                         .await?,
-                ),
-                None => None,
-            },
+                )
+            }
+            None => None,
             Some(_) => {
                 return Err(AuthError::internal(
                     "Non-Cognito claims supplied to Cognito",
@@ -145,18 +146,16 @@ pub(super) async fn fetch_user_info_with_claims(
         }
         None => {
             if let Some(issuer) = provider.config.paybin_issuer() {
-                let Some(token) = request
-                    .id_token
-                    .as_deref()
-                    .filter(|token| !token.is_empty())
-                else {
+                if !request.id_token.is_truthy()? {
                     return Ok(None);
-                };
+                }
+                let token = request.id_token.field_value();
+                let token = super::providers::jwt_string(&token)?;
                 Some(VerifiedIdToken::Paybin(
                     super::providers::paybin::verify(
                         issuer,
                         &provider.config.client_id,
-                        token,
+                        &token,
                         expected_nonce,
                     )
                     .await?,
@@ -176,7 +175,7 @@ pub(super) async fn fetch_user_info_with_claims(
         }
     };
     if (provider.config.is_atlassian() || provider.config.is_vk())
-        && request.access_token.as_deref().is_none_or(str::is_empty)
+        && !request.access_token.is_truthy()?
     {
         return Ok(None);
     }
@@ -234,11 +233,15 @@ pub(super) async fn fetch_user_info_for_code(
     let claims = if provider.config.get_user_info.is_none()
         && let Some(jwks_url) = provider.config.google_jwks_url()
     {
-        let Some(token) = request.id_token.as_deref() else {
+        if !request.id_token.is_truthy()? {
+            return Ok(None);
+        }
+        let token = request.id_token.field_value();
+        let Ok(token) = super::providers::jwt_string(&token) else {
             return Ok(None);
         };
         let Some(claims) = google::verify(
-            token,
+            &token,
             &provider.config.google_client_ids(),
             expected_nonce,
             jwks_url,
@@ -391,13 +394,10 @@ async fn fetch_social_user_info(
                 .user_info_url
                 .as_deref()
                 .ok_or_else(|| AuthError::internal("Missing user_info_url for provider"))?;
-            let access_token = request
-                .access_token
-                .as_deref()
-                .ok_or_else(|| AuthError::internal("Missing access token for user-info lookup"))?;
+            let access_token = request.access_token.field_value();
             let request = provider
                 .config
-                .user_info_request(user_info_url, access_token);
+                .user_info_request(user_info_url, &access_token)?;
             let Some(profile) = fetch_http_profile(request).await? else {
                 return Ok(None);
             };

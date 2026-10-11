@@ -45,7 +45,7 @@ impl OAuthIdTokenVerifier for UnusedCallbacks {
 impl OAuthRefreshTokenHandler for UnusedCallbacks {
     async fn refresh_access_token(
         &self,
-        _: &str,
+        _: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         Err(self.called())

@@ -45,12 +45,11 @@ impl OAuthSignInOptions<'_> {
 
     async fn check_email_verification(
         &self,
-        provider: &ResolvedProvider,
+        required: bool,
         user: Option<&UserView>,
         is_register: bool,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> Result<(), OAuthSignInError> {
-        let required = provider.config.require_email_verification.unwrap_or(false);
         if let Some(plugin) = self.email_verification {
             plugin
                 .send_verification_on_oauth_sign_in(
@@ -194,11 +193,28 @@ pub(super) async fn process_oauth_sign_in(
     provider_name: &str,
     provider: &ResolvedProvider,
     user_info: &OAuthUserInfo,
-    tokens: &OAuthTokenSet,
+    account: &better_auth_core::FieldMap,
     options: OAuthSignInOptions<'_>,
     meta: &better_auth_core::RequestMeta,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> Result<ProcessOAuthUserResult, OAuthSignInError> {
+    let provider_id = account.get("providerId").cloned().unwrap_or_default();
+    let account_id = account.get("accountId").cloned().unwrap_or_default();
+    let require_email_verification = if provider_id.strict_equals(&provider_name.into()) {
+        provider.config.require_email_verification.unwrap_or(false)
+    } else {
+        ctx.extensions
+            .get::<std::sync::Arc<super::resolved::ResolvedOAuthConfig>>()
+            .and_then(|config| {
+                config
+                    .providers
+                    .iter()
+                    .find(|(name, _)| provider_id.strict_equals(&name.as_str().into()))
+            })
+            .is_some_and(|(_, provider)| {
+                provider.config.require_email_verification.unwrap_or(false)
+            })
+    };
     let email_verified = user_info.email_verified()?;
     let Some(provider_email) = user_info.email()?.filter(|email| !email.is_empty()) else {
         return Err(OAuthSignInError::Generic("email not found".to_string()));
@@ -212,7 +228,7 @@ pub(super) async fn process_oauth_sign_in(
 
     let account_owner = ctx
         .database
-        .get_account_owner(provider_name, &user_info.id)
+        .get_account_owner_value(&provider_id, &account_id)
         .await
         .map_err(|error| account_query_error(error, ctx))?;
 
@@ -238,7 +254,11 @@ pub(super) async fn process_oauth_sign_in(
                         return Err(AuthError::internal("accounts.find is not a function").into());
                     };
                     match accounts.into_iter().find(|account| {
-                        account.provider_id == provider_name && account.account_id == user_info.id
+                        account
+                            .provider_id
+                            .field_value()
+                            .strict_equals(&provider_id)
+                            && account.account_id.field_value().strict_equals(&account_id)
                     }) {
                         Some(account) => (
                             Some(better_auth_core::store::AccountOwner {
@@ -266,7 +286,7 @@ pub(super) async fn process_oauth_sign_in(
         validate_provider_user(
             user_info,
             user_id,
-            provider_name,
+            &provider_name.into(),
             options.profile,
             crate::plugins::user_admission::UserValidationAction::SignIn,
             &endpoint,
@@ -275,44 +295,39 @@ pub(super) async fn process_oauth_sign_in(
         let token_update = if ctx.config.account.update_account_on_sign_in() {
             let token_bundle = encrypt_token_set(
                 ctx,
-                tokens.access_token.clone(),
-                tokens.refresh_token.clone(),
-                tokens.id_token.clone(),
+                better_auth_core::SchemaValue::Dynamic(
+                    account.get("accessToken").cloned().unwrap_or_default(),
+                ),
+                better_auth_core::SchemaValue::Dynamic(
+                    account.get("refreshToken").cloned().unwrap_or_default(),
+                ),
+                better_auth_core::SchemaValue::Dynamic(
+                    account.get("idToken").cloned().unwrap_or_default(),
+                ),
             )?;
             let mut fresh_tokens = better_auth_core::FieldMap::from([
-                ("providerId".into(), provider_name.into()),
-                (
-                    "idToken".into(),
-                    token_bundle.id_token.map(Into::into).unwrap_or_default(),
-                ),
+                ("providerId".into(), provider_id.clone()),
+                ("idToken".into(), token_bundle.id_token.field_value()),
                 (
                     "accessToken".into(),
-                    token_bundle
-                        .access_token
-                        .map(Into::into)
-                        .unwrap_or_default(),
+                    token_bundle.access_token.field_value(),
                 ),
                 (
                     "refreshToken".into(),
-                    token_bundle
-                        .refresh_token
-                        .map(Into::into)
-                        .unwrap_or_default(),
+                    token_bundle.refresh_token.field_value(),
                 ),
                 (
                     "accessTokenExpiresAt".into(),
-                    tokens
-                        .access_token_expires_at
-                        .clone()
-                        .map(Into::into)
+                    account
+                        .get("accessTokenExpiresAt")
+                        .cloned()
                         .unwrap_or_default(),
                 ),
                 (
                     "refreshTokenExpiresAt".into(),
-                    tokens
-                        .refresh_token_expires_at
-                        .clone()
-                        .map(Into::into)
+                    account
+                        .get("refreshTokenExpiresAt")
+                        .cloned()
                         .unwrap_or_default(),
                 ),
             ]);
@@ -401,13 +416,13 @@ pub(super) async fn process_oauth_sign_in(
         let user = match owner_user {
             better_auth_core::store::JoinValue::One(Some(user)) => {
                 options
-                    .check_email_verification(provider, Some(&user), false, ctx)
+                    .check_email_verification(require_email_verification, Some(&user), false, ctx)
                     .await?;
                 better_auth_core::FieldValue::from(better_auth_core::FieldMap::from(user))
             }
             better_auth_core::store::JoinValue::Many(users) => {
                 options
-                    .check_email_verification(provider, None, false, ctx)
+                    .check_email_verification(require_email_verification, None, false, ctx)
                     .await?;
                 better_auth_core::FieldValue::Array(
                     users
@@ -436,7 +451,7 @@ pub(super) async fn process_oauth_sign_in(
         let trusted_provider = ctx
             .trusted_providers()
             .iter()
-            .any(|trusted| trusted == provider_name);
+            .any(|trusted| provider_id.strict_equals(&trusted.as_str().into()));
 
         // Mirrors upstream's linking guard, including the local-account check:
         // an unverified local account is not implicitly linkable.
@@ -453,13 +468,13 @@ pub(super) async fn process_oauth_sign_in(
             validate_provider_user(
                 user_info,
                 existing_user.id().field_value(),
-                provider_name,
+                &provider_name.into(),
                 options.profile,
                 crate::plugins::user_admission::UserValidationAction::LinkAccount,
                 &endpoint,
             )
             .await?;
-            let account = oauth_account_input(ctx, provider_name, user_info, tokens)?;
+            let account = oauth_account_input(ctx, account)?;
             let created_account = ctx
                 .database
                 .create_account_optional(CreateAccount {
@@ -557,7 +572,7 @@ pub(super) async fn process_oauth_sign_in(
         }
 
         options
-            .check_email_verification(provider, Some(&linked_user), false, ctx)
+            .check_email_verification(require_email_verification, Some(&linked_user), false, ctx)
             .await?;
         let issued = issue_selected_user_session_optional(
             ctx,
@@ -587,14 +602,14 @@ pub(super) async fn process_oauth_sign_in(
                 additional_fields: fields,
                 ..Default::default()
             };
-            let account = oauth_account_input(ctx, provider_name, user_info, tokens)?;
+            let account = oauth_account_input(ctx, account)?;
 
             let context = ctx.clone();
             let request = options.request.clone();
             let admission_body = options.body.clone();
             let admission_session = endpoint.session;
             let source = crate::plugins::user_admission::UserValidationSource::oauth(
-                provider_name,
+                &provider_name.into(),
                 options.profile,
                 crate::plugins::user_admission::UserValidationAction::CreateUser,
             );
@@ -648,7 +663,7 @@ pub(super) async fn process_oauth_sign_in(
             })
         })?;
         options
-            .check_email_verification(provider, Some(&created_user), true, ctx)
+            .check_email_verification(require_email_verification, Some(&created_user), true, ctx)
             .await?;
         let issued = issue_selected_user_session_optional(
             ctx,
@@ -666,60 +681,78 @@ pub(super) async fn process_oauth_sign_in(
     }
 }
 
+pub(super) fn token_account(
+    provider_name: &str,
+    account_id: &str,
+    tokens: &OAuthTokenSet,
+) -> AuthResult<better_auth_core::FieldMap> {
+    let mut account = better_auth_core::FieldMap::from([
+        ("providerId".into(), provider_name.into()),
+        ("accountId".into(), account_id.into()),
+    ]);
+    account.extend(tokens.fields());
+    let _ = account.insert(
+        "scope".into(),
+        super::providers::joined_scopes(&tokens.scopes)?,
+    );
+    Ok(account)
+}
+
 fn oauth_account_input(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-    provider_name: &str,
-    user_info: &OAuthUserInfo,
-    tokens: &OAuthTokenSet,
+    account: &better_auth_core::FieldMap,
 ) -> AuthResult<CreateAccount> {
     let tokens_to_store = encrypt_token_set(
         ctx,
-        tokens.access_token.clone(),
-        tokens.refresh_token.clone(),
-        tokens.id_token.clone(),
+        better_auth_core::SchemaValue::Dynamic(
+            account.get("accessToken").cloned().unwrap_or_default(),
+        ),
+        better_auth_core::SchemaValue::Dynamic(
+            account.get("refreshToken").cloned().unwrap_or_default(),
+        ),
+        better_auth_core::SchemaValue::Dynamic(account.get("idToken").cloned().unwrap_or_default()),
     )?;
     Ok(CreateAccount {
-        field_order: [
-            "accessToken",
-            "refreshToken",
-            "idToken",
-            "accessTokenExpiresAt",
-            "refreshTokenExpiresAt",
-            "scope",
-            "providerId",
-            "accountId",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect(),
-        account_id: user_info.id.clone().into(),
-        provider_id: provider_name.to_owned().into(),
-        access_token: tokens_to_store
-            .access_token
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        refresh_token: tokens_to_store
-            .refresh_token
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        id_token: tokens_to_store
-            .id_token
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        access_token_expires_at: tokens
-            .access_token_expires_at
-            .clone()
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        refresh_token_expires_at: tokens
-            .refresh_token_expires_at
-            .clone()
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        scope: (!tokens.scopes.is_empty())
-            .then(|| tokens.scopes.join(","))
-            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
+        additional_fields: better_auth_core::FieldMap::from([
+            (
+                "accessToken".into(),
+                tokens_to_store.access_token.into_field_value(),
+            ),
+            (
+                "refreshToken".into(),
+                tokens_to_store.refresh_token.into_field_value(),
+            ),
+            (
+                "idToken".into(),
+                tokens_to_store.id_token.into_field_value(),
+            ),
+            (
+                "accessTokenExpiresAt".into(),
+                account
+                    .get("accessTokenExpiresAt")
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
+            (
+                "refreshTokenExpiresAt".into(),
+                account
+                    .get("refreshTokenExpiresAt")
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
+            (
+                "scope".into(),
+                account.get("scope").cloned().unwrap_or_default(),
+            ),
+            (
+                "providerId".into(),
+                account.get("providerId").cloned().unwrap_or_default(),
+            ),
+            (
+                "accountId".into(),
+                account.get("accountId").cloned().unwrap_or_default(),
+            ),
+        ]),
         ..Default::default()
     })
 }
@@ -781,7 +814,7 @@ pub(crate) async fn sign_in_verified_profile(
             generic: None,
         },
         &user.user,
-        &tokens,
+        &token_account(provider_name, &user.user.id, &tokens)?,
         OAuthSignInOptions {
             request: req,
             profile: Some(&user.data),
@@ -826,7 +859,7 @@ pub(crate) async fn sign_in_verified_profile(
 pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
     user: &OAuthUserInfo,
     user_id: better_auth_core::FieldValue,
-    provider: &str,
+    provider: &better_auth_core::FieldValue,
     profile: Option<&serde_json::Value>,
     action: crate::plugins::user_admission::UserValidationAction,
     endpoint: &crate::plugins::endpoint_context::EndpointContext<'_, S>,

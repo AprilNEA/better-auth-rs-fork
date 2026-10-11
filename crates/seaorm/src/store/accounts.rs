@@ -140,13 +140,11 @@ where
 
     async fn account_records(
         &self,
-        provider: &str,
-        provider_account_id: &str,
+        provider: &FieldValue,
+        provider_account_id: &FieldValue,
     ) -> AuthResult<Vec<SqlRow>> {
-        let condition = self.account_selectors([
-            ("providerId", &provider.into()),
-            ("accountId", &provider_account_id.into()),
-        ])?;
+        let condition =
+            self.account_selectors([("providerId", provider), ("accountId", provider_account_id)])?;
         database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
             self.config(),
             "findMany",
@@ -514,12 +512,21 @@ where
         provider: &str,
         provider_account_id: &str,
     ) -> AuthResult<Option<AccountView>> {
+        self.get_account_value(&provider.into(), &provider_account_id.into())
+            .await
+    }
+
+    async fn get_account_value(
+        &self,
+        provider: &FieldValue,
+        provider_account_id: &FieldValue,
+    ) -> AuthResult<Option<AccountView>> {
         let records = self.account_records(provider, provider_account_id).await?;
         let accounts = self.output_accounts(&records, self.connection()).await?;
         if accounts.len() > 1 {
             return Err(crate::error::AuthError::internal(format!(
                 "Multiple accounts match the same accountId for provider {}. Resolve duplicate account identities before continuing.",
-                serde_json::to_string(provider)?
+                provider.stringify()?.unwrap_or_else(|| "undefined".into())
             )));
         }
         Ok(accounts.into_iter().next())
@@ -529,6 +536,15 @@ where
         &self,
         provider: &str,
         account_id: &str,
+    ) -> AuthResult<Option<better_auth_core::store::AccountOwner>> {
+        self.get_account_owner_value(&provider.into(), &account_id.into())
+            .await
+    }
+
+    async fn get_account_owner_value(
+        &self,
+        provider: &FieldValue,
+        account_id: &FieldValue,
     ) -> AuthResult<Option<better_auth_core::store::AccountOwner>> {
         let relation = AccountOwner::resolve_schema(
             self.config(),
@@ -544,8 +560,8 @@ where
                 (
                     super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
                         .filter(self.account_selectors([
-                            ("providerId", &provider.into()),
-                            ("accountId", &account_id.into()),
+                            ("providerId", provider),
+                            ("accountId", account_id),
                         ])?)
                         .limit(2),
                     S::Account::id_column(),
@@ -644,7 +660,7 @@ where
         if owners.len() > 1 {
             return Err(crate::error::AuthError::internal(format!(
                 "Multiple accounts match the same accountId for provider {}. Resolve duplicate account identities before continuing.",
-                serde_json::to_string(provider)?
+                provider.stringify()?.unwrap_or_else(|| "undefined".into())
             )));
         }
         Ok(owners.into_iter().next())

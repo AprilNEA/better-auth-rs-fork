@@ -136,18 +136,14 @@ pub(super) async fn fetch_user_info(
             ),
         }
     }
-    if let Some(access_token) = request
-        .access_token
-        .as_deref()
-        .filter(|token| !token.is_empty())
-    {
+    if request.access_token.is_truthy()? {
         let result = async {
             let url = provider
                 .user_info_url
                 .as_deref()
                 .ok_or_else(|| AuthError::internal("Missing user_info_url for provider"))?;
             let Some(profile) = super::social_profile::fetch_http_profile(
-                provider.user_info_request(url, access_token),
+                provider.user_info_request(url, &request.access_token.field_value())?,
             )
             .await?
             else {

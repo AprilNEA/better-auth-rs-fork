@@ -237,32 +237,43 @@ struct PresetProfile {
 }
 
 impl PresetProfile {
-    fn request(&self, tokens: &OAuthUserInfoRequest) -> reqwest::RequestBuilder {
-        let access_token = tokens.access_token.as_deref().unwrap_or("undefined");
+    fn request(&self, tokens: &OAuthUserInfoRequest) -> AuthResult<reqwest::RequestBuilder> {
+        let access_token = tokens.access_token.field_value();
         let client = reqwest::Client::new();
-        match self.preset {
+        Ok(match self.preset {
             Preset::HubSpot => client
-                .get(format!("{}{access_token}", self.endpoint))
+                .get(format!(
+                    "{}{}",
+                    self.endpoint,
+                    super::providers::token_http::form_string(&access_token)?
+                ))
                 .header("content-type", "application/json"),
-            Preset::Yandex => client
-                .get(&self.endpoint)
-                .header("authorization", format!("OAuth {access_token}")),
+            Preset::Yandex => client.get(&self.endpoint).header(
+                "authorization",
+                super::providers::token_http::authorization("OAuth", &access_token)?,
+            ),
             Preset::Patreon => client
                 .get(&self.endpoint)
                 .query(&[(
                     "fields[user]",
                     "email,full_name,image_url,is_email_verified",
                 )])
-                .bearer_auth(access_token),
-            _ => client.get(&self.endpoint).bearer_auth(access_token),
-        }
+                .header(
+                    "authorization",
+                    super::providers::token_http::authorization("Bearer", &access_token)?,
+                ),
+            _ => client.get(&self.endpoint).header(
+                "authorization",
+                super::providers::token_http::authorization("Bearer", &access_token)?,
+            ),
+        })
     }
 }
 
 #[async_trait]
 impl GenericOAuthUserInfoHandler for PresetProfile {
     async fn get_user_info(&self, tokens: &OAuthUserInfoRequest) -> AuthResult<Option<Value>> {
-        match super::social_profile::fetch_http_profile(self.request(tokens)).await? {
+        match super::social_profile::fetch_http_profile(self.request(tokens)?).await? {
             Some(profile) => self
                 .preset
                 .profile(profile)

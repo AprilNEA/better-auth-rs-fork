@@ -198,8 +198,8 @@ impl EphemeralStore {
 
     pub(super) async fn account_owner_relation(
         &self,
-        provider: &str,
-        account_id: &str,
+        provider: &Value,
+        account_id: &Value,
         relation: &ResolvedJoin,
     ) -> AuthResult<Option<AccountOwner>> {
         let fields = self.config.account.field_schema();
@@ -311,7 +311,7 @@ impl EphemeralStore {
         if owners.len() > 1 {
             return Err(AuthError::internal(format!(
                 "Multiple accounts match the same accountId for provider {}. Resolve duplicate account identities before continuing.",
-                serde_json::to_string(provider)?
+                provider.stringify()?.unwrap_or_else(|| "undefined".into())
             )));
         }
         Ok(owners.into_iter().next())

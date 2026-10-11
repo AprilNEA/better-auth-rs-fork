@@ -221,13 +221,14 @@ fn ordered_input_fields<const N: usize>(
     order: &[String],
     native: [(&str, bool, crate::FieldValue); N],
 ) -> crate::FieldMap {
-    let mut fields = additional.clone();
-    for (name, present, value) in native {
-        if present || (!fields.contains_key(name) && order.iter().any(|field| field == name)) {
-            let _ = fields.insert(name.into(), value);
-        }
-    }
-    fields.in_field_order(order)
+    additional.clone().with_schema_fields(
+        order,
+        native.map(|(name, present, value)| {
+            let present = present
+                || (!additional.contains_key(name) && order.iter().any(|field| field == name));
+            (name, present.then_some(value))
+        }),
+    )
 }
 
 fn input_timestamps(

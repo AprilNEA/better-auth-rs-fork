@@ -1,13 +1,10 @@
 use std::time::Duration;
 
-use better_auth_core::{AuthError, AuthResult};
+use better_auth_core::{AuthError, AuthResult, FieldValue, SchemaValue, Utf16String};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use super::{
-    OAuthCallbackUserPayload, OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest,
-    defaults::ProviderKind,
-};
+use super::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, defaults::ProviderKind};
 use crate::plugins::oauth::{generic_profile::decode_claims, id_token, oidc::OidcVerifier};
 
 const ISSUER: &str = "https://appleid.apple.com";
@@ -107,40 +104,55 @@ pub(in crate::plugins::oauth) fn profile(
     let claims = match verified {
         Some(claims) => claims,
         None => {
-            let Some(token) = request
-                .id_token
-                .as_deref()
-                .filter(|token| !token.is_empty())
-            else {
+            if !request.id_token.is_truthy()? {
                 return Ok(None);
-            };
-            decode_claims(token)
+            }
+            let token = request.id_token.field_value();
+            decode_claims(&crate::plugins::oauth::providers::jwt_string(&token)?)
                 .ok_or_else(|| AuthError::internal("Invalid Apple ID-token claims"))?
         }
     };
-    enrich_profile(claims, request.user.as_ref()).map(Some)
+    enrich_profile(claims, &request.user.field_value()).map(Some)
 }
 
-fn enrich_profile(mut claims: Value, user: Option<&OAuthCallbackUserPayload>) -> AuthResult<Value> {
-    let name = if let Some(name) = user.and_then(|user| user.name.as_ref()) {
-        format!(
-            "{} {}",
-            name.first_name.as_deref().unwrap_or_default(),
-            name.last_name.as_deref().unwrap_or_default()
-        )
-        .trim_matches(crate::plugins::helpers::oauth_scope_whitespace)
-        .to_owned()
+fn enrich_profile(mut claims: Value, user: &FieldValue) -> AuthResult<Value> {
+    let user_name = if user.is_null() || user.is_undefined() {
+        FieldValue::Undefined
     } else {
-        claims
-            .get("name")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned()
+        user.model_property("name")?
+    };
+    let name = if user_name.is_truthy() {
+        let mut units = Vec::new();
+        for (index, property) in ["firstName", "lastName"].into_iter().enumerate() {
+            if index != 0 {
+                units.push(u16::from(b' '));
+            }
+            let value = user.model_property("name")?.model_property(property)?;
+            if value.is_truthy() {
+                units.extend_from_slice(value.display_utf16()?.as_utf16());
+            }
+        }
+        let name = Utf16String::from_units(units).to_utf8().map_err(|error| {
+            AuthError::internal(format!(
+                "JSON value cannot represent unpaired UTF-16 surrogates: {error}"
+            ))
+        })?;
+        Value::String(
+            name.trim_matches(crate::plugins::helpers::oauth_scope_whitespace)
+                .to_owned(),
+        )
+    } else {
+        let name = claims.get("name").cloned().unwrap_or_default();
+        if FieldValue::from_json(name.clone())?.is_truthy() {
+            name
+        } else {
+            Value::String(String::new())
+        }
     };
     let _ = claims
         .as_object_mut()
         .ok_or_else(|| AuthError::internal("Apple claims must be an object"))?
-        .insert("name".into(), name.into());
+        .insert("name".into(), name);
     Ok(claims)
 }
 
@@ -156,17 +168,166 @@ pub(super) fn decode_profile(profile: Value) -> Result<OAuthUserInfo, String> {
             .and_then(Value::as_str)
             .ok_or("missing Apple subject")?
             .into(),
-        name: Some(
-            profile
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-        )
-        .into(),
+        name: SchemaValue::from_field(
+            FieldValue::from_json(
+                profile
+                    .get("name")
+                    .cloned()
+                    .unwrap_or_else(|| Value::String(String::new())),
+            )
+            .map_err(|error| error.to_string())?,
+        ),
         email: super::defaults::profile_email(&profile)?,
         image: None,
         email_verified: Some(verified).into(),
         additional_fields: Default::default(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #![expect(
+        clippy::unwrap_used,
+        clippy::panic_in_result_fn,
+        reason = "The callback regressions must fail immediately on unexpected property access, conversion, or output"
+    )]
+
+    use super::*;
+    use better_auth_core::{FieldFunction, FieldMap, FieldObject, field_value::FieldObjectSource};
+    use serde_json::json;
+    use std::sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    #[test]
+    fn native_callback_names_keep_truthiness_and_template_conversion() -> AuthResult<()> {
+        for (user, expected) in [
+            (json!(null), json!(17)),
+            (json!(false), json!(17)),
+            (json!({"name": false}), json!(17)),
+            (json!({"name": true}), json!("")),
+            (json!({"name":{"firstName":7,"lastName":false}}), json!("7")),
+            (
+                json!({"name":{"firstName":["A",null,2],"lastName":{}}}),
+                json!("A,,2 [object Object]"),
+            ),
+            (
+                json!({"name":{"firstName":"\u{feff}Ada","lastName":"Lovelace\u{a0}"}}),
+                json!("Ada Lovelace"),
+            ),
+        ] {
+            let profile = enrich_profile(
+                json!({"sub":"apple-owner","name":17}),
+                &FieldValue::from_json(user)?,
+            )?;
+            assert_eq!(profile, json!({"sub":"apple-owner","name":expected}));
+            let decoded = decode_profile(profile).map_err(AuthError::internal)?;
+            assert_eq!(decoded.name.field_value().json()?, Some(expected));
+        }
+        Ok(())
+    }
+
+    struct LiveNames {
+        reads: AtomicUsize,
+        events: Arc<Mutex<Vec<String>>>,
+        fail: bool,
+        first: FieldValue,
+    }
+
+    impl FieldObjectSource for LiveNames {
+        fn own_keys(&self) -> AuthResult<Vec<String>> {
+            Err(AuthError::internal(
+                "Apple must not enumerate the callback user",
+            ))
+        }
+
+        fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            assert_eq!(name, "name");
+            let read = self.reads.fetch_add(1, Ordering::SeqCst);
+            self.events.lock().unwrap().push(format!("name:{read}"));
+            match read {
+                0 => Ok(Some(true.into())),
+                1 if self.fail => Err(AuthError::internal("native Apple getter failure")),
+                1 => Ok(Some(
+                    FieldMap::from([("firstName".into(), self.first.clone())]).into(),
+                )),
+                2 => Ok(Some(
+                    FieldMap::from([("lastName".into(), "Second".into())]).into(),
+                )),
+                _ => Err(AuthError::internal(
+                    "Apple read callback name too many times",
+                )),
+            }
+        }
+
+        fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+            Err(AuthError::internal(
+                "Apple must not mutate the callback user",
+            ))
+        }
+
+        fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+            Err(AuthError::internal(
+                "Apple must not mutate the callback user",
+            ))
+        }
+
+        fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+            Err(AuthError::internal(
+                "Apple must not snapshot the callback user",
+            ))
+        }
+
+        fn identity(&self) -> usize {
+            std::ptr::from_ref(self) as usize
+        }
+    }
+
+    #[test]
+    fn native_callback_name_getters_repeat_around_string_conversion_and_keep_errors()
+    -> AuthResult<()> {
+        for fail in [false, true] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let converted = events.clone();
+            let first = FieldMap::from([(
+                "toString".into(),
+                FieldFunction::contextual(move |receiver, arguments| {
+                    assert!(receiver.is_object());
+                    assert!(arguments.is_empty());
+                    converted.lock().unwrap().push("first:toString".into());
+                    Ok("First".into())
+                })
+                .into(),
+            )])
+            .into();
+            let user = FieldObject::from_source(Arc::new(LiveNames {
+                reads: AtomicUsize::new(0),
+                events: events.clone(),
+                fail,
+                first,
+            }));
+            let request = OAuthUserInfoRequest {
+                user: SchemaValue::from_field(user.into()),
+                ..Default::default()
+            };
+            let result = profile(&request, Some(json!({"sub":"apple-owner"})));
+            if fail {
+                assert!(
+                    matches!(result, Err(AuthError::Internal(message)) if message == "native Apple getter failure")
+                );
+                assert_eq!(*events.lock().unwrap(), ["name:0", "name:1"]);
+            } else {
+                assert_eq!(
+                    result?,
+                    Some(json!({"sub":"apple-owner","name":"First Second"}))
+                );
+                assert_eq!(
+                    *events.lock().unwrap(),
+                    ["name:0", "name:1", "first:toString", "name:2"]
+                );
+            }
+        }
+        Ok(())
+    }
 }

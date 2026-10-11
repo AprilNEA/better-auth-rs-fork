@@ -199,22 +199,8 @@ impl Server {
     }
 }
 
-fn token_value(tokens: OAuthTokenSet) -> Value {
-    let mut value = json!({"scopes":tokens.scopes});
-    for (key, field) in [
-        ("tokenType", tokens.token_type),
-        ("accessToken", tokens.access_token),
-        ("refreshToken", tokens.refresh_token),
-        ("idToken", tokens.id_token),
-    ] {
-        if let Some(field) = field {
-            value[key] = json!(field);
-        }
-    }
-    if let Some(raw) = tokens.raw {
-        value["raw"] = raw;
-    }
-    value
+fn token_value(token: OAuthTokenSet) -> Value {
+    Value::Object(token.fields().json().unwrap())
 }
 
 #[tokio::test]
@@ -240,7 +226,7 @@ async fn paypal_grants_match_basic_requests_results_and_default_error_mapping() 
         } else {
             provider_tokens::refresh_tokens_via_provider(
                 &provider,
-                "ordinary-refresh",
+                &"ordinary-refresh".into(),
                 &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
             )
             .await
@@ -380,8 +366,9 @@ async fn paypal_profiles_preserve_http_data_mapping_and_optional_verified_token(
         let result = social_profile::fetch_user_info_for_code(
             &resolved(config),
             OAuthUserInfoRequest {
-                access_token: (sample["missingAccess"] != true).then(|| "ordinary-access".into()),
-                id_token: signed.as_ref().map(|s| s.token.clone()),
+                access_token: ((sample["missingAccess"] != true).then(|| "ordinary-access".into()))
+                    .into(),
+                id_token: (signed.as_ref().map(|s| s.token.clone())).into(),
                 ..Default::default()
             },
             None,
@@ -422,8 +409,8 @@ async fn paypal_explicit_verifier_runs_once_for_direct_and_stored_profile_reads(
         config.verify_id_token = Some(verifier);
         let provider = resolved(config);
         let request = OAuthUserInfoRequest {
-            access_token: Some("ordinary-access".into()),
-            id_token: Some(signed.token.clone()),
+            access_token: (Some("ordinary-access".into())).into(),
+            id_token: (Some(signed.token.clone())).into(),
             ..Default::default()
         };
         let result = if entry == "direct" {
@@ -476,8 +463,8 @@ async fn paypal_optional_token_requires_the_explicit_application_verifier() {
     let response = social_profile::fetch_user_info_for_code(
         &resolved(config),
         OAuthUserInfoRequest {
-            access_token: Some("ordinary-access".into()),
-            id_token: Some(signed.token.clone()),
+            access_token: (Some("ordinary-access".into())).into(),
+            id_token: (Some(signed.token.clone())).into(),
             ..Default::default()
         },
         None,
@@ -519,14 +506,14 @@ impl OAuthUserInfoHandler for Custom {
 impl OAuthRefreshTokenHandler for Custom {
     async fn refresh_access_token(
         &self,
-        _token: &str,
+        _token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         if self.0.ends_with("error") {
             return Err(format!("Ordinary PayPal {}", self.0));
         }
         Ok(OAuthTokenSet {
-            access_token: Some("custom-access".into()),
+            access_token: (Some("custom-access".into())).into(),
             ..Default::default()
         })
     }
@@ -550,7 +537,7 @@ async fn paypal_default_mapper_catch_and_custom_callbacks_keep_distinct_errors()
             config.refresh_access_token = Some(Arc::new(Custom(mode.into())));
             provider_tokens::refresh_tokens_via_provider(
                 &resolved(config),
-                "ordinary-refresh",
+                &"ordinary-refresh".into(),
                 &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
             )
             .await
@@ -562,7 +549,7 @@ async fn paypal_default_mapper_catch_and_custom_callbacks_keep_distinct_errors()
             social_profile::fetch_user_info_for_code(
                 &resolved(config),
                 OAuthUserInfoRequest {
-                    access_token: Some("ordinary-access".into()),
+                    access_token: (Some("ordinary-access".into())).into(),
                     ..Default::default()
                 },
                 None,

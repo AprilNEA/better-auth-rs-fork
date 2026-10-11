@@ -205,7 +205,10 @@ impl OAuthUserInfoHandler for Callbacks {
         &self,
         request: OAuthUserInfoRequest,
     ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-        assert_eq!(request.access_token.as_deref(), Some("ordinary-access"));
+        assert_eq!(
+            request.access_token.field_value().as_str(),
+            Some("ordinary-access")
+        );
         self.calls
             .send("get")
             .map_err(|error| AuthError::internal(error.to_string()))?;
@@ -264,7 +267,7 @@ async fn tiktok_profiles_preserve_envelope_and_skip_mapper_like_pinned_capture()
         let explicit_accepts = if provider.config.get_user_info.is_none() {
             let request = provider
                 .config
-                .user_info_request(endpoint.as_str(), "ordinary-access")
+                .user_info_request(endpoint.as_str(), &"ordinary-access".into())?
                 .build()?;
             vec![
                 request
@@ -281,7 +284,7 @@ async fn tiktok_profiles_preserve_envelope_and_skip_mapper_like_pinned_capture()
         let response = fetch_user_info_from_provider(
             &provider,
             OAuthUserInfoRequest {
-                access_token: Some("ordinary-access".into()),
+                access_token: (Some("ordinary-access".into())).into(),
                 ..Default::default()
             },
             None,

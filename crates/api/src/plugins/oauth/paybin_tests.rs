@@ -99,23 +99,12 @@ fn authorization_and_configuration_match_pinned_paybin() {
 }
 
 fn token_json(token: OAuthTokenSet) -> Value {
-    let mut result = serde_json::Map::from_iter([("scopes".into(), json!(token.scopes))]);
-    for (key, value) in [
-        ("tokenType", token.token_type),
-        ("accessToken", token.access_token),
-        ("refreshToken", token.refresh_token),
-        (
-            "idToken",
-            token.id_token.map(|_| "<signed ID token>".into()),
-        ),
-    ] {
-        if let Some(value) = value {
-            let _ = result.insert(key.into(), value.into());
-        }
+    let mut result = token.fields().json().unwrap();
+    if result.contains_key("idToken") {
+        let _ = result.insert("idToken".into(), "<signed ID token>".into());
     }
-    if let Some(mut raw) = token.raw {
+    if let Some(raw) = result.get_mut("raw") {
         raw["id_token"] = "<signed ID token>".into();
-        let _ = result.insert("raw".into(), raw);
     }
     Value::Object(result)
 }
@@ -142,7 +131,7 @@ async fn paybin_grants_use_pinned_post_fields_and_normal_http_errors() {
         } else {
             provider_tokens::refresh_tokens_via_provider(
                 &resolved,
-                "ordinary-refresh",
+                &"ordinary-refresh".into(),
                 &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
             )
             .await
@@ -340,14 +329,14 @@ struct CustomRefresh(Arc<Mutex<Vec<String>>>);
 impl OAuthRefreshTokenHandler for CustomRefresh {
     async fn refresh_access_token(
         &self,
-        token: &str,
+        token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
-        self.0.lock().unwrap().push(token.into());
+        self.0.lock().unwrap().push(token.as_str().unwrap().into());
         Ok(OAuthTokenSet {
-            access_token: Some("custom-access".into()),
-            refresh_token: Some("custom-refresh".into()),
-            scopes: vec!["custom".into()],
+            access_token: (Some("custom-access".into())).into(),
+            refresh_token: (Some("custom-refresh".into())).into(),
+            scopes: (vec!["custom".into()]).into(),
             ..Default::default()
         })
     }
@@ -360,7 +349,7 @@ async fn paybin_custom_refresh_retains_precedence() {
     provider.refresh_access_token = Some(Arc::new(CustomRefresh(Arc::clone(&calls))));
     let token = provider_tokens::refresh_tokens_via_provider(
         &resolved(provider),
-        "ordinary-refresh",
+        &"ordinary-refresh".into(),
         &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
     )
     .await

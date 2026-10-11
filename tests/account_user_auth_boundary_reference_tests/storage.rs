@@ -237,4 +237,17 @@ pub(super) fn assert_snapshot(
 ) {
     let backend = if sqlite { "SQLite" } else { "Memory" };
     assert_eq!(actual, expected, "{case:?}: complete {backend} rows");
+    if !sqlite {
+        let row_keys = |rows: &Value| {
+            rows.as_array()
+                .map(|rows| rows.iter().map(recorder::object_keys).collect::<Vec<_>>())
+        };
+        for model in ["user", "account", "session", "verification"] {
+            assert_eq!(
+                row_keys(&actual[model]),
+                row_keys(&expected[model]),
+                "{case:?}: Memory {model} row own-property order"
+            );
+        }
+    }
 }

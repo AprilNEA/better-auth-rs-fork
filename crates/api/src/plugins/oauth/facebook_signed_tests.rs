@@ -129,7 +129,7 @@ async fn limited_signed_profiles_match_pinned_on_code_direct_and_account_reads()
         };
         for entry in ["code", "direct", "account"] {
             let request = OAuthUserInfoRequest {
-                id_token: Some(server.token.clone()),
+                id_token: (Some(server.token.clone())).into(),
                 ..Default::default()
             };
             let response = if entry == "direct" {
@@ -206,7 +206,7 @@ async fn limited_mapper_error_retains_the_original_application_error() {
             generic: None,
         },
         OAuthUserInfoRequest {
-            id_token: Some(server.token.clone()),
+            id_token: (Some(server.token.clone())).into(),
             ..Default::default()
         },
         Some("ordinary-facebook-nonce"),

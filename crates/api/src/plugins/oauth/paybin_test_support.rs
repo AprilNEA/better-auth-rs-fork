@@ -211,7 +211,7 @@ impl Server {
 
     pub fn request(&self) -> OAuthUserInfoRequest {
         OAuthUserInfoRequest {
-            id_token: Some(self.token.clone()),
+            id_token: (Some(self.token.clone())).into(),
             ..Default::default()
         }
     }

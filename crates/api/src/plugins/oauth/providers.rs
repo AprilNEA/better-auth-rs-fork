@@ -13,6 +13,7 @@ pub(super) mod microsoft;
 pub(super) mod paybin;
 pub(super) mod paypal;
 pub(super) mod tiktok;
+pub(super) mod token_http;
 pub(super) mod twitch;
 pub(super) mod twitter;
 pub(super) mod wechat;
@@ -28,16 +29,21 @@ pub struct OAuthConfig {
     pub providers: IndexMap<String, OAuthProvider>,
 }
 
+/// Ordered provider token fields with typed slots and native replacement values.
 #[derive(Debug, Clone, Default)]
 pub struct OAuthTokenSet {
-    pub token_type: Option<String>,
-    pub access_token: Option<String>,
-    pub refresh_token: Option<String>,
-    pub access_token_expires_at: Option<FieldDate>,
-    pub refresh_token_expires_at: Option<FieldDate>,
-    pub scopes: Vec<String>,
-    pub id_token: Option<String>,
-    pub raw: Option<Value>,
+    /// Source property order. This list does not create missing properties.
+    pub field_order: Vec<String>,
+    /// Provider fields outside the named slots. A present named slot takes precedence.
+    pub additional_fields: better_auth_core::FieldMap,
+    pub token_type: SchemaValue<Option<String>>,
+    pub access_token: SchemaValue<Option<String>>,
+    pub refresh_token: SchemaValue<Option<String>>,
+    pub access_token_expires_at: SchemaValue<Option<FieldDate>>,
+    pub refresh_token_expires_at: SchemaValue<Option<FieldDate>>,
+    pub scopes: SchemaValue<Vec<String>>,
+    pub id_token: SchemaValue<Option<String>>,
+    pub raw: SchemaValue<Option<Value>>,
 }
 
 /// User information extracted from an OAuth provider's user info endpoint.
@@ -130,17 +136,37 @@ pub struct OAuthCallbackUserName {
     pub last_name: Option<String>,
 }
 
+/// Provider input that preserves token values until the provider consumes each field.
 #[derive(Debug, Clone, Default)]
 pub struct OAuthUserInfoRequest {
-    pub token_type: Option<String>,
-    pub access_token: Option<String>,
-    pub refresh_token: Option<String>,
-    pub access_token_expires_at: Option<FieldDate>,
-    pub refresh_token_expires_at: Option<FieldDate>,
-    pub scopes: Vec<String>,
-    pub id_token: Option<String>,
-    pub raw: Option<Value>,
-    pub user: Option<OAuthCallbackUserPayload>,
+    /// Source property order. This list does not create missing properties.
+    pub field_order: Vec<String>,
+    /// Provider fields outside the named slots. A present named slot takes precedence.
+    pub additional_fields: better_auth_core::FieldMap,
+    pub token_type: SchemaValue<Option<String>>,
+    pub access_token: SchemaValue<Option<String>>,
+    pub refresh_token: SchemaValue<Option<String>>,
+    pub access_token_expires_at: SchemaValue<Option<FieldDate>>,
+    pub refresh_token_expires_at: SchemaValue<Option<FieldDate>>,
+    pub scopes: SchemaValue<Vec<String>>,
+    pub id_token: SchemaValue<Option<String>>,
+    pub raw: SchemaValue<Option<Value>>,
+    pub expected_id_token_nonce: SchemaValue<Option<String>>,
+    pub user: SchemaValue<Option<OAuthCallbackUserPayload>>,
+}
+
+#[path = "token_record.rs"]
+mod token_record;
+pub(super) use token_record::{joined_scopes, merge_scopes, split_scopes};
+
+pub(super) fn jwt_string(value: &FieldValue) -> AuthResult<std::borrow::Cow<'_, str>> {
+    match value {
+        FieldValue::String(value) => Ok(std::borrow::Cow::Borrowed(value)),
+        FieldValue::Utf16String(value) => Ok(std::borrow::Cow::Owned(String::from_utf16_lossy(
+            value.as_utf16(),
+        ))),
+        _ => Err(AuthError::type_error("JWTs must be a string")),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -164,7 +190,7 @@ pub trait OAuthRefreshTokenHandler: Send + Sync {
     /// Endpoint calls supply original request metadata; standalone calls may omit the context.
     async fn refresh_access_token(
         &self,
-        refresh_token: &str,
+        refresh_token: &FieldValue,
         context: Option<NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String>;
 }
@@ -246,24 +272,26 @@ impl OAuthProvider {
     pub(super) fn user_info_request(
         &self,
         url: &str,
-        access_token: &str,
-    ) -> reqwest::RequestBuilder {
+        access_token: &FieldValue,
+    ) -> AuthResult<reqwest::RequestBuilder> {
         if self.is_vk() {
-            return reqwest::Client::new()
+            let access_token = token_http::form_string(access_token)?;
+            return Ok(reqwest::Client::new()
                 .post(url)
                 .header("Accept", "*/*")
                 .form(&[
-                    ("access_token", access_token),
+                    ("access_token", &access_token),
                     ("client_id", &self.client_id),
-                ]);
+                ]));
         }
         let method = match self.kind {
             ProviderKind::Dropbox | ProviderKind::Linear => reqwest::Method::POST,
             _ => reqwest::Method::GET,
         };
-        let request = reqwest::Client::new()
-            .request(method, url)
-            .bearer_auth(access_token);
+        let request = reqwest::Client::new().request(method, url).header(
+            reqwest::header::AUTHORIZATION,
+            token_http::authorization("Bearer", access_token)?,
+        );
         let request = if self.is_tiktok() {
             request
         } else {
@@ -276,7 +304,7 @@ impl OAuthProvider {
                 },
             )
         };
-        if matches!(self.kind, ProviderKind::Linear) {
+        Ok(if matches!(self.kind, ProviderKind::Linear) {
             request.json(&serde_json::json!({
                 "query": "query { viewer { id name email avatarUrl active createdAt updatedAt } }"
             }))
@@ -286,7 +314,7 @@ impl OAuthProvider {
             request.header("Notion-Version", "2022-06-28")
         } else {
             request
-        }
+        })
     }
 
     pub(super) fn is_figma(&self) -> bool {

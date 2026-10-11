@@ -1125,6 +1125,19 @@ pub trait AccountStore<S: AuthSchema>: Send + Sync {
         provider: &str,
         provider_account_id: &str,
     ) -> AuthResult<Option<crate::wire::AccountView>>;
+    /// Preserve native provider and account selectors through adapter query conversion.
+    async fn get_account_value(
+        &self,
+        provider: &crate::FieldValue,
+        account_id: &crate::FieldValue,
+    ) -> AuthResult<Option<crate::wire::AccountView>> {
+        let (Some(provider), Some(account_id)) = (provider.as_str(), account_id.as_str()) else {
+            return Err(AuthError::config(
+                "The store must support native Account identity selectors",
+            ));
+        };
+        self.get_account(provider, account_id).await
+    }
     /// Read at most two matching accounts and their schema-selected User relationships before checking duplicate identities.
     async fn get_account_owner(
         &self,
@@ -1134,6 +1147,19 @@ pub trait AccountStore<S: AuthSchema>: Send + Sync {
         Err(AuthError::config(
             "The store must support account owner joins",
         ))
+    }
+    /// Preserve native identity selectors before reading Accounts and their User relationships.
+    async fn get_account_owner_value(
+        &self,
+        provider: &crate::FieldValue,
+        account_id: &crate::FieldValue,
+    ) -> AuthResult<Option<AccountOwner>> {
+        let (Some(provider), Some(account_id)) = (provider.as_str(), account_id.as_str()) else {
+            return Err(AuthError::config(
+                "The store must support native Account identity selectors",
+            ));
+        };
+        self.get_account_owner(provider, account_id).await
     }
     async fn get_user_accounts(&self, user_id: &str) -> AuthResult<Vec<crate::wire::AccountView>>;
     /// List Accounts with the native User selector before adapter query conversion.

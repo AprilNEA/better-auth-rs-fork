@@ -82,21 +82,18 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     let (data, limited) = if let Some(claims) = claims {
         (claims, true)
     } else {
-        let Some(access_token) = request
-            .access_token
-            .as_deref()
-            .filter(|token| !token.is_empty())
-        else {
+        if !request.access_token.is_truthy()? {
             return Ok(None);
-        };
+        }
         if provider.client_id.is_empty() || provider.client_secret.is_empty() {
             return Ok(None);
         }
         let debug_url = "https://graph.facebook.com/debug_token";
         #[cfg(test)]
         let debug_url = options.debug_token_url.as_deref().unwrap_or(debug_url);
+        let access_token = super::token_http::form_string(&request.access_token.field_value())?;
         let inspection = reqwest::Client::new().get(debug_url).query(&[
-            ("input_token", access_token),
+            ("input_token", access_token.as_str()),
             (
                 "access_token",
                 &format!("{}|{}", provider.client_id, provider.client_secret),
@@ -140,7 +137,10 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         let profile = reqwest::Client::new()
             .get(endpoint)
             .query(&[("fields", fields)])
-            .bearer_auth(access_token);
+            .header(
+                reqwest::header::AUTHORIZATION,
+                super::token_http::authorization("Bearer", &request.access_token.field_value())?,
+            );
         let Some(profile) = fetch_http_profile(profile).await? else {
             return Ok(None);
         };

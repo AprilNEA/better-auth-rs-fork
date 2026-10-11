@@ -235,8 +235,8 @@ async fn line_code_login_uses_verified_claims_and_matches_pinned_profiles() {
             calls: calls.clone(),
         }));
         provider.get_token = Some(Arc::new(TokenHandler(OAuthTokenSet {
-            id_token: input.get("claims").map(|claims| token(claims, None)),
-            access_token: Some("ordinary-access".into()),
+            id_token: (input.get("claims").map(|claims| token(claims, None))).into(),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         })));
         provider.map_profile_to_user = Some(Arc::new(Mapper {
@@ -306,7 +306,7 @@ async fn line_profile_context_forwards_the_expected_nonce_with_form_encoding() {
     let handler = config.get_user_info.as_ref().unwrap();
     let nonce = "ordinary +/&=nonce";
     let request = OAuthUserInfoRequest {
-        id_token: Some(token(&case["input"]["claims"], Some(nonce))),
+        id_token: (Some(token(&case["input"]["claims"], Some(nonce)))).into(),
         ..Default::default()
     };
     let result = handler
@@ -398,15 +398,16 @@ async fn social_line_configuration_and_profiles_match_pinned_capture() {
         let server = Server::start(&json!({"userinfo":profile})).await;
         let resolved = social_provider(&server).await;
         let tokens = OAuthUserInfoRequest {
-            id_token: (case["source"] == "token").then(|| {
+            id_token: ((case["source"] == "token").then(|| {
                 jsonwebtoken::encode(
                     &Header::new(Algorithm::HS256),
                     profile,
                     &EncodingKey::from_secret(SECRET),
                 )
                 .unwrap()
-            }),
-            access_token: Some("ordinary-access".into()),
+            }))
+            .into(),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         };
         let response = super::super::handlers::fetch_user_info_from_provider(
@@ -536,7 +537,7 @@ async fn social_line_mapper_matches_pinned_input_and_result() {
     let response = super::super::handlers::fetch_user_info_from_provider(
         &resolved.providers["line"],
         OAuthUserInfoRequest {
-            access_token: Some("ordinary-access".into()),
+            access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         },
         None,

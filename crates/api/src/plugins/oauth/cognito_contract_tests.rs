@@ -233,7 +233,7 @@ async fn code_and_refresh_match_captured_post_requests_and_token_fields() {
         } else {
             provider_tokens::refresh_tokens_via_provider(
                 &provider,
-                sample["input"].as_str().unwrap(),
+                &sample["input"].as_str().unwrap().into(),
                 &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
             )
             .await
@@ -244,10 +244,10 @@ async fn code_and_refresh_match_captured_post_requests_and_token_fields() {
         assert_eq!(json!(tokens.refresh_token), expected["refreshToken"]);
         assert_eq!(json!(tokens.token_type), expected["tokenType"]);
         assert_eq!(json!(tokens.scopes), expected["scopes"]);
-        assert_eq!(tokens.raw.as_ref(), expected.get("raw"));
-        assert!(tokens.id_token.is_none());
-        assert!(tokens.access_token_expires_at.is_none());
-        assert!(tokens.refresh_token_expires_at.is_none());
+        assert_eq!(tokens.raw.json().unwrap().as_ref(), expected.get("raw"));
+        assert!(tokens.id_token.field_value().is_undefined());
+        assert!(tokens.access_token_expires_at.field_value().is_undefined());
+        assert!(tokens.refresh_token_expires_at.field_value().is_undefined());
         assert_eq!(
             json!(std::mem::take(&mut *server.requests.lock().unwrap())),
             sample["requests"]
@@ -266,7 +266,7 @@ async fn fetch(
     social_profile::fetch_user_info_for_code(
         &resolved(config),
         OAuthUserInfoRequest {
-            access_token: Some(access_token),
+            access_token: (Some(access_token)).into(),
             ..Default::default()
         },
         None,

@@ -179,7 +179,7 @@ async fn grant(config: OAuthProvider, name: &str) -> AuthResult<OAuthTokenSet> {
     } else {
         provider_tokens::refresh_tokens_via_provider(
             &resolved(config),
-            "ordinary-refresh",
+            &"ordinary-refresh".into(),
             &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
         )
         .await
@@ -201,20 +201,26 @@ async fn grants_match_captured_get_requests_and_normalized_tokens() {
         assert_eq!(json!(result.access_token), expected["accessToken"]);
         assert_eq!(json!(result.refresh_token), expected["refreshToken"]);
         assert_eq!(json!(result.scopes), expected["scopes"]);
-        let expires = result.access_token_expires_at.unwrap().milliseconds();
+        let expires = result
+            .access_token_expires_at
+            .field_value()
+            .as_date()
+            .unwrap()
+            .milliseconds();
         let duration = Duration::seconds(sample["rawResponse"]["expires_in"].as_i64().unwrap());
         assert!(
             expires >= (before + duration).timestamp_millis() as f64
                 && expires <= (after + duration).timestamp_millis() as f64
         );
-        assert!(result.refresh_token_expires_at.is_none());
-        assert!(result.id_token.is_none());
+        assert!(result.refresh_token_expires_at.is_undefined());
+        assert!(result.id_token.is_undefined());
+        assert!(result.raw.is_undefined());
         if name == "code" {
-            let raw = result.raw.unwrap();
-            assert_eq!(raw["openid"], expected["openid"]);
-            assert_eq!(raw["unionid"], expected["unionid"]);
+            let fields = result.fields().json().unwrap();
+            assert_eq!(fields["openid"], expected["openid"]);
+            assert_eq!(fields["unionid"], expected["unionid"]);
         } else {
-            assert!(result.raw.is_none());
+            assert!(result.additional_fields.is_empty());
         }
         assert_eq!(json!(*server.requests.lock().unwrap()), sample["requests"]);
         assert_eq!(json!(*events.lock().unwrap()), sample["events"]);
@@ -297,11 +303,9 @@ fn public_response(response: Option<OAuthUserInfoResponse>) -> Value {
 async fn fetch(config: OAuthProvider, token: &Value) -> AuthResult<Option<OAuthUserInfoResponse>> {
     social_profile::fetch_user_info_for_code(
         &resolved(config),
-        OAuthUserInfoRequest {
-            access_token: token["accessToken"].as_str().map(str::to_owned),
-            raw: Some(token.clone()),
-            ..Default::default()
-        },
+        OAuthUserInfoRequest::from_fields(better_auth_core::FieldMap::from_json(
+            token.as_object().unwrap().clone(),
+        )?),
         None,
     )
     .await
@@ -379,15 +383,15 @@ impl OAuthUserInfoHandler for Custom {
 impl OAuthRefreshTokenHandler for Custom {
     async fn refresh_access_token(
         &self,
-        refresh_token: &str,
+        refresh_token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         self.events
             .lock()
             .unwrap()
-            .push(format!("custom:{refresh_token}"));
+            .push(format!("custom:{}", refresh_token.as_str().unwrap()));
         Ok(OAuthTokenSet {
-            access_token: Some("custom-access".into()),
+            access_token: (Some("custom-access".into())).into(),
             ..Default::default()
         })
     }

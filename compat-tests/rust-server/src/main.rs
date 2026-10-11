@@ -492,7 +492,7 @@ struct CompatGoogleRefreshHandler {
 impl OAuthRefreshTokenHandler for CompatGoogleRefreshHandler {
     async fn refresh_access_token(
         &self,
-        _refresh_token: &str,
+        _refresh_token: &better_auth_core::FieldValue,
         _: Option<better_auth_core::NativeRequest<'_>>,
     ) -> Result<OAuthTokenSet, String> {
         let mode = *self.mode.lock().await;
@@ -508,18 +508,19 @@ impl OAuthRefreshTokenHandler for CompatGoogleRefreshHandler {
         };
 
         Ok(OAuthTokenSet {
-            token_type: Some("Bearer".to_string()),
-            access_token: token("google-access-token"),
-            refresh_token: token("google-refresh-token"),
-            access_token_expires_at: Some((Utc::now() + chrono::Duration::hours(1)).into()),
-            refresh_token_expires_at: Some((Utc::now() + chrono::Duration::hours(2)).into()),
+            token_type: Some("Bearer".to_string()).into(),
+            access_token: token("google-access-token").into(),
+            refresh_token: token("google-refresh-token").into(),
+            access_token_expires_at: Some((Utc::now() + chrono::Duration::hours(1)).into()).into(),
+            refresh_token_expires_at: Some((Utc::now() + chrono::Duration::hours(2)).into()).into(),
             scopes: vec![
                 "openid".to_string(),
                 "email".to_string(),
                 "profile".to_string(),
-            ],
-            id_token: token("google-id-token"),
-            raw: None,
+            ]
+            .into(),
+            id_token: token("google-id-token").into(),
+            ..Default::default()
         })
     }
 }

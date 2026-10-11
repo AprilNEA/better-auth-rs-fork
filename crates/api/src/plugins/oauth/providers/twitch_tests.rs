@@ -71,12 +71,13 @@ fn tokens(fixture: &Value, profile: &Value) -> TestResult<OAuthUserInfoRequest> 
         .as_str()
         .ok_or("missing Twitch client secret")?;
     Ok(OAuthUserInfoRequest {
-        access_token: Some("ordinary-access".into()),
-        id_token: Some(jsonwebtoken::encode(
+        access_token: (Some("ordinary-access".into())).into(),
+        id_token: (Some(jsonwebtoken::encode(
             &Header::new(Algorithm::HS256),
             profile,
             &EncodingKey::from_secret(secret.as_bytes()),
-        )?),
+        )?))
+        .into(),
         ..Default::default()
     })
 }

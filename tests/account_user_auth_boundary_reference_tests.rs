@@ -27,6 +27,8 @@ mod fixture;
 mod hooks;
 #[path = "account_user_auth_boundary_reference_tests/http.rs"]
 mod http;
+#[path = "account_user_auth_boundary_reference_tests/link.rs"]
+mod link;
 #[path = "account_user_auth_boundary_reference_tests/models.rs"]
 mod models;
 #[path = "account_user_auth_boundary_reference_tests/oauth_flow.rs"]

@@ -442,6 +442,7 @@ pub(super) fn assert_events(actual: &[Value], case: &Case, scenario: &Scenario) 
         .filter(|event| event["kind"] != "console.error")
         .cloned()
         .collect();
+    recorder::assert_provider_token_keys(actual, &expected, case);
     assert_eq!(
         actual, expected,
         "{case:?}: full ordered callbacks, field keys, query spans, and Cookie visibility"

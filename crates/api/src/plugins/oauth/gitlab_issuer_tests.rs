@@ -14,7 +14,7 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth_core::{AuthRequest, HttpMethod};
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, error::Error, fmt::Debug, sync::mpsc};
 use url::Url;
@@ -128,31 +128,7 @@ fn route_locally(endpoint: &mut String, local_origin: &str) -> TestResult<String
 }
 
 fn token_json(token: OAuthTokenSet) -> Value {
-    let mut fields = Map::from_iter([("scopes".into(), json!(token.scopes))]);
-    for (name, value) in [
-        ("tokenType", token.token_type.map(Value::String)),
-        ("accessToken", token.access_token.map(Value::String)),
-        ("refreshToken", token.refresh_token.map(Value::String)),
-        ("idToken", token.id_token.map(Value::String)),
-        (
-            "accessTokenExpiresAt",
-            token
-                .access_token_expires_at
-                .map(|value| json!(better_auth_core::SchemaValue::Typed(value))),
-        ),
-        (
-            "refreshTokenExpiresAt",
-            token
-                .refresh_token_expires_at
-                .map(|value| json!(better_auth_core::SchemaValue::Typed(value))),
-        ),
-        ("raw", token.raw),
-    ] {
-        if let Some(value) = value {
-            let _ = fields.insert(name.into(), value);
-        }
-    }
-    Value::Object(fields)
+    Value::Object(token.fields().json().unwrap())
 }
 
 async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
@@ -221,7 +197,7 @@ async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
         )?;
         let refresh = refresh_tokens_via_provider(
             &provider,
-            "ordinary-refresh",
+            &"ordinary-refresh".into(),
             &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
         )
         .await?;
@@ -233,7 +209,7 @@ async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
         let info = fetch_user_info_for_code(
             &provider,
             OAuthUserInfoRequest {
-                access_token: Some("ordinary-access".into()),
+                access_token: (Some("ordinary-access".into())).into(),
                 ..Default::default()
             },
             None,
