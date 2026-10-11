@@ -23,6 +23,10 @@ impl LogSink for Logs {
                 .iter()
                 .map(|value| match value {
                     LogArgument::Value(value) => (*value).clone(),
+                    LogArgument::Native(value) => value
+                        .json()
+                        .expect("contract logger argument must serialize")
+                        .expect("contract logger argument must be JSON-defined"),
                     LogArgument::Text(value) => (*value).into(),
                     LogArgument::Error(error) => error.to_string().into(),
                 })

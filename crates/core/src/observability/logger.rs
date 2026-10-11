@@ -50,6 +50,8 @@ impl LogLevel {
 pub enum LogArgument<'a> {
     Text(&'a str),
     Value(&'a Value),
+    /// Retain undefined, native values, and object identity until the sink chooses a projection.
+    Native(&'a crate::FieldValue),
     /// Borrow the concrete error so callbacks can inspect its type without replacing the error.
     Error(&'a (dyn Error + Send + Sync + 'static)),
 }
@@ -63,12 +65,16 @@ impl fmt::Display for LogArgument<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Text(value) => formatter.write_str(value),
-            Self::Value(value) => formatter.write_str(
-                &crate::SchemaValue::<String>::Dynamic(
-                    crate::FieldValue::from_json((*value).clone()).map_err(|_| fmt::Error)?,
-                )
-                .display_string()
-                .map_err(|_| fmt::Error)?,
+            Self::Value(value) => fmt::Display::fmt(
+                &Self::Native(&crate::FieldValue::from((*value).clone())),
+                formatter,
+            ),
+            Self::Native(value) => formatter.write_str(
+                &value
+                    .display_utf16()
+                    .map_err(|_| fmt::Error)?
+                    .to_utf8()
+                    .map_err(|_| fmt::Error)?,
             ),
             Self::Error(error) => fmt::Display::fmt(error, formatter),
         }
@@ -193,6 +199,10 @@ mod tests {
                 .map(|value| match value {
                     LogArgument::Text(value) => Value::String((*value).into()),
                     LogArgument::Value(value) => (*value).clone(),
+                    LogArgument::Native(value) => value
+                        .json()
+                        .expect("contract logger argument must serialize")
+                        .expect("contract logger argument must be JSON-defined"),
                     LogArgument::Error(error) => Value::String(error.to_string()),
                 })
                 .collect();
@@ -253,5 +263,48 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn native_arguments_reach_custom_sink_without_coercion_or_identity_loss() {
+        #[derive(Default)]
+        struct NativeCapture(Mutex<Option<(crate::FieldValue, crate::FieldValue)>>);
+        impl LogSink for NativeCapture {
+            fn log(&self, _: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+                let (LogArgument::Native(message), [LogArgument::Native(argument)]) =
+                    (message, arguments)
+                else {
+                    panic!("native arguments must retain their representation");
+                };
+                *self.0.lock().expect("capture mutex is not poisoned") =
+                    Some((message.clone(), (*argument).clone()));
+            }
+        }
+        let message: crate::FieldValue = crate::Utf16String::from_units(vec![0xd800]).into();
+        let argument: crate::FieldValue = crate::FieldMap::from([
+            ("missing".into(), crate::FieldValue::Undefined),
+            ("message".into(), message.clone()),
+        ])
+        .into();
+        let sink = Arc::new(NativeCapture::default());
+        let logger = LoggerConfig {
+            log: Some(sink.clone()),
+            ..Default::default()
+        };
+        logger.log(
+            LogLevel::Error,
+            LogArgument::Native(&message),
+            &[LogArgument::Native(&argument)],
+        );
+        let observed = sink.0.lock().expect("capture mutex is not poisoned");
+        let (observed_message, observed_argument) = observed.as_ref().expect("logger was called");
+        assert!(observed_message.strict_equals(&message));
+        assert!(observed_argument.strict_equals(&argument));
+        assert!(
+            observed_argument
+                .model_property("missing")
+                .expect("native object is readable")
+                .is_undefined()
+        );
     }
 }

@@ -263,7 +263,7 @@ run_stage() {
         plugins::oauth:: plugins::one_tap:: plugins::user_admission:: || profile_status=1
       cargo test --locked -p better-auth-api --features axum --no-fail-fast \
         --test account_oauth_tests --test oauth_session_revocation_tests || profile_status=1
-      cargo test --locked -p better-auth-core --lib -- error:: field_value:: \
+      cargo test --locked -p better-auth-core --lib -- error:: field_value:: observability::logger:: \
         user_fields::input_binding_tests:: store::ephemeral::initial_storage_tests:: \
         plugin::tests::route_paths:: || profile_status=1
       cargo test --locked --features axum,seaorm2,redis-cache --no-fail-fast \

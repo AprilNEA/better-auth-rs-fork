@@ -29,6 +29,10 @@ fn argument(value: &LogArgument<'_>) -> Value {
     match value {
         LogArgument::Text(value) => json!(value),
         LogArgument::Value(value) => (*value).clone(),
+        LogArgument::Native(value) => value
+            .json()
+            .expect("contract logger argument must serialize")
+            .expect("contract logger argument must be JSON-defined"),
         LogArgument::Error(value) => json!({
             "type": "rust-error", "debug": format!("{value:?}"), "display": value.to_string(),
         }),

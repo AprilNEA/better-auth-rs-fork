@@ -181,6 +181,10 @@ impl LogSink for Observer {
                 }
                 LogArgument::Text(text) => json!(text),
                 LogArgument::Value(value) => (*value).clone(),
+                LogArgument::Native(value) => value
+                    .json()
+                    .expect("contract logger argument must serialize")
+                    .expect("contract logger argument must be JSON-defined"),
             })
             .collect();
         self.push(json!({ "kind": "log", "level": level.as_str(), "message": message.to_string(), "args": arguments }));
