@@ -97,7 +97,9 @@ async fn check<S: AuthSchema>(
     assert_eq!(
         users
             .first()
-            .and_then(|user| user.name.typed().unwrap().as_deref()),
+            .map(|user| user.name.typed().map(Option::as_deref))
+            .transpose()?
+            .flatten(),
         Some("Included B")
     );
     assert_eq!(total, 2);

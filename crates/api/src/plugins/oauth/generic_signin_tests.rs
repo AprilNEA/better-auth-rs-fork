@@ -421,7 +421,7 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
             better_auth_core::FieldValue::Null,
             &ctx,
         );
-        super::handlers::complete_link_social(
+        let outcome = super::handlers::complete_link_social(
             "generic",
             &super::providers::OAuthUserInfo {
                 id: "stable-subject".into(),
@@ -441,6 +441,7 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
         )
         .await
         .unwrap_or_else(|_| panic!("explicit link must succeed"));
+        assert!(matches!(outcome, super::handlers::OAuthLinkOutcome::Linked));
         let linked = ctx
             .database
             .get_account("generic", "stable-subject")

@@ -5,10 +5,35 @@ use better_auth_api::plugins::oauth::{
     OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse,
 };
 use better_auth_core::{
-    AuthResult, FieldMap, FieldValue,
+    AuthResponse, AuthResult, FieldMap, FieldValue,
+    endpoint_dispatch::EndpointDispatcher,
     store::database_hooks::{DatabaseHookContext, DatabaseHookUpdate, DatabaseHooks},
-    user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform},
+    user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType},
 };
+
+pub(super) async fn dispatch(
+    plugin: &OAuthPlugin,
+    request: &AuthRequest,
+    context: &AuthContext<TestSchema>,
+) -> AuthResult<AuthResponse> {
+    let dispatcher = EndpointDispatcher::new(
+        Arc::new(Vec::new()),
+        Default::default(),
+        AuthPlugin::<TestSchema>::routes(plugin),
+    );
+    let mut input = request.clone();
+    let mut scope = better_auth_core::RequestHookContext::from_request(request)?;
+    scope.is_http = true;
+    better_auth_core::with_request_hook_context_value(
+        scope,
+        dispatcher.run(&mut input, true, context, None, |request| async move {
+            plugin.on_request(&request, context).await?.ok_or_else(|| {
+                better_auth_core::AuthError::internal("OAuth endpoint did not match the request")
+            })
+        }),
+    )
+    .await
+}
 
 struct RefreshWrites(Arc<std::sync::Mutex<Vec<FieldMap>>>);
 
@@ -25,6 +50,7 @@ impl DatabaseHooks<TestSchema> for RefreshWrites {
 }
 
 fn refreshed_cookie_claims(response: &better_auth_core::AuthResponse) -> serde_json::Value {
+    assert_eq!(response.headers.get_all("Set-Cookie").count(), 1);
     let cookie = response
         .headers
         .get_all("Set-Cookie")
@@ -203,13 +229,7 @@ async fn assert_token_refresh_cookie_spread(path: &str, selection: RefreshSelect
     req.headers
         .insert("content-type".into(), "application/json".into());
     set_session_and_account_cookies(&mut req, &session_token, &cookie);
-    let response = match plugin.on_request(&req, &ctx).await {
-        Ok(Some(response)) => response,
-        Err(error) => error.to_auth_response(),
-        Ok(None) => panic!("{path} must be handled"),
-    }
-    .into_http_response()
-    .unwrap();
+    let response = dispatch(&plugin, &req, &ctx).await.unwrap();
     let rejected = selection == RefreshSelection::ForeignCookieOwner;
     let failed_output = selection == RefreshSelection::OutputError;
     assert_eq!(
@@ -393,13 +413,7 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
         let mut req = AuthRequest::new(HttpMethod::Get, "/account-info");
         req.query = Some(json!({"useAccountCookie": true}));
         set_session_and_account_cookies(&mut req, &session_token, &cookie);
-        let response = plugin
-            .on_request(&req, &ctx)
-            .await
-            .unwrap()
-            .unwrap()
-            .into_http_response()
-            .unwrap();
+        let response = dispatch(&plugin, &req, &ctx).await.unwrap();
         assert_eq!(response.status, 200);
         assert!(sequence.lock().unwrap().is_empty());
         let calls = calls.lock().unwrap();
@@ -420,6 +434,191 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
                 .milliseconds(),
             next_expiry.milliseconds()
         );
-        assert_eq!(calls[0].scopes, ["email", "profile"]);
+        assert_eq!(calls[0].scopes, ["email profile"]);
     }
+}
+
+struct RejectUserInfo(Arc<std::sync::Mutex<Vec<OAuthUserInfoRequest>>>);
+
+fn profile_rejection() -> serde_json::Value {
+    json!({
+        "code":"PROVIDER_PROFILE_REJECTED",
+        "message":"Provider refused the refreshed token",
+        "details":{"source":"userinfo","retryable":false}
+    })
+}
+
+#[async_trait]
+impl OAuthUserInfoHandler for RejectUserInfo {
+    async fn get_user_info(
+        &self,
+        request: OAuthUserInfoRequest,
+    ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+        self.0.lock().unwrap().push(request);
+        Err(AuthResponse::json(409, &profile_rejection())?.into())
+    }
+}
+
+#[tokio::test]
+async fn test_get_access_token_preserves_refreshed_cookie_after_scope_failure() {
+    assert_refresh_cookie_survives_failure(false).await;
+}
+
+#[tokio::test]
+async fn test_account_info_preserves_refreshed_cookie_after_provider_failure() {
+    assert_refresh_cookie_survives_failure(true).await;
+}
+
+async fn assert_refresh_cookie_survives_failure(profile: bool) {
+    let updated_at = better_auth_core::FieldDate::from_milliseconds(1_893_456_000_000.0);
+    let mut config = test_config_with_account_cookie();
+    let timestamp = updated_at.clone();
+    config.account.additional_fields.insert(
+        "updatedAt".into(),
+        UserFieldConfig {
+            field_type: UserFieldType::Date,
+            on_update: Some(Arc::new(move || Ok(timestamp.clone().into()))),
+            ..Default::default()
+        },
+    );
+    let config = Arc::new(config);
+    let db = create_test_database().await;
+    let (user_id, session_token, account_id) = setup_user_with_account(
+        &db,
+        &config,
+        "refresh-failure@example.com",
+        "google",
+        Some("old-access-token".into()),
+        Some("old-refresh-token".into()),
+    )
+    .await;
+    let original = db.get_user_accounts(&user_id).await.unwrap().remove(0);
+    let mut cookie_fields = original.internal_fields().unwrap().json().unwrap();
+    cookie_fields.insert(
+        "accessTokenExpiresAt".into(),
+        json!("2000-01-01T00:00:00.000Z"),
+    );
+    if !profile {
+        cookie_fields.insert("scope".into(), json!(7));
+    }
+    let cookie = better_auth_core::utils::jwe::encode(
+        cookie_fields,
+        TEST_SECRET,
+        "better-auth-account",
+        300.0,
+    )
+    .unwrap();
+    let next_expiry = better_auth_core::FieldDate::from_milliseconds(4_102_444_800_000.0);
+    let sequence = Arc::new(std::sync::Mutex::new(vec![(
+        "old-refresh-token".into(),
+        OAuthTokenSet {
+            access_token: Some("rotated-access-token".into()),
+            refresh_token: Some("rotated-refresh-token".into()),
+            access_token_expires_at: Some(next_expiry.clone()),
+            ..Default::default()
+        },
+    )]));
+    let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let mut provider = make_test_provider("http://localhost:65535");
+    provider.refresh_access_token = Some(Arc::new(RotatingRefreshHandler {
+        sequence: sequence.clone(),
+    }));
+    provider.get_user_info = Some(Arc::new(RejectUserInfo(calls.clone())));
+    let mut oauth_config = OAuthConfig::default();
+    oauth_config.providers.insert("google".into(), provider);
+    let plugin = OAuthPlugin::with_config(oauth_config);
+    let writes = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let runtime = db
+        .with_runtime(
+            config.clone(),
+            vec![Arc::new(RefreshWrites(writes.clone()))],
+            Default::default(),
+        )
+        .unwrap();
+    let ctx = AuthContext::new(config, runtime)
+        .initialize_request_context()
+        .await
+        .unwrap();
+    let mut req = if profile {
+        let mut request = AuthRequest::new(HttpMethod::Get, "/account-info");
+        request.query = Some(json!({"useAccountCookie":true}));
+        request
+    } else {
+        let mut request = AuthRequest::new(HttpMethod::Post, "/get-access-token");
+        request.body = Some(json!({"useAccountCookie":true}).to_string().into_bytes());
+        request
+            .headers
+            .insert("content-type".into(), "application/json".into());
+        request
+    };
+    set_session_and_account_cookies(&mut req, &session_token, &cookie);
+    let response = dispatch(&plugin, &req, &ctx).await.unwrap();
+    assert_eq!(response.status, if profile { 409 } else { 400 });
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap(),
+        if profile {
+            profile_rejection()
+        } else {
+            json!({
+                "code":"FAILED_TO_GET_ACCESS_TOKEN",
+                "message":"Failed to get a valid access token"
+            })
+        }
+    );
+    assert!(sequence.lock().unwrap().is_empty());
+    {
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), usize::from(profile));
+        if profile {
+            assert_eq!(
+                calls[0].access_token.as_deref(),
+                Some("rotated-access-token")
+            );
+            assert_eq!(
+                calls[0]
+                    .access_token_expires_at
+                    .as_ref()
+                    .unwrap()
+                    .milliseconds(),
+                next_expiry.milliseconds()
+            );
+            assert_eq!(calls[0].scopes, ["email profile"]);
+        }
+    }
+    let expected_write = FieldMap::from([
+        ("accessToken".into(), "rotated-access-token".into()),
+        ("accessTokenExpiresAt".into(), next_expiry.into()),
+        ("refreshToken".into(), "rotated-refresh-token".into()),
+        (
+            "refreshTokenExpiresAt".into(),
+            original.refresh_token_expires_at.field_value(),
+        ),
+        ("idToken".into(), original.id_token.field_value()),
+    ]);
+    {
+        let writes = writes.lock().unwrap();
+        assert_eq!(writes.as_slice(), std::slice::from_ref(&expected_write));
+        assert_eq!(
+            writes[0].keys().collect::<Vec<_>>(),
+            expected_write.keys().collect::<Vec<_>>()
+        );
+    }
+    let mut expected_storage = original.internal_fields().unwrap().json().unwrap();
+    expected_storage.extend(expected_write.json().unwrap());
+    expected_storage.insert(
+        "updatedAt".into(),
+        FieldValue::from(updated_at).json().unwrap().unwrap(),
+    );
+    let stored = db.get_user_accounts(&user_id).await.unwrap();
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].id, account_id);
+    assert_eq!(
+        stored[0].internal_fields().unwrap().json().unwrap(),
+        expected_storage
+    );
+    assert_eq!(
+        refreshed_cookie_claims(&response),
+        serde_json::Value::Object(expected_storage)
+    );
+    assert!(req.take_response_headers().unwrap().is_empty());
 }

@@ -20,6 +20,8 @@ mod environment;
 #[cfg(test)]
 mod config_tests;
 #[cfg(test)]
+mod linking_tests;
+#[cfg(test)]
 mod native_result_tests;
 
 /// Production-to-preview callback configuration.
@@ -747,6 +749,7 @@ impl OAuthProxyPlugin {
             &state::state_cookie_name(&ctx.config),
             &ctx.config,
         )?;
+        req.append_response_header("Set-Cookie", clear)?;
         let user = OAuthUserInfo {
             additional_fields: profile.user_info.additional_fields,
             id: profile.account.account_id,
@@ -775,26 +778,28 @@ impl OAuthProxyPlugin {
         };
         let provider_profile = profile.profile.clone().map(Value::Object);
         if let Some(link) = state.link {
-            if let Err(error) = handlers::complete_link_social(
-                &profile.account.provider_id,
-                &user,
-                &tokens,
-                &link,
-                Some(provider_profile.as_ref().unwrap_or(&serde_json::json!({}))),
-                &crate::plugins::endpoint_context::EndpointContext::new(
-                    Some(req),
-                    better_auth_core::FieldValue::Null,
-                    ctx,
-                ),
-            )
-            .await
+            if let handlers::OAuthLinkOutcome::Failed { code, description } =
+                handlers::complete_link_social(
+                    &profile.account.provider_id,
+                    &user,
+                    &tokens,
+                    &link,
+                    Some(provider_profile.as_ref().unwrap_or(&serde_json::json!({}))),
+                    &crate::plugins::endpoint_context::EndpointContext::new(
+                        Some(req),
+                        better_auth_core::FieldValue::Null,
+                        ctx,
+                    ),
+                )
+                .await?
             {
-                let (code, description) = error.redirect_parts()?;
-                return Ok(redirect_error(error_url, &code, description.as_deref())?
-                    .with_appended_header("Set-Cookie", clear));
+                return Err(AuthError::redirect(error_location(
+                    error_url,
+                    &code,
+                    description.as_deref(),
+                )?));
             }
-            return Ok(handlers::redirect_response(&profile.callback_url)
-                .with_appended_header("Set-Cookie", clear));
+            return Err(AuthError::redirect(&profile.callback_url));
         }
         let fallback = super::resolved::ResolvedProvider {
             config: OAuthProvider::google("", ""),
@@ -833,8 +838,7 @@ impl OAuthProxyPlugin {
             Ok(outcome) => outcome,
             Err(error) => {
                 let (code, description) = error.redirect_parts()?;
-                return Ok(redirect_error(error_url, &code, description.as_deref())?
-                    .with_appended_header("Set-Cookie", clear));
+                return redirect_error(error_url, &code, description.as_deref());
             }
         };
         let target = if outcome.is_register {
@@ -846,7 +850,6 @@ impl OAuthProxyPlugin {
         } else {
             &profile.callback_url
         };
-        req.append_response_header("Set-Cookie", clear)?;
         ctx.session_manager()
             .set_native_session_cookie(req, outcome.issued, None)
             .await?;
@@ -864,14 +867,20 @@ fn redirect_error(
     error: &str,
     description: Option<&str>,
 ) -> AuthResult<AuthResponse> {
+    Ok(handlers::redirect_response(&error_location(
+        target,
+        error,
+        description,
+    )?))
+}
+
+fn error_location(target: &str, error: &str, description: Option<&str>) -> AuthResult<String> {
     let mut params = url::form_urlencoded::Serializer::new(String::new());
     let _ = params.append_pair("error", error);
     if let Some(description) = description {
         let _ = params.append_pair("error_description", description);
     }
-    Ok(handlers::redirect_response(
-        &better_auth_core::utils::url::append_query_params(target, &params.finish())?,
-    ))
+    better_auth_core::utils::url::append_query_params(target, &params.finish())
 }
 
 #[cfg(test)]

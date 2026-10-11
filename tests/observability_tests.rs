@@ -1207,7 +1207,7 @@ mod sqlite {
             }
             let result = store.update_user(id, update).instrument(capture_span).await;
             match kind {
-                "success" => assert_eq!(result?.name.typed().unwrap().as_deref(), Some("Changed")),
+                "success" => assert_eq!(result?.name.typed()?.as_deref(), Some("Changed")),
                 "missing" => assert!(matches!(result, Err(AuthError::UserNotFound))),
                 _ => assert!(result.is_err()),
             }
@@ -1256,7 +1256,9 @@ mod sqlite {
             store
                 .get_user_by_id(second.id.typed()?)
                 .await?
-                .and_then(|user| user.email.typed().unwrap().clone()),
+                .map(|user| user.email.typed().cloned())
+                .transpose()?
+                .flatten(),
             Some("second@example.test".into())
         );
         Ok(())
@@ -1414,8 +1416,7 @@ async fn check_plugin_operations(
                 .update_passkey_name(row.id.typed()?, "Renamed")
                 .await?
                 .name
-                .typed()
-                .unwrap()
+                .typed()?
                 .as_deref(),
             Some("Renamed")
         );
@@ -1811,8 +1812,8 @@ async fn check_api_key_list(
     assert_eq!(
         keys?
             .iter()
-            .map(|key| key.name.typed().unwrap().as_deref())
-            .collect::<Vec<_>>(),
+            .map(|key| key.name.typed().map(Option::as_deref))
+            .collect::<AuthResult<Vec<_>>>()?,
         [Some("E"), Some("D")]
     );
     assert_eq!(count?, 5);

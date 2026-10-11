@@ -9,6 +9,8 @@
     reason = "oauth integration tests intentionally discard setup return values from inserts and config mutation helpers"
 )]
 
+extern crate better_auth_core as better_auth;
+
 use std::sync::{Arc, Once};
 
 use async_trait::async_trait;
@@ -698,11 +700,9 @@ async fn test_refresh_token_persists_rotated_tokens_for_cookie_matched_account()
         .insert("content-type".to_string(), "application/json".to_string());
     set_session_and_account_cookies(&mut req, &session_token, &account_cookie);
 
-    let result = oauth_plugin.on_request(&req, &ctx).await;
-    let resp = match result {
-        Ok(Some(resp)) => resp,
-        other => panic!("refresh-token should succeed, got {other:?}"),
-    };
+    let resp = refresh_cookie::dispatch(&oauth_plugin, &req, &ctx)
+        .await
+        .unwrap();
 
     assert_eq!(resp.status, 200);
     let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap();
@@ -781,11 +781,9 @@ async fn test_get_access_token_refresh_persists_rotated_tokens_for_cookie_matche
         .insert("content-type".to_string(), "application/json".to_string());
     set_session_and_account_cookies(&mut req, &session_token, &account_cookie);
 
-    let result = oauth_plugin.on_request(&req, &ctx).await;
-    let resp = match result {
-        Ok(Some(resp)) => resp,
-        other => panic!("get-access-token should succeed, got {other:?}"),
-    };
+    let resp = refresh_cookie::dispatch(&oauth_plugin, &req, &ctx)
+        .await
+        .unwrap();
 
     assert_eq!(resp.status, 200);
     let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap();

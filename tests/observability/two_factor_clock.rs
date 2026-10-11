@@ -20,7 +20,10 @@ fn events(capture: &Capture, collection: &str) -> AuthResult<Value> {
         assert!(!record.fields.contains_key("otel.status_code"));
         let name = record.fields.get("otel.name").and_then(Value::as_str);
         if name == Some("deadline clock") {
-            events.push(json!({"type":"clock", "millis":record.fields["clock.milliseconds"]}));
+            let millis = record.fields.get("clock.milliseconds").ok_or_else(|| {
+                AuthError::internal("Deadline clock observation is missing clock.milliseconds")
+            })?;
+            events.push(json!({"type":"clock", "millis":millis}));
         } else {
             assert_eq!(name, Some(format!("db incrementOne {collection}").as_str()));
             assert_eq!(
@@ -49,17 +52,36 @@ async fn check(store: &impl TwoFactorStore, collection: &str) -> AuthResult<()> 
             verified: true,
         })
         .await?;
-    let max_attempts = fixture["maxAttempts"]
-        .as_i64()
-        .expect("integer attempt count");
-    let duration = fixture["durationSeconds"]
-        .as_f64()
-        .expect("numeric duration");
-    for case in fixture["cases"].as_array().expect("captured cases") {
+    let max_attempts = fixture
+        .get("maxAttempts")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| AuthError::internal("Clock fixture requires an integer maxAttempts"))?;
+    let duration = fixture
+        .get("durationSeconds")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| AuthError::internal("Clock fixture requires a numeric durationSeconds"))?;
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
+        .ok_or_else(|| AuthError::internal("Clock fixture requires a cases array"))?;
+    for case in cases {
         let capture = Capture::default();
-        let now = case["incrementCompletedMillis"]
-            .as_i64()
-            .expect("fixed clock");
+        let now = case
+            .get("incrementCompletedMillis")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| {
+                AuthError::internal("Clock case requires integer incrementCompletedMillis")
+            })?;
+        let name = case
+            .get("name")
+            .and_then(Value::as_str)
+            .ok_or_else(|| AuthError::internal("Clock case requires a name"))?;
+        let expected_events = case
+            .get("events")
+            .ok_or_else(|| AuthError::internal("Clock case requires events"))?;
+        let expected_stored = case
+            .get("stored")
+            .ok_or_else(|| AuthError::internal("Clock case requires stored fields"))?;
         store
             .record_two_factor_failure(&factor.id, max_attempts, &|| {
                 let _clock = tracing::info_span!(
@@ -77,17 +99,11 @@ async fn check(store: &impl TwoFactorStore, collection: &str) -> AuthResult<()> 
             .get_two_factor_by_user_id("ordinary-clock")
             .await?
             .expect("created factor remains");
+        assert_eq!(&events(&capture, collection)?, expected_events, "{name}");
         assert_eq!(
-            events(&capture, collection)?,
-            case["events"],
-            "{}",
-            case["name"]
-        );
-        assert_eq!(
-            json!({"failedVerificationCount":stored.failed_verification_count,"lockedUntil":stored.locked_until.json()?}),
-            case["stored"],
-            "{}",
-            case["name"]
+            &json!({"failedVerificationCount":stored.failed_verification_count,"lockedUntil":stored.locked_until.json()?}),
+            expected_stored,
+            "{name}"
         );
     }
 

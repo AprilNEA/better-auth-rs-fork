@@ -318,13 +318,19 @@ async fn persist_tokens(
     Ok(updated.unwrap_or_else(|| AccountCookiePayload::from_adapter_fields(update_fields)))
 }
 
-fn updated_account_cookie(
+fn set_refreshed_account_cookie(
+    req: &AuthRequest,
+    config: &better_auth_core::AuthConfig,
     account: &AccountCookiePayload,
     update: &AccountCookiePayload,
-) -> AuthResult<AccountCookiePayload> {
+) -> AuthResult<()> {
     let mut fields = account.internal_fields()?;
     fields.extend(update.internal_fields()?);
-    Ok(AccountCookiePayload::from_adapter_fields(fields))
+    let cookie = AccountCookiePayload::from_adapter_fields(fields);
+    for header in create_account_cookie_headers(req, config, &cookie)? {
+        req.append_response_header("Set-Cookie", header)?;
+    }
+    Ok(())
 }
 
 async fn valid_access_token(
@@ -334,7 +340,7 @@ async fn valid_access_token(
     config: &OAuthConfig,
     req: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<(AccessTokenResponse, Vec<String>)> {
+) -> AuthResult<AccessTokenResponse> {
     if !selection.matches(account, user_id, ctx) {
         return Err(AuthError::bad_request("Account not found"));
     }
@@ -344,7 +350,6 @@ async fn valid_access_token(
             && date_value(&account.access_token_expires_at)?
                 .converted_date()?
                 .is_before(Utc::now() + chrono::Duration::seconds(5))?;
-        let mut cookies = Vec::new();
         let new_tokens = if expired
             && account.refresh_token.is_truthy()?
             && provider.config.supports_refresh()
@@ -357,11 +362,7 @@ async fn valid_access_token(
             let tokens = refresh_tokens_via_provider(provider, refresh, req).await?;
             let updated = persist_tokens(account, &tokens, TokenRefresh::AccessToken, ctx).await?;
             if ctx.config.account.store_account_cookie() {
-                cookies = create_account_cookie_headers(
-                    req,
-                    &ctx.config,
-                    &updated_account_cookie(account, &updated)?,
-                )?;
+                set_refreshed_account_cookie(req, &ctx.config, account, &updated)?;
             }
             Some(tokens)
         } else {
@@ -408,26 +409,15 @@ async fn valid_access_token(
                     account.id_token.clone()
                 }
             });
-        Ok((
-            AccessTokenResponse {
-                access_token,
-                access_token_expires_at,
-                scopes: parse_scopes(&account.scope)?,
-                id_token,
-            },
-            cookies,
-        ))
+        Ok(AccessTokenResponse {
+            access_token,
+            access_token_expires_at,
+            scopes: parse_scopes(&account.scope)?,
+            id_token,
+        })
     }
     .await
     .map_err(|_: AuthError| AuthError::bad_request("Failed to get a valid access token"))
-}
-
-fn token_response(value: FieldValue, cookies: Vec<String>) -> AuthResponse {
-    let mut response = AuthResponse::native(None, value);
-    for cookie in cookies {
-        response = response.with_appended_header("Set-Cookie", cookie);
-    }
-    response
 }
 
 pub(super) async fn handle_get_access_token(
@@ -441,9 +431,8 @@ pub(super) async fn handle_get_access_token(
     };
     let user_id = selection.resolve_user_id(req, ctx).await?;
     let account = selection.resolve(req, &user_id, ctx).await?;
-    let (response, cookies) =
-        valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
-    Ok(token_response(response.into_field_value(), cookies))
+    let response = valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
+    Ok(AuthResponse::native(None, response.into_field_value()))
 }
 
 pub(super) async fn handle_refresh_token(
@@ -482,6 +471,11 @@ pub(super) async fn handle_refresh_token(
             .ok_or_else(|| AuthError::internal("Refresh token is null"))?;
         let tokens = refresh_tokens_via_provider(provider, refresh_token, req).await?;
         let updated = persist_tokens(&account, &tokens, TokenRefresh::RefreshToken, ctx).await?;
+        if matches!(selection.source, AccountSource::Cookie)
+            && ctx.config.account.store_account_cookie()
+        {
+            set_refreshed_account_cookie(req, &ctx.config, &account, &updated)?;
+        }
         let response = RefreshTokenResponse {
             access_token: tokens.access_token,
             access_token_expires_at: tokens.access_token_expires_at,
@@ -505,18 +499,7 @@ pub(super) async fn handle_refresh_token(
             provider_id: account.provider_id.clone(),
             account_id: account.id.clone(),
         };
-        let cookies = if matches!(selection.source, AccountSource::Cookie)
-            && ctx.config.account.store_account_cookie()
-        {
-            create_account_cookie_headers(
-                req,
-                &ctx.config,
-                &updated_account_cookie(&account, &updated)?,
-            )?
-        } else {
-            Vec::new()
-        };
-        Ok(token_response(response.into_field_value(), cookies))
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
     .await
     .map_err(|_: AuthError| AuthError::bad_request("Failed to refresh access token"))
@@ -543,8 +526,7 @@ pub(super) async fn handle_account_info(
             code: "PROVIDER_NOT_CONFIGURED",
             message: "Account is not associated with a configured social provider.",
         })?;
-    let (tokens, cookies) =
-        valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
+    let tokens = valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
     if !tokens.access_token.is_truthy()? {
         return Err(AuthError::bad_request("Access token not found"));
     }
@@ -603,5 +585,5 @@ pub(super) async fn handle_account_info(
             account_id: account.account_id.clone(),
         },
     };
-    Ok(token_response(response.into_field_value(), cookies))
+    Ok(AuthResponse::native(None, response.into_field_value()))
 }

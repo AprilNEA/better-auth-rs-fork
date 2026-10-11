@@ -213,18 +213,17 @@ pub(super) async fn handle_callback(
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| default_error_url.clone());
 
-    let redirect_on_error =
-        |error_code: &str, description: Option<&str>| -> AuthResult<AuthResponse> {
-            let mut params = url::form_urlencoded::Serializer::new(String::new());
-            let _ = params.append_pair("error", error_code);
-            if let Some(description) = description {
-                let _ = params.append_pair("error_description", description);
-            }
-            Ok(redirect_response(&append_query_params(
-                &error_url,
-                &params.finish(),
-            )?))
-        };
+    let error_location = |error_code: &str, description: Option<&str>| -> AuthResult<String> {
+        let mut params = url::form_urlencoded::Serializer::new(String::new());
+        let _ = params.append_pair("error", error_code);
+        if let Some(description) = description {
+            let _ = params.append_pair("error_description", description);
+        }
+        append_query_params(&error_url, &params.finish())
+    };
+    let redirect_on_error = |error_code: &str, description: Option<&str>| {
+        Ok(redirect_response(&error_location(error_code, description)?))
+    };
 
     if payload.is_expired() {
         return redirect_on_error("state_mismatch", None);
@@ -315,21 +314,24 @@ pub(super) async fn handle_callback(
     );
     endpoint.path = Some(super::signin::callback_path(req));
     if let Some(link) = payload.link.as_ref() {
-        if let Err(error) = complete_link_social(
-            provider_name,
-            &user_info.user,
-            &tokens,
-            link,
-            Some(&user_info.data),
-            &endpoint,
-        )
-        .await
+        if let super::handlers::OAuthLinkOutcome::Failed { code, description } =
+            complete_link_social(
+                provider_name,
+                &user_info.user,
+                &tokens,
+                link,
+                Some(&user_info.data),
+                &endpoint,
+            )
+            .await?
         {
-            let (code, description) = error.redirect_parts()?;
-            return redirect_on_error(&code, description.as_deref());
+            return Err(AuthError::redirect(error_location(
+                &code,
+                description.as_deref(),
+            )?));
         }
 
-        return Ok(redirect_response(&payload.callback_url));
+        return Err(AuthError::redirect(&payload.callback_url));
     }
 
     let disable_sign_up = provider.config.disable_implicit_sign_up()

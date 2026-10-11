@@ -9,7 +9,7 @@ use better_auth_core::session::NativeSessionData;
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount,
-    CreateVerification, FieldValue, UpdateAccount, UpdateUser, Utf16String,
+    CreateVerification, FieldMap, FieldValue, UpdateAccount, UpdateUser, Utf16String,
 };
 
 use super::authorization::{AuthorizationRequest, build_authorization_url};
@@ -215,6 +215,23 @@ pub(super) struct FlowStartRequest<'a> {
     pub(super) disable_redirect: bool,
 }
 
+pub(super) enum OAuthLinkOutcome {
+    Linked,
+    Failed {
+        code: String,
+        description: Option<String>,
+    },
+}
+
+impl OAuthLinkOutcome {
+    fn failed(code: &str) -> Self {
+        Self::Failed {
+            code: code.to_owned(),
+            description: None,
+        }
+    }
+}
+
 pub(super) async fn complete_link_social(
     provider_name: &str,
     user_info: &OAuthUserInfo,
@@ -225,9 +242,9 @@ pub(super) async fn complete_link_social(
         '_,
         impl better_auth_core::AuthSchema,
     >,
-) -> Result<(), super::signin::OAuthSignInError> {
+) -> AuthResult<OAuthLinkOutcome> {
     let ctx = endpoint.auth;
-    super::signin::validate_provider_user(
+    if let Err(error) = super::signin::validate_provider_user(
         user_info,
         link.user_id().clone(),
         provider_name,
@@ -235,7 +252,11 @@ pub(super) async fn complete_link_social(
         crate::plugins::user_admission::UserValidationAction::LinkAccount,
         endpoint,
     )
-    .await?;
+    .await
+    {
+        let (code, description) = super::signin::OAuthSignInError::Auth(error).redirect_parts()?;
+        return Ok(OAuthLinkOutcome::Failed { code, description });
+    }
     let linking = &ctx.config.account.account_linking;
     let trusted_provider = ctx
         .trusted_providers()
@@ -243,7 +264,7 @@ pub(super) async fn complete_link_social(
         .any(|trusted| trusted == provider_name);
 
     if !linking.enabled() || (!trusted_provider && !user_info.email_verified()?) {
-        return Err("unable_to_link_account".to_string().into());
+        return Ok(OAuthLinkOutcome::failed("unable_to_link_account"));
     }
 
     let provider_email = user_info
@@ -252,14 +273,13 @@ pub(super) async fn complete_link_social(
     if provider_email.as_ref() != Some(&lowercase_link_email(link.email())?)
         && !linking.allow_different_emails
     {
-        return Err("email_doesn't_match".to_string().into());
+        return Ok(OAuthLinkOutcome::failed("email_doesn't_match"));
     }
 
     if let Some(existing_account) = ctx
         .database
         .get_account(provider_name, &user_info.id)
-        .await
-        .map_err(|error| error.to_string())?
+        .await?
     {
         let account_owner = existing_account.user_id.field_value();
         if matches!(account_owner, FieldValue::Null | FieldValue::Undefined) {
@@ -270,13 +290,12 @@ pub(super) async fn complete_link_social(
             };
             return Err(AuthError::type_error(format!(
                 "{kind} is not an object (evaluating 'existingAccount.userId.toString')"
-            ))
-            .into());
+            )));
         }
         if account_owner.display_utf16()? != link.user_id().display_utf16()? {
-            return Err("account_already_linked_to_different_user"
-                .to_string()
-                .into());
+            return Ok(OAuthLinkOutcome::failed(
+                "account_already_linked_to_different_user",
+            ));
         }
 
         let stored_scope = if existing_account.scope.is_truthy()? {
@@ -302,45 +321,66 @@ pub(super) async fn complete_link_social(
             tokens.access_token.clone(),
             tokens.refresh_token.clone(),
             tokens.id_token.clone(),
-        )
-        .map_err(|error| error.to_string())?;
+        )?;
+        let mut fields = FieldMap::from([
+            ("providerId".into(), provider_name.into()),
+            (
+                "accessToken".into(),
+                token_bundle
+                    .access_token
+                    .map(Into::into)
+                    .unwrap_or_default(),
+            ),
+            (
+                "refreshToken".into(),
+                token_bundle
+                    .refresh_token
+                    .map(Into::into)
+                    .unwrap_or_default(),
+            ),
+            (
+                "idToken".into(),
+                token_bundle.id_token.map(Into::into).unwrap_or_default(),
+            ),
+            (
+                "accessTokenExpiresAt".into(),
+                tokens
+                    .access_token_expires_at
+                    .clone()
+                    .map(Into::into)
+                    .unwrap_or_default(),
+            ),
+            (
+                "refreshTokenExpiresAt".into(),
+                tokens
+                    .refresh_token_expires_at
+                    .clone()
+                    .map(Into::into)
+                    .unwrap_or_default(),
+            ),
+            (
+                "scope".into(),
+                (!merged_scope.is_empty())
+                    .then_some(merged_scope)
+                    .map(Into::into)
+                    .unwrap_or_default(),
+            ),
+        ]);
+        fields.retain(|_, value| !value.is_undefined());
 
         let _ = ctx
             .database
             .update_account_by_id_value(
                 &existing_account.id.field_value(),
                 UpdateAccount {
-                    provider_id: provider_name.to_owned().into(),
-                    access_token: (token_bundle.access_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    refresh_token: (token_bundle.refresh_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    id_token: (token_bundle.id_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    access_token_expires_at: tokens
-                        .access_token_expires_at
-                        .clone()
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    refresh_token_expires_at: tokens
-                        .refresh_token_expires_at
-                        .clone()
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    scope: ((!merged_scope.is_empty()).then_some(merged_scope))
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
+                    additional_fields: fields,
                     ..Default::default()
                 },
             )
-            .await
-            .map_err(|error| error.to_string())?;
+            .await?;
 
         let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
-        return Ok(());
+        return Ok(OAuthLinkOutcome::Linked);
     }
 
     let token_bundle = encrypt_token_set(
@@ -348,10 +388,9 @@ pub(super) async fn complete_link_social(
         tokens.access_token.clone(),
         tokens.refresh_token.clone(),
         tokens.id_token.clone(),
-    )
-    .map_err(|error| error.to_string())?;
+    )?;
 
-    let _ = ctx
+    let account = ctx
         .database
         .create_account_optional(CreateAccount {
             user_id: better_auth_core::SchemaValue::from_field(link.user_id().clone()),
@@ -380,12 +419,13 @@ pub(super) async fn complete_link_social(
             password: Default::default(),
             ..Default::default()
         })
-        .await
-        .map_err(|_| "unable_to_link_account".to_string())?
-        .ok_or_else(|| "unable_to_link_account".to_string())?;
+        .await?;
+    if account.is_none() {
+        return Ok(OAuthLinkOutcome::failed("unable_to_link_account"));
+    }
 
     let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
-    Ok(())
+    Ok(OAuthLinkOutcome::Linked)
 }
 
 async fn sign_in_with_id_token_core(
@@ -524,6 +564,22 @@ async fn link_with_id_token_core(
             id_token.refresh_token.clone(),
             Some(id_token.token.clone()),
         )?;
+        let mut fields = FieldMap::from([
+            ("providerId".into(), body.provider.clone().into()),
+            (
+                "accessToken".into(),
+                tokens.access_token.map(Into::into).unwrap_or_default(),
+            ),
+            (
+                "idToken".into(),
+                tokens.id_token.map(Into::into).unwrap_or_default(),
+            ),
+            (
+                "refreshToken".into(),
+                tokens.refresh_token.map(Into::into).unwrap_or_default(),
+            ),
+        ]);
+        fields.retain(|_, value| !value.is_undefined());
         let account = account.as_ref().ok_or_else(|| {
             AuthError::type_error("null is not an object (evaluating 'linkedAccount.id')")
         })?;
@@ -532,16 +588,7 @@ async fn link_with_id_token_core(
             .update_account_by_id_value(
                 &account.id.field_value(),
                 UpdateAccount {
-                    provider_id: body.provider.clone().into(),
-                    access_token: (tokens.access_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    refresh_token: (tokens.refresh_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
-                    id_token: (tokens.id_token)
-                        .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                        .unwrap_or_default(),
+                    additional_fields: fields,
                     ..Default::default()
                 },
             )
@@ -597,22 +644,29 @@ async fn link_with_id_token_core(
         let _ = ctx
             .database
             .create_account_optional(CreateAccount {
-                user_id: better_auth_core::SchemaValue::from_field(current_user_id.clone()),
-                provider_id: (body.provider.clone()).into(),
-                account_id: (response.user.id.clone()).into(),
-                access_token: (token_bundle.access_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                refresh_token: (token_bundle.refresh_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                id_token: (token_bundle.id_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                access_token_expires_at: Default::default(),
-                refresh_token_expires_at: Default::default(),
-                scope: Default::default(),
-                password: Default::default(),
+                additional_fields: FieldMap::from([
+                    ("userId".into(), current_user_id.clone()),
+                    ("providerId".into(), body.provider.clone().into()),
+                    ("accountId".into(), response.user.id.clone().into()),
+                    (
+                        "accessToken".into(),
+                        token_bundle
+                            .access_token
+                            .map(Into::into)
+                            .unwrap_or_default(),
+                    ),
+                    (
+                        "idToken".into(),
+                        token_bundle.id_token.map(Into::into).unwrap_or_default(),
+                    ),
+                    (
+                        "refreshToken".into(),
+                        token_bundle
+                            .refresh_token
+                            .map(Into::into)
+                            .unwrap_or_default(),
+                    ),
+                ]),
                 ..Default::default()
             })
             .await?;
