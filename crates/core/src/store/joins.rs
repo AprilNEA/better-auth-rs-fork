@@ -17,6 +17,15 @@ pub enum JoinValue<T> {
     Many(Vec<T>),
 }
 
+impl From<JoinValue<crate::FieldMap>> for crate::FieldValue {
+    fn from(value: JoinValue<crate::FieldMap>) -> Self {
+        match value {
+            JoinValue::One(row) => row.map_or(Self::Null, Self::from),
+            JoinValue::Many(rows) => rows.into_iter().map(Self::from).collect::<Vec<_>>().into(),
+        }
+    }
+}
+
 /// An account and the User relationship selected by the active schema.
 #[derive(Debug, Clone)]
 pub struct AccountOwner {
@@ -228,11 +237,12 @@ mod history_tests;
 #[cfg(test)]
 mod reference_fields_tests;
 
-/// An invitation and the organization selected by its persisted foreign key.
+/// An invitation and the Organization relationship selected by the final field declarations.
 #[derive(Debug, Clone)]
 pub struct InvitationOrganization {
     pub invitation: crate::Invitation,
-    pub organization: Option<crate::Organization>,
+    /// Complete projected child fields, including null and page relationships.
+    pub organization: JoinValue<crate::FieldMap>,
 }
 
 /// A member and the user summary selected by the final schema relationship.

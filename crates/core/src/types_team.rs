@@ -101,10 +101,9 @@ impl Team {
         if schema.additional_fields.is_none() {
             return Ok(self);
         }
-        let mut fields = crate::StructuredCloneContext::new()
-            .clone_map(&crate::AuthRecordFields::field_values(&self)?)?;
-        schema.filter_returned_fields(&mut fields);
-        crate::FromFieldMap::from_field_values(fields)
+        let value =
+            schema.filter_output_value(crate::AuthRecordFields::field_values(&self)?.into())?;
+        crate::FromFieldMap::from_field_values(value.enumerable_fields()?)
     }
 
     /// Apply the Organization adapter's object rest operation to a projected relationship.

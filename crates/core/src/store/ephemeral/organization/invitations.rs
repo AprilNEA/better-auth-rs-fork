@@ -173,73 +173,7 @@ impl InvitationStore for EphemeralStore {
         &self,
         email: &str,
     ) -> AuthResult<Vec<crate::store::InvitationOrganization>> {
-        if self.config.advanced.database.joins == Some(true) {
-            return self.joined_user_invitations(email).await;
-        }
-        let email = self.organization_query(
-            EntityRole::Invitation,
-            "email",
-            Value::from(email.to_lowercase()),
-        )?;
-        let schema = self.field_config(EntityRole::Invitation)?;
-        let selected = {
-            let state = self.lock()?;
-            state.invitations.select_refs(|row| {
-                organization_value(row, &schema, "email").strict_equals(&email.field_value())
-            })?
-        };
-        let rows = crate::query::paginate_memory(
-            selected,
-            Some(self.config.advanced.database.find_many_limit()),
-            None,
-        );
-        self.output_record_refs_batches_then(
-            EntityRole::Invitation,
-            rows,
-            |ready: Vec<(usize, Invitation)>| async move {
-                let mut pending = Vec::new();
-                let mut organizations = Vec::new();
-                for (index, invitation) in ready {
-                    let owner = invitation.organization_id.field_value();
-                    let organization = if owner.is_null() || owner.is_undefined() {
-                        None
-                    } else {
-                        let id = self.organization_query(
-                            EntityRole::Organization,
-                            "id",
-                            invitation.organization_id.field_value(),
-                        )?;
-                        self.lock()?
-                            .organizations
-                            .first_ref(|row| organization_id(row) == id)?
-                    };
-                    let has_organization = organization.is_some();
-                    organizations.extend(organization);
-                    pending.push((index, invitation, has_organization));
-                }
-                let mut organizations = self
-                    .output_record_refs(EntityRole::Organization, organizations)
-                    .await?
-                    .into_iter();
-                Ok(pending
-                    .into_iter()
-                    .map(|(index, invitation, has_organization)| {
-                        (
-                            index,
-                            crate::store::InvitationOrganization {
-                                invitation,
-                                organization: if has_organization {
-                                    organizations.next()
-                                } else {
-                                    None
-                                },
-                            },
-                        )
-                    })
-                    .collect())
-            },
-        )
-        .await
+        self.joined_user_invitations(email).await
     }
 }
 

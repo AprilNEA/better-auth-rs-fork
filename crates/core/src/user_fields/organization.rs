@@ -140,6 +140,19 @@ impl UserConfig {
     pub fn filter_returned_fields(&self, fields: &mut FieldMap) {
         fields.retain(|name, _| self.fields().get(name).is_none_or(|field| field.returned()));
     }
+
+    /// Clone configured public output before filtering its own enumerable fields.
+    /// A relationship array becomes an object with numeric keys when fields are configured.
+    pub fn filter_output_value(&self, value: Value) -> AuthResult<Value> {
+        if !value.is_truthy() || self.additional_fields.is_none() {
+            return Ok(value);
+        }
+        let mut fields = crate::StructuredCloneContext::new()
+            .clone_value(&value)?
+            .enumerable_fields()?;
+        self.filter_returned_fields(&mut fields);
+        Ok(fields.into())
+    }
 }
 impl UserFieldConfig {
     /// Validate one Organization field without applying adapter defaults or transforms.

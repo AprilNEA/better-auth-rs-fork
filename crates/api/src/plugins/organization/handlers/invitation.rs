@@ -1,10 +1,10 @@
-use better_auth_core::AuthRecordFields;
 use better_auth_core::entity::{AuthInvitation, AuthMember, AuthUser};
 use better_auth_core::error::{AuthError, AuthResult};
 use better_auth_core::plugin::AuthContext;
 use better_auth_core::session::NativeSessionData;
 use better_auth_core::types::{AuthRequest, AuthResponse, InvitationStatus};
 use better_auth_core::wire::InvitationView;
+use better_auth_core::{AuthRecordFields, FieldValue, SchemaValue};
 
 use super::{require_native_session, resolve_organization_id};
 use crate::plugins::organization::rbac::check_permission;
@@ -479,10 +479,12 @@ pub(crate) async fn list_user_invitations_core(
         .map(|row| {
             Ok(UserInvitationResponse {
                 invitation: InvitationView::try_from_invitation(&row.invitation)?,
-                organization_name: row
-                    .organization
-                    .map(|organization| organization.name)
-                    .unwrap_or_default(),
+                organization_name: SchemaValue::from_field(match row.organization {
+                    better_auth_core::store::JoinValue::One(Some(organization)) => {
+                        organization.get("name").cloned().unwrap_or_default()
+                    }
+                    _ => FieldValue::Undefined,
+                }),
             })
         })
         .collect::<AuthResult<Vec<_>>>()?;

@@ -55,10 +55,13 @@ async fn query<S: AuthSchema>(store: &impl AuthStore<S>, fixture: &Value) -> Aut
     Ok(match fixture["path"].as_str().unwrap() {
         "member-org" => display_member(&store.get_member_with_user("organization-a", "user-a").await?.unwrap()),
         "member-id" => display_member(&store.get_member_by_id_with_user("member-a").await?.unwrap()),
-        "organizations" => json!(store.list_user_organizations("user-a").await?.iter().map(display_organization).collect::<Vec<_>>()),
+        "organizations" => json!(store.list_user_organizations("user-a").await?.into_iter().map(|row| -> AuthResult<Value> {
+            let row = better_auth_core::FieldValue::from(row);
+            Ok(json!({"name":row.model_property("name")?.json()?, "logo":row.model_property("logo")?.json()?}))
+        }).collect::<AuthResult<Vec<_>>>()?),
         "teams" => json!(store.list_user_teams("user-a").await?.iter().map(display_team).collect::<Vec<_>>()),
         "invitations" => json!(store.list_user_invitations("RECIPIENT@ordinary-native-org.test").await?.into_iter().map(|row| {
-            json!({"label":row.invitation.additional_fields["label"].json().unwrap(),"detail":row.invitation.additional_fields["detail"].json().unwrap(),"organizationName":row.organization.unwrap().name})
+            json!({"label":row.invitation.additional_fields["label"].json().unwrap(),"detail":row.invitation.additional_fields["detail"].json().unwrap(),"organizationName":better_auth_core::FieldValue::from(row.organization).model_property("name").unwrap().json().unwrap()})
         }).collect::<Vec<_>>()),
         "full" => {
             let row = store.get_organization_details(OrganizationDetailsQuery {

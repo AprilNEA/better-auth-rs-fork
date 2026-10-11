@@ -288,22 +288,6 @@ pub(super) fn optional_model<M: FromQueryResult>(
     }
 }
 
-pub(super) async fn joined_rows<P: EntityTrait, C: EntityTrait>(
-    db: &impl ConnectionTrait,
-    query: &SelectStatement,
-) -> AuthResult<Vec<(P::Model, Option<C::Model>)>> {
-    db.query_all(query)
-        .await
-        .map_err(super::map_db_err)?
-        .iter()
-        .map(|row| {
-            let parent = P::Model::from_query_result(row, "A_").map_err(super::map_db_err)?;
-            let child = optional_model::<C::Model>(row, "B_", CHILD_PRESENT)?;
-            Ok((parent, child))
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

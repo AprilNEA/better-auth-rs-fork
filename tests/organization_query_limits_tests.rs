@@ -272,7 +272,13 @@ async fn check_native_organization_lists<S: AuthSchema>(
                 observed,
                 [
                     "member:owner".to_owned(),
-                    format!("organization:{}", row.name.typed()?)
+                    format!(
+                        "organization:{}",
+                        better_auth_core::SchemaValue::<String>::from_field(
+                            FieldValue::from(row.clone()).model_property("name")?
+                        )
+                        .typed()?
+                    )
                 ]
             );
         } else {

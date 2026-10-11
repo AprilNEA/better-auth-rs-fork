@@ -256,8 +256,8 @@ async fn native_member_page_preserves_projected_values_and_strict_join_identity(
     assert_eq!(response.body.json().unwrap(), Some(expected));
     let organizations = list_organizations_core(&data, &ctx).await.unwrap();
     assert_eq!(
-        serde_json::to_value(organizations).unwrap(),
-        serde_json::to_value([&organization]).unwrap()
+        FieldValue::from(organizations).json().unwrap(),
+        Some(serde_json::to_value([&organization]).unwrap())
     );
     // A non-ID reference preserves the numeric projection; native joins still match stored string keys.
     numeric_member_ids.store(true, Ordering::SeqCst);

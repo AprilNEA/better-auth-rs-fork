@@ -38,6 +38,9 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
     for SeaOrmStore<S, O, P>
 where
     S::User: crate::SeaOrmUserModel,
+    S::Session: crate::SeaOrmSessionModel,
+    S::Account: crate::SeaOrmAccountModel,
+    S::Verification: crate::SeaOrmVerificationModel,
 {
     async fn get_organization_details(
         &self,
@@ -356,79 +359,18 @@ where
         tx.commit().await.map_err(map_db_err)
     }
 
-    async fn list_user_organizations(&self, user_id: &str) -> AuthResult<Vec<Organization>> {
+    async fn list_user_organizations(
+        &self,
+        user_id: &str,
+    ) -> AuthResult<Vec<better_auth_core::store::JoinValue<better_auth_core::FieldMap>>> {
         self.list_user_organizations_value(&user_id.into()).await
     }
 
     async fn list_user_organizations_value(
         &self,
         user_id: &better_auth_core::FieldValue,
-    ) -> AuthResult<Vec<Organization>> {
-        if self.config().advanced.database.joins == Some(true) {
-            return self.joined_user_organizations(user_id).await;
-        }
-        let config = self.organization_fields()?;
-        let rows = Entity::<O::Member>::find()
-            .filter(self.organization_field_equals::<O::Member>(
-                better_auth_core::store::schema::EntityRole::Member,
-                "userId",
-                user_id,
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
-        let organizations = models::project_then::<O::Member, _, _>(
-            &rows,
-            &config.member,
-            self.connection().get_database_backend(),
-            (
-                &self.model_fields,
-                better_auth_core::store::schema::EntityRole::Member,
-            ),
-            |index, _| {
-                let rows = &rows;
-                let config = &config;
-                async move {
-                    let member = rows.get(index).ok_or_else(|| {
-                        better_auth_core::AuthError::internal(
-                            "Member projection lost its stored join index",
-                        )
-                    })?;
-                    self.model_fields.begin_id_query(
-                        better_auth_core::store::schema::EntityRole::Organization,
-                    )?;
-                    let row = Entity::<O::Organization>::find()
-                        .filter(super::value_filter::equals_native(
-                            O::Organization::column("id")?,
-                            models::join_value(member, "organization_id")?,
-                            self.connection().get_database_backend(),
-                        )?)
-                        .one(self.connection())
-                        .await
-                        .map_err(map_db_err)?;
-                    match row {
-                        Some(row) => models::record(
-                            &row,
-                            &config.organization,
-                            self.connection().get_database_backend(),
-                            (
-                                &self.model_fields,
-                                better_auth_core::store::schema::EntityRole::Organization,
-                            ),
-                        )
-                        .await
-                        .map(Some),
-                        None => Ok(None),
-                    }
-                }
-            },
-        )
-        .await?;
-        Ok(organizations.into_iter().flatten().collect())
+    ) -> AuthResult<Vec<better_auth_core::store::JoinValue<better_auth_core::FieldMap>>> {
+        self.list_member_organizations(user_id).await
     }
 }
 

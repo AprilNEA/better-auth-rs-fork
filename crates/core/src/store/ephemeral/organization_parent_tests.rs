@@ -223,8 +223,11 @@ async fn query(store: &EphemeralStore, path: &str) -> AuthResult<JsonValue> {
                 .list_user_organizations("user-a")
                 .await?
                 .into_iter()
-                .map(|row| json!({"name":row.name,"logo":row.logo}))
-                .collect::<Vec<_>>()
+                .map(|row| {
+                    let row = Value::from(row);
+                    Ok(json!({"name":row.model_property("name")?.json()?,"logo":row.model_property("logo")?.json()?}))
+                })
+                .collect::<AuthResult<Vec<_>>>()?
         ),
         "invitations" => json!(
             store
@@ -234,7 +237,7 @@ async fn query(store: &EphemeralStore, path: &str) -> AuthResult<JsonValue> {
                 .map(|row| Ok(
                     json!({"label":row.invitation.additional_fields["label"].json()?,
                 "detail":row.invitation.additional_fields["detail"].json()?,
-                "organizationName":row.organization.unwrap().name})
+                "organizationName":Value::from(row.organization).model_property("name")?.json()?})
                 ))
                 .collect::<AuthResult<Vec<_>>>()?
         ),

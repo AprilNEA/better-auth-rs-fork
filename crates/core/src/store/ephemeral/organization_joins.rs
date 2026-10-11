@@ -9,6 +9,7 @@ use better_auth_schema_registry::EntityRole;
 mod detail_dependencies_tests;
 mod details;
 mod member_user;
+mod organization_lists;
 #[cfg(test)]
 mod property_tests;
 mod team_details;
@@ -90,84 +91,6 @@ fn native_relationships(
 }
 
 impl EphemeralStore {
-    pub(super) async fn joined_user_organizations(
-        &self,
-        user_id: &Value,
-    ) -> AuthResult<Vec<Organization>> {
-        let schema = self.field_config(EntityRole::Member)?;
-        let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
-        let (members, organizations) = {
-            let state = self.lock()?;
-            let rows = crate::query::paginate_memory(
-                state
-                    .members
-                    .snapshot()?
-                    .into_iter()
-                    .filter(|row| {
-                        organization_value(row, &schema, "userId")
-                            .strict_equals(&user_id.field_value())
-                    })
-                    .collect(),
-                Some(self.config.advanced.database.find_many_limit()),
-                None,
-            );
-            let organizations = rows
-                .iter()
-                .map(|row| {
-                    state.organizations.first_ref(|org| {
-                        super::organization_rows::id(org)
-                            .field_value()
-                            .strict_equals(&organization_value(row, &schema, "organizationId"))
-                    })
-                })
-                .collect::<AuthResult<Vec<_>>>()?;
-            let sources = rows
-                .into_iter()
-                .zip(&organizations)
-                .map(|(parent, child)| {
-                    RecordSource::joined(
-                        parent,
-                        [(
-                            self.model_fields
-                                .storage_model_name(EntityRole::Organization, "organization")
-                                .to_owned(),
-                            JoinValue::One(child.clone()).raw_value(),
-                        )],
-                    )
-                })
-                .collect();
-            (sources, organizations)
-        };
-        self.project_record_sources_batches_then(
-            EntityRole::Member,
-            &schema,
-            members,
-            |ready: Vec<(usize, FieldMap)>| {
-                let organizations = &organizations;
-                async move {
-                    let mut indices = Vec::new();
-                    let mut sources = Vec::new();
-                    for (index, _) in ready {
-                        if let Some(row) = organizations.get(index).ok_or_else(|| {
-                            AuthError::internal("Member projection lost its stored join index")
-                        })? {
-                            indices.push(index);
-                            sources.push(row.clone());
-                        }
-                    }
-                    Ok(indices
-                        .into_iter()
-                        .zip(
-                            self.output_record_refs(EntityRole::Organization, sources)
-                                .await?,
-                        )
-                        .collect())
-                }
-            },
-        )
-        .await
-    }
-
     pub(super) async fn joined_user_teams(&self, user_id: &Value) -> AuthResult<Vec<crate::Team>> {
         let member_schema = self.field_config(EntityRole::TeamMember)?;
         let team_schema = self.field_config(EntityRole::Team)?;
@@ -241,96 +164,5 @@ impl EphemeralStore {
             .into_iter()
             .map(|rows| crate::Team::from_membership_join(rows, join.many))
             .collect()
-    }
-
-    pub(super) async fn joined_user_invitations(
-        &self,
-        email: &str,
-    ) -> AuthResult<Vec<crate::store::InvitationOrganization>> {
-        let schema = self.field_config(EntityRole::Invitation)?;
-        let email = self.organization_query(
-            EntityRole::Invitation,
-            "email",
-            Value::from(email.to_lowercase()),
-        )?;
-        let (invitations, organizations) = {
-            let state = self.lock()?;
-            let rows = crate::query::paginate_memory(
-                state
-                    .invitations
-                    .snapshot()?
-                    .into_iter()
-                    .filter(|row| {
-                        organization_value(row, &schema, "email")
-                            .strict_equals(&email.field_value())
-                    })
-                    .collect(),
-                Some(self.config.advanced.database.find_many_limit()),
-                None,
-            );
-            let organizations = rows
-                .iter()
-                .map(|row| {
-                    state.organizations.first_ref(|org| {
-                        super::organization_rows::id(org)
-                            .field_value()
-                            .strict_equals(&organization_value(row, &schema, "organizationId"))
-                    })
-                })
-                .collect::<AuthResult<Vec<_>>>()?;
-            let sources = rows
-                .into_iter()
-                .zip(&organizations)
-                .map(|(parent, child)| {
-                    RecordSource::joined(
-                        parent,
-                        [(
-                            self.model_fields
-                                .storage_model_name(EntityRole::Organization, "organization")
-                                .to_owned(),
-                            JoinValue::One(child.clone()).raw_value(),
-                        )],
-                    )
-                })
-                .collect();
-            (sources, organizations)
-        };
-        self.project_record_sources_batches_then(
-            EntityRole::Invitation,
-            &schema,
-            invitations,
-            |ready: Vec<(usize, FieldMap)>| {
-                let organizations = &organizations;
-                async move {
-                    let mut pending = Vec::new();
-                    let mut sources = Vec::new();
-                    for (index, invitation) in ready {
-                        let row = organizations.get(index).ok_or_else(|| {
-                            AuthError::internal("Invitation projection lost its stored join index")
-                        })?;
-                        sources.extend(row.clone());
-                        pending.push((index, invitation, row.is_some()));
-                    }
-                    let mut projected = self
-                        .output_record_refs(EntityRole::Organization, sources)
-                        .await?
-                        .into_iter();
-                    Ok(pending
-                        .into_iter()
-                        .map(|(index, mut invitation, present)| {
-                            let _ = invitation.shift_remove("organization");
-                            Ok((
-                                index,
-                                crate::store::InvitationOrganization {
-                                    invitation: Invitation::from_field_values(invitation)?,
-                                    organization: if present { projected.next() } else { None },
-                                },
-                            ))
-                        })
-                        .collect::<AuthResult<Vec<_>>>()?)
-                }
-            },
-        )
-        .await
     }
 }

@@ -1,6 +1,6 @@
 use super::types::OrganizationResponse;
 use better_auth_core::{
-    AuthContext, AuthResult, AuthSchema, FromFieldMap, Organization, StructuredCloneContext, Team,
+    AuthContext, AuthResult, AuthSchema, FieldValue, FromFieldMap, Organization, Team,
     entity::AuthOrganization, organization_fields::OrganizationFields,
 };
 use serde_json::Value;
@@ -145,25 +145,21 @@ pub(super) fn organization(
     organization: &impl AuthOrganization,
     ctx: &AuthContext<impl AuthSchema>,
 ) -> AuthResult<OrganizationResponse> {
-    let mut fields = organization.field_values()?;
-    if let Some(plugin) = ctx.extensions.get::<super::OrganizationPlugin>()
-        && plugin
-            .config
-            .schema
-            .organization
-            .additional_fields
-            .is_some()
-    {
-        fields = StructuredCloneContext::new().clone_map(&fields)?;
-        plugin
-            .config
-            .schema
-            .organization
-            .filter_returned_fields(&mut fields);
-    }
+    let fields =
+        organization_value(organization.field_values()?.into(), ctx)?.enumerable_fields()?;
     Ok(OrganizationResponse::from_organization(
         &Organization::from_field_values(fields)?,
     ))
+}
+
+pub(super) fn organization_value(
+    value: FieldValue,
+    ctx: &AuthContext<impl AuthSchema>,
+) -> AuthResult<FieldValue> {
+    match ctx.extensions.get::<super::OrganizationPlugin>() {
+        Some(plugin) => plugin.config.schema.organization.filter_output_value(value),
+        None => Ok(value),
+    }
 }
 
 pub(super) fn created_organization(
@@ -192,7 +188,6 @@ fn response_fields(path: &str) -> ResponseFields {
         "/organization/create"
         | "/organization/update"
         | "/organization/delete"
-        | "/organization/list"
         | "/organization/get-organization"
         | "/organization/set-active" => ResponseFields::Organization,
         "/organization/get-full-organization" => ResponseFields::FullOrganization,

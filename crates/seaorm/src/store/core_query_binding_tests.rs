@@ -380,12 +380,23 @@ async fn organization_relations_rebind_stored_keys_through_the_write_policy() ->
             assert_eq!(invitations.len(), 1);
             assert_eq!(required(invitations.first())?.invitation, invitation);
             assert_eq!(
-                required(invitations.first())?.organization.as_ref(),
-                Some(&organization)
+                better_auth_core::FieldValue::from(
+                    required(invitations.first())?.organization.clone()
+                ),
+                better_auth_core::FieldValue::from(
+                    better_auth_core::AuthRecordFields::field_values(&organization)?
+                )
             );
             assert_eq!(
-                store.list_user_organizations(owner_id).await?,
-                [organization.clone()]
+                store
+                    .list_user_organizations(owner_id)
+                    .await?
+                    .into_iter()
+                    .map(better_auth_core::FieldValue::from)
+                    .collect::<Vec<_>>(),
+                [better_auth_core::FieldValue::from(
+                    better_auth_core::AuthRecordFields::field_values(&organization)?
+                )]
             );
             let mut public_team = team.clone();
             assert_eq!(

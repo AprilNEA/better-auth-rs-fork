@@ -229,7 +229,10 @@ pub(super) async fn groups(
         .await?;
     let result = organizations
         .iter()
-        .map(|row| display(&row.additional_fields))
+        .map(|row| match row {
+            crate::store::JoinValue::One(Some(row)) => display(row),
+            _ => Err(AuthError::internal("Expected an Organization record")),
+        })
         .collect::<AuthResult<Vec<_>>>()?;
     fixture.observe(
         &mut operations,

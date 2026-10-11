@@ -121,9 +121,10 @@ async fn rows<S: AuthSchema>(
             .await?
             .into_iter()
             .map(|row| {
+                let row = better_auth_core::FieldValue::from(row);
                 (
-                    row.id.typed().unwrap().clone(),
-                    json!({"name":row.name, "detail":row.logo}),
+                    row.model_property("id").unwrap().as_str().unwrap().to_owned(),
+                    json!({"name":row.model_property("name").unwrap().json().unwrap(), "detail":row.model_property("logo").unwrap().json().unwrap()}),
                 )
             })
             .collect()),

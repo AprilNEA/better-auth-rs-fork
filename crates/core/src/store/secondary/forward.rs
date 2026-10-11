@@ -169,13 +169,16 @@ impl<S: AuthSchema> OrganizationStore for SecondaryStore<S> {
     async fn delete_organization(&self, id: &str) -> AuthResult<()> {
         self.inner.delete_organization(id).await
     }
-    async fn list_user_organizations(&self, user_id: &str) -> AuthResult<Vec<Organization>> {
+    async fn list_user_organizations(
+        &self,
+        user_id: &str,
+    ) -> AuthResult<Vec<JoinValue<crate::FieldMap>>> {
         self.inner.list_user_organizations(user_id).await
     }
     async fn list_user_organizations_value(
         &self,
         user_id: &crate::FieldValue,
-    ) -> AuthResult<Vec<Organization>> {
+    ) -> AuthResult<Vec<JoinValue<crate::FieldMap>>> {
         self.inner.list_user_organizations_value(user_id).await
     }
 }

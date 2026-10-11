@@ -228,9 +228,10 @@ async fn rows<S: AuthSchema>(
         Ok(result)
     } else {
         store.list_user_invitations("GUEST@ordinary-fallback.test").await?.into_iter().map(|row| {
-            let child = row.organization.unwrap();
-            assert_eq!(row.invitation.organization_id, child.id);
-            Ok((child.id.typed().unwrap().clone(), json!({"parent":row.invitation.additional_fields["label"].json()?, "parentDetail":row.invitation.additional_fields["marker"].json()?, "name":child.name})))
+            let child = FieldValue::from(row.organization);
+            let id = child.model_property("id")?;
+            assert_eq!(row.invitation.organization_id.field_value(), id);
+            Ok((id.as_str().unwrap().to_owned(), json!({"parent":row.invitation.additional_fields["label"].json()?, "parentDetail":row.invitation.additional_fields["marker"].json()?, "name":child.model_property("name")?.json()?})))
         }).collect()
     }
 }

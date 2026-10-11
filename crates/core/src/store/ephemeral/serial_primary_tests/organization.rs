@@ -272,7 +272,9 @@ async fn serial_organization_joins_distinguish_native_owners_from_projected_owne
                 required(state.invitations.get_mut(&id)?)?.insert("organizationId".into(), owner);
         }
         let organizations = store.list_user_organizations("001").await?;
-        assert_eq!(organizations.len(), usize::from(!native));
+        assert_eq!(organizations.len(), 1);
+        let organization = Value::from(required(organizations.first())?.clone());
+        assert_eq!(organization.is_null(), native);
         let invitations = store.list_user_invitations("recipient@example.com").await?;
         assert_eq!(invitations.len(), 1);
         let joined = required(invitations.first())?;
@@ -280,16 +282,11 @@ async fn serial_organization_joins_distinguish_native_owners_from_projected_owne
             joined.invitation.organization_id.field_value(),
             Value::from("1")
         );
-        assert_eq!(joined.organization.is_some(), !native);
+        let joined_organization = Value::from(joined.organization.clone());
+        assert_eq!(joined_organization.is_null(), native);
         if !native {
-            assert_eq!(
-                required(organizations.first())?.id.field_value(),
-                Value::from("1")
-            );
-            assert_eq!(
-                required(joined.organization.as_ref())?.id.field_value(),
-                Value::from("1")
-            );
+            assert_eq!(organization.model_property("id")?, Value::from("1"));
+            assert_eq!(joined_organization.model_property("id")?, Value::from("1"));
         }
     }
     Ok(())
@@ -331,7 +328,10 @@ async fn live_organization_id_projection_observes_prior_output_callbacks() -> Au
     );
     store.configure_organization_fields(fields)?;
     let rows = store.list_user_organizations("001").await?;
-    assert_eq!(required(rows.first())?.id.field_value(), Value::from("2"));
+    assert_eq!(
+        Value::from(required(rows.first())?.clone()).model_property("id")?,
+        Value::from("2")
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(
         organization_id(required(store.lock()?.organizations.snapshot()?.first())?).field_value(),

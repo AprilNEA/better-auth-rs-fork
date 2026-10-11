@@ -270,64 +270,17 @@ impl OrganizationStore for EphemeralStore {
         })?;
         Ok(())
     }
-    async fn list_user_organizations(&self, user_id: &str) -> AuthResult<Vec<Organization>> {
+    async fn list_user_organizations(
+        &self,
+        user_id: &str,
+    ) -> AuthResult<Vec<crate::store::JoinValue<FieldMap>>> {
         self.list_user_organizations_value(&user_id.into()).await
     }
 
     async fn list_user_organizations_value(
         &self,
         user_id: &Value,
-    ) -> AuthResult<Vec<Organization>> {
-        if self.config.advanced.database.joins == Some(true) {
-            return self.joined_user_organizations(user_id).await;
-        }
-        let schema = self.field_config(EntityRole::Member)?;
-        let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
-        let selected = {
-            let state = self.lock()?;
-            state.members.select_refs(|row| {
-                organization_value(row, &schema, "userId").strict_equals(&user_id.field_value())
-            })?
-        };
-        let rows = crate::query::paginate_memory(
-            selected,
-            Some(self.config.advanced.database.find_many_limit()),
-            None,
-        );
-        self.output_record_refs_batches_then(
-            EntityRole::Member,
-            rows,
-            |ready: Vec<(usize, Member)>| async move {
-                let mut indices = Vec::new();
-                let mut organizations = Vec::new();
-                for (index, member) in ready {
-                    let owner = member.organization_id.field_value();
-                    if owner.is_null() || owner.is_undefined() {
-                        continue;
-                    }
-                    let id = self.organization_query(
-                        EntityRole::Organization,
-                        "id",
-                        member.organization_id.field_value(),
-                    )?;
-                    if let Some(organization) = self
-                        .lock()?
-                        .organizations
-                        .first_ref(|row| organization_id(row) == id)?
-                    {
-                        indices.push(index);
-                        organizations.push(organization);
-                    }
-                }
-                Ok(indices
-                    .into_iter()
-                    .zip(
-                        self.output_record_refs(EntityRole::Organization, organizations)
-                            .await?,
-                    )
-                    .collect())
-            },
-        )
-        .await
+    ) -> AuthResult<Vec<crate::store::JoinValue<FieldMap>>> {
+        self.joined_user_organizations(user_id).await
     }
 }

@@ -13,7 +13,7 @@ use better_auth_core::store::{EphemeralStore, OrganizationRoleKey};
 use better_auth_core::user_fields::UserFieldConfig;
 use better_auth_core::{
     CreateInvitation, CreateMember, CreateOrganization, CreateOrganizationRole, CreateSession,
-    CreateTeam, CreateUser, FieldDate, FieldMap, HttpMethod, InvitationStatus,
+    CreateTeam, CreateUser, FieldDate, FieldMap, FieldValue, HttpMethod, InvitationStatus,
 };
 use better_auth_seaorm::store::__private_test_support::{bundled_schema::BundledSchema, migrator};
 use better_auth_seaorm::{SeaOrmStore, sea_orm::Database};
@@ -239,8 +239,8 @@ async fn check<S: AuthSchema>(
                 .list_user_organizations("alice")
                 .await?
                 .into_iter()
-                .map(|row| row.name)
-                .collect::<Vec<_>>()
+                .map(|row| FieldValue::from(row).model_property("name")?.json())
+                .collect::<AuthResult<Vec<_>>>()?
         ),
     )?;
     record(

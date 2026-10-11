@@ -1410,12 +1410,16 @@ pub trait OrganizationStore: Send + Sync {
         self.update_organization(id.typed()?, update).await
     }
     async fn delete_organization(&self, id: &str) -> AuthResult<()>;
-    async fn list_user_organizations(&self, user_id: &str) -> AuthResult<Vec<Organization>>;
-    /// Query membership with the original native User ID and existing join policy.
+    /// Read each membership's complete Organization relationship before public output filtering.
+    async fn list_user_organizations(
+        &self,
+        user_id: &str,
+    ) -> AuthResult<Vec<JoinValue<crate::FieldMap>>>;
+    /// Query membership with the original native User ID and final reference declarations.
     async fn list_user_organizations_value(
         &self,
         user_id: &crate::FieldValue,
-    ) -> AuthResult<Vec<Organization>> {
+    ) -> AuthResult<Vec<JoinValue<crate::FieldMap>>> {
         let user_id = user_id.as_str().ok_or_else(|| {
             AuthError::config("The store must support native organization membership queries")
         })?;
@@ -1622,7 +1626,7 @@ pub trait InvitationStore: Send + Sync {
         self.count_pending_organization_invitations(id.typed()?)
             .await
     }
-    /// Read the email's adapter-limited page before status filtering, with its stored organizations.
+    /// Read the email's adapter-limited page and projected relationships before status filtering.
     async fn list_user_invitations(&self, email: &str) -> AuthResult<Vec<InvitationOrganization>>;
 }
 

@@ -120,7 +120,7 @@ pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
         "member":joined_member(&store.get_member_with_user(&padded_organization, &padded_user).await?.ok_or_else(|| AuthError::internal("ordinary member pair exists"))?),
         "memberById":joined_member(&store.get_member_by_id_with_user(created_member.id.typed()?).await?.ok_or_else(|| AuthError::internal("ordinary member ID exists"))?),
         "filtered":{"total":total,"members":filtered_members},
-        "organizations":store.list_user_organizations(&padded_user).await?.iter().map(|row| &row.id).collect::<Vec<_>>(),
+        "organizations":store.list_user_organizations(&padded_user).await?.into_iter().map(|row| FieldValue::from(row).model_property("id")?.json()).collect::<AuthResult<Vec<_>>>()?,
         "teams":store.list_user_teams(&padded_user).await?.iter().map(|row| &row.id).collect::<Vec<_>>(),
         "teamMembers":team_members(store.list_team_members(&padded_team).await?),
         "teamMember":{"teamId":point_team_member.team_id,"userId":point_team_member.user_id},
@@ -135,7 +135,7 @@ pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
         "role":store.find_organization_role(&padded_organization, OrganizationRoleKey::Name("viewer")).await?.ok_or_else(|| AuthError::internal("ordinary role exists"))?.organization_id,
         "invitations":store.list_user_invitations(EMAIL).await?.iter().map(|row| -> AuthResult<Value> { Ok(json!({
             "organizationId":row.invitation.organization_id,"inviterId":row.invitation.inviter_id,
-            "organizationName":present(row.organization.as_ref().ok_or_else(|| AuthError::internal("ordinary invitation organization exists"))?.name.json()?),"teamId":present(row.invitation.team_id.json()?),
+            "organizationName":present(FieldValue::from(row.organization.clone()).model_property("name")?.json()?),"teamId":present(row.invitation.team_id.json()?),
         })) }).collect::<AuthResult<Vec<_>>>()?,
         "pending":store.get_pending_invitation(&padded_organization, EMAIL).await?.iter().map(|row| &row.id).collect::<Vec<_>>(),
         "full":{

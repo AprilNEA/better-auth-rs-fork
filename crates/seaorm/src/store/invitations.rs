@@ -71,6 +71,11 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
 #[async_trait]
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> InvitationStore
     for SeaOrmStore<S, O, P>
+where
+    S::User: crate::SeaOrmUserModel,
+    S::Session: crate::SeaOrmSessionModel,
+    S::Account: crate::SeaOrmAccountModel,
+    S::Verification: crate::SeaOrmVerificationModel,
 {
     async fn create_invitation(&self, mut input: CreateInvitation) -> AuthResult<Invitation> {
         let config = self.organization_fields()?.invitation;
@@ -278,75 +283,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> I
         &self,
         email: &str,
     ) -> AuthResult<Vec<better_auth_core::store::InvitationOrganization>> {
-        if self.config().advanced.database.joins == Some(true) {
-            return self.joined_user_invitations(email).await;
-        }
-        let fields = self.organization_fields()?;
-        let rows = Entity::<O::Invitation>::find()
-            .filter(self.organization_field_equals::<O::Invitation>(
-                EntityRole::Invitation,
-                "email",
-                &email.to_lowercase().into(),
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
-        models::project_then::<O::Invitation, _, _>(
-            &rows,
-            &fields.invitation,
-            self.connection().get_database_backend(),
-            (
-                &self.model_fields,
-                better_auth_core::store::schema::EntityRole::Invitation,
-            ),
-            |index, invitation| {
-                let rows = &rows;
-                let fields = &fields;
-                async move {
-                    let row = rows.get(index).ok_or_else(|| {
-                        better_auth_core::AuthError::internal(
-                            "Invitation projection lost its stored join index",
-                        )
-                    })?;
-                    self.model_fields.begin_id_query(
-                        better_auth_core::store::schema::EntityRole::Organization,
-                    )?;
-                    let organization = Entity::<O::Organization>::find()
-                        .filter(super::value_filter::equals_native(
-                            O::Organization::column("id")?,
-                            models::join_value(row, "organization_id")?,
-                            self.connection().get_database_backend(),
-                        )?)
-                        .one(self.connection())
-                        .await
-                        .map_err(map_db_err)?;
-                    let organization = match organization {
-                        Some(row) => Some(
-                            models::record(
-                                &row,
-                                &fields.organization,
-                                self.connection().get_database_backend(),
-                                (
-                                    &self.model_fields,
-                                    better_auth_core::store::schema::EntityRole::Organization,
-                                ),
-                            )
-                            .await?,
-                        ),
-                        None => None,
-                    };
-                    Ok(better_auth_core::store::InvitationOrganization {
-                        invitation,
-                        organization,
-                    })
-                }
-            },
-        )
-        .await
+        self.list_invitation_organizations(email).await
     }
 }
 

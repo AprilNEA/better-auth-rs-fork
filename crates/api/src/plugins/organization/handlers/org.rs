@@ -64,10 +64,7 @@ pub(crate) async fn create_organization_core(
             message: "You are not allowed to create a new organization",
         });
     }
-    let user_orgs = ctx
-        .database
-        .list_user_organizations_value(&user.model_property("id")?)
-        .await?;
+    let user_orgs = user_organizations(&user.model_property("id")?, ctx).await?;
     if config
         .organization_limit_reached(user, user_orgs.len())
         .await?
@@ -393,15 +390,19 @@ pub(crate) async fn delete_organization_core(
 pub(crate) async fn list_organizations_core(
     session: &NativeSessionData,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<Vec<OrganizationResponse>> {
-    let organizations = ctx
-        .database
-        .list_user_organizations_value(&session.user_property("id")?)
-        .await?;
-    Ok(organizations
-        .iter()
-        .map(OrganizationResponse::from_organization)
-        .collect())
+) -> AuthResult<Vec<FieldValue>> {
+    user_organizations(&session.user_property("id")?, ctx).await
+}
+
+async fn user_organizations(
+    user_id: &FieldValue,
+    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+) -> AuthResult<Vec<FieldValue>> {
+    let organizations = ctx.database.list_user_organizations_value(user_id).await?;
+    organizations
+        .into_iter()
+        .map(|organization| super::super::fields::organization_value(organization.into(), ctx))
+        .collect()
 }
 
 pub(crate) async fn get_full_organization_core(
@@ -760,7 +761,7 @@ pub async fn handle_list_organizations(
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
     let organizations = list_organizations_core(&session, ctx).await?;
-    AuthResponse::json(None, &organizations)
+    Ok(AuthResponse::native(None, organizations.into()))
 }
 
 /// Get organization metadata for a member, without expanding members or invitations.
