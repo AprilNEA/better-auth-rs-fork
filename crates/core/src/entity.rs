@@ -208,6 +208,11 @@ pub trait AuthAccount:
 pub trait AuthOrganization:
     AuthRecordFields + Clone + Send + Sync + Serialize + std::fmt::Debug + 'static
 {
+    /// Source property order retained by a projected organization.
+    fn field_order(&self) -> Option<&[String]> {
+        None
+    }
+
     /// Application fields already projected by the adapter.
     fn projected_fields(&self) -> Option<&crate::FieldMap> {
         None

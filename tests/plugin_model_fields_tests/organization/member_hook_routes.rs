@@ -1,7 +1,8 @@
 use super::member_contract_support::*;
 use super::*;
 use better_auth::plugins::organization::hooks::{OrganizationHooks, OrganizationMemberEvent};
-use better_auth_core::{AuthRecordFields, EndpointInput, HttpMethod};
+use better_auth::server_api::EndpointInput;
+use better_auth_core::{AuthRecordFields, HttpMethod};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, Debug)]

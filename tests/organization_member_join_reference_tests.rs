@@ -44,55 +44,61 @@ async fn contract<S: AuthSchema>(
     scenario: &Scenario,
     case: &Case,
 ) -> AuthResult<()> {
-    raw.configure_organization_fields(policies::organization_fields(&scenario.storage(), None)?)?;
-    if case.populated {
-        storage::seed(raw.as_ref(), scenario).await?;
-    }
-    let before = storage::snapshot(raw.as_ref(), database).await?;
-    let expected_operations = case
-        .operations
-        .iter()
-        .filter(|operation| operation.surface == "organization")
-        .collect::<Vec<_>>();
-    assert_eq!(expected_operations.len(), 2, "{case:?}");
-    for operation in expected_operations {
-        let events = Events::default();
-        let store = raw.with_runtime(
-            Arc::new(policies::config(scenario, case.joins, Some(&events))?),
-            Vec::new(),
-            Default::default(),
-        )?;
-        store.configure_organization_fields(policies::organization_fields(
-            scenario,
-            Some(&events),
+    let events = Events::default();
+    // Fixture setup initializes the same tracing callsite as the observed operations.
+    let subscriber = tracing_subscriber::registry().with(events.clone());
+    async {
+        raw.configure_organization_fields(policies::organization_fields(
+            &scenario.storage(),
+            None,
         )?)?;
-        let result = async {
-            match operation.path.as_str() {
+        if case.populated {
+            storage::seed(raw.as_ref(), scenario).await?;
+        }
+        let before = storage::snapshot(raw.as_ref(), database).await?;
+        let expected_operations = case
+            .operations
+            .iter()
+            .filter(|operation| operation.surface == "organization")
+            .collect::<Vec<_>>();
+        assert_eq!(expected_operations.len(), 2, "{case:?}");
+        for operation in expected_operations {
+            let store = raw.with_runtime(
+                Arc::new(policies::config(scenario, case.joins, Some(&events))?),
+                Vec::new(),
+                Default::default(),
+            )?;
+            store.configure_organization_fields(policies::organization_fields(
+                scenario,
+                Some(&events),
+            )?)?;
+            let _ = events.take();
+            let result = match operation.path.as_str() {
                 "by-org" => store.get_member_with_user("organization-a", "user-a").await,
                 "by-id" => store.get_member_by_id_with_user("member-a").await,
                 path => Err(AuthError::internal(format!(
                     "Unknown member join fixture path: {path}"
                 ))),
-            }
+            };
+            assert_eq!(
+                events.take(),
+                operation.events,
+                "{case:?}: {}",
+                operation.path
+            );
+            observe::assert_result(result, operation, case)?;
+            assert!(operation.storage_unchanged, "{case:?}");
+            assert_eq!(
+                storage::snapshot(raw.as_ref(), database).await?,
+                before,
+                "{case:?}: {}",
+                operation.path
+            );
         }
-        .with_subscriber(tracing_subscriber::registry().with(events.clone()))
-        .await;
-        assert_eq!(
-            events.take(),
-            operation.events,
-            "{case:?}: {}",
-            operation.path
-        );
-        observe::assert_result(result, operation, case)?;
-        assert!(operation.storage_unchanged, "{case:?}");
-        assert_eq!(
-            storage::snapshot(raw.as_ref(), database).await?,
-            before,
-            "{case:?}: {}",
-            operation.path
-        );
+        Ok(())
     }
-    Ok(())
+    .with_subscriber(subscriber)
+    .await
 }
 
 #[tokio::test]

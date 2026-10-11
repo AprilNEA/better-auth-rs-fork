@@ -80,6 +80,7 @@ impl OrganizationStore for EphemeralStore {
         .map(crate::SchemaValue::from_field)
         .unwrap_or_default();
         let org = Organization {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: input.id.map(crate::SchemaValue::Typed).unwrap_or_default(),
             name: input.name,

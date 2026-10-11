@@ -141,7 +141,10 @@ impl Expected {
                     error: missing_error.then(|| {
                         json!({
                             "name": "TypeError",
+                            "message": "null is not an object (evaluating 'user.id')",
                             "sameCallbackError": false,
+                            "properties": {},
+                            "keys": [],
                         })
                     }),
                     storage_unchanged: true,

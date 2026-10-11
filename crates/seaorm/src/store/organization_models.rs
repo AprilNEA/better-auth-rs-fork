@@ -6,6 +6,8 @@ use better_auth_core::{
 use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, Select};
 
+use super::plugin_rows::{self, SqlRow};
+
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
 pub(super) fn raw_record<M: SeaOrmOrganizationModel>(
@@ -91,12 +93,12 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         conn: &impl ConnectionTrait,
         role: EntityRole,
         id: &FieldValue,
-    ) -> AuthResult<Option<M>> {
-        Entity::<M>::find()
-            .filter(self.organization_field_equals::<M>(role, "id", id)?)
-            .one(conn)
-            .await
-            .map_err(super::map_db_err)
+    ) -> AuthResult<Option<SqlRow>> {
+        plugin_rows::one(
+            conn,
+            Entity::<M>::find().filter(self.organization_field_equals::<M>(role, "id", id)?),
+        )
+        .await
     }
 
     pub(super) async fn read_organization_model<M: SeaOrmOrganizationModel>(
@@ -117,13 +119,14 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         let Some(row) = row else {
             return Ok(None);
         };
-        let fields = self.organization_query_schema(role)?.adapter_fields(&[]);
-        let backend = conn.get_database_backend();
-        let record = raw_record::<M>(&row, &fields, backend, (&self.model_fields, role))?;
-        let mut output = fields
-            .organization_output_records(vec![record], backend == DbBackend::Postgres)
-            .await?;
-        M::Record::from_field_values(output.remove(0)).map(Some)
+        record::<M>(
+            &row,
+            &self.organization_query_schema(role)?,
+            conn.get_database_backend(),
+            (&self.model_fields, role),
+        )
+        .await
+        .map(Some)
     }
 
     pub(super) async fn update_organization_model<M: SeaOrmOrganizationModel>(
@@ -134,7 +137,10 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         core: FieldMap,
         input: FieldMap,
         config: &UserConfig,
-    ) -> AuthResult<M::Record> {
+    ) -> AuthResult<M::Record>
+    where
+        M::Record: FromFieldMap,
+    {
         self.update_organization_model_optional::<M>(conn, role, id, core, input, config)
             .await?
             .ok_or_else(|| AuthError::not_found("Organization record not found"))
@@ -148,7 +154,10 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         core: FieldMap,
         input: FieldMap,
         config: &UserConfig,
-    ) -> AuthResult<Option<M::Record>> {
+    ) -> AuthResult<Option<M::Record>>
+    where
+        M::Record: FromFieldMap,
+    {
         let selector = self.bind_organization_query_field(role, "id", id)?;
         let active = active::<M>(
             core,
@@ -173,9 +182,8 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         let Some(row) = row else {
             return Ok(None);
         };
-        let row = M::from_query_result(&row, "").map_err(super::map_db_err)?;
-        record(
-            &row,
+        record::<M>(
+            &row.into(),
             config,
             conn.get_database_backend(),
             (&self.model_fields, role),
@@ -323,7 +331,10 @@ pub(super) async fn insert<M: SeaOrmOrganizationModel, C: ConnectionTrait>(
     config: &UserConfig,
     policy: &better_auth_core::id::IdGeneration,
     (runtime, role, model): (&ModelFields, EntityRole, &str),
-) -> AuthResult<M::Record> {
+) -> AuthResult<M::Record>
+where
+    M::Record: FromFieldMap,
+{
     let row = active::<M>(
         core,
         input,
@@ -334,7 +345,7 @@ pub(super) async fn insert<M: SeaOrmOrganizationModel, C: ConnectionTrait>(
         (runtime, role),
     )
     .await?
-    .insert(
+    .insert_raw(
         conn,
         super::create_readback::CreateReadback {
             schema: config,
@@ -345,40 +356,48 @@ pub(super) async fn insert<M: SeaOrmOrganizationModel, C: ConnectionTrait>(
     )
     .await?
     .ok_or_else(|| AuthError::internal("Organization record creation returned no record"))?;
-    record(&row, config, conn.get_database_backend(), (runtime, role)).await
+    record::<M>(
+        &row.into(),
+        config,
+        conn.get_database_backend(),
+        (runtime, role),
+    )
+    .await
 }
 
 pub(super) async fn record<M: SeaOrmOrganizationModel>(
-    row: &M,
+    row: &SqlRow,
     config: &UserConfig,
     backend: DbBackend,
-    (runtime, role): (&ModelFields, EntityRole),
-) -> AuthResult<M::Record> {
-    let record = record_fields(row, config, backend)?.with_id_output(runtime, role);
-    let mut projected = config
-        .organization_output_records(vec![record], backend == DbBackend::Postgres)
-        .await?;
-    row.record_from_fields(config, projected.remove(0))
+    runtime: (&ModelFields, EntityRole),
+) -> AuthResult<M::Record>
+where
+    M::Record: FromFieldMap,
+{
+    Ok(project::<M>(vec![row.clone()], config, backend, runtime)
+        .await?
+        .remove(0))
 }
 
 pub(super) async fn project<M: SeaOrmOrganizationModel>(
-    rows: Vec<M>,
+    rows: Vec<SqlRow>,
     config: &UserConfig,
     backend: DbBackend,
-    (runtime, role): (&ModelFields, EntityRole),
-) -> AuthResult<Vec<M::Record>> {
+    runtime: (&ModelFields, EntityRole),
+) -> AuthResult<Vec<M::Record>>
+where
+    M::Record: FromFieldMap,
+{
+    let fields = config.adapter_fields(&[]);
     let records = rows
         .iter()
-        .map(|row| {
-            record_fields(row, config, backend).map(|record| record.with_id_output(runtime, role))
-        })
+        .map(|row| raw_record::<M>(row, &fields, backend, runtime))
         .collect::<AuthResult<Vec<_>>>()?;
-    let projected = config
+    fields
         .organization_output_records(records, backend == DbBackend::Postgres)
-        .await?;
-    rows.iter()
-        .zip(projected)
-        .map(|(row, fields)| row.record_from_fields(config, fields))
+        .await?
+        .into_iter()
+        .map(M::Record::from_field_values)
         .collect()
 }
 

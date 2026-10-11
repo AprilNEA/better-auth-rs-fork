@@ -137,6 +137,7 @@ impl EphemeralStore {
                 EntityRole::TeamMember,
                 &member_schema,
                 members,
+                |_, fields| Ok(fields),
                 |ready: Vec<(usize, FieldMap)>| {
                     let teams = &teams;
                     async move {

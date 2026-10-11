@@ -1,5 +1,5 @@
+use super::rows::RecordSource;
 use super::*;
-use crate::store::schema::resolve_field_name;
 #[cfg(test)]
 use crate::user_fields::{FieldTransforms, UserFieldTransform};
 use better_auth_schema_registry::{EntityRole, core_fields};
@@ -269,8 +269,12 @@ pub(super) struct PreparedOrganizationFields {
 
 impl PreparedOrganizationFields {
     pub(super) fn apply(self, mut fields: FieldMap) -> FieldMap {
-        fields.extend(self.fields);
+        self.apply_to(&mut fields);
         fields
+    }
+
+    pub(super) fn apply_to(self, fields: &mut FieldMap) {
+        fields.extend(self.fields);
     }
 }
 
@@ -288,16 +292,6 @@ fn record_input<T: MemoryOrganizationRecord>(role: EntityRole, value: &T) -> Aut
         let _ = core.entry("teamId".to_owned()).or_insert(Value::Null);
     }
     Ok(core)
-}
-
-fn record_output(storage: FieldMap) -> crate::user_fields::AdapterRecord {
-    let core = storage
-        .get("id")
-        .cloned()
-        .map(|id| ("id".into(), id))
-        .into_iter()
-        .collect();
-    crate::user_fields::AdapterRecord::new(core, storage)
 }
 
 impl EphemeralStore {
@@ -453,50 +447,11 @@ impl EphemeralStore {
         F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
     {
         let schema = self.field_config(role)?;
-        let fields = schema.adapter_fields(&[]);
-        let mut rows = values
-            .into_iter()
-            .map(|row| (row, FieldMap::new(), false))
-            .collect::<Vec<_>>();
-        crate::user_fields::project_source_fields_batches_then(
-            &mut rows,
-            fields.fields(),
-            |(source, _, started), name, field| {
-                if !*started {
-                    self.model_fields.begin_id_output(role)?;
-                    *started = true;
-                }
-                source.read(|storage| {
-                    let key = if name != "id" {
-                        resolve_field_name(field.field_name.as_deref(), name)
-                    } else {
-                        name
-                    };
-                    Ok(storage.get(key).cloned())
-                })
-            },
-            |(_, output, _), name, field, value| {
-                Box::pin(async move {
-                    if name != "id" {
-                        let value = crate::user_fields::project_adapter_value(
-                            value.unwrap_or_default(),
-                            field,
-                            field.references_id(),
-                            true,
-                        )
-                        .await?;
-                        let _ = output.insert(name.to_owned(), value);
-                    } else {
-                        let value = Self::project_id(&crate::SchemaValue::from_field(
-                            value.unwrap_or_default(),
-                        ))?
-                        .into_field_value();
-                        let _ = output.insert(name.to_owned(), value);
-                    }
-                    Ok(())
-                })
-            },
-            |_, (_, output, _)| decode_record(std::mem::take(output)),
+        self.project_record_sources_batches_then(
+            role,
+            &schema,
+            values.into_iter().map(RecordSource::Live).collect(),
+            |_, fields| decode_record(fields),
             complete,
         )
         .await
@@ -508,12 +463,11 @@ impl EphemeralStore {
         values: Vec<FieldMap>,
     ) -> AuthResult<Vec<T>> {
         let schema = self.field_config(role)?;
-        let records = values
+        let sources = values
             .into_iter()
-            .map(|value| record_output(value).with_id_output(&self.model_fields, role))
+            .map(|value| RecordSource::Snapshot(Box::new(value)))
             .collect();
-        schema
-            .organization_output_memory_records(records)
+        self.project_record_sources(role, &schema, sources)
             .await?
             .into_iter()
             .map(decode_record)

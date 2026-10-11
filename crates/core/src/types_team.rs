@@ -1,9 +1,9 @@
 //! Organization teams and dynamic access-control records.
 use crate::SchemaValue;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 /// A team belonging to one organization.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
     /// Source property order, independent of the current typed values.
@@ -50,7 +50,7 @@ pub struct UpdateTeam {
 }
 
 /// A user's membership in a team.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TeamMember {
     /// Source property order, independent of the current typed values.
@@ -131,9 +131,12 @@ impl Team {
 }
 
 /// A dynamic role scoped to one organization.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OrganizationRole {
+    /// Source property order, independent of the current typed values.
+    #[serde(skip)]
+    pub field_order: Vec<String>,
     /// Application fields projected by the configured role schema.
     #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
@@ -151,6 +154,18 @@ pub struct OrganizationRole {
     #[serde(with = "crate::field_value::serde::optional_schema_date")]
     #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub updated_at: SchemaValue<Option<crate::FieldDate>>,
+}
+
+impl PartialEq for OrganizationRole {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.organization_id == other.organization_id
+            && self.role == other.role
+            && self.permission == other.permission
+            && self.created_at == other.created_at
+            && self.updated_at == other.updated_at
+            && self.additional_fields == other.additional_fields
+    }
 }
 
 /// Data required to create a dynamic role.

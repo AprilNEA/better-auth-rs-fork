@@ -254,42 +254,50 @@ impl EphemeralStore {
             (self.account_records(provider, account_id).await?, None)
         };
         let owners = self
-            .project_record_sources_batches_then(EntityRole::Account, &fields, records, |ready| {
-                let users = &users;
-                let fields = &fields;
-                async move {
-                    let mut selected = Vec::with_capacity(ready.len());
-                    for (index, account) in &ready {
-                        selected.push(match users {
-                            Some(users) => users.get(*index).cloned().ok_or_else(|| {
-                                AuthError::internal("Account projection lost its joined User index")
-                            })?,
-                            None => {
-                                self.fallback_join_users(
-                                    relation,
-                                    (EntityRole::Account, "account", fields),
-                                    account,
+            .project_record_sources_batches_then(
+                EntityRole::Account,
+                &fields,
+                records,
+                |_, fields| Ok(fields),
+                |ready| {
+                    let users = &users;
+                    let fields = &fields;
+                    async move {
+                        let mut selected = Vec::with_capacity(ready.len());
+                        for (index, account) in &ready {
+                            selected.push(match users {
+                                Some(users) => users.get(*index).cloned().ok_or_else(|| {
+                                    AuthError::internal(
+                                        "Account projection lost its joined User index",
+                                    )
+                                })?,
+                                None => {
+                                    self.fallback_join_users(
+                                        relation,
+                                        (EntityRole::Account, "account", fields),
+                                        account,
+                                    )
+                                    .await?
+                                }
+                            });
+                        }
+                        let projected = self.output_user_relations(selected).await?;
+                        Ok(ready
+                            .into_iter()
+                            .zip(projected)
+                            .map(|((index, account), user)| {
+                                (
+                                    index,
+                                    AccountOwner {
+                                        account: AccountView::from_adapter_fields(account),
+                                        user,
+                                    },
                                 )
-                                .await?
-                            }
-                        });
+                            })
+                            .collect())
                     }
-                    let projected = self.output_user_relations(selected).await?;
-                    Ok(ready
-                        .into_iter()
-                        .zip(projected)
-                        .map(|((index, account), user)| {
-                            (
-                                index,
-                                AccountOwner {
-                                    account: AccountView::from_adapter_fields(account),
-                                    user,
-                                },
-                            )
-                        })
-                        .collect())
-                }
-            })
+                },
+            )
             .await?;
         if owners.len() > 1 {
             return Err(AuthError::internal(format!(

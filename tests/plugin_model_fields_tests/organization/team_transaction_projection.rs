@@ -104,6 +104,7 @@ async fn check<S: AuthSchema>(
     if scenario.mismatch() {
         let _ = raw
             .insert_organization(Organization {
+                field_order: Default::default(),
                 id: "other".into(),
                 name: "Other".into(),
                 slug: "other".into(),

@@ -135,9 +135,9 @@ mod tests {
         clippy::panic_in_result_fn,
         reason = "Contract assertions panic while model conversion errors retain their types"
     )]
-    fn check_projected_record<M: SeaOrmOrganizationModel>(model: &M) -> AuthResult<()>
+    fn check_projected_record<M: SeaOrmOrganizationModel>(model: &M) -> AuthResult<M::Record>
     where
-        M::Record: AuthRecordFields,
+        M::Record: AuthRecordFields + Serialize,
     {
         let role: FieldValue = FieldMap::from([("custom".into(), true.into())]).into();
         let projected = FieldMap::from([
@@ -160,12 +160,48 @@ mod tests {
                 .zip(role.as_object())
                 .is_some_and(|(actual, expected)| actual.same_object(expected))
         );
-        Ok(())
+        assert_eq!(
+            serde_json::to_string(&record)?,
+            r#"{"role":{"custom":true},"extra":false,"createdAt":null}"#
+        );
+        Ok(record)
     }
 
     #[test]
-    fn member_and_invitation_preserve_projected_presence_order_and_identity() -> AuthResult<()> {
-        use crate::store::entities::{invitation, member};
+    fn organization_models_preserve_projected_presence_order_and_identity() -> AuthResult<()> {
+        use crate::store::entities::{invitation, member, organization, organization_role, team};
+
+        let organization = check_projected_record(&organization::Model {
+            id: "organization".into(),
+            name: "Organization".into(),
+            slug: "organization".into(),
+            logo: None,
+            metadata: None,
+            created_at: Default::default(),
+            auth_updated_at: Default::default(),
+        })?;
+        let copied = better_auth_core::Organization::from(&organization);
+        assert_eq!(copied.field_order, organization.field_order);
+        assert_eq!(copied.field_values()?, organization.field_values()?);
+        let view = better_auth_core::OrganizationView::from(&organization);
+        assert_eq!(view.field_order, organization.field_order);
+        let view_fields = view.field_values()?;
+        let organization_fields = organization.field_values()?;
+        assert_eq!(view_fields, organization_fields);
+        assert_eq!(
+            view_fields.keys().collect::<Vec<_>>(),
+            organization_fields.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            serde_json::to_string(&view)?,
+            r#"{"role":{"custom":true},"extra":false,"createdAt":null}"#
+        );
+        let mut reordered_view = view.clone();
+        reordered_view.field_order.reverse();
+        assert_eq!(reordered_view, view);
+        let mut reordered = organization.clone();
+        reordered.field_order.reverse();
+        assert_eq!(reordered, organization);
 
         check_projected_record(&member::Model {
             id: "member".into(),
@@ -184,6 +220,26 @@ mod tests {
             inviter_id: "user".into(),
             expires_at: Default::default(),
             created_at: Default::default(),
-        })
+        })?;
+        check_projected_record(&team::Model {
+            id: "team".into(),
+            name: "Team".into(),
+            organization_id: "organization".into(),
+            created_at: Default::default(),
+            updated_at: None,
+            member_count: 0,
+        })?;
+        let role = check_projected_record(&organization_role::Model {
+            id: "role".into(),
+            organization_id: "organization".into(),
+            role: "reader".into(),
+            permission: serde_json::json!({}),
+            created_at: Default::default(),
+            updated_at: None,
+        })?;
+        let mut reordered = role.clone();
+        reordered.field_order.reverse();
+        assert_eq!(reordered, role);
+        Ok(())
     }
 }

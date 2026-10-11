@@ -85,6 +85,7 @@ pub(super) async fn seed<S: AuthSchema>(
     for suffix in ["a", "b", "c"] {
         let _ = store
             .insert_organization(Organization {
+                field_order: Default::default(),
                 id: format!("org-{suffix}").into(),
                 name: format!("Organization {suffix}").into(),
                 slug: format!("slug-{suffix}").into(),

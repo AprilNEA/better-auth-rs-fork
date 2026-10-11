@@ -6,8 +6,11 @@ use std::borrow::Cow;
 use crate::entity::{AuthInvitation, AuthMember, AuthOrganization};
 
 /// Organization entity - matches OpenAPI schema
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct Organization {
+    /// Source property order, independent of the current typed values.
+    #[serde(skip)]
+    pub field_order: Vec<String>,
     /// Application fields projected by the configured organization schema.
     #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
@@ -86,7 +89,7 @@ impl std::fmt::Display for InvitationStatus {
 }
 
 /// Organization invitation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Invitation {
     /// Source property order, independent of the current typed values.
     #[serde(skip)]
@@ -263,6 +266,7 @@ impl CreateInvitation {
 impl<T: AuthOrganization> From<&T> for Organization {
     fn from(organization: &T) -> Self {
         Self {
+            field_order: organization.field_order().unwrap_or_default().to_vec(),
             additional_fields: organization.projected_fields().cloned().unwrap_or_default(),
             id: organization.id().into_owned(),
             name: organization.name().clone(),
@@ -275,6 +279,10 @@ impl<T: AuthOrganization> From<&T> for Organization {
 }
 
 impl AuthOrganization for Organization {
+    fn field_order(&self) -> Option<&[String]> {
+        Some(&self.field_order)
+    }
+
     fn projected_fields(&self) -> Option<&crate::FieldMap> {
         Some(&self.additional_fields)
     }
@@ -296,6 +304,18 @@ impl AuthOrganization for Organization {
     }
     fn created_at(&self) -> &SchemaValue<crate::FieldDate> {
         &self.created_at
+    }
+}
+
+impl PartialEq for Organization {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.slug == other.slug
+            && self.logo == other.logo
+            && self.metadata == other.metadata
+            && self.created_at == other.created_at
+            && self.additional_fields == other.additional_fields
     }
 }
 

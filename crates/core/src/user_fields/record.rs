@@ -343,18 +343,6 @@ impl UserConfig {
             .await
     }
 
-    pub(crate) async fn organization_output_memory_records(
-        &self,
-        records: Vec<AdapterRecord>,
-    ) -> AuthResult<Vec<FieldMap>> {
-        self.organization_output_records_with_json(
-            records,
-            UserFieldConfig::references_id,
-            |_, output| std::future::ready(Ok(output)),
-        )
-        .await
-    }
-
     async fn organization_output_records_with_json<R: Send, F>(
         &self,
         records: Vec<AdapterRecord>,

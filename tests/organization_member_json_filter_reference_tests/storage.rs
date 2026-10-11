@@ -97,6 +97,7 @@ pub(super) async fn seed<S: AuthSchema>(store: &dyn AuthStore<S>) -> AuthResult<
     }
     let _ = store
         .insert_organization(Organization {
+            field_order: Default::default(),
             id: ORGANIZATION_ID.into(),
             name: "JSON filter organization".into(),
             slug: "json-filter-organization".into(),

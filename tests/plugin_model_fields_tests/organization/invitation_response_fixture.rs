@@ -31,6 +31,7 @@ pub(super) async fn seed_with_team_ids<S: AuthSchema>(
     }
     let _ = store
         .insert_organization(Organization {
+            field_order: Default::default(),
             id: "organization".into(),
             name: "Organization".into(),
             slug: "organization".into(),

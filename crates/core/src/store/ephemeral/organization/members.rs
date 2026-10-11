@@ -68,14 +68,18 @@ impl MemberStore for EphemeralStore {
         let mut record = self
             .create_record(EntityRole::Member, record, fields)
             .await?;
-        {
-            let mut state = self.lock()?;
-            if let Some(id) = self.next_serial_id(state.members.len()) {
-                let _ = record.insert("id".into(), id);
-            }
-            state.members.push(record.clone());
-        }
-        self.output_member(record).await
+        let source = self
+            .raw("member", "create", |state| {
+                if let Some(id) = self.next_serial_id(state.members.len()) {
+                    let _ = record.insert("id".into(), id);
+                }
+                Ok(state.members.push_ref(record))
+            })
+            .await?;
+        Ok(self
+            .output_record_refs(EntityRole::Member, vec![source])
+            .await?
+            .remove(0))
     }
 
     async fn create_member(&self, input: CreateMember) -> AuthResult<Member> {
@@ -91,14 +95,18 @@ impl MemberStore for EphemeralStore {
         let mut member = self
             .create_record(EntityRole::Member, member, input.additional_fields)
             .await?;
-        {
-            let mut state = self.lock()?;
-            if let Some(id) = self.next_serial_id(state.members.len()) {
-                let _ = member.insert("id".into(), id);
-            }
-            state.members.push(member.clone());
-        }
-        self.output_member(member).await
+        let source = self
+            .raw("member", "create", |state| {
+                if let Some(id) = self.next_serial_id(state.members.len()) {
+                    let _ = member.insert("id".into(), id);
+                }
+                Ok(state.members.push_ref(member))
+            })
+            .await?;
+        Ok(self
+            .output_record_refs(EntityRole::Member, vec![source])
+            .await?
+            .remove(0))
     }
     async fn get_member(&self, organization_id: &str, user_id: &str) -> AuthResult<Option<Member>> {
         self.get_member_value(&organization_id.into(), &user_id.into())
@@ -157,16 +165,28 @@ impl MemberStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let result = {
-            let state = self.lock()?;
-            let mut value = state
-                .members
-                .get_mut(&id)?
-                .ok_or_else(|| AuthError::not_found("Member not found"))?;
-            *value = patch.apply(value.clone());
-            value.clone()
-        };
-        self.output_member(result).await
+        let source = self
+            .raw("member", "update", |state| {
+                let selected = state.members.select_refs(|row| {
+                    crate::query::field_matches_equality(
+                        row.get("id").unwrap_or(&Value::Undefined),
+                        &id.field_value(),
+                    )
+                })?;
+                for source in &selected {
+                    source.write(|row| {
+                        patch.clone().apply_to(row);
+                        Ok(())
+                    })?;
+                }
+                Ok(selected.into_iter().next())
+            })
+            .await?
+            .ok_or_else(|| AuthError::not_found("Member not found"))?;
+        Ok(self
+            .output_record_refs(EntityRole::Member, vec![source])
+            .await?
+            .remove(0))
     }
     async fn delete_member(&self, id: &str) -> AuthResult<()> {
         self.delete_member_value(&id.into()).await
@@ -210,15 +230,14 @@ impl MemberStore for EphemeralStore {
         let org = self.organization_query(EntityRole::Member, "organizationId", org.clone())?;
         let schema = self.field_config(EntityRole::Member)?;
         let rows = self
-            .lock()?
-            .members
-            .snapshot()?
-            .into_iter()
-            .filter(|row| {
-                organization_value(row, &schema, "organizationId").strict_equals(&org.field_value())
+            .raw("member", "findMany", |state| {
+                state.members.select_refs(|row| {
+                    organization_value(row, &schema, "organizationId")
+                        .strict_equals(&org.field_value())
+                })
             })
-            .collect();
-        self.output_records(EntityRole::Member, rows).await
+            .await?;
+        self.output_record_refs(EntityRole::Member, rows).await
     }
     async fn query_organization_members(
         &self,
@@ -230,117 +249,138 @@ impl MemberStore for EphemeralStore {
             "organizationId",
             params.organization_id.field_value(),
         )?;
-        let mut members: Vec<_> = self
-            .lock()?
-            .members
-            .snapshot()?
-            .iter()
-            .filter(|member| {
-                organization_value(member, &schema, "organizationId")
-                    .strict_equals(&organization_id.field_value())
-            })
-            .cloned()
-            .collect();
         let value = |member: &FieldMap, field: &str| -> Option<Value> {
             (field == "id" || schema.fields().contains_key(field))
                 .then(|| organization_value(member, &schema, field))
         };
-        if let (Some(field), Some(expected)) = (&params.filter_field, &params.filter_value) {
-            let operator = params.filter_operator.as_deref().unwrap_or("eq");
-            if matches!(operator, "in" | "not_in") && !expected.is_array() {
-                return Err(AuthError::internal("Value must be an array"));
-            }
-            let expected = if field == "id" {
-                self.memory_primary_id_query(expected)?
-            } else {
-                self.memory_field_query(&schema, field, expected.clone())?
-            };
-            let matches_member = |member: &FieldMap| -> AuthResult<bool> {
-                let Some(actual) = value(member, field) else {
-                    return Ok(true);
-                };
-                if matches!(operator, "in" | "not_in") {
-                    let values = expected
-                        .as_array()
-                        .ok_or_else(|| AuthError::internal("Value must be an array"))?;
-                    let contains = values
-                        .iter()
-                        .any(|expected| actual.same_value_zero(expected));
-                    return Ok(if operator == "in" {
-                        contains
-                    } else {
-                        !contains
-                    });
+        let filter =
+            if let (Some(field), Some(expected)) = (&params.filter_field, &params.filter_value) {
+                let operator = params.filter_operator.as_deref().unwrap_or("eq");
+                if matches!(operator, "in" | "not_in") && !expected.is_array() {
+                    return Err(AuthError::internal("Value must be an array"));
                 }
-                if actual.is_null() {
-                    return Ok(false);
-                }
-                let expected = if field == "createdAt"
-                    && expected.is_string()
-                    && !schema
-                        .fields()
-                        .get(field)
-                        .is_some_and(|field| field.references_id())
-                {
-                    match expected
-                        .as_str()
-                        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-                    {
-                        Some(date) => Value::from(date.with_timezone(&Utc)),
-                        None => return Ok(false),
-                    }
+                let expected = if field == "id" {
+                    self.memory_primary_id_query(expected)?
                 } else {
-                    expected.clone()
+                    self.memory_field_query(&schema, field, expected.clone())?
                 };
-                Ok(match operator {
-                    "eq" => actual.strict_equals(&expected),
-                    "ne" => !actual.strict_equals(&expected),
-                    "contains" | "starts_with" | "ends_with" => {
-                        let actual = actual.display_utf16()?;
-                        let expected = expected.display_utf16()?;
-                        let (actual, expected) = (actual.as_utf16(), expected.as_utf16());
-                        match operator {
-                            "starts_with" => actual.starts_with(expected),
-                            "ends_with" => actual.ends_with(expected),
-                            _ => {
-                                expected.is_empty()
-                                    || actual.windows(expected.len()).any(|part| part == expected)
+                Some((field, operator, expected))
+            } else {
+                None
+            };
+        let (sources, total) = crate::observability::database::with_database_operation(
+            &self.config,
+            "member",
+            "findMany",
+            async {
+                let mut members = {
+                    let state = self.lock()?;
+                    state
+                        .members
+                        .select_refs(|member| {
+                            organization_value(member, &schema, "organizationId")
+                                .strict_equals(&organization_id.field_value())
+                        })?
+                        .into_iter()
+                        .map(|source| {
+                            let snapshot = source.read(|row| Ok(row.clone()))?;
+                            Ok((snapshot, source))
+                        })
+                        .collect::<AuthResult<Vec<_>>>()?
+                };
+                if let Some((field, operator, expected)) = filter {
+                    let matches_member = |member: &FieldMap| -> AuthResult<bool> {
+                        let Some(actual) = value(member, field) else {
+                            return Ok(true);
+                        };
+                        if matches!(operator, "in" | "not_in") {
+                            let values = expected
+                                .as_array()
+                                .ok_or_else(|| AuthError::internal("Value must be an array"))?;
+                            let contains = values
+                                .iter()
+                                .any(|expected| actual.same_value_zero(expected));
+                            return Ok(if operator == "in" {
+                                contains
+                            } else {
+                                !contains
+                            });
+                        }
+                        if actual.is_null() {
+                            return Ok(false);
+                        }
+                        let expected = if field == "createdAt"
+                            && expected.is_string()
+                            && !schema
+                                .fields()
+                                .get(field)
+                                .is_some_and(|field| field.references_id())
+                        {
+                            match expected
+                                .as_str()
+                                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                            {
+                                Some(date) => Value::from(date.with_timezone(&Utc)),
+                                None => return Ok(false),
                             }
+                        } else {
+                            expected.clone()
+                        };
+                        Ok(match operator {
+                            "eq" => actual.strict_equals(&expected),
+                            "ne" => !actual.strict_equals(&expected),
+                            "contains" | "starts_with" | "ends_with" => {
+                                let actual = actual.display_utf16()?;
+                                let expected = expected.display_utf16()?;
+                                let (actual, expected) = (actual.as_utf16(), expected.as_utf16());
+                                match operator {
+                                    "starts_with" => actual.starts_with(expected),
+                                    "ends_with" => actual.ends_with(expected),
+                                    _ => {
+                                        expected.is_empty()
+                                            || actual
+                                                .windows(expected.len())
+                                                .any(|part| part == expected)
+                                    }
+                                }
+                            }
+                            "gt" | "gte" | "lt" | "lte" => {
+                                use std::cmp::Ordering::{Equal, Greater, Less};
+                                let ordering = crate::query::field_compare(&actual, &expected)?;
+                                matches!(
+                                    (operator, ordering),
+                                    ("gt" | "gte", Some(Greater))
+                                        | ("lt" | "lte", Some(Less))
+                                        | ("gte" | "lte", Some(Equal))
+                                )
+                            }
+                            _ => true,
+                        })
+                    };
+                    let mut selected = Vec::with_capacity(members.len());
+                    for member in members {
+                        if matches_member(&member.0)? {
+                            selected.push(member);
                         }
                     }
-                    "gt" | "gte" | "lt" | "lte" => {
-                        use std::cmp::Ordering::{Equal, Greater, Less};
-                        let ordering = crate::query::field_compare(&actual, &expected)?;
-                        matches!(
-                            (operator, ordering),
-                            ("gt" | "gte", Some(Greater))
-                                | ("lt" | "lte", Some(Less))
-                                | ("gte" | "lte", Some(Equal))
-                        )
-                    }
-                    _ => true,
-                })
-            };
-            let mut selected = Vec::with_capacity(members.len());
-            for member in members {
-                if matches_member(&member)? {
-                    selected.push(member);
+                    members = selected;
                 }
-            }
-            members = selected;
-        }
-        let field = params.sort_by.as_deref().unwrap_or("createdAt");
-        let descending = params.sort_direction.as_deref() == Some("desc");
-        crate::memory_sort::sort(&mut members, descending, |member| {
-            Ok(value(member, field).unwrap_or(Value::Null))
-        })?;
-        let total = members.len();
+                let field = params.sort_by.as_deref().unwrap_or("createdAt");
+                let descending = params.sort_direction.as_deref() == Some("desc");
+                crate::memory_sort::sort(&mut members, descending, |(member, _)| {
+                    Ok(value(member, field).unwrap_or(Value::Null))
+                })?;
+                let total = members.len();
+                let sources = crate::query::paginate_memory(members, params.limit, params.offset)
+                    .into_iter()
+                    .map(|(_, source)| source)
+                    .collect();
+                Ok((sources, total))
+            },
+        )
+        .await?;
         Ok((
-            self.output_records(
-                EntityRole::Member,
-                crate::query::paginate_memory(members, params.limit, params.offset),
-            )
-            .await?,
+            self.output_record_refs(EntityRole::Member, sources).await?,
             total,
         ))
     }

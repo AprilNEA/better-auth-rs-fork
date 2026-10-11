@@ -67,6 +67,7 @@ pub(super) async fn seed<S: AuthSchema>(
     }
     let _ = store
         .insert_organization(Organization {
+            field_order: Default::default(),
             id: "organization-a".into(),
             name: "Join organization".into(),
             slug: "join-organization".into(),

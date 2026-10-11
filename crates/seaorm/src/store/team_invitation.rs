@@ -12,7 +12,7 @@ use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema:
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
 use sea_orm::{
-    EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, TransactionTrait,
+    EntityTrait, PaginatorTrait, QueryFilter, TransactionTrait,
     sea_query::{Expr, ExprTrait},
 };
 use std::sync::{Arc, Mutex};
@@ -104,14 +104,11 @@ where
                 id,
             )
             .await?;
-        let row = row
-            .map(|row| O::Invitation::from_query_result(&row, "").map_err(map_db_err))
-            .transpose()?;
         tx.commit().await.map_err(map_db_err)?;
         // Output transforms run after the claim is committed, before the member transaction starts.
         match row {
-            Some(row) => models::record(
-                &row,
+            Some(row) => models::record::<O::Invitation>(
+                &row.into(),
                 &config,
                 self.connection().get_database_backend(),
                 (

@@ -114,13 +114,6 @@ pub(super) fn generate(
         }
     }
     let ident = &input.ident;
-    let ordered = matches!(
-        role,
-        EntityRole::Member | EntityRole::Invitation | EntityRole::Team | EntityRole::TeamMember
-    );
-    let field_order =
-        ordered.then(|| quote!(let field_order = projected.keys().cloned().collect();));
-    let order_output = ordered.then(|| quote!(field_order,));
     let record_fields = quote! {
             let model = #core_root::entity::AuthRecordFields::field_values(self)?;
             let core = #core_root::FieldMap::from_iter([#(#core_values),*]);
@@ -162,9 +155,9 @@ pub(super) fn generate(
                 #record_fields
             }
             fn record_from_fields(&self, fields: &#core_root::user_fields::UserConfig, mut projected: #core_root::FieldMap) -> #core_root::AuthResult<Self::Record> {
-                #field_order
+                let field_order = projected.keys().cloned().collect();
                 #(#output_values)*
-                Ok(#core_root::#record { #(#output,)* #order_output additional_fields: projected })
+                Ok(#core_root::#record { #(#output,)* field_order, additional_fields: projected })
             }
             fn is_id_reference(column: &Column) -> bool {
                 match column { #(#references)* }

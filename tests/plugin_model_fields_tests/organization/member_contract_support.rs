@@ -20,8 +20,15 @@ impl Storage {
     pub(super) async fn snapshot(
         &self,
     ) -> AuthResult<std::collections::BTreeMap<String, Vec<FieldMap>>> {
+        self.snapshot_with_roles(false).await
+    }
+
+    pub(super) async fn snapshot_with_roles(
+        &self,
+        roles: bool,
+    ) -> AuthResult<std::collections::BTreeMap<String, Vec<FieldMap>>> {
         let mut snapshot = std::collections::BTreeMap::new();
-        for (name, table, role) in [
+        let mut tables = vec![
             ("user", "users", EntityRole::User),
             ("session", "sessions", EntityRole::Session),
             ("account", "accounts", EntityRole::Account),
@@ -31,7 +38,15 @@ impl Storage {
             ("invitation", "invitation", EntityRole::Invitation),
             ("team", "team", EntityRole::Team),
             ("teamMember", "team_member", EntityRole::TeamMember),
-        ] {
+        ];
+        if roles {
+            tables.push((
+                "organizationRole",
+                "organization_role",
+                EntityRole::OrganizationRole,
+            ));
+        }
+        for (name, table, role) in tables {
             let mut rows = match self {
                 Self::Memory(store) => store.storage_rows(role)?,
                 Self::Sqlite(database) => {
@@ -127,6 +142,7 @@ pub(super) async fn seed<S: AuthSchema>(
     }
     let _ = raw
         .insert_organization(Organization {
+            field_order: Default::default(),
             id: "organization".into(),
             name: "Organization".into(),
             slug: "organization".into(),

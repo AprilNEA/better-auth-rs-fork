@@ -12,18 +12,23 @@ impl EphemeralStore {
         configured: &UserConfig,
         sources: Vec<RecordSource>,
     ) -> AuthResult<Vec<FieldMap>> {
-        self.project_record_sources_batches_then(role, configured, sources, |ready| {
-            std::future::ready(Ok(ready))
-        })
+        self.project_record_sources_batches_then(
+            role,
+            configured,
+            sources,
+            |_, fields| Ok(fields),
+            |ready| std::future::ready(Ok(ready)),
+        )
         .await
     }
 
-    pub(super) async fn project_record_sources_batches_then<R: Send, F>(
+    pub(super) async fn project_record_sources_batches_then<V: Send, R: Send, F>(
         &self,
         role: EntityRole,
         configured: &UserConfig,
         sources: Vec<RecordSource>,
-        complete: impl Fn(Vec<(usize, FieldMap)>) -> F + Sync,
+        decode: impl Fn(usize, FieldMap) -> AuthResult<V> + Sync,
+        complete: impl Fn(Vec<(usize, V)>) -> F + Sync,
     ) -> AuthResult<Vec<R>>
     where
         F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
@@ -59,7 +64,7 @@ impl EphemeralStore {
                     Ok(())
                 })
             },
-            |_, (output, _, _)| Ok(std::mem::take(output)),
+            |index, (output, _, _)| decode(index, std::mem::take(output)),
             complete,
         )
         .await

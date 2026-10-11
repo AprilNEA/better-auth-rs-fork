@@ -75,7 +75,7 @@ where
             ),
         )
         .await?
-        .insert(
+        .insert_raw(
             self.connection(),
             super::create_readback::CreateReadback {
                 schema: &config,
@@ -86,8 +86,8 @@ where
         )
         .await?
         .ok_or_else(|| AuthError::internal("Organization creation returned no record"))?;
-        models::record(
-            &row,
+        models::record::<O::Organization>(
+            &row.into(),
             &config,
             self.connection().get_database_backend(),
             (
@@ -180,7 +180,7 @@ where
         )
         .await?;
         let row = active
-            .insert(
+            .insert_raw(
                 self.connection(),
                 super::create_readback::CreateReadback {
                     schema: &config,
@@ -191,8 +191,8 @@ where
             )
             .await?
             .ok_or_else(|| AuthError::internal("Organization creation returned no record"))?;
-        models::record(
-            &row,
+        models::record::<O::Organization>(
+            &row.into(),
             &config,
             self.connection().get_database_backend(),
             (
@@ -230,13 +230,13 @@ where
             "slug",
             slug,
         )?;
-        let row = Entity::<O::Organization>::find()
-            .filter(filter)
-            .one(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let row = super::plugin_rows::one(
+            self.connection(),
+            Entity::<O::Organization>::find().filter(filter),
+        )
+        .await?;
         match row {
-            Some(row) => models::record(
+            Some(row) => models::record::<O::Organization>(
                 &row,
                 &config,
                 self.connection().get_database_backend(),
@@ -263,15 +263,15 @@ where
             bound,
         )?;
         models::project::<O::Organization>(
-            Entity::<O::Organization>::find()
-                .filter(super::value_filter::is_in(
+            super::plugin_rows::all(
+                self.connection(),
+                Entity::<O::Organization>::find().filter(super::value_filter::is_in(
                     column,
                     &value,
                     self.connection().get_database_backend(),
-                )?)
-                .all(self.connection())
-                .await
-                .map_err(map_db_err)?,
+                )?),
+            )
+            .await?,
             &config,
             self.connection().get_database_backend(),
             (
@@ -387,17 +387,19 @@ impl<
         db: &C,
         id: &FieldValue,
     ) -> AuthResult<Option<Organization>> {
-        let row = Entity::<O::Organization>::find()
-            .filter(self.organization_field_equals::<O::Organization>(
-                better_auth_core::store::schema::EntityRole::Organization,
-                "id",
-                id,
-            )?)
-            .one(db)
-            .await
-            .map_err(map_db_err)?;
+        let row = super::plugin_rows::one(
+            db,
+            Entity::<O::Organization>::find().filter(
+                self.organization_field_equals::<O::Organization>(
+                    better_auth_core::store::schema::EntityRole::Organization,
+                    "id",
+                    id,
+                )?,
+            ),
+        )
+        .await?;
         match row {
-            Some(row) => models::record(
+            Some(row) => models::record::<O::Organization>(
                 &row,
                 &self.organization_fields()?.organization,
                 db.get_database_backend(),

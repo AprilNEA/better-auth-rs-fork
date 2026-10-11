@@ -11,7 +11,7 @@ use better_auth_core::{
 };
 use better_auth_core::{FieldMap, FieldValue, SchemaField, store::schema::EntityRole};
 use chrono::Utc;
-use sea_orm::{Condition, EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, QuerySelect};
+use sea_orm::{Condition, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect};
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -153,13 +153,13 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         selectors: &FieldMap,
     ) -> AuthResult<Option<OrganizationRole>> {
         let config = self.organization_fields()?.organization_role;
-        let row = Entity::<O::OrganizationRole>::find()
-            .filter(self.organization_role_filter(selectors)?)
-            .one(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let row = super::plugin_rows::one(
+            self.connection(),
+            Entity::<O::OrganizationRole>::find().filter(self.organization_role_filter(selectors)?),
+        )
+        .await?;
         match row {
-            Some(row) => models::record(
+            Some(row) => models::record::<O::OrganizationRole>(
                 &row,
                 &config,
                 self.connection().get_database_backend(),
@@ -184,19 +184,20 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         &self,
         organization_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Vec<OrganizationRole>> {
-        let rows = Entity::<O::OrganizationRole>::find()
-            .filter(self.organization_field_equals::<O::OrganizationRole>(
-                EntityRole::OrganizationRole,
-                "organizationId",
-                organization_id,
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            self.connection(),
+            Entity::<O::OrganizationRole>::find()
+                .filter(self.organization_field_equals::<O::OrganizationRole>(
+                    EntityRole::OrganizationRole,
+                    "organizationId",
+                    organization_id,
+                )?)
+                .limit(super::pagination::default_limit(
+                    self.config(),
+                    self.connection().get_database_backend(),
+                )?),
+        )
+        .await?;
         models::project::<O::OrganizationRole>(
             rows,
             &self.organization_fields()?.organization_role,
@@ -242,20 +243,21 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
             names,
         )?;
         let backend = self.connection().get_database_backend();
-        let rows = Entity::<O::OrganizationRole>::find()
-            .filter(super::value_filter::equals(
-                organization_column,
-                &organization,
-                backend,
-            )?)
-            .filter(super::value_filter::is_in(role_column, &names, backend)?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            self.connection(),
+            Entity::<O::OrganizationRole>::find()
+                .filter(super::value_filter::equals(
+                    organization_column,
+                    &organization,
+                    backend,
+                )?)
+                .filter(super::value_filter::is_in(role_column, &names, backend)?)
+                .limit(super::pagination::default_limit(
+                    self.config(),
+                    self.connection().get_database_backend(),
+                )?),
+        )
+        .await?;
         models::project::<O::OrganizationRole>(
             rows,
             &self.organization_fields()?.organization_role,
@@ -344,9 +346,8 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         )
         .await?
         .ok_or_else(|| better_auth_core::AuthError::not_found("Role not found"))?;
-        let row = O::OrganizationRole::from_query_result(&row, "").map_err(map_db_err)?;
-        models::record(
-            &row,
+        models::record::<O::OrganizationRole>(
+            &row.into(),
             &config,
             backend,
             (&self.model_fields, EntityRole::OrganizationRole),

@@ -132,9 +132,9 @@ where
             )
             .await?
             .ok_or_else(|| AuthError::not_found("Team not found"))?;
-        let team = models::record(
+        let team = models::record::<O::Team>(
             &team,
-            &Default::default(),
+            &better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(EntityRole::Team),
             self.connection().get_database_backend(),
             (&self.model_fields, EntityRole::Team),
         )
@@ -196,19 +196,20 @@ where
         &self,
         organization_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Vec<Team>> {
-        let rows = Entity::<O::Team>::find()
-            .filter(self.organization_field_equals::<O::Team>(
-                EntityRole::Team,
-                "organizationId",
-                organization_id,
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            self.connection(),
+            Entity::<O::Team>::find()
+                .filter(self.organization_field_equals::<O::Team>(
+                    EntityRole::Team,
+                    "organizationId",
+                    organization_id,
+                )?)
+                .limit(super::pagination::default_limit(
+                    self.config(),
+                    self.connection().get_database_backend(),
+                )?),
+        )
+        .await?;
         models::project::<O::Team>(
             rows,
             &self.organization_fields()?.team,
@@ -380,7 +381,7 @@ impl<
             )
             .await?;
         match row {
-            Some(row) => models::record(
+            Some(row) => models::record::<O::Team>(
                 &row,
                 &config,
                 db.get_database_backend(),

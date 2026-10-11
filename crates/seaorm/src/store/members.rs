@@ -201,7 +201,7 @@ where
             ),
         )
         .await?
-        .insert(
+        .insert_raw(
             self.connection(),
             super::create_readback::CreateReadback {
                 schema: &config,
@@ -212,8 +212,8 @@ where
         )
         .await?
         .ok_or_else(|| AuthError::internal("Member creation returned no record"))?;
-        models::record(
-            &row,
+        models::record::<O::Member>(
+            &row.into(),
             &config,
             self.connection().get_database_backend(),
             (
@@ -370,16 +370,17 @@ where
         &self,
         organization_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Vec<Member>> {
-        let rows = Entity::<O::Member>::find()
-            .filter(self.organization_field_equals::<O::Member>(
-                better_auth_core::store::schema::EntityRole::Member,
-                "organizationId",
-                organization_id,
-            )?)
-            .order_by_asc(O::Member::column("created_at")?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            self.connection(),
+            Entity::<O::Member>::find()
+                .filter(self.organization_field_equals::<O::Member>(
+                    better_auth_core::store::schema::EntityRole::Member,
+                    "organizationId",
+                    organization_id,
+                )?)
+                .order_by_asc(O::Member::column("created_at")?),
+        )
+        .await?;
         models::project::<O::Member>(
             rows,
             &self.organization_fields()?.member,
@@ -453,7 +454,7 @@ where
             query = query.limit(limit);
         }
 
-        let rows = query.all(self.connection()).await.map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(self.connection(), query).await?;
         let skip = std::cmp::min(unbounded_offset, rows.len() as u64) as usize;
         let rows = rows.into_iter().skip(skip).collect();
         Ok((
@@ -786,19 +787,17 @@ impl<
         db: &C,
         member_id: &better_auth_core::FieldValue,
     ) -> AuthResult<()> {
-        let Some(member) = Entity::<O::Member>::find()
-            .filter(self.organization_field_equals::<O::Member>(
+        let Some(member) = self
+            .find_organization_model::<O::Member>(
+                db,
                 better_auth_core::store::schema::EntityRole::Member,
-                "id",
                 member_id,
-            )?)
-            .one(db)
-            .await
-            .map_err(map_db_err)?
+            )
+            .await?
         else {
             return Ok(());
         };
-        let member = models::record(
+        let member = models::record::<O::Member>(
             &member,
             &self.organization_fields()?.member,
             db.get_database_backend(),
@@ -833,19 +832,20 @@ impl<
             .exec(db)
             .await
             .map_err(map_db_err)?;
-        let teams = Entity::<O::Team>::find()
-            .filter(self.organization_field_equals::<O::Team>(
-                better_auth_core::store::schema::EntityRole::Team,
-                "organizationId",
-                organization_id,
-            )?)
-            .limit(super::pagination::default_limit(
-                &self.config,
-                db.get_database_backend(),
-            )?)
-            .all(db)
-            .await
-            .map_err(map_db_err)?;
+        let teams = super::plugin_rows::all(
+            db,
+            Entity::<O::Team>::find()
+                .filter(self.organization_field_equals::<O::Team>(
+                    better_auth_core::store::schema::EntityRole::Team,
+                    "organizationId",
+                    organization_id,
+                )?)
+                .limit(super::pagination::default_limit(
+                    &self.config,
+                    db.get_database_backend(),
+                )?),
+        )
+        .await?;
         let teams = models::project::<O::Team>(
             teams,
             &self.organization_fields()?.team,

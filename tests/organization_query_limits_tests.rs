@@ -219,9 +219,13 @@ async fn check_native_organization_lists<S: AuthSchema>(
             })
             .await?;
     }
-    for name in ["first", "second"] {
+    for (index, name) in ["first", "second"].into_iter().enumerate() {
+        // SQL reuses these references after enabling serial query conversion.
         let organization = inner
-            .create_organization(CreateOrganization::new(name, name))
+            .create_organization(CreateOrganization {
+                id: Some(index.to_string()),
+                ..CreateOrganization::new(name, name)
+            })
             .await?;
         for id in ["0", "1"] {
             let _ = inner

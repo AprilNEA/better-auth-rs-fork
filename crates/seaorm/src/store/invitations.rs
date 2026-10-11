@@ -1,5 +1,5 @@
 use super::{
-    SeaOrmStore, map_db_err,
+    SeaOrmStore,
     organization_models::{self as models, Entity, values},
 };
 use crate::SeaOrmOrganizationSchema;
@@ -31,18 +31,19 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
             ("organizationId", organization_id.clone()),
             ("status", "pending".into()),
         ]);
-        let rows = Entity::<O::Invitation>::find()
-            .filter(self.organization_fields_equal::<O::Invitation>(
-                EntityRole::Invitation,
-                selectors.iter().map(|(name, value)| (*name, value)),
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                connection.get_database_backend(),
-            )?)
-            .all(connection)
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            connection,
+            Entity::<O::Invitation>::find()
+                .filter(self.organization_fields_equal::<O::Invitation>(
+                    EntityRole::Invitation,
+                    selectors.iter().map(|(name, value)| (*name, value)),
+                )?)
+                .limit(super::pagination::default_limit(
+                    self.config(),
+                    connection.get_database_backend(),
+                )?),
+        )
+        .await?;
         let rows = models::project::<O::Invitation>(
             rows,
             &self.organization_fields()?.invitation,
@@ -144,7 +145,7 @@ where
             )
             .await?;
         match row {
-            Some(row) => models::record(
+            Some(row) => models::record::<O::Invitation>(
                 &row,
                 &config,
                 self.connection().get_database_backend(),
@@ -238,19 +239,20 @@ where
         &self,
         organization_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Vec<Invitation>> {
-        let rows = Entity::<O::Invitation>::find()
-            .filter(self.organization_field_equals::<O::Invitation>(
-                EntityRole::Invitation,
-                "organizationId",
-                organization_id,
-            )?)
-            .limit(super::pagination::default_limit(
-                self.config(),
-                self.connection().get_database_backend(),
-            )?)
-            .all(self.connection())
-            .await
-            .map_err(map_db_err)?;
+        let rows = super::plugin_rows::all(
+            self.connection(),
+            Entity::<O::Invitation>::find()
+                .filter(self.organization_field_equals::<O::Invitation>(
+                    EntityRole::Invitation,
+                    "organizationId",
+                    organization_id,
+                )?)
+                .limit(super::pagination::default_limit(
+                    self.config(),
+                    self.connection().get_database_backend(),
+                )?),
+        )
+        .await?;
         models::project::<O::Invitation>(
             rows,
             &self.organization_fields()?.invitation,

@@ -115,6 +115,7 @@ impl EphemeralStore {
             parent.role,
             &fields,
             sources,
+            |_, fields| Ok(fields),
             |ready: Vec<(usize, FieldMap)>| {
                 let (children, fields, child_fields, relation, runtime) =
                     (&children, &fields, &child_fields, &relation, &runtime);

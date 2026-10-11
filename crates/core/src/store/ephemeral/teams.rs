@@ -634,6 +634,7 @@ impl OrganizationRoleStore for EphemeralStore {
                 .unwrap_or_default(),
         );
         let mut role = OrganizationRole {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: Default::default(),
             organization_id: input.organization_id,

@@ -11,7 +11,7 @@ use futures_util::future::BoxFuture;
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Cow;
 
-use crate::entity::{AuthInvitation, AuthOrganization, AuthPasskey, AuthSession, AuthUser};
+use crate::entity::{AuthInvitation, AuthPasskey, AuthSession, AuthUser};
 use crate::types::InvitationStatus;
 
 mod account_view;
@@ -485,43 +485,10 @@ impl AuthSession for SessionView {
 // ---------------------------------------------------------------------------
 
 /// Public organization response shape.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct OrganizationView {
-    #[serde(with = "crate::field_value::serde::map", flatten)]
-    pub additional_fields: crate::FieldMap,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub name: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub slug: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub logo: SchemaValue<Option<String>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub metadata: SchemaValue<Option<crate::FieldValue>>,
-    #[serde(rename = "createdAt")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub created_at: SchemaValue<crate::FieldDate>,
-}
-
-impl<T: AuthOrganization> From<&T> for OrganizationView {
-    fn from(org: &T) -> Self {
-        Self {
-            additional_fields: org.projected_fields().cloned().unwrap_or_default(),
-            id: org.id().into_owned(),
-            name: org.name().clone(),
-            slug: org.slug().clone(),
-            logo: org.logo().clone(),
-            metadata: org.metadata().clone(),
-            created_at: org.created_at().clone(),
-        }
-    }
-}
+pub type OrganizationView = crate::Organization;
 
 /// Public invitation response shape.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct InvitationView {
     /// Source property order, independent of the current typed values.
     #[serde(skip)]

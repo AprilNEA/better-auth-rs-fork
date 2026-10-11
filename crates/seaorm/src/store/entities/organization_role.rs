@@ -21,6 +21,7 @@ impl TryFrom<Model> for better_auth_core::OrganizationRole {
 
     fn try_from(model: Model) -> Result<Self, Self::Error> {
         Ok(Self {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: model.id.into(),
             organization_id: model.organization_id.into(),

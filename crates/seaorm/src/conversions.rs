@@ -8,6 +8,7 @@ use crate::store::entities;
 impl From<&entities::organization::Model> for Organization {
     fn from(model: &entities::organization::Model) -> Self {
         Self {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: model.id.clone().into(),
             name: model.name.clone().into(),

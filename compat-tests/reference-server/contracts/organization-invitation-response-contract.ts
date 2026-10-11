@@ -9,7 +9,7 @@ import { serializeSignedCookie } from "better-call";
 import { date, storedDate, team, type Backend, type Events, type Fields, type Policies } from "./organization-team-member-contract";
 
 type Route = "get" | "list" | "list-user" | "accept" | "reject" | "cancel";
-type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean; teamIds?: string };
+type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean; teamIds?: string; dynamicAccessControl?: boolean };
 const cases: Scenario[] = [
   { name: "get-collision", route: "get" },
   { name: "get-clone-before-inviter", route: "get", cloneError: true },
@@ -40,14 +40,15 @@ export const member = (id: string, userId: string, role: string) => ({
 });
 
 export async function setup(backend: Backend, scenario: Scenario) {
-  const memory: Record<string, Fields[]> = Object.fromEntries(models.map(model => [model, []]));
+  const tables = scenario.dynamicAccessControl ? [...models, "organizationRole"] : models;
+  const memory: Record<string, Fields[]> = Object.fromEntries(tables.map(model => [model, []]));
   const database = backend === "sqlite" ? new Database(":memory:") : undefined;
   const options: BetterAuthOptions = {
     database: database ?? memoryAdapter(memory), baseURL,
     secret: "invitation-response-contract-at-least-thirty-two-characters",
     logger: { disabled: true }, telemetry: { enabled: false }, rateLimit: { enabled: false },
     advanced: { database: { joins: scenario.joins ?? false, generateId: ({ model }) => `${model}-a` } },
-    plugins: [organization({ teams: { enabled: true } })],
+    plugins: [organization({ teams: { enabled: true }, ...(scenario.dynamicAccessControl ? { dynamicAccessControl: { enabled: true } } : {}) })],
   };
   if (database) await (await getMigrations(options)).runMigrations();
   const context = await betterAuth(options).$context;
@@ -74,7 +75,7 @@ export async function setup(backend: Backend, scenario: Scenario) {
         await context.adapter.deleteMany({ model, where: [{ field: model === "organization" ? "id" : "organizationId", value: "organization" }] });
       }
     },
-    snapshot: () => Object.fromEntries(models.map(model => [model, structuredClone(database
+    snapshot: () => Object.fromEntries(tables.map(model => [model, structuredClone(database
       ? database.query(`SELECT * FROM "${model}" ORDER BY id`).all()
       : memory[model].toSorted((left, right) => String(left.id).localeCompare(String(right.id))))])) as Record<string, Fields[]>,
     stored: (row: Fields) => Object.fromEntries(Object.entries(row).map(([key, value]) => [

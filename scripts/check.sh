@@ -104,6 +104,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-member-point-reads.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-native-routes.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-crud-sources.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
         ./compat-tests/reference-server/contracts/organization-direct-order.test.ts || organization_status=1
@@ -144,6 +145,13 @@ run_stage() {
       cargo fmt --all -- --check
       local organization_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/organization-member-point-reads.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-native-routes.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-crud-sources.test.ts \
+        ./compat-tests/reference-server/contracts/organization-invitation-session-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-invitation-cookie-transaction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-full-fallback.test.ts \
         ./tests/fixtures/organization-join-continuation-upstream.test.ts \
         ./compat-tests/reference-server/contracts/organization-id-input.test.ts \
         ./compat-tests/reference-server/contracts/organization-query-limits.test.ts \

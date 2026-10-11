@@ -9,6 +9,8 @@ mod team_member;
 
 #[path = "organization/member_contract_support.rs"]
 mod member_contract_support;
+#[path = "organization/member_crud_sources.rs"]
+mod member_crud_sources;
 #[path = "organization/member_hook_routes.rs"]
 mod member_hook_routes;
 #[path = "organization/member_native_routes.rs"]
