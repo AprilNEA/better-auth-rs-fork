@@ -1,18 +1,39 @@
 //! Rows preserve object identity when a transaction commits into the live table.
 
-use crate::{
-    AuthError, AuthRecordFields, AuthResult, FieldMap, FieldValue, FromFieldMap, SchemaValue,
-};
+use crate::user_fields::UserRowState;
+use crate::{AuthError, AuthRecordFields, AuthResult, FieldMap, FieldValue, FromFieldMap};
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::operation::MemoryGate;
 
-pub(super) trait MemoryRow {
-    fn id(&self) -> &SchemaValue<String>;
+#[derive(Clone)]
+pub(super) struct RowCell<T> {
+    pub(super) value: T,
+    user_state: Option<UserRowState>,
 }
 
-pub(super) struct RowRef<T>(pub(super) Arc<Mutex<T>>, pub(super) MemoryGate);
+impl<T> RowCell<T> {
+    pub(super) fn new(value: T) -> Self {
+        Self {
+            value,
+            user_state: None,
+        }
+    }
+}
+
+#[cfg(test)]
+impl RowCell<FieldMap> {
+    pub(super) fn from_user_state(user: crate::UserView) -> Self {
+        let (value, state) = user.into_row_parts();
+        Self {
+            value,
+            user_state: Some(state),
+        }
+    }
+}
+
+pub(super) struct RowRef<T>(pub(super) Arc<Mutex<RowCell<T>>>, pub(super) MemoryGate);
 
 impl<T> Clone for RowRef<T> {
     fn clone(&self) -> Self {
@@ -87,33 +108,11 @@ pub(super) trait ObjectRow:
     AuthRecordFields + FromFieldMap + Clone + Send + Sync + 'static
 {
     fn property(&self, name: &str) -> AuthResult<Option<FieldValue>>;
-
-    fn clone_hidden_values(&self) -> AuthResult<Vec<FieldValue>> {
-        Ok(Vec::new())
-    }
-
-    fn with_cloned_fields(&self, fields: FieldMap, _state: Vec<FieldValue>) -> AuthResult<Self> {
-        Self::from_field_values(fields)
-    }
 }
 
 impl ObjectRow for FieldMap {
     fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         Ok(self.get(name).cloned())
-    }
-}
-
-impl ObjectRow for crate::UserView {
-    fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
-        Ok(self.field_values()?.get(name).cloned())
-    }
-
-    fn clone_hidden_values(&self) -> AuthResult<Vec<FieldValue>> {
-        self.clone_hidden_values()
-    }
-
-    fn with_cloned_fields(&self, fields: FieldMap, state: Vec<FieldValue>) -> AuthResult<Self> {
-        self.with_cloned_fields(fields, state)
     }
 }
 
@@ -147,8 +146,14 @@ impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
     }
 
     fn clone_seed(&self) -> AuthResult<Option<crate::field_value::ObjectCloneSeed>> {
-        let before = Arc::new(self.snapshot()?);
-        let state = before.clone_hidden_values()?;
+        let before = {
+            let _operation = self.1.lock();
+            Arc::new(lock(&self.0)?.clone())
+        };
+        let state = before
+            .user_state
+            .as_ref()
+            .map_or_else(Vec::new, |state| state.hidden_values().to_vec());
         let target = Self(Arc::new(Mutex::new((*before).clone())), self.1.clone());
         let object = crate::FieldObject::from_source(Arc::new(target.clone()));
         Ok(Some(crate::field_value::ObjectCloneSeed {
@@ -156,7 +161,17 @@ impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
             state,
             original_record: Some(before.clone()),
             prepare: Box::new(move |fields, state| {
-                let row = before.with_cloned_fields(fields, state)?;
+                let user_state = before
+                    .user_state
+                    .as_ref()
+                    .map(|user| {
+                        user.with_cloned_fields(&before.value.field_values()?, &fields, state)
+                    })
+                    .transpose()?;
+                let row = RowCell {
+                    value: T::from_field_values(fields)?,
+                    user_state,
+                };
                 Ok(Box::new(move || {
                     crate::field_value::publish_clone(&target.0, row);
                 }))
@@ -168,12 +183,12 @@ impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
 impl<T: ObjectRow> RowRef<T> {
     pub(super) fn field(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         let _operation = self.1.lock();
-        lock(&self.0)?.property(name)
+        lock(&self.0)?.value.property(name)
     }
 
     pub(super) fn shallow_fields(&self) -> AuthResult<FieldMap> {
         let _operation = self.1.lock();
-        lock(&self.0)?.field_values()
+        lock(&self.0)?.value.field_values()
     }
 
     pub(super) fn set_field(
@@ -226,13 +241,13 @@ impl<T: ObjectRow> RowRef<T> {
         &self,
         context: &mut crate::StructuredCloneContext,
     ) -> AuthResult<(Self, T)> {
-        let (value, before) = context.clone_record(&self.field_value())?;
+        let (value, before) = context.clone_record::<RowCell<T>>(&self.field_value())?;
         let row = value
             .as_object()
             .and_then(crate::FieldObject::source::<Self>)
             .cloned()
             .ok_or_else(|| AuthError::internal("Structured clone lost its native row type"))?;
-        Ok((row, before))
+        Ok((row, before.value))
     }
 }
 
@@ -255,6 +270,10 @@ impl<T> RowRef<T> {
     }
 
     pub(super) fn replace(&self, value: T) -> AuthResult<()> {
+        self.replace_cell(RowCell::new(value))
+    }
+
+    fn replace_cell(&self, value: RowCell<T>) -> AuthResult<()> {
         let _operation = self.1.lock();
         let previous = {
             let mut row = lock(&self.0)?;
@@ -269,7 +288,25 @@ impl<T> RowRef<T> {
         T: Clone,
     {
         let _operation = self.1.lock();
-        Ok(lock(&self.0)?.clone())
+        Ok(lock(&self.0)?.value.clone())
+    }
+}
+
+#[cfg(test)]
+impl RowRef<FieldMap> {
+    pub(super) fn replace_user_state(&self, user: crate::UserView) -> AuthResult<()> {
+        self.replace_cell(RowCell::from_user_state(user))
+    }
+
+    pub(super) fn user_state_snapshot(&self) -> AuthResult<crate::UserView> {
+        let cell = {
+            let _operation = self.1.lock();
+            lock(&self.0)?.clone()
+        };
+        match cell.user_state {
+            Some(state) => state.into_user(cell.value),
+            None => crate::UserView::from_field_values(cell.value),
+        }
     }
 }
 
@@ -279,11 +316,6 @@ fn lock<T>(row: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
 }
 pub(super) trait TransactionRow {
     fn transaction_id(&self) -> FieldValue;
-}
-impl<T: MemoryRow> TransactionRow for T {
-    fn transaction_id(&self) -> FieldValue {
-        self.id().field_value()
-    }
 }
 impl TransactionRow for FieldMap {
     fn transaction_id(&self) -> FieldValue {
@@ -332,21 +364,14 @@ pub(super) fn row_json(row: &impl AuthRecordFields) -> AuthResult<Option<String>
     FieldValue::from(row.field_values()?).stringify()
 }
 
-macro_rules! row_id {
-    ($($record:ty),* $(,)?) => { $(impl MemoryRow for $record {
-        fn id(&self) -> &SchemaValue<String> { &self.id }
-    })* };
-}
-row_id!(crate::wire::UserView);
-
 #[cfg(test)]
 mod object_tests;
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StructuredCloneContext;
     use crate::store::ephemeral::table::TableRef;
+    use crate::{SchemaValue, StructuredCloneContext};
     use std::collections::HashSet;
 
     #[derive(Clone, Debug, PartialEq)]
@@ -354,9 +379,9 @@ mod tests {
         id: SchemaValue<String>,
         label: String,
     }
-    impl MemoryRow for Record {
-        fn id(&self) -> &SchemaValue<String> {
-            &self.id
+    impl TransactionRow for Record {
+        fn transaction_id(&self) -> FieldValue {
+            self.id.field_value()
         }
     }
 

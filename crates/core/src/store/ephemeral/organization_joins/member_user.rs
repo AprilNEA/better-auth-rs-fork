@@ -4,8 +4,8 @@ fn selected_users(
     op: &super::super::operation::MemoryOperation<'_>,
     fields: (&str, &str),
     value: &Value,
-) -> AuthResult<Vec<RowRef<UserView>>> {
-    op.capture_users()?.select_refs(|user| {
+) -> AuthResult<Vec<RowRef<FieldMap>>> {
+    op.capture_table(EntityRole::User)?.select_refs(|user| {
         Ok(user
             .field(fields.1)?
             .unwrap_or_default()
@@ -38,7 +38,7 @@ impl EphemeralStore {
                     let groups = native_relationships(
                         selected.into_iter().map(RecordSource::Live).collect(),
                         &[(EntityRole::User, join, limit)],
-                        |_| op.capture_users(),
+                        |_| op.capture_table(EntityRole::User),
                     )?;
                     let Some(mut group) = groups.into_iter().next() else {
                         return Ok(None);

@@ -129,7 +129,7 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
     writer.operation(|op| {
         let state = op.capture_state()?;
         state.members.push(member)?;
-        state.users.push(UserView::from_field_values(user)?)?;
+        state.users.push(user)?;
         state.teams.push(team)?;
         state.team_members.push(membership)?;
         Ok(())
@@ -488,7 +488,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
             )?;
             for suffix in ["a", "b"] {
                 let id = format!("user-{suffix}");
-                state.users.push(UserView::from_field_values(
+                state.users.push(
                     [
                         ("id".into(), id.clone().into()),
                         ("name".into(), suffix.into()),
@@ -499,7 +499,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                         ("updatedAt".into(), date().into()),
                     ]
                     .into(),
-                )?)?;
+                )?;
                 state.members.push(
                     [
                         ("id".into(), format!("member-{suffix}").into()),

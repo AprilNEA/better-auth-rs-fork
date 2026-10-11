@@ -10,7 +10,7 @@ use crate::store::{ApiKeyStore, ApiKeyUsageWrite, UserStore, schema::EntityRole}
 use crate::user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform};
 use crate::{
     AuthConfig, AuthError, AuthRecordFields, AuthResult, FieldDate, FieldFunction, FieldMap,
-    FieldObject, FieldValue, FromFieldMap, UpdateUser, UserView,
+    FieldObject, FieldValue, UpdateUser,
 };
 use std::sync::{
     Arc, Mutex,
@@ -125,8 +125,8 @@ fn keys(store: &EphemeralStore) -> AuthResult<TableRef<FieldMap>> {
     store.operation(|op| op.capture_table(EntityRole::ApiKey))
 }
 
-fn users(store: &EphemeralStore) -> AuthResult<TableRef<UserView>> {
-    store.operation(|op| op.capture_users())
+fn users(store: &EphemeralStore) -> AuthResult<TableRef<FieldMap>> {
+    store.operation(|op| op.capture_table(EntityRole::User))
 }
 
 fn check_raw(
@@ -135,15 +135,7 @@ fn check_raw(
     expected_keys: &[FieldMap],
 ) -> AuthResult<()> {
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(
-        state
-            .users
-            .snapshot()?
-            .iter()
-            .map(AuthRecordFields::field_values)
-            .collect::<AuthResult<Vec<_>>>()?,
-        expected_users
-    );
+    assert_eq!(state.users.snapshot()?, expected_users);
     assert_eq!(state.api_keys.snapshot()?, expected_keys);
     for table in [
         &state.sessions,
@@ -307,7 +299,7 @@ async fn user_field_reference_reuses_a_later_top_level_key_table() -> AuthResult
     let captured_keys = keys(&store)?;
     let captured_users = users(&store)?;
     let target = captured_keys.push(key("target", 5.0))?;
-    let owner = captured_users.push(UserView::from_field_values(user(target.field_value()))?)?;
+    let owner = captured_users.push(user(target.field_value()))?;
     let (base, tx, queue) = store.begin_adapter_transaction()?;
     record(&trace, "transaction:enter")?;
     let selected = required(tx.get_user_by_id("owner").await?)?.field_values()?;
@@ -402,7 +394,7 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
         let target = captured_keys.push(key("target", 5.0))?;
         let live_name = cyclic_name(&target.field_value(), row_cycle)?;
         let _ = target.set_field("name".into(), live_name.clone())?;
-        let owner = captured_users.push(UserView::from_field_values(user("Before".into()))?)?;
+        let owner = captured_users.push(user("Before".into()))?;
         let expected_failure = required(target.field_value().stringify().err())?;
         let (base, tx, queue) = store.begin_adapter_transaction()?;
         let base_name = required(required(base.api_keys.row_at(0)?)?.field("name")?)?;
@@ -469,7 +461,7 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
 }
 
 struct CloneProbe {
-    owner: RowRef<UserView>,
+    owner: RowRef<FieldMap>,
     trace: Events,
     reads: AtomicUsize,
     fail_at: usize,
@@ -531,7 +523,7 @@ fn clone_getter_failures_preserve_original_errors_and_live_writes_before_work() 
             let store = fixture(&trace);
             let captured_keys = keys(&store)?;
             let captured_users = users(&store)?;
-            let owner = captured_users.push(UserView::from_field_values(user("Before".into()))?)?;
+            let owner = captured_users.push(user("Before".into()))?;
             let target = captured_keys.push(key("target", 5.0))?;
             let message = "memory-clone-getter-original".to_owned();
             let original = message.as_ptr() as usize;

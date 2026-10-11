@@ -150,7 +150,7 @@ fn observe_memory(store: &EphemeralStore) -> AuthResult<JsonValue> {
         .users
         .snapshot()?
         .iter()
-        .map(observe_user)
+        .map(|row| observe_fields(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
     let jwks = state
         .jwks

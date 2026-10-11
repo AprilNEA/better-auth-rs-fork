@@ -8,7 +8,7 @@
 use crate::{
     AuthConfig, AuthError, AuthResult, AuthSchema, FieldMap, FieldValue, UserView,
     store::database_hooks::{DatabaseHookContext, DatabaseHookUpdate, DatabaseHooks},
-    store::{EphemeralStore, RuntimeStore, UserStore},
+    store::{EphemeralStore, RuntimeStore, UserStore, schema::EntityRole},
     user_fields::{FieldTransforms, UserFieldTransform},
 };
 use std::sync::{Arc, Mutex};
@@ -129,17 +129,17 @@ fn raw(config: &AuthConfig, create: bool) -> AuthResult<Arc<EphemeralStore>> {
     let store = Arc::new(EphemeralStore::new(Arc::new(config.clone())));
     if !create {
         let _ = store.operation(|op| {
-            op.capture_users()?
-                .push(UserView::try_from(contract::native_user())?)
+            op.capture_table(EntityRole::User)?
+                .push(contract::native_user())
         })?;
     }
     Ok(store)
 }
 
 fn stored_user(store: &EphemeralStore) -> AuthResult<Option<FieldMap>> {
-    let rows = store.operation(|op| op.capture_users()?.snapshot())?;
+    let rows = store.operation(|op| op.capture_table(EntityRole::User)?.snapshot())?;
     assert!(rows.len() <= 1);
-    Ok(rows.into_iter().next().map(FieldMap::from))
+    Ok(rows.into_iter().next())
 }
 
 #[tokio::test]

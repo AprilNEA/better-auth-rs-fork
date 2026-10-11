@@ -20,6 +20,7 @@ pub use record::AdapterRecord;
 pub(crate) use record::project_adapter_value;
 mod organization;
 mod output;
+pub(crate) use output::UserRowState;
 mod record;
 mod transform;
 mod user_record;

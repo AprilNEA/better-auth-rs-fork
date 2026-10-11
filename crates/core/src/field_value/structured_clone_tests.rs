@@ -4,6 +4,7 @@
 )]
 
 use super::*;
+use crate::AuthRecordFields;
 use crate::field_value::FieldObjectSource;
 use std::sync::Mutex;
 
@@ -335,5 +336,146 @@ fn deferred_snapshot_failure_does_not_publish_an_earlier_cyclic_graph() -> AuthR
             .is_empty()
     );
     let _ = source.delete("self")?;
+    Ok(())
+}
+
+#[test]
+fn user_view_clone_follows_own_order_and_keeps_hidden_aliases_and_original_errors() -> AuthResult<()>
+{
+    for (unconfigured, throws) in [(false, false), (true, false), (false, true)] {
+        let events = Events::default();
+        let message = "public-user-clone-original".to_owned();
+        let allocation = message.as_ptr() as usize;
+        let failure = Arc::new(Mutex::new(Some(AuthError::Internal(message))));
+        let source =
+            |name: &'static str, fields: FieldMap| {
+                let failure = failure.clone();
+                FieldValue::Object(FieldObject::from_source(Arc::new(Source {
+                    name,
+                    fields: Mutex::new(fields),
+                    events: events.clone(),
+                    on_read: Box::new(move |_| {
+                        if throws && name == "extra" {
+                            return Err(failure.lock().map_err(poisoned)?.take().ok_or_else(
+                                || AuthError::internal("Repeated User clone failure"),
+                            )?);
+                        }
+                        Ok(())
+                    }),
+                    target: None,
+                })))
+            };
+        let date = FieldValue::from(FieldDate::from_milliseconds(42.0));
+        let extra = source("extra", [("value".into(), "extra".into())].into());
+        let mut user = crate::UserView::try_from(FieldMap::from([
+            ("extra".into(), extra.clone()),
+            (
+                "10".into(),
+                source("10", [("value".into(), "ten".into())].into()),
+            ),
+            (
+                "2".into(),
+                source("2", [("value".into(), "two".into())].into()),
+            ),
+            (
+                "name".into(),
+                source("native", [("value".into(), "native".into())].into()),
+            ),
+            ("createdAt".into(), date.clone()),
+            ("id".into(), "owner".into()),
+        ]))?;
+        user.metadata = source(
+            "hidden",
+            [
+                ("date".into(), date.clone()),
+                ("alias".into(), extra.clone()),
+            ]
+            .into(),
+        );
+        if unconfigured {
+            user.visible_fields = None;
+        }
+        let visible = user.visible_fields.clone();
+        let result = user.structured_clone(&mut StructuredCloneContext::new());
+        let mut expected_events = vec![
+            "keys:2",
+            "get:2.value",
+            "keys:10",
+            "get:10.value",
+            "keys:extra",
+            "get:extra.value",
+        ];
+        if throws {
+            assert!(
+                matches!(result, Err(AuthError::Internal(message)) if message == "public-user-clone-original" && message.as_ptr() as usize == allocation)
+            );
+        } else {
+            expected_events.extend([
+                "keys:native",
+                "get:native.value",
+                "keys:hidden",
+                "get:hidden.date",
+                "get:hidden.alias",
+            ]);
+            let cloned = result?;
+            let fields = cloned.field_values()?;
+            assert_eq!(cloned.visible_fields, visible);
+            assert_eq!(
+                fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                ["2", "10", "extra", "name", "createdAt", "id"]
+            );
+            assert_eq!(
+                cloned.field_order,
+                ["2", "10", "extra", "name", "createdAt", "id"]
+            );
+            let copied_date = cloned.created_at.field_value();
+            assert!(!copied_date.strict_equals(&date));
+            assert!(
+                cloned
+                    .metadata
+                    .model_property("date")?
+                    .strict_equals(&copied_date)
+            );
+            let copied_extra = fields
+                .get("extra")
+                .ok_or_else(|| AuthError::internal("Missing cloned extra field"))?;
+            assert!(!copied_extra.strict_equals(&extra));
+            assert!(
+                cloned
+                    .metadata
+                    .model_property("alias")?
+                    .strict_equals(copied_extra)
+            );
+            assert_eq!(
+                fields,
+                FieldMap::from([
+                    (
+                        "2".into(),
+                        FieldMap::from([("value".into(), "two".into())]).into(),
+                    ),
+                    (
+                        "10".into(),
+                        FieldMap::from([("value".into(), "ten".into())]).into(),
+                    ),
+                    (
+                        "extra".into(),
+                        FieldMap::from([("value".into(), "extra".into())]).into(),
+                    ),
+                    (
+                        "name".into(),
+                        FieldMap::from([("value".into(), "native".into())]).into(),
+                    ),
+                    ("createdAt".into(), copied_date),
+                    ("id".into(), "owner".into()),
+                ])
+            );
+        }
+        assert_eq!(*events.lock().map_err(poisoned)?, expected_events);
+        assert_eq!(user.visible_fields, visible);
+        assert_eq!(
+            user.field_order,
+            ["extra", "10", "2", "name", "createdAt", "id"]
+        );
+    }
     Ok(())
 }

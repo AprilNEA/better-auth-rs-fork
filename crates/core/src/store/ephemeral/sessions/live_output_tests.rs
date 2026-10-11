@@ -83,29 +83,8 @@ fn observe_session_fields(mut row: FieldMap, trace: &Trace) -> AuthResult<JsonVa
     observe_fields(row)
 }
 
-fn observe_user(row: &UserView, raw: bool) -> AuthResult<JsonValue> {
-    if !raw {
-        return observe_fields(row.clone().into());
-    }
-    let mut fields = FieldMap::new();
-    for name in [
-        "name",
-        "email",
-        "emailVerified",
-        "image",
-        "createdAt",
-        "updatedAt",
-        "id",
-    ] {
-        let _ = fields.insert(
-            name.into(),
-            required(
-                row.native_field_value(name),
-                "Raw owner must contain every native user field",
-            )?,
-        );
-    }
-    observe_fields(fields)
+fn observe_user(row: &UserView) -> AuthResult<JsonValue> {
+    observe_fields(row.clone().into())
 }
 
 fn observe_memory(store: &EphemeralStore, trace: &Trace) -> AuthResult<JsonValue> {
@@ -114,7 +93,7 @@ fn observe_memory(store: &EphemeralStore, trace: &Trace) -> AuthResult<JsonValue
         .users
         .snapshot()?
         .iter()
-        .map(|row| observe_user(row, true))
+        .map(|row| observe_fields(row.clone()))
         .collect::<AuthResult<Vec<_>>>()?;
     let sessions = state
         .sessions
@@ -321,7 +300,7 @@ async fn capture(path: &str) -> AuthResult<JsonValue> {
                 true,
             )
             .await?;
-            json!({"session":observe_session(&joined.session, &trace)?, "user":observe_user(&user, false)?})
+            json!({"session":observe_session(&joined.session, &trace)?, "user":observe_user(&user)?})
         }
         "list" => JsonValue::Array(
             reader

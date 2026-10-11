@@ -96,7 +96,25 @@ fn event(events: &Events, name: &'static str, value: &FieldValue) -> AuthResult<
 }
 
 fn snapshot(value: &FieldValue) -> AuthResult<FieldValue> {
-    StructuredCloneContext::new().clone_value(value)
+    fn plain_tree(value: &FieldValue) -> AuthResult<FieldValue> {
+        Ok(match value {
+            FieldValue::Array(values) => values
+                .iter()
+                .map(plain_tree)
+                .collect::<AuthResult<Vec<_>>>()?
+                .into(),
+            FieldValue::Object(object) => object
+                .snapshot_fields()?
+                .into_iter()
+                .map(|(name, value)| Ok((name, plain_tree(&value)?)))
+                .collect::<AuthResult<FieldMap>>()?
+                .into(),
+            value => value.clone(),
+        })
+    }
+
+    // These acyclic fixture trees need structural comparisons; identity assertions use the original live handles.
+    plain_tree(&StructuredCloneContext::new().clone_value(value)?)
 }
 
 fn mutate(target: Target, row: &mut FieldMap) {

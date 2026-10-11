@@ -11,7 +11,8 @@ pub(super) struct PreparedTransactionCommit {
     consumed: Vec<super::device_codes::DeviceCodeConsumption>,
 }
 
-const FIELD_TABLES: &[EntityRole] = &[
+const TRANSACTION_TABLES: &[EntityRole] = &[
+    EntityRole::User,
     EntityRole::Account,
     EntityRole::Session,
     EntityRole::Verification,
@@ -31,7 +32,6 @@ const FIELD_TABLES: &[EntityRole] = &[
 ];
 
 pub(super) struct AtomicTransactionCommit {
-    users: super::table::ReconcilePlan<UserView>,
     tables: Vec<(EntityRole, super::table::ReconcilePlan<FieldMap>)>,
     consumed: Vec<super::device_codes::DeviceCodeConsumption>,
 }
@@ -58,11 +58,8 @@ impl PreparedTransactionCommit {
         base: &State,
     ) -> AuthResult<AtomicTransactionCommit> {
         validate_consumed_devices(op, &self.consumed)?;
-        let live = op.capture_users()?;
-        let working = self.store.operation(|op| op.capture_users())?;
-        let (_, users) = live.reconcile_with_plan(&base.users, &working)?;
         let mut tables = Vec::new();
-        for &role in FIELD_TABLES {
+        for &role in TRANSACTION_TABLES {
             let live = op.capture_table(role)?;
             let working = self.store.operation(|op| op.capture_table(role))?;
             let (_, plan) = live.reconcile_with_plan(base.table(role)?, &working)?;
@@ -71,7 +68,6 @@ impl PreparedTransactionCommit {
             }
         }
         Ok(AtomicTransactionCommit {
-            users,
             tables,
             consumed: self.consumed,
         })
@@ -81,19 +77,11 @@ impl PreparedTransactionCommit {
 impl AtomicTransactionCommit {
     pub(super) fn publish(self, op: &super::operation::MemoryOperation<'_>) -> AuthResult<()> {
         validate_consumed_devices(op, &self.consumed)?;
-        let users = if self.users.is_empty() {
-            None
-        } else {
-            Some(self.users.apply(&op.capture_users()?)?)
-        };
         let tables = self
             .tables
             .into_iter()
             .map(|(role, plan)| Ok((role, plan.apply(&op.capture_table(role)?)?)))
             .collect::<AuthResult<Vec<_>>>()?;
-        if let Some(users) = users {
-            op.replace_users(users)?;
-        }
         for (role, table) in tables {
             op.replace_table(role, table)?;
         }
@@ -494,10 +482,7 @@ impl EphemeralStore {
         let committed = isolated.prepare_transaction_commit()?;
         self.operation(|op| {
             validate_consumed_devices(op, &committed.consumed)?;
-            let live = op.capture_users()?;
-            let working = committed.store.operation(|op| op.capture_users())?;
-            op.replace_users(live.reconcile(&base.users, &working)?)?;
-            for &role in FIELD_TABLES {
+            for &role in TRANSACTION_TABLES {
                 if role == EntityRole::DeviceCode {
                     validate_consumed_devices(op, &committed.consumed)?;
                 }

@@ -15,25 +15,29 @@ fn required<T>(value: Option<T>) -> AuthResult<T> {
     value.ok_or_else(|| AuthError::internal("Expected a retained object fixture"))
 }
 
-fn detached<T: ObjectRow>() -> AuthResult<()> {
+fn detached(
+    seed: impl Fn(&TableRef<FieldMap>, FieldMap) -> AuthResult<RowRef<FieldMap>>,
+) -> AuthResult<()> {
     let mut rows = TableRef::new(Arc::default());
-    let original = rows.push(T::from_field_values(
+    let original = seed(
+        &rows,
         [
             ("id".into(), "same-id".into()),
             ("name".into(), "original".into()),
         ]
         .into(),
-    )?)?;
+    )?;
     let retained = original.field_value();
     let handle = required(retained.as_object())?;
     rows = rows.without_refs(std::slice::from_ref(&original))?;
-    let replacement = rows.push(T::from_field_values(
+    let replacement = seed(
+        &rows,
         [
             ("id".into(), "same-id".into()),
             ("name".into(), "replacement".into()),
         ]
         .into(),
-    )?)?;
+    )?;
     assert_eq!(handle.set("name", false.into())?, Some("original".into()));
     assert_eq!(handle.delete("id")?, Some("same-id".into()));
     assert_eq!(handle.set("id", FieldValue::Undefined)?, None);
@@ -58,8 +62,8 @@ fn detached<T: ObjectRow>() -> AuthResult<()> {
 
 #[test]
 fn retained_map_and_user_handles_do_not_rebind_after_deletion() -> AuthResult<()> {
-    detached::<FieldMap>()?;
-    detached::<crate::UserView>()
+    detached(TableRef::push)?;
+    detached(|table, fields| table.push_user_state(crate::UserView::from_field_values(fields)?))
 }
 
 #[test]
@@ -73,12 +77,12 @@ fn user_row_clone_preserves_native_state_and_hidden_graph_aliases() -> AuthResul
     user.visible_fields = None;
     user.is_anonymous = None.into();
     let table = TableRef::new(Arc::default());
-    let source = table.push(user)?;
+    let source = table.push_user_state(user)?;
     let metadata = crate::FieldObject::from(FieldMap::from([
         ("date".into(), date.clone()),
         ("row".into(), source.field_value()),
     ]));
-    let mut user = source.snapshot()?;
+    let mut user = source.user_state_snapshot()?;
     user.metadata = FieldValue::Object(metadata.clone());
     let _ = user
         .additional_fields
@@ -86,10 +90,10 @@ fn user_row_clone_preserves_native_state_and_hidden_graph_aliases() -> AuthResul
     let _ = user
         .additional_fields
         .insert("payload".into(), FieldValue::Object(metadata.clone()));
-    source.replace(user.clone())?;
+    source.replace_user_state(user.clone())?;
     let copied = table.deep_clone(&mut crate::StructuredCloneContext::new())?;
     let target = required(copied.row_at(0)?)?;
-    let cloned = target.snapshot()?;
+    let cloned = target.user_state_snapshot()?;
     assert_eq!(cloned.visible_fields, None);
     assert_eq!(cloned.is_anonymous, None);
     assert_eq!(cloned.field_order, user.field_order);
@@ -106,6 +110,80 @@ fn user_row_clone_preserves_native_state_and_hidden_graph_aliases() -> AuthResul
     assert!(!cloned.field_values()?.contains_key("metadata"));
     let _ = metadata.delete("row")?;
     let _ = cloned_metadata.delete("row")?;
+    Ok(())
+}
+
+#[test]
+fn user_row_clone_preserves_presence_order_and_interleaved_native_shadows() -> AuthResult<()> {
+    let date = FieldValue::from(crate::FieldDate::from_milliseconds(42.0));
+    let mut user = crate::UserView::from_field_values(FieldMap::from([
+        ("first".into(), "first".into()),
+        ("name".into(), FieldValue::Undefined),
+        ("id".into(), "user".into()),
+    ]))?;
+    user.field_order.push("absent".into());
+    user.email = crate::SchemaValue::from_field(date.clone());
+    user.metadata = date.clone();
+    for name in ["name", "last", "metadata"] {
+        let _ = user.additional_fields.insert(name.into(), date.clone());
+    }
+    let table = TableRef::new(Arc::default());
+    let _ = table.push_user_state(user.clone())?;
+    let copied = table.deep_clone(&mut crate::StructuredCloneContext::new())?;
+    let target = required(copied.row_at(0)?)?;
+    let raw = target.snapshot()?;
+    assert_eq!(
+        raw.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["first", "name", "id", "last"]
+    );
+    assert_eq!(raw.get("name"), Some(&FieldValue::Undefined));
+    assert!(!raw.contains_key("email"));
+    assert!(!raw.contains_key("metadata"));
+    let cloned = target.user_state_snapshot()?;
+    assert_eq!(cloned.field_order, user.field_order);
+    assert_eq!(cloned.visible_fields, Some(raw.keys().cloned().collect()));
+    assert_eq!(
+        cloned.additional_fields.keys().collect::<Vec<_>>(),
+        user.additional_fields.keys().collect::<Vec<_>>()
+    );
+    let cloned_date = required(raw.get("last"))?;
+    assert!(!cloned_date.strict_equals(&date));
+    assert!(cloned.email.field_value().strict_equals(cloned_date));
+    assert!(cloned.metadata.strict_equals(cloned_date));
+    for name in ["name", "last", "metadata"] {
+        assert!(required(cloned.additional_fields.get(name))?.strict_equals(cloned_date));
+    }
+    Ok(())
+}
+
+#[test]
+fn ordinary_row_writes_discard_hidden_user_state_even_without_field_changes() -> AuthResult<()> {
+    let writes: [fn(&RowRef<FieldMap>) -> AuthResult<()>; 5] = [
+        |row| row.set_field("id".into(), "user".into()).map(|_| ()),
+        |row| row.delete_field("absent").map(|_| ()),
+        |row| row.apply_patch(FieldMap::new()),
+        |row| row.increment_number_fields(&[]),
+        |row| row.replace(row.snapshot()?),
+    ];
+    for write in writes {
+        let raw = FieldMap::from([("id".into(), "user".into())]);
+        let mut user = crate::UserView::from_field_values(raw.clone())?;
+        user.field_order.push("absent".into());
+        user.email = crate::SchemaValue::from_field("hidden@example.com".into());
+        user.metadata = "hidden metadata".into();
+        let _ = user
+            .additional_fields
+            .insert("name".into(), "hidden name".into());
+        let source = TableRef::new(Arc::default()).push_user_state(user)?;
+        write(&source)?;
+        assert_eq!(source.snapshot()?, raw);
+        let user = source.user_state_snapshot()?;
+        assert!(user.email.field_value().is_undefined());
+        assert!(user.metadata.is_undefined());
+        assert!(user.additional_fields.is_empty());
+        assert_eq!(user.field_order, ["id"]);
+        assert_eq!(user.visible_fields, Some(raw.keys().cloned().collect()));
+    }
     Ok(())
 }
 
@@ -193,7 +271,7 @@ async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> Aut
 }
 
 struct InvitationGraphSource {
-    row: Weak<Mutex<FieldMap>>,
+    row: Weak<Mutex<RowCell<FieldMap>>>,
     reads: AtomicUsize,
     failure: Mutex<Option<AuthError>>,
 }
@@ -226,7 +304,11 @@ impl FieldObjectSource for InvitationGraphSource {
         {
             return Err(error);
         }
-        Ok([("name".into(), row.get("name").cloned().unwrap_or_default())].into())
+        Ok([(
+            "name".into(),
+            row.value.get("name").cloned().unwrap_or_default(),
+        )]
+        .into())
     }
 
     fn identity(&self) -> usize {

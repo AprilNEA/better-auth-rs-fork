@@ -93,7 +93,7 @@ fn session_fields(session: &SessionView, slot: &str) -> FieldMap {
     fields
 }
 
-fn memory(store: &EphemeralStore, slot: &str) -> AuthResult<JsonValue> {
+fn memory(store: &EphemeralStore, _slot: &str) -> AuthResult<JsonValue> {
     let state = store.operation(|op| op.capture_state())?;
     assert_eq!(state.accounts.len()?, 0);
     assert_eq!(state.verifications.len()?, 0);
@@ -103,7 +103,7 @@ fn memory(store: &EphemeralStore, slot: &str) -> AuthResult<JsonValue> {
         .users
         .snapshot()?
         .iter()
-        .map(|row| observe(user_fields(row, slot)?, true))
+        .map(|row| observe(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
     let sessions = state
         .sessions
@@ -280,7 +280,8 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
             .insert("label".into(), UserFieldConfig::default());
         let writer = EphemeralStore::new(Arc::new(writer_config));
         let _ = writer.create_user(user_input("selected")?).await?;
-        let source = writer.operation(|op| required(op.capture_users()?.row_at(0)?))?;
+        let source =
+            writer.operation(|op| required(op.capture_table(EntityRole::User)?.row_at(0)?))?;
         let before = source.snapshot()?;
         let target = source.clone();
         let mut config = (*writer.config).clone();
@@ -303,14 +304,14 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
         reader.state = writer.state.clone();
         reader.operations = writer.operations.clone();
         let output = required(reader.get_user_by_id("1").await?)?;
-        let mut expected = before.clone();
+        let mut expected = UserView::from_field_values(before.clone())?;
         expected.id = if slot == "before-label" { "1" } else { "101" }.into();
         let _ = expected
             .additional_fields
             .insert("label".into(), "selected:out".into());
         assert_eq!(user_fields(&output, slot)?, user_fields(&expected, slot)?);
         let mut expected_raw = before;
-        expected_raw.id = crate::SchemaValue::from_field(Value::Number(101.0));
+        let _ = expected_raw.insert("id".into(), Value::Number(101.0));
         assert_eq!(source.snapshot()?, expected_raw);
     }
     Ok(())

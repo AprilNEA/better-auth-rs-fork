@@ -3,7 +3,7 @@ use super::*;
 use crate::store::schema::EntityRole;
 use crate::store::{AccountOwner, JoinValue, ResolvedJoin, UserAccounts};
 
-type UserRef = RowRef<UserView>;
+type UserRef = RowRef<FieldMap>;
 type UserPage = (Arc<[UserRef]>, usize);
 type AccountRef = RowRef<FieldMap>;
 
@@ -79,7 +79,7 @@ impl EphemeralStore {
             let selected = self
                 .raw("user", "findOne", |op| {
                     let Some(user) = op
-                        .capture_users()?
+                        .capture_table(EntityRole::User)?
                         .select_refs(|user| {
                             Ok(user
                                 .field("email")?
@@ -224,7 +224,7 @@ impl EphemeralStore {
                         parent_ids.push(id);
                         let value = account.get(&relation.from).cloned().unwrap_or_default();
                         let users = native_relation(
-                            op.capture_users()?.select_refs(|user| {
+                            op.capture_table(EntityRole::User)?.select_refs(|user| {
                                 Ok(user
                                     .field(&relation.to)?
                                     .unwrap_or_default()
@@ -232,7 +232,7 @@ impl EphemeralStore {
                             })?,
                             relation,
                             self.config.advanced.database.find_many_limit(),
-                            |user| user.id.field_value(),
+                            |user| user.get("id").cloned().unwrap_or_default(),
                         )?;
                         let source = RecordSource::joined(
                             account,
@@ -340,7 +340,7 @@ impl EphemeralStore {
             if relation.many { "findMany" } else { "findOne" },
             |op| {
                 Ok(fallback_relation(
-                    op.capture_users()?.select_refs(|user| {
+                    op.capture_table(EntityRole::User)?.select_refs(|user| {
                         Ok(user
                             .field(&physical)?
                             .unwrap_or_default()

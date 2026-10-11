@@ -287,8 +287,8 @@ impl Harness {
             .raw
             .operation(|op| op.capture_state()?.users.snapshot())?;
         let rows = rows
-            .iter()
-            .map(|row| self.row(row))
+            .into_iter()
+            .map(|row| observe(&row.into(), &self.default, &self.returned))
             .collect::<AuthResult<Vec<_>>>()?;
         assert_eq!(
             Value::Array(rows),

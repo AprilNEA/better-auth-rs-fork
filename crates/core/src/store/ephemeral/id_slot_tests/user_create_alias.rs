@@ -66,9 +66,13 @@ async fn create_alias(slot: &'static str, serial: bool) -> AuthResult<JsonValue>
     let _ = request_fields.remove("label");
     let _ = request_fields.insert("aliasId".into(), json!("A"));
     let user = store.create_user(input).await?;
-    let stored = store.operation(|op| op.capture_users()?.snapshot())?;
+    let stored = store.operation(|op| op.capture_table(EntityRole::User)?.snapshot())?;
     assert_eq!(stored.len(), 1);
-    assert!(required(stored.first())?.additional_fields.is_empty());
+    assert!(
+        UserView::from_field_values(required(stored.first())?.clone())?
+            .additional_fields
+            .is_empty()
+    );
     Ok(json!({
         "model":"user", "slot":slot, "operation":"create-id-alias",
         "idGeneration":if serial { "serial" } else { "custom" },
@@ -149,9 +153,13 @@ async fn memory_user_id_alias_reads_use_the_canonical_id_before_output_conversio
                 created.additional_fields,
                 [("aliasId".into(), expected)].into()
             );
-            let stored = store.operation(|op| op.capture_users()?.snapshot())?;
+            let stored = store.operation(|op| op.capture_table(EntityRole::User)?.snapshot())?;
             assert_eq!(stored.len(), 1);
-            assert!(required(stored.first())?.additional_fields.is_empty());
+            assert!(
+                UserView::from_field_values(required(stored.first())?.clone())?
+                    .additional_fields
+                    .is_empty()
+            );
             assert_eq!(required(store.get_user_by_id("null").await?)?, created);
             assert_eq!(
                 required(
@@ -163,7 +171,7 @@ async fn memory_user_id_alias_reads_use_the_canonical_id_before_output_conversio
             );
             assert_eq!(store.output_users(stored.clone()).await?, [created]);
             assert_eq!(
-                store.operation(|op| op.capture_users()?.snapshot())?,
+                store.operation(|op| op.capture_table(EntityRole::User)?.snapshot())?,
                 stored
             );
             assert_eq!(events(&trace)?, vec![json!("null"); 4]);

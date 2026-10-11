@@ -3,6 +3,86 @@ use crate::{AuthRecordFields, FromFieldMap, SchemaValue};
 use crate::{AuthResult, entity::AuthUser, plugin::MetadataMap, wire::UserView};
 use crate::{FieldMap, FieldValue as Value};
 use futures_util::future::BoxFuture;
+use std::collections::BTreeSet;
+
+#[derive(Clone)]
+pub(crate) struct UserRowState {
+    field_order: Vec<String>,
+    visible_fields: Option<BTreeSet<String>>,
+    additional_order: Vec<String>,
+    // Visible values live only in the raw row; placeholders preserve the native slot layout.
+    hidden_values: Vec<Value>,
+}
+
+impl UserRowState {
+    pub(crate) fn hidden_values(&self) -> &[Value] {
+        &self.hidden_values
+    }
+
+    pub(crate) fn with_cloned_fields(
+        &self,
+        before: &FieldMap,
+        fields: &FieldMap,
+        values: Vec<Value>,
+    ) -> AuthResult<Self> {
+        let mut values = values.into_iter();
+        let mut next = || {
+            values
+                .next()
+                .ok_or_else(|| crate::AuthError::internal("User clone state is incomplete"))
+        };
+        let mut hidden_values = Vec::new();
+        for name in UserView::NATIVE_FIELDS
+            .iter()
+            .copied()
+            .chain(std::iter::once("metadata"))
+        {
+            let hidden = next()?;
+            hidden_values.push(if fields.contains_key(name) {
+                Value::Undefined
+            } else {
+                hidden
+            });
+        }
+        let is_native = |name: &str| name == "metadata" || UserView::NATIVE_FIELDS.contains(&name);
+        let mut additional_order = Vec::new();
+        for name in &self.additional_order {
+            let hidden = next()?;
+            let value = if is_native(name) {
+                Some(hidden)
+            } else if fields.contains_key(name) {
+                Some(Value::Undefined)
+            } else {
+                (!before.contains_key(name)).then_some(hidden)
+            };
+            if let Some(value) = value {
+                additional_order.push(name.clone());
+                hidden_values.push(value);
+            }
+        }
+        for name in fields.keys() {
+            if !is_native(name) && !additional_order.contains(name) {
+                additional_order.push(name.clone());
+                hidden_values.push(Value::Undefined);
+            }
+        }
+        let cloned_order: Vec<_> = fields.keys().cloned().collect();
+        let field_order = if before.keys().eq(fields.keys()) {
+            self.field_order.clone()
+        } else {
+            cloned_order.clone()
+        };
+        Ok(Self {
+            field_order,
+            visible_fields: self
+                .visible_fields
+                .as_ref()
+                .map(|_| cloned_order.into_iter().collect()),
+            additional_order,
+            hidden_values,
+        })
+    }
+}
 
 const PLUGIN_FIELDS: &[(&str, &[&str])] = &[
     ("anonymous.enabled", &["isAnonymous"]),
@@ -327,50 +407,46 @@ macro_rules! user_fields {
                 }
             }
 
-            pub(crate) fn clone_hidden_values(&self) -> AuthResult<Vec<Value>> {
-                let visible = self.field_values()?;
-                let mut values = vec![
+            pub(crate) fn into_row_parts(self) -> (FieldMap, UserRowState) {
+                let visible = FieldMap::from(self.clone());
+                let mut hidden_values = vec![
                     $(if visible.contains_key($name) { Value::Undefined } else { self.$field.field_value() },)*
                     if visible.contains_key("metadata") { Value::Undefined } else { self.metadata.clone() },
                 ];
-                values.extend(self.additional_fields.iter().map(|(name, value)| {
+                hidden_values.extend(self.additional_fields.iter().map(|(name, value)| {
                     if name != "metadata" && !Self::NATIVE_FIELDS.contains(&name.as_str()) && visible.contains_key(name) {
                         Value::Undefined
                     } else {
                         value.clone()
                     }
                 }));
-                Ok(values)
+                let state = UserRowState {
+                    field_order: self.field_order,
+                    visible_fields: self.visible_fields,
+                    additional_order: self.additional_fields.keys().cloned().collect(),
+                    hidden_values,
+                };
+                (visible, state)
             }
+        }
 
-            pub(crate) fn with_cloned_fields(&self, mut fields: FieldMap, state: Vec<Value>) -> AuthResult<Self> {
-                let cloned_order: Vec<_> = fields.keys().cloned().collect();
-                let original_fields = self.field_values()?;
-                let original_order: Vec<_> = original_fields.keys().cloned().collect();
-                let mut state = state.into_iter();
-                let mut next = || state.next().ok_or_else(|| crate::AuthError::internal("User clone state is incomplete"));
-                let mut user = self.clone();
-                $(user.$field = SchemaValue::from_field(fields.remove($name).unwrap_or(next()?));)*
-                user.metadata = fields.remove("metadata").unwrap_or(next()?);
-                user.additional_fields = FieldMap::new();
-                for name in self.additional_fields.keys() {
+        impl UserRowState {
+            pub(crate) fn into_user(self, mut fields: FieldMap) -> AuthResult<UserView> {
+                let mut values = self.hidden_values.into_iter();
+                let mut next = || values.next().ok_or_else(|| crate::AuthError::internal("User clone state is incomplete"));
+                let mut user = UserView {
+                    field_order: self.field_order,
+                    visible_fields: self.visible_fields,
+                    $($field: SchemaValue::from_field(fields.remove($name).unwrap_or(next()?)),)*
+                    metadata: fields.remove("metadata").unwrap_or(next()?),
+                    additional_fields: FieldMap::new(),
+                };
+                for name in self.additional_order {
                     let hidden = next()?;
-                    let value = if name != "metadata" && !Self::NATIVE_FIELDS.contains(&name.as_str()) {
-                        fields.remove(name).or_else(|| (!original_fields.contains_key(name)).then_some(hidden))
-                    } else {
-                        Some(hidden)
-                    };
-                    if let Some(value) = value {
-                        let _ = user.additional_fields.insert(name.clone(), value);
-                    }
+                    let value = fields.remove(&name).unwrap_or(hidden);
+                    let _ = user.additional_fields.insert(name, value);
                 }
                 user.additional_fields.extend(fields);
-                if original_order != cloned_order {
-                    user.field_order = cloned_order.clone();
-                }
-                if user.visible_fields.is_some() {
-                    user.visible_fields = Some(cloned_order.into_iter().collect());
-                }
                 Ok(user)
             }
         }
@@ -396,11 +472,15 @@ macro_rules! user_fields {
             }
 
             fn structured_clone(&self, context: &mut crate::StructuredCloneContext) -> AuthResult<Self> {
-                let mut user = self.clone();
-                $(user.$field = context.clone_field(&self.$field)?;)*
-                user.metadata = context.clone_value(&self.metadata)?;
-                user.additional_fields = context.clone_map(&self.additional_fields)?;
-                Ok(user)
+                let (fields, state) = self.clone().into_row_parts();
+                let cloned_fields = context.clone_map(&fields)?;
+                // Rust-only hidden slots follow enumerable properties and share their graph aliases.
+                let hidden_values = state.hidden_values().iter()
+                    .map(|value| context.clone_value(value))
+                    .collect::<AuthResult<_>>()?;
+                let mut cloned_state = state.with_cloned_fields(&fields, &cloned_fields, hidden_values)?;
+                cloned_state.visible_fields = state.visible_fields;
+                cloned_state.into_user(cloned_fields)
             }
         }
     };

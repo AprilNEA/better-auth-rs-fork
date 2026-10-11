@@ -60,11 +60,11 @@ fn observation(user: &UserView, slot: &str) -> AuthResult<JsonValue> {
     Ok(JsonValue::Object(fields.json()?))
 }
 
-fn raw_rows(store: &EphemeralStore, slot: &str) -> AuthResult<Vec<JsonValue>> {
+fn raw_rows(store: &EphemeralStore) -> AuthResult<Vec<JsonValue>> {
     store
         .operation(|op| op.capture_state()?.users.snapshot())?
         .iter()
-        .map(|user| observation(user, slot))
+        .map(|user| user.json().map(JsonValue::Object))
         .collect()
 }
 
@@ -135,7 +135,7 @@ async fn capture(slot: &'static str, operation: &'static str) -> AuthResult<Json
     target
         .set(Arc::downgrade(&store))
         .map_err(|_| AuthError::internal("Serial target already assigned"))?;
-    let before = raw_rows(&store, slot)?;
+    let before = raw_rows(&store)?;
     let (result, error) = match store.create_user(input("outer")?).await {
         Ok(user) => {
             assert!(matches!(user.id.field_value(), Value::String(_)));
@@ -151,7 +151,7 @@ async fn capture(slot: &'static str, operation: &'static str) -> AuthResult<Json
             .iter()
             .all(|id| matches!(id, Value::Number(_)))
     );
-    let after = raw_rows(&store, slot)?;
+    let after = raw_rows(&store)?;
     let events = events
         .lock()
         .map_err(|_| AuthError::internal("Serial event lock poisoned"))?

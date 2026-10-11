@@ -50,7 +50,8 @@ impl LogLevel {
 pub enum LogArgument<'a> {
     Text(&'a str),
     Value(&'a Value),
-    Error(&'a (dyn Error + Send + Sync)),
+    /// Borrow the concrete error so callbacks can inspect its type without replacing the error.
+    Error(&'a (dyn Error + Send + Sync + 'static)),
 }
 
 impl<'a> From<&'a str> for LogArgument<'a> {

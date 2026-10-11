@@ -221,7 +221,7 @@ impl ApiKeyPlugin {
             .validate_api_key(input, ctx, endpoint, input.config_id.is_none())
             .await
             .inspect_err(|error| {
-                let cause: &(dyn std::error::Error + Send + Sync) = match error {
+                let cause: &(dyn std::error::Error + Send + Sync + 'static) = match error {
                     ApiKeyVerificationError::Rejected(error)
                     | ApiKeyVerificationError::Internal(error)
                     | ApiKeyVerificationError::Endpoint(error) => error,

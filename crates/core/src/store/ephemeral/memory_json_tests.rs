@@ -162,12 +162,7 @@ impl Fixture {
     ) -> AuthResult<JsonValue> {
         let state = self.store.operation(|op| op.capture_state())?;
         let fields = match model {
-            "user" => state
-                .users
-                .snapshot()?
-                .into_iter()
-                .find(|row| row.id == *id)
-                .map(|row| row.additional_fields),
+            "user" => state.users.get(id)?,
             "session" => state.sessions.get(id)?,
             "organization" => state.organizations.get(id)?,
             "member" => state.members.get(id)?,

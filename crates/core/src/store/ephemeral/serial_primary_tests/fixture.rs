@@ -82,21 +82,7 @@ fn raw_memory(store: &EphemeralStore) -> AuthResult<JsonValue> {
         .users
         .snapshot()?
         .iter()
-        .map(|user| {
-            let mut fields = FieldMap::new();
-            for name in [
-                "name",
-                "email",
-                "emailVerified",
-                "image",
-                "createdAt",
-                "updatedAt",
-                "id",
-            ] {
-                let _ = fields.insert(name.into(), required(user.native_field_value(name))?);
-            }
-            observe_fields(&fields)
-        })
+        .map(observe_fields)
         .collect::<AuthResult<Vec<_>>>()?;
     let accounts = state.accounts.snapshot()?;
     let verifications = state.verifications.snapshot()?;

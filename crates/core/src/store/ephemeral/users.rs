@@ -10,7 +10,7 @@ impl EphemeralStore {
     pub(super) async fn user_ref_by_email(
         &self,
         email: &str,
-    ) -> AuthResult<Option<RowRef<UserView>>> {
+    ) -> AuthResult<Option<RowRef<FieldMap>>> {
         self.user_ref_by_field_value("email", &Value::from(email.to_lowercase()))
             .await
     }
@@ -19,11 +19,16 @@ impl EphemeralStore {
         &self,
         name: &str,
         value: &Value,
-    ) -> AuthResult<Option<RowRef<UserView>>> {
+    ) -> AuthResult<Option<RowRef<FieldMap>>> {
         self.model_fields.begin_id_query(EntityRole::User)?;
         let (physical, value) = self.user_field_selector(name, value)?;
-        self.user_ref(|user| Self::user_matches_selector(user, &physical, &value))
-            .await
+        self.user_ref(|user| {
+            Ok(crate::query::field_matches_equality(
+                &user.field(&physical)?.unwrap_or_default(),
+                &value,
+            ))
+        })
+        .await
     }
 
     fn user_field_selector(&self, name: &str, value: &Value) -> AuthResult<(String, Value)> {
@@ -47,23 +52,15 @@ impl EphemeralStore {
         Ok((physical.to_owned(), value))
     }
 
-    fn user_matches_selector(user: &UserView, field: &str, value: &Value) -> bool {
-        let stored = FieldMap::from(user.clone())
-            .get(field)
-            .cloned()
-            .unwrap_or_default();
-        crate::query::field_matches_equality(&stored, value)
-    }
-
     pub(super) async fn user_ref(
         &self,
-        predicate: impl Fn(&UserView) -> bool + Send,
-    ) -> AuthResult<Option<RowRef<UserView>>> {
+        predicate: impl Fn(&RowRef<FieldMap>) -> AuthResult<bool> + Send,
+    ) -> AuthResult<Option<RowRef<FieldMap>>> {
         self.model_fields.begin_id_query(EntityRole::User)?;
         self.raw("user", "findOne", move |op| {
             Ok(op
-                .capture_users()?
-                .select_refs(|row| Ok(predicate(&row.snapshot()?)))?
+                .capture_table(EntityRole::User)?
+                .select_refs(predicate)?
                 .into_iter()
                 .next())
         })
@@ -73,15 +70,15 @@ impl EphemeralStore {
     pub(super) async fn user_ref_by_id_value(
         &self,
         id: &Value,
-    ) -> AuthResult<Option<RowRef<UserView>>> {
+    ) -> AuthResult<Option<RowRef<FieldMap>>> {
         let id = self.memory_primary_id_query(id)?;
-        self.user_ref(|user| user.id.field_value().strict_equals(&id))
+        self.user_ref(|user| Ok(user.field("id")?.unwrap_or_default().strict_equals(&id)))
             .await
     }
 
     async fn output_optional_user_ref(
         &self,
-        user: Option<RowRef<UserView>>,
+        user: Option<RowRef<FieldMap>>,
     ) -> AuthResult<Option<UserView>> {
         Ok(self
             .output_user_refs(user.into_iter().collect())
@@ -112,29 +109,16 @@ impl EphemeralStore {
     }
 
     #[cfg(test)]
-    pub(super) async fn output_users(&self, users: Vec<UserView>) -> AuthResult<Vec<UserView>> {
+    pub(super) async fn output_users(&self, users: Vec<FieldMap>) -> AuthResult<Vec<UserView>> {
         let sources = users
-            .iter()
-            .map(|user| super::rows::RecordSource::Snapshot(Box::new(FieldMap::from(user.clone()))))
+            .into_iter()
+            .map(|user| super::rows::RecordSource::Snapshot(Box::new(user)))
             .collect::<Vec<_>>();
         self.project_record_sources(EntityRole::User, &self.user_schema(), sources)
             .await?
             .into_iter()
             .map(UserView::try_from)
             .collect()
-    }
-
-    pub(super) fn project_id(
-        id: &crate::SchemaValue<String>,
-    ) -> AuthResult<crate::SchemaValue<String>> {
-        let value = id.field_value();
-        if value.is_null() || value.is_undefined() {
-            Ok(crate::SchemaValue::from_field(value))
-        } else {
-            Ok(crate::SchemaValue::from_field(
-                value.display_utf16()?.into(),
-            ))
-        }
     }
 
     async fn prepare_user_update_optional(
@@ -210,7 +194,7 @@ impl EphemeralStore {
     ) -> AuthResult<Option<UserView>> {
         let user = self
             .raw("user", "update", |op| {
-                let selected = op.capture_users()?.select_refs(|user| {
+                let selected = op.capture_table(EntityRole::User)?.select_refs(|user| {
                     Ok(crate::query::field_matches_equality(
                         &user.field(field)?.unwrap_or_default(),
                         value,
@@ -273,7 +257,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
                 supports_native_uuid: false,
             },
         )?;
-        let fields = self
+        let mut fields = self
             .user_schema()
             .storage_fields_with_bound_id(
                 input.clone(),
@@ -283,9 +267,9 @@ impl UserStore<StatelessSchema> for EphemeralStore {
                     let Some(policy) = self.model_fields.id_input_policy(EntityRole::User)? else {
                         return Ok(supplied);
                     };
-                    if let Some(serial) =
-                        self.next_serial_id(self.operation(|op| op.capture_users()?.len())?)
-                    {
+                    if let Some(serial) = self.next_serial_id(
+                        self.operation(|op| op.capture_table(EntityRole::User)?.len())?,
+                    ) {
                         return Ok(Some(serial));
                     }
                     self.config
@@ -297,14 +281,13 @@ impl UserStore<StatelessSchema> for EphemeralStore {
                 |_, field, value| self.memory_plugin_field_input(field, value),
             )
             .await?;
-        let mut user = UserView::try_from(fields)?;
         let user = self
             .raw("user", "create", |op| {
-                let users = op.capture_users()?;
+                let users = op.capture_table(EntityRole::User)?;
                 if let Some(id) = self.next_serial_id(users.len()?) {
-                    user.set_field("id", id);
+                    let _ = fields.insert("id".into(), id);
                 }
-                users.push(user)
+                users.push(fields)
             })
             .await?;
         let user = self.output_user_refs(vec![user]).await?.remove(0);
@@ -345,7 +328,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         let users: Vec<_> = self
             .raw("user", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    op.capture_users()?.select_refs(|user| {
+                    op.capture_table(EntityRole::User)?.select_refs(|user| {
                         let actual = user.field("id")?.unwrap_or_default();
                         Ok(ids.iter().any(|id| actual.same_value_zero(id)))
                     })?,
@@ -456,7 +439,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
             let user = self
                 .raw("user", "findMany", |op| {
                     Ok(op
-                        .capture_users()?
+                        .capture_table(EntityRole::User)?
                         .select_refs(|user| {
                             Ok(crate::query::field_matches_equality(
                                 &user.field("id")?.unwrap_or_default(),
@@ -498,14 +481,14 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         self.model_fields.begin_id_query(EntityRole::User)?;
         let stored_id = self.memory_primary_id_query(id)?;
         self.raw("user", "delete", |op| {
-            let table = op.capture_users()?;
+            let table = op.capture_table(EntityRole::User)?;
             let selected = table.select_refs(|user| {
                 Ok(crate::query::field_matches_equality(
                     &user.field("id")?.unwrap_or_default(),
                     &stored_id,
                 ))
             })?;
-            op.replace_users(table.without_refs(&selected)?)
+            op.replace_table(EntityRole::User, table.without_refs(&selected)?)
         })
         .await?;
         self.after(CommittedWrite::UserDeleted(user.clone()))
@@ -530,7 +513,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         })?;
         let users: Vec<_> = self
             .raw("user", "findMany", |op| {
-                let selected = op.capture_users()?.select_refs(|user| {
+                let selected = op.capture_table(EntityRole::User)?.select_refs(|user| {
                     query.matches_memory_fields(|name| Ok(user.field(name)?.unwrap_or_default()))
                 })?;
                 query
@@ -545,7 +528,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         let total = self
             .raw("user", "count", |op| {
                 Ok(op
-                    .capture_users()?
+                    .capture_table(EntityRole::User)?
                     .select_refs(|user| {
                         query
                             .matches_memory_fields(|name| Ok(user.field(name)?.unwrap_or_default()))

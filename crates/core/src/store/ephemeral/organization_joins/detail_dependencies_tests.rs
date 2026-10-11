@@ -164,9 +164,7 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
         state.invitations.push(invitation.clone())?;
         state.members.push(member.clone())?;
         state.teams.push(team.clone())?;
-        state
-            .users
-            .push(UserView::from_field_values(user.clone())?)?;
+        state.users.push(user.clone())?;
         Ok(())
     })?;
     let roles = [

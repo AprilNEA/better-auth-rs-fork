@@ -240,7 +240,7 @@ impl EphemeralStore {
             let rows = self
                 .raw("user", "findMany", |op| {
                     Ok(crate::query::paginate_memory(
-                        op.capture_users()?.select_refs(|user| {
+                        op.capture_table(EntityRole::User)?.select_refs(|user| {
                             let id = user.field("id")?.unwrap_or_default();
                             Ok(owners.iter().any(|owner| id.same_value_zero(owner)))
                         })?,

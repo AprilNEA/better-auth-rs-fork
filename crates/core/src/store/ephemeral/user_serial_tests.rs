@@ -1,5 +1,5 @@
 use super::*;
-use crate::store::{OrganizationDetailsQuery, OrganizationKey, transaction};
+use crate::store::{OrganizationDetailsQuery, OrganizationKey, schema::EntityRole, transaction};
 
 mod create_order;
 mod join_projection;
@@ -23,13 +23,13 @@ fn user(name: &str) -> CreateUser {
 }
 
 fn stored_ids(store: &EphemeralStore) -> AuthResult<Vec<Value>> {
-    Ok(store
+    store
         .operation(|op| op.capture_state())?
         .users
         .snapshot()?
         .into_iter()
-        .map(|user| user.id.field_value())
-        .collect())
+        .map(|user| required(user.get("id")).cloned())
+        .collect()
 }
 
 #[tokio::test]
@@ -344,9 +344,9 @@ async fn native_user_update_preserves_undefined_null_and_string_selectors() -> A
     for name in ["first", "second", "null", "string"] {
         let _ = store.create_user(user(name)).await?;
     }
-    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+    for source in store.operation(|op| op.capture_table(EntityRole::User)?.snapshot_refs())? {
         let user = source.snapshot()?;
-        let id = match user.name.typed()?.as_deref() {
+        let id = match required(user.get("name"))?.as_str() {
             Some("first" | "second") => Value::Undefined,
             Some("null") => Value::Null,
             _ => Value::from("undefined"),
@@ -389,14 +389,17 @@ async fn native_user_update_preserves_undefined_null_and_string_selectors() -> A
                 "first@serial-user.test"
             })
         );
-        let rows = store.operation(|op| op.capture_users()?.snapshot())?;
+        let rows = store.operation(|op| op.capture_table(EntityRole::User)?.snapshot())?;
         assert_eq!(
             rows.iter()
-                .map(|user| user.name.typed().map(|value| value.as_deref()))
+                .map(|user| Ok(required(user.get("name"))?.as_str()))
                 .collect::<AuthResult<Vec<_>>>()?,
             expected_names.map(Some)
         );
-        assert_eq!(rows[0].updated_at, rows[1].updated_at);
+        assert_eq!(
+            required(rows[0].get("updatedAt"))?,
+            required(rows[1].get("updatedAt"))?
+        );
     }
     Ok(())
 }
@@ -407,9 +410,9 @@ async fn serial_user_batches_convert_the_whole_array_once() -> AuthResult<()> {
     for name in ["zero", "one", "nan"] {
         let _ = store.create_user(user(name)).await?;
     }
-    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+    for source in store.operation(|op| op.capture_table(EntityRole::User)?.snapshot_refs())? {
         let user = source.snapshot()?;
-        let id = Value::Number(match user.name.typed()?.as_deref() {
+        let id = Value::Number(match required(user.get("name"))?.as_str() {
             Some("zero") => 0.0,
             Some("one") => 1.0,
             _ => f64::NAN,
@@ -459,9 +462,9 @@ async fn native_user_batches_distinguish_stored_primitive_ids() -> AuthResult<()
     for (name, _) in &cases {
         let _ = store.create_user(user(name)).await?;
     }
-    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+    for source in store.operation(|op| op.capture_table(EntityRole::User)?.snapshot_refs())? {
         let user = source.snapshot()?;
-        let name = user.name.typed()?.as_deref();
+        let name = required(user.get("name"))?.as_str();
         let (_, id) = required(cases.iter().find(|(candidate, _)| Some(*candidate) == name))?;
         let _ = source.set_field("id".into(), id.clone())?;
     }

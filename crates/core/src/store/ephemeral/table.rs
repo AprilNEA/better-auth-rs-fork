@@ -1,12 +1,12 @@
 //! Captured arrays retain their identity when an operation replaces an active table.
 
 use super::operation::MemoryGate;
-use super::rows::{ObjectRow, RowRef, TransactionId, TransactionRow, row_json};
+use super::rows::{ObjectRow, RowCell, RowRef, TransactionId, TransactionRow, row_json};
 use crate::{AuthError, AuthRecordFields, AuthResult, StructuredCloneContext};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-type RowArray<T> = Vec<Arc<Mutex<T>>>;
+type RowArray<T> = Vec<Arc<Mutex<RowCell<T>>>>;
 
 pub(super) struct TableRef<T> {
     rows: Arc<Mutex<RowArray<T>>>,
@@ -102,6 +102,10 @@ impl<T> TableRef<T> {
     }
 
     pub(super) fn push(&self, value: T) -> AuthResult<RowRef<T>> {
+        self.push_cell(RowCell::new(value))
+    }
+
+    fn push_cell(&self, value: RowCell<T>) -> AuthResult<RowRef<T>> {
         let _operation = self.gate.lock();
         let row = Arc::new(Mutex::new(value));
         self.lock()?.push(row.clone());
@@ -135,6 +139,16 @@ impl<T> TableRef<T> {
         let rows =
             self.select_refs(|row| Ok(!selected.iter().any(|selected| row.same_row(selected))))?;
         Ok(Self::from_refs(self.gate.clone(), rows))
+    }
+}
+
+#[cfg(test)]
+impl TableRef<crate::FieldMap> {
+    pub(super) fn push_user_state(
+        &self,
+        user: crate::UserView,
+    ) -> AuthResult<RowRef<crate::FieldMap>> {
+        self.push_cell(RowCell::from_user_state(user))
     }
 }
 

@@ -5,54 +5,10 @@ use super::rows::RecordSource;
 use super::rows::RowRef;
 use super::*;
 use crate::session::SessionData;
-use crate::store::JoinValue;
-use crate::store::schema::resolve_field_name;
-use crate::user_fields::{
-    UserFieldConfig, project_adapter_value, project_owned_source_fields_batches_then,
-};
-use futures_util::future::BoxFuture;
+use crate::store::{JoinValue, schema::EntityRole};
 
-type UserRef = RowRef<UserView>;
-type UserProjection = (UserRef, bool, FieldMap);
+type UserRef = RowRef<FieldMap>;
 type SessionSnapshot = (SessionView, Option<SessionData<JoinValue<UserView>>>);
-
-fn read_user_field(
-    runtime: &crate::plugin_runtime::ModelFields,
-    (source, started, _): &mut UserProjection,
-    name: &str,
-    field: &UserFieldConfig,
-) -> AuthResult<Option<Value>> {
-    if !*started {
-        runtime.begin_id_output(crate::store::schema::EntityRole::User)?;
-        *started = true;
-    }
-    let physical = resolve_field_name(field.field_name.as_deref(), name);
-    source.field(physical)
-}
-
-fn apply_user_field<'a>(
-    (_, _, output): &'a mut UserProjection,
-    name: &'a str,
-    field: &'a UserFieldConfig,
-    value: Option<Value>,
-) -> BoxFuture<'a, AuthResult<()>> {
-    Box::pin(async move {
-        let value = if name == "id" {
-            EphemeralStore::project_id(&crate::SchemaValue::from_field(value.unwrap_or_default()))?
-                .into_field_value()
-        } else {
-            project_adapter_value(
-                value.unwrap_or_default(),
-                field,
-                field.references_id(),
-                true,
-            )
-            .await?
-        };
-        let _ = output.insert(name.to_owned(), value);
-        Ok(())
-    })
-}
 
 impl EphemeralStore {
     pub(super) async fn output_user_refs(&self, users: Vec<UserRef>) -> AuthResult<Vec<UserView>> {
@@ -68,17 +24,11 @@ impl EphemeralStore {
     where
         F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send + 'static,
     {
-        let fields = self.user_schema();
-        let runtime = self.model_fields.clone();
-        project_owned_source_fields_batches_then(
-            users
-                .into_iter()
-                .map(|user| (user, false, FieldMap::new()))
-                .collect(),
-            fields.fields().clone(),
-            move |row, name, field| read_user_field(&runtime, row, name, field),
-            apply_user_field,
-            |_, (_, _, output)| UserView::from_field_values(std::mem::take(output)),
+        self.project_record_sources_owned_batches_then(
+            EntityRole::User,
+            &self.user_schema(),
+            users.into_iter().map(RecordSource::Live).collect(),
+            |_, fields| UserView::from_field_values(fields),
             complete,
         )
         .await
@@ -90,7 +40,6 @@ impl EphemeralStore {
         only_active: bool,
         single: bool,
     ) -> AuthResult<Vec<SessionSnapshot>> {
-        use crate::store::schema::EntityRole;
         let (token_column, token_query) = self.memory_session_token_query(token_query)?;
         let native = self.config.advanced.database.joins == Some(true);
         let expiry = only_active
@@ -145,7 +94,7 @@ impl EphemeralStore {
                             let session = source.shallow_fields()?;
                             let value = session.get(&relation.from).cloned().unwrap_or_default();
                             let users = native_relation(
-                                op.capture_users()?.select_refs(|user| {
+                                op.capture_table(EntityRole::User)?.select_refs(|user| {
                                     Ok(user
                                         .field(&relation.to)?
                                         .unwrap_or_default()
@@ -153,7 +102,7 @@ impl EphemeralStore {
                                 })?,
                                 &relation,
                                 self.config.advanced.database.find_many_limit(),
-                                |user| user.id.field_value(),
+                                |user| user.get("id").cloned().unwrap_or_default(),
                             )?;
                             let source = RecordSource::joined(
                                 session,

@@ -44,6 +44,19 @@ fn apply_field<'a>(
 }
 
 impl EphemeralStore {
+    pub(super) fn project_id(
+        id: &crate::SchemaValue<String>,
+    ) -> AuthResult<crate::SchemaValue<String>> {
+        let value = id.field_value();
+        if value.is_null() || value.is_undefined() {
+            Ok(crate::SchemaValue::from_field(value))
+        } else {
+            Ok(crate::SchemaValue::from_field(
+                value.display_utf16()?.into(),
+            ))
+        }
+    }
+
     pub(super) async fn project_record_sources(
         &self,
         role: EntityRole,

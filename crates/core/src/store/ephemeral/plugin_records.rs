@@ -223,14 +223,6 @@ impl EphemeralStore {
     /// Observe complete physical records without applying query limits or output callbacks.
     #[doc(hidden)]
     pub fn storage_rows(&self, role: EntityRole) -> AuthResult<Vec<FieldMap>> {
-        self.operation(|op| match role {
-            EntityRole::User => op
-                .capture_users()?
-                .snapshot_refs()?
-                .iter()
-                .map(RowRef::shallow_fields)
-                .collect(),
-            _ => op.capture_table(role)?.snapshot(),
-        })
+        self.operation(|op| op.capture_table(role)?.snapshot())
     }
 }

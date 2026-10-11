@@ -16,7 +16,7 @@ config.logger.level = Some(LogLevel::Info);
 config.logger.disable_colors = Some(true);
 ```
 
-Set `disabled = Some(true)` to suppress all instance logger output. `disabled` and `level` use `Option` to retain omission. `None` keeps logging enabled at the warning threshold; `Some(false)` and `Some(LogLevel::Warn)` apply the same runtime defaults but remain explicit telemetry options. Set `log` to an `Arc<dyn LogSink>` to receive the level, original message, and argument list. `LogArgument` preserves text, JSON values, and errors without applying format placeholders. The default sink uses Rust `tracing` events. Concurrent authentication instances retain their own logger configuration.
+Set `disabled = Some(true)` to suppress all instance logger output. `disabled` and `level` use `Option` to retain omission. `None` keeps logging enabled at the warning threshold; `Some(false)` and `Some(LogLevel::Warn)` apply the same runtime defaults but remain explicit telemetry options. Set `log` to an `Arc<dyn LogSink>` to receive the level, original message, and argument list. `LogArgument` preserves text, JSON values, and errors without applying format placeholders. `LogArgument::Error` borrows a concrete `Error + Send + Sync + 'static`; the error borrow lasts only for the callback. Custom sinks can use `downcast_ref` to inspect the original error type. The default sink uses Rust `tracing` events. Concurrent authentication instances retain their own logger configuration.
 
 ## Tracing
 

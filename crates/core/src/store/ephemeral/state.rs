@@ -16,7 +16,7 @@ pub(super) struct State {
     pub(super) team_members: TableRef<FieldMap>,
     pub(super) organization_roles: TableRef<FieldMap>,
     pub(super) jwks: TableRef<FieldMap>,
-    pub(super) users: TableRef<UserView>,
+    pub(super) users: TableRef<FieldMap>,
     pub(super) wallets: TableRef<FieldMap>,
     pub(super) sessions: TableRef<FieldMap>,
     pub(super) accounts: TableRef<FieldMap>,
@@ -75,7 +75,7 @@ impl State {
             EntityRole::ApiKey => Ok(&self.api_keys),
             EntityRole::Passkey => Ok(&self.passkeys),
             EntityRole::RateLimit => Ok(&self.rate_limits),
-            EntityRole::User => Err(AuthError::internal("User storage requires its typed table")),
+            EntityRole::User => Ok(&self.users),
         }
     }
 
@@ -97,7 +97,7 @@ impl State {
             EntityRole::ApiKey => Ok(&mut self.api_keys),
             EntityRole::Passkey => Ok(&mut self.passkeys),
             EntityRole::RateLimit => Ok(&mut self.rate_limits),
-            EntityRole::User => Err(AuthError::internal("User storage requires its typed table")),
+            EntityRole::User => Ok(&mut self.users),
         }
     }
 
@@ -144,7 +144,9 @@ impl State {
             organization_roles: operation
                 .capture_table(EntityRole::OrganizationRole)?
                 .deep_clone(context)?,
-            users: operation.capture_users()?.deep_clone(context)?,
+            users: operation
+                .capture_table(EntityRole::User)?
+                .deep_clone(context)?,
             two_factors: operation
                 .capture_table(EntityRole::TwoFactor)?
                 .deep_clone(context)?,

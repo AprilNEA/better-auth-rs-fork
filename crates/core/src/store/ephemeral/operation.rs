@@ -4,7 +4,7 @@ use super::rows::RowRef;
 use super::table::TableRef;
 use super::{EphemeralStore, State};
 use crate::store::schema::EntityRole;
-use crate::{AuthError, AuthResult, FieldMap, UserView};
+use crate::{AuthError, AuthResult, FieldMap};
 use parking_lot::ReentrantMutex;
 use std::sync::{Arc, MutexGuard};
 
@@ -34,10 +34,6 @@ impl MemoryOperation<'_> {
         Ok(self.state()?.table(role)?.clone())
     }
 
-    pub(super) fn capture_users(&self) -> AuthResult<TableRef<UserView>> {
-        Ok(self.state()?.users.clone())
-    }
-
     pub(super) fn replace_table(
         &self,
         role: EntityRole,
@@ -46,15 +42,6 @@ impl MemoryOperation<'_> {
         let previous = {
             let mut state = self.state()?;
             std::mem::replace(state.table_mut(role)?, replacement)
-        };
-        drop(previous);
-        Ok(())
-    }
-
-    pub(super) fn replace_users(&self, replacement: TableRef<UserView>) -> AuthResult<()> {
-        let previous = {
-            let mut state = self.state()?;
-            std::mem::replace(&mut state.users, replacement)
         };
         drop(previous);
         Ok(())

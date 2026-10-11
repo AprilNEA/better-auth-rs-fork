@@ -364,9 +364,7 @@ async fn native_member_user_join_groups_duplicate_parent_ids_before_projection()
                 let _ = op.capture_table(EntityRole::Member)?.push(member.clone())?;
             }
             for user in &users {
-                let _ = op
-                    .capture_users()?
-                    .push(UserView::from_field_values(user.clone())?)?;
+                let _ = op.capture_table(EntityRole::User)?.push(user.clone())?;
             }
             Ok(())
         })?;
