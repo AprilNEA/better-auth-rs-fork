@@ -969,8 +969,12 @@ async fn test_verify_email_invalid_token() {
         test_helpers::create_auth_request(HttpMethod::Get, "/verify-email", None, None, query);
     let err = plugin.handle_verify_email(&req, &ctx).await.unwrap_err();
     assert_eq!(
-        err.error_payload(),
-        (401, Some("INVALID_TOKEN".into()), "Invalid token".into())
+        err.error_payload().unwrap(),
+        (
+            better_auth_core::SchemaValue::Typed(401),
+            Some("INVALID_TOKEN".into()),
+            "Invalid token".into()
+        )
     );
 }
 

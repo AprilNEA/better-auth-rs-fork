@@ -236,7 +236,7 @@ impl ApiKeyPlugin {
                     ApiKeyVerificationError::Rejected(error)
                     | ApiKeyVerificationError::Internal(error)
                     | ApiKeyVerificationError::Endpoint(error) => error,
-                    ApiKeyVerificationError::Validation(_) => error,
+                    ApiKeyVerificationError::Validation(_) => &error,
                 };
                 ctx.config.logger.error(
                     "Failed to validate API key:",

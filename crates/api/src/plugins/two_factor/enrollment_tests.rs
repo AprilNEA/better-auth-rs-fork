@@ -211,7 +211,7 @@ async fn native_verified_states_control_setup_and_sign_in_methods() {
             assert_ne!(stored.backup_codes, original.backup_codes);
         } else {
             assert_eq!(
-                result.unwrap_err().error_payload().1.as_deref(),
+                result.unwrap_err().error_payload().unwrap().1.as_deref(),
                 Some("TOTP_ALREADY_ENABLED")
             );
             assert_eq!(stored, original);

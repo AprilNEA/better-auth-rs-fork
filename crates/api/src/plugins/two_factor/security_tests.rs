@@ -147,7 +147,7 @@ async fn otp_enrollment_rotates_session_and_does_not_enroll_an_authenticator() {
     .await
     .unwrap_err();
     assert_eq!(
-        missing_sender.error_payload().1.as_deref(),
+        missing_sender.error_payload().unwrap().1.as_deref(),
         Some("OTP_NOT_CONFIGURED")
     );
     let config = TwoFactorConfig {
@@ -287,7 +287,7 @@ async fn authenticator_enrollment_can_restart_only_until_verified() {
     .await
     .unwrap_err();
     assert_eq!(
-        rejected.error_payload().1.as_deref(),
+        rejected.error_payload().unwrap().1.as_deref(),
         Some("TOTP_ALREADY_ENABLED")
     );
     let preserved = ctx
@@ -370,6 +370,7 @@ async fn failed_challenge_budget_and_account_lock_survive_new_challenges() {
             .await
             .unwrap_err()
             .error_payload()
+            .unwrap()
             .1
             .as_deref(),
         Some("ACCOUNT_TEMPORARILY_LOCKED")

@@ -39,7 +39,7 @@ async fn headers_identity_controls_rereads_and_prevents_duplicate_context_cookie
         config.logger.disabled = Some(true);
         config.logger.level = Some(LogLevel::Warn);
         let config = Arc::new(config);
-        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::<S>::new(config)));
+        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
         let route = AuthRoute::get("/raw-headers", "rawHeaders");
         let dispatcher = EndpointDispatcher::new(
             Arc::new(Vec::new()),

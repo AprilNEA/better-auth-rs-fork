@@ -707,7 +707,7 @@ async fn consumers_read_real_many_relationships_without_a_typed_user_gate() -> A
                 .on_request(&req, &ctx)
                 .await
                 .unwrap_err()
-                .error_payload()
+                .error_payload()?
                 .1
                 .as_deref(),
             Some("FAILED_TO_UPDATE_USER")

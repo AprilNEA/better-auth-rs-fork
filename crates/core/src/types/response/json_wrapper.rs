@@ -1,5 +1,5 @@
 use super::http_init::{HttpInit, copy_headers, headers_init, nullish, optional_property};
-use crate::{AuthResponse, AuthResult, FieldObject, FieldValue, Headers, ResponseBody};
+use crate::{AuthResponse, AuthResult, FieldObject, Headers, ResponseBody};
 
 impl AuthResponse {
     pub(super) fn materialize_json_wrapper(

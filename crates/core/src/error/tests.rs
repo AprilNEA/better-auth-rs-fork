@@ -338,6 +338,43 @@ fn validation_error_response_serializes_field_errors() {
     assert_eq!(body["message"], "[body.email] Email is invalid");
 }
 
+#[test]
+fn request_validation_uses_native_errors_and_preserves_http_bodies() -> AuthResult<()> {
+    #[derive(Debug, serde::Deserialize, validator::Validate)]
+    struct Body {
+        #[validate(length(min = 3, message = "Name is too short"))]
+        name: String,
+    }
+    let mut request = crate::types::AuthRequest::new(crate::types::HttpMethod::Post, "/validate");
+    request.body = Some(br#"{"name":"valid"}"#.to_vec());
+    assert_eq!(validate_request_body::<Body>(&request)?.name, "valid");
+
+    request.body = Some(br#"{"name":"x"}"#.to_vec());
+    let error = validate_request_body::<Body>(&request).unwrap_err();
+    assert!(error.is_api_error()?);
+    let response = error.to_auth_response().into_http_response()?;
+    assert_eq!(response.status, 400);
+    assert_eq!(
+        response.body.bytes()?,
+        br#"{"code":"VALIDATION_ERROR","message":"[body.name] Name is too short"}"#
+    );
+
+    request.body = Some(b"{".to_vec());
+    let message = format!(
+        "Invalid JSON: {}",
+        request.body_as_json::<Body>().unwrap_err()
+    );
+    let error = validate_request_body::<Body>(&request).unwrap_err();
+    assert!(error.is_api_error()?);
+    let response = error.to_auth_response().into_http_response()?;
+    assert_eq!(response.status, 400);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&response.body.bytes()?)?,
+        serde_json::json!({"message": message})
+    );
+    Ok(())
+}
+
 // ── Display for fixed-message variants ──────────────────────────────
 
 // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.

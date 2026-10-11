@@ -9,7 +9,7 @@ fn contract() -> Value {
 
 fn assert_error(error: AuthError, expected: &Value) {
     assert_eq!(
-        u64::from(error.status_code()),
+        u64::from(*error.status_code().unwrap().typed().unwrap()),
         expected["status"].as_u64().unwrap()
     );
     assert_eq!(json_body(&error.to_auth_response()), expected["body"]);

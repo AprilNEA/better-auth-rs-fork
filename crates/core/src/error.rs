@@ -693,54 +693,58 @@ impl axum::response::IntoResponse for AuthError {
 pub fn validation_error_response(
     errors: &validator::ValidationErrors,
 ) -> crate::types::AuthResponse {
-    // Build a TS-compatible message: "[body.field] message; [body.field2] message2"
+    crate::types::AuthResponse::json_value(400, validation_error_fields(errors).into())
+}
+
+fn validation_error_fields(errors: &validator::ValidationErrors) -> FieldMap {
     let messages: Vec<String> = errors
         .field_errors()
         .into_iter()
         .flat_map(|(field, errs)| {
-            errs.iter().map(move |e| {
-                let msg = e
+            errs.iter().map(move |error| {
+                let message = error
                     .message
                     .as_ref()
-                    .map(|m| m.to_string())
-                    .unwrap_or_else(|| format!("Invalid value for {}", field));
-                format!("[body.{}] {}", field, msg)
+                    .map(|message| message.to_string())
+                    .unwrap_or_else(|| format!("Invalid value for {field}"));
+                format!("[body.{field}] {message}")
             })
         })
         .collect();
-    let message = messages.join("; ");
-
-    let body = crate::types::ErrorCodeMessageResponse {
-        code: Some("VALIDATION_ERROR".to_string()),
-        message,
-    };
-
-    // Validation errors return 400 (not 422) per the TS spec
-    crate::types::AuthResponse::json(400, &body)
-        .unwrap_or_else(|_| crate::types::AuthResponse::text(400, "Validation failed"))
+    FieldMap::from([
+        ("code".into(), "VALIDATION_ERROR".into()),
+        ("message".into(), messages.join("; ").into()),
+    ])
 }
 
-/// Validate a request body, returning a parsed + validated value or an error response.
-pub fn validate_request_body<T>(
-    req: &crate::types::AuthRequest,
-) -> Result<T, crate::types::AuthResponse>
+/// Parse and validate a request body, preserving failures as native API errors.
+pub fn validate_request_body<T>(req: &crate::types::AuthRequest) -> AuthResult<T>
 where
     T: serde::de::DeserializeOwned + validator::Validate,
 {
-    let value: T = req.body_as_json().map_err(|e| {
-        let message = format!("Invalid JSON: {}", e);
-        let code = AuthError::code_from_message(&message);
-        crate::types::AuthResponse::json(
-            400,
-            &crate::types::ErrorCodeMessageResponse { code, message },
-        )
-        .unwrap_or_else(|_| crate::types::AuthResponse::text(400, "Invalid JSON"))
-    })?;
-
-    value
-        .validate()
-        .map_err(|e| validation_error_response(&e))?;
-
+    let value: T = match req.body_as_json() {
+        Ok(value) => value,
+        Err(error) => {
+            let message = format!("Invalid JSON: {error}");
+            let mut body = FieldMap::new();
+            if let Some(code) = AuthError::code_from_message(&message) {
+                let _ = body.insert("code".into(), code.into());
+            }
+            let _ = body.insert("message".into(), message.into());
+            return Err(AuthError::try_api_error(ApiErrorInit {
+                status: 400.0.into(),
+                body: body.into(),
+                ..Default::default()
+            })?);
+        }
+    };
+    if let Err(errors) = value.validate() {
+        return Err(AuthError::try_api_error(ApiErrorInit {
+            status: 400.0.into(),
+            body: validation_error_fields(&errors).into(),
+            ..Default::default()
+        })?);
+    }
     Ok(value)
 }
 

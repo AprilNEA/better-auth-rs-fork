@@ -134,7 +134,7 @@ async fn check_organization_actor<S: AuthSchema>(ctx: AuthContext<S>) {
             .await,
     ] {
         let error = result.unwrap_err();
-        assert_eq!(error.status_code(), 403);
+        assert_eq!(error.status_code().unwrap(), 403);
         assert_eq!(
             json_body(&error.to_auth_response())["code"],
             "USER_NOT_MEMBER_OF_ORGANIZATION"
