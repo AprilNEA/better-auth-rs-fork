@@ -1,6 +1,6 @@
 use super::*;
+use better_auth_core::store::schema::EntityRole;
 use better_auth_seaorm::sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
-use std::collections::BTreeMap;
 
 pub(super) async fn sqlite(scenario: &Scenario) -> TestResult<DatabaseConnection> {
     let database = Database::connect("sqlite::memory:").await?;
@@ -136,64 +136,39 @@ pub(super) async fn seed<S: AuthSchema>(
     Ok(())
 }
 
-pub(super) async fn snapshot<S: AuthSchema>(
-    store: &dyn AuthStore<S>,
-    database: Option<&DatabaseConnection>,
-    issued_tokens: &[String],
-) -> TestResult<Value> {
-    if let Some(database) = database {
-        return sqlite_snapshot(database).await;
-    }
-    let (users, count) = store
-        .list_users(ListUsersParams {
-            limit: Some(100.0),
-            sort_by: Some("id".into()),
-            sort_direction: Some("asc".into()),
-            ..Default::default()
-        })
-        .await?;
-    assert_eq!(users.len(), count);
-    let mut accounts = Vec::new();
-    let mut sessions = BTreeMap::new();
-    let mut projected_users = Vec::new();
-    let baseline = config::baseline();
-    for user in &users {
-        let projected = better_auth_core::wire::UserView::with_internal_fields(
-            user,
-            &baseline.user,
-            &Default::default(),
-        )
-        .await?;
-        projected_users.push(values::observe(&FieldMap::from(projected).into())?);
-        accounts.extend(store.get_user_accounts(user.id.typed()?).await?);
-        for session in store.get_user_sessions(user.id.typed()?).await? {
-            insert_session(&mut sessions, session)?;
-        }
-    }
-    for token in issued_tokens {
-        if let Some(session) = store.get_session(token).await? {
-            insert_session(&mut sessions, session)?;
-        }
-    }
-    Ok(json!({
-        "user": projected_users,
-        "account": accounts.iter().map(|account| values::observe(&account.internal_fields()?.into())).collect::<AuthResult<Vec<_>>>()?,
-        "session": sessions.into_values().collect::<Vec<_>>(),
-    }))
+#[derive(Clone, Copy)]
+pub(super) enum Backend<'a> {
+    Memory(&'a EphemeralStore),
+    Sqlite(&'a DatabaseConnection),
 }
 
-fn insert_session(
-    sessions: &mut BTreeMap<String, Value>,
-    session: better_auth_core::wire::SessionView,
-) -> TestResult {
-    let value = values::observe(&FieldMap::from(session.clone()).into())?;
-    if let Some(previous) = sessions.insert(session.id.typed()?.clone(), value.clone()) {
-        assert_eq!(
-            previous, value,
-            "Owner lookup and token lookup must return the same Session"
-        );
+impl Backend<'_> {
+    pub(super) fn is_sqlite(self) -> bool {
+        matches!(self, Self::Sqlite(_))
     }
-    Ok(())
+
+    pub(super) async fn snapshot(self) -> TestResult<Value> {
+        match self {
+            Self::Sqlite(database) => sqlite_snapshot(database).await,
+            Self::Memory(store) => {
+                let mut tables = serde_json::Map::new();
+                for (name, role) in [
+                    ("user", EntityRole::User),
+                    ("account", EntityRole::Account),
+                    ("session", EntityRole::Session),
+                    ("verification", EntityRole::Verification),
+                ] {
+                    let rows = store
+                        .storage_rows(role)?
+                        .into_iter()
+                        .map(|row| values::observe(&row.into()))
+                        .collect::<AuthResult<Vec<_>>>()?;
+                    let _ = tables.insert(name.into(), rows.into());
+                }
+                Ok(tables.into())
+            }
+        }
+    }
 }
 
 async fn sqlite_snapshot(database: &DatabaseConnection) -> TestResult<Value> {
@@ -254,28 +229,12 @@ async fn sqlite_snapshot(database: &DatabaseConnection) -> TestResult<Value> {
     Ok(Value::Object(tables))
 }
 
-pub(super) fn assert_snapshot(actual: &Value, expected: &Value, sqlite: bool, case: &Case) {
-    if sqlite {
-        assert_eq!(actual, expected, "{case:?}: complete SQLite rows");
-    } else {
-        // The public Memory adapter exposes projections, including own Undefined for an absent Session owner.
-        let mut sessions = expected["session"].clone();
-        if let Some(rows) = sessions.as_array_mut() {
-            for row in rows {
-                if row.get("userId").is_none() {
-                    row["userId"] = json!({"type": "undefined"});
-                }
-            }
-        }
-        assert_eq!(
-            actual,
-            &json!({"user": expected["user"], "account": expected["account"], "session": sessions}),
-            "{case:?}: Memory adapter projection"
-        );
-        assert_eq!(
-            expected["verification"],
-            json!([]),
-            "The captured scenario does not touch Verification"
-        );
-    }
+pub(super) fn assert_snapshot(
+    actual: &Value,
+    expected: &Value,
+    sqlite: bool,
+    case: &impl std::fmt::Debug,
+) {
+    let backend = if sqlite { "SQLite" } else { "Memory" };
+    assert_eq!(actual, expected, "{case:?}: complete {backend} rows");
 }

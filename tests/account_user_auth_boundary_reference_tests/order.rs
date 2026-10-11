@@ -10,13 +10,13 @@ const COOKIE_FAILURE: &str =
 
 async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
-    database: Option<&DatabaseConnection>,
+    backend: storage::Backend<'_>,
     scenario: &Scenario,
     case: &Case,
 ) -> TestResult {
     storage::seed(raw.as_ref(), scenario).await?;
-    let before = storage::snapshot(raw.as_ref(), database, &[]).await?;
-    storage::assert_snapshot(&before, &case.before, database.is_some(), case);
+    let before = backend.snapshot().await?;
+    storage::assert_snapshot(&before, &case.before, backend.is_sqlite(), case);
     let events = Events::default();
     let mut options = config::configured(scenario, case.joins, Some(&events))?;
     options.account.encrypt_oauth_tokens = Some(true);
@@ -57,10 +57,7 @@ async fn contract<S: AuthSchema>(
                 .capture(flow.prepare(harness.auth.clone(), setup, &case.request))
                 .await?;
             assert!(events.take()?.is_empty());
-            assert_eq!(
-                storage::snapshot(raw.as_ref(), database, &[]).await?,
-                before
-            );
+            assert_eq!(backend.snapshot().await?, before);
             request
         }
         (None, None) => case.request.clone(),
@@ -75,8 +72,7 @@ async fn contract<S: AuthSchema>(
     if let Some(flow) = &harness.flow {
         flow.verify_and_normalize(&mut actual)?;
     }
-    let tokens = super::observe::issued_tokens(&actual)?;
-    let mut after = storage::snapshot(raw.as_ref(), database, &tokens).await?;
+    let mut after = backend.snapshot().await?;
     let anchors =
         observe::Anchors::verify(&actual, &before, &after, &response, scenario, start..=end)?;
     let observations = anchors.account_cookies.clone();
@@ -84,7 +80,7 @@ async fn contract<S: AuthSchema>(
     anchors.normalize_storage(&mut after)?;
     anchors.normalize_response(&mut response)?;
     observe::assert_events(&actual, case, scenario)?;
-    storage::assert_snapshot(&after, &case.after, database.is_some(), case);
+    storage::assert_snapshot(&after, &case.after, backend.is_sqlite(), case);
     assert_eq!(response.status, case.response.status, "{case:?}");
     assert_eq!(response.headers, case.response.headers, "{case:?}");
     assert_eq!(response.cookies, case.response.cookies, "{case:?}");
@@ -121,9 +117,10 @@ async fn oauth_signin_order_matches_upstream_http() -> TestResult {
         let scenario = fixture.scenario(&case.scenario)?;
         match case.backend.as_str() {
             "memory" => {
+                let raw = Arc::new(EphemeralStore::new(Arc::new(config::baseline())));
                 contract(
-                    Arc::new(EphemeralStore::new(Arc::new(config::baseline()))),
-                    None,
+                    raw.clone(),
+                    storage::Backend::Memory(raw.as_ref()),
                     scenario,
                     case,
                 )
@@ -136,7 +133,7 @@ async fn oauth_signin_order_matches_upstream_http() -> TestResult {
                         config::baseline(),
                         database.clone(),
                     )),
-                    Some(&database),
+                    storage::Backend::Sqlite(&database),
                     scenario,
                     case,
                 )

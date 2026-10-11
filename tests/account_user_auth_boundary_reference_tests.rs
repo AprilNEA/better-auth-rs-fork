@@ -8,7 +8,7 @@
 use better_auth::BetterAuth;
 use better_auth_core::{
     AuthConfig, AuthError, AuthResult, AuthSchema, AuthStore, CreateAccount, CreateUser, FieldDate,
-    FieldMap, FieldValue, ListUsersParams, store::EphemeralStore,
+    FieldMap, FieldValue, store::EphemeralStore,
 };
 use better_auth_seaorm::{SeaOrmStore, sea_orm::DatabaseConnection};
 use serde::Deserialize;
@@ -57,13 +57,13 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
-    database: Option<&DatabaseConnection>,
+    backend: storage::Backend<'_>,
     scenario: &Scenario,
     case: &Case,
 ) -> TestResult {
     storage::seed(raw.as_ref(), scenario).await?;
-    let before = storage::snapshot(raw.as_ref(), database, &[]).await?;
-    storage::assert_snapshot(&before, &case.before, database.is_some(), case);
+    let before = backend.snapshot().await?;
+    storage::assert_snapshot(&before, &case.before, backend.is_sqlite(), case);
     let events = Events::default();
     let options = config::configured(scenario, case.joins, Some(&events))?;
     let store = raw.with_runtime(
@@ -81,10 +81,7 @@ async fn contract<S: AuthSchema>(
                 events.take()?.is_empty(),
                 "OAuth setup must not run database or provider callbacks"
             );
-            assert_eq!(
-                storage::snapshot(raw.as_ref(), database, &[]).await?,
-                before
-            );
+            assert_eq!(backend.snapshot().await?, before);
             request
         }
         (None, None) => case.request.clone(),
@@ -106,12 +103,11 @@ async fn contract<S: AuthSchema>(
                 .is_none()
         );
     }
-    let tokens = observe::issued_tokens(&observed)?;
-    let mut after = storage::snapshot(raw.as_ref(), database, &tokens).await?;
+    let mut after = backend.snapshot().await?;
     let anchors = observe::verify_dynamic(&observed, &after, case, start, end)?;
     observe::normalize(&mut observed, &mut after, &anchors)?;
     observe::assert_events(&observed, &case.events, case)?;
-    storage::assert_snapshot(&after, &case.after, database.is_some(), case);
+    storage::assert_snapshot(&after, &case.after, backend.is_sqlite(), case);
     http::assert_response(response, &case.response, &anchors)?;
     observe::assert_checked(case, scenario, &anchors, &observed);
     Ok(())
@@ -122,7 +118,13 @@ async fn memory_account_user_auth_boundaries_match_upstream_http() -> TestResult
     let fixture = Fixture::read()?;
     for case in fixture.cases.iter().filter(|case| case.backend == "memory") {
         let raw = Arc::new(EphemeralStore::new(Arc::new(config::baseline())));
-        contract(raw, None, fixture.scenario(&case.scenario)?, case).await?;
+        contract(
+            raw.clone(),
+            storage::Backend::Memory(raw.as_ref()),
+            fixture.scenario(&case.scenario)?,
+            case,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -138,7 +140,7 @@ async fn sqlite_account_user_auth_boundaries_match_upstream_http() -> TestResult
         ));
         contract(
             raw,
-            Some(&database),
+            storage::Backend::Sqlite(&database),
             fixture.scenario(&case.scenario)?,
             case,
         )
@@ -152,7 +154,13 @@ async fn memory_account_user_profile_overrides_match_upstream_http() -> TestResu
     let fixture = Fixture::read_overrides()?;
     for case in fixture.cases.iter().filter(|case| case.backend == "memory") {
         let raw = Arc::new(EphemeralStore::new(Arc::new(config::baseline())));
-        contract(raw, None, fixture.scenario(&case.scenario)?, case).await?;
+        contract(
+            raw.clone(),
+            storage::Backend::Memory(raw.as_ref()),
+            fixture.scenario(&case.scenario)?,
+            case,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -168,7 +176,7 @@ async fn sqlite_account_user_profile_overrides_match_upstream_http() -> TestResu
         ));
         contract(
             raw,
-            Some(&database),
+            storage::Backend::Sqlite(&database),
             fixture.scenario(&case.scenario)?,
             case,
         )

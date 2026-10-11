@@ -52,7 +52,7 @@ impl LogSink for Logger {
 
 async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
-    database: Option<&DatabaseConnection>,
+    backend: storage::Backend<'_>,
     scenario: &Scenario,
     case: &Case,
 ) -> TestResult {
@@ -67,8 +67,8 @@ async fn contract<S: AuthSchema>(
         json!({"provider": "google", "idToken": {"token": ID_TOKEN, "nonce": NONCE}})
     );
     storage::seed(raw.as_ref(), scenario).await?;
-    let before = storage::snapshot(raw.as_ref(), database, &[]).await?;
-    storage::assert_snapshot(&before, &case.before, database.is_some(), case);
+    let before = backend.snapshot().await?;
+    storage::assert_snapshot(&before, &case.before, backend.is_sqlite(), case);
     let events = Events::default();
     let mut options = config::configured(scenario, case.joins, Some(&events))?;
     options.logger.disabled = Some(false);
@@ -93,13 +93,13 @@ async fn contract<S: AuthSchema>(
         tokens.is_empty(),
         "Verification rejection must precede Session issuance"
     );
-    let mut after = storage::snapshot(raw.as_ref(), database, &tokens).await?;
+    let mut after = backend.snapshot().await?;
     assert_eq!(after["user"], before["user"]);
     assert_eq!(after["session"], json!([]));
     let anchors = observe::account_update_anchors(&observed, &after, case, start..=end)?;
     observe::normalize(&mut observed, &mut after, &anchors)?;
     assert_events(&observed, case, scenario)?;
-    storage::assert_snapshot(&after, &case.after, database.is_some(), case);
+    storage::assert_snapshot(&after, &case.after, backend.is_sqlite(), case);
     http::assert_response(response, &case.response, &anchors)?;
     assert_eq!(case.response.status, 403);
     assert_eq!(
@@ -199,7 +199,13 @@ async fn selected_user_email_verification_matches_upstream_http() -> TestResult 
         let scenario = fixture.scenario(&case.scenario)?;
         if case.backend == "memory" {
             let raw = Arc::new(EphemeralStore::new(Arc::new(config::baseline())));
-            contract(raw, None, scenario, case).await?;
+            contract(
+                raw.clone(),
+                storage::Backend::Memory(raw.as_ref()),
+                scenario,
+                case,
+            )
+            .await?;
         } else {
             assert_eq!(case.backend, "sqlite");
             let database = storage::sqlite(scenario).await?;
@@ -207,7 +213,7 @@ async fn selected_user_email_verification_matches_upstream_http() -> TestResult 
                 config::baseline(),
                 database.clone(),
             ));
-            contract(raw, Some(&database), scenario, case).await?;
+            contract(raw, storage::Backend::Sqlite(&database), scenario, case).await?;
         }
     }
     Ok(())

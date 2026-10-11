@@ -94,16 +94,11 @@ impl SecondaryStorage for Cache {
     }
 }
 
-fn table_presence(snapshot: &Value, sqlite: bool) -> Value {
+fn table_presence(snapshot: &Value) -> Value {
     ["user", "session", "account", "verification"]
         .into_iter()
         .map(|model| {
-            let present = if model == "verification" && !sqlite {
-                // EphemeralStore has a fixed Verification collection; its public snapshot exposes only the queried models.
-                true
-            } else {
-                snapshot.get(model).is_some_and(|rows| !rows.is_null())
-            };
+            let present = snapshot.get(model).is_some_and(|rows| !rows.is_null());
             (model.to_owned(), Value::Bool(present))
         })
         .collect::<serde_json::Map<_, _>>()
@@ -244,20 +239,20 @@ fn paired_expected(case: &Case) -> Vec<Value> {
 
 async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
-    database: Option<&DatabaseConnection>,
+    backend: storage::Backend<'_>,
     scenario: &Scenario,
     case: &Case,
 ) -> TestResult {
     storage::seed(raw.as_ref(), scenario).await?;
-    let before = storage::snapshot(raw.as_ref(), database, &[]).await?;
-    storage::assert_snapshot(&before, &case.before, database.is_some(), case);
+    let before = backend.snapshot().await?;
+    storage::assert_snapshot(&before, &case.before, backend.is_sqlite(), case);
     let events = Events::default();
     let cache = Arc::new(Cache::new(events.clone()));
     let captured = case
         .observations
         .as_ref()
         .ok_or("Missing secondary observations")?;
-    let presence = table_presence(&before, database.is_some());
+    let presence = table_presence(&before);
     assert_eq!(
         json!({"tablePresence":presence,"cache":cache.snapshot().await?}),
         captured["before"]
@@ -282,9 +277,8 @@ async fn contract<S: AuthSchema>(
         .await?;
     let end = chrono::Utc::now().timestamp_millis();
     let mut observed = events.take()?;
-    let tokens = observe::issued_tokens(&observed)?;
-    let mut after = storage::snapshot(raw.as_ref(), database, &tokens).await?;
-    assert_eq!(table_presence(&after, database.is_some()), presence);
+    let mut after = backend.snapshot().await?;
+    assert_eq!(table_presence(&after), presence);
     assert_eq!(after["user"], before["user"]);
     assert_eq!(after["session"], before["session"]);
     let anchors = observe::verify_dynamic(&observed, &after, case, start, end)?;
@@ -304,14 +298,14 @@ async fn contract<S: AuthSchema>(
     );
     observe::normalize(&mut observed, &mut after, &anchors)?;
     observe::assert_events(&observed, &paired_expected(case), case)?;
-    storage::assert_snapshot(&after, &case.after, database.is_some(), case);
+    storage::assert_snapshot(&after, &case.after, backend.is_sqlite(), case);
     http::assert_response(response, &case.response, &anchors)?;
     assert_eq!(
         case.checked,
         json!({
             "noNetwork":true,"completeStorage":true,"pureSecondarySession":true,"completeSecondaryCalls":true,
             "admissionIdIsUndefined":true,"sessionOwnerIsOwnUndefined":true,"adapterLookupValueIsOwnUndefined":true,
-            "sqliteUndefinedLookupObserved":database.is_some(),"lookupOutcome":"return",
+            "sqliteUndefinedLookupObserved":backend.is_sqlite(),"lookupOutcome":"return",
             "preservedCanonicalAccountOwner":true,"sessionDatesWithinRequest":true,"exactSharedTtl":true,
             "sessionCookieMatchesToken":true,
         })
@@ -324,7 +318,13 @@ async fn memory_array_owner_pure_secondary_matches_upstream_http() -> TestResult
     let fixture = Fixture::read_secondary()?;
     for case in fixture.cases.iter().filter(|case| case.backend == "memory") {
         let raw = Arc::new(EphemeralStore::new(Arc::new(config::baseline())));
-        contract(raw, None, fixture.scenario(&case.scenario)?, case).await?;
+        contract(
+            raw.clone(),
+            storage::Backend::Memory(raw.as_ref()),
+            fixture.scenario(&case.scenario)?,
+            case,
+        )
+        .await?;
     }
     Ok(())
 }
@@ -345,7 +345,7 @@ async fn sqlite_array_owner_pure_secondary_matches_upstream_http() -> TestResult
             config::baseline(),
             database.clone(),
         ));
-        contract(raw, Some(&database), scenario, case).await?;
+        contract(raw, storage::Backend::Sqlite(&database), scenario, case).await?;
     }
     Ok(())
 }
