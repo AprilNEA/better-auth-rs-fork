@@ -96,8 +96,8 @@ where
     P: crate::SeaOrmPluginSchema,
 {
     let config = &settings.config;
-    settings
-        .models()
+    model_fields
+        .active_models()
         .into_iter()
         .map(|(role, _)| match role {
             EntityRole::User => Ok(model::<<S::User as SeaOrmUserModel>::Entity>(columns(
@@ -134,25 +134,24 @@ where
                 S::Verification::extra_insert_columns(),
             )?)),
             EntityRole::Organization => {
-                let fields = organization_fields.schema_for(role)?;
-                let updated_at = O::Organization::column("auth_updated_at")?;
-                let logical =
-                    O::Organization::core_field_name(&updated_at).unwrap_or("auth_updated_at");
-                let extra = (!fields.fields().contains_key(logical)).then_some(updated_at);
-                organization::<O::Organization>(&fields, extra)
+                let fields = organization_fields.fields_for(role)?;
+                let extra = super::super::organization_models::extra_updated_at_column::<
+                    O::Organization,
+                >(fields)?;
+                organization::<O::Organization>(fields, extra)
             }
             EntityRole::Member => {
-                organization::<O::Member>(&organization_fields.schema_for(role)?, [])
+                organization::<O::Member>(organization_fields.fields_for(role)?, [])
             }
             EntityRole::Invitation => {
-                organization::<O::Invitation>(&organization_fields.schema_for(role)?, [])
+                organization::<O::Invitation>(organization_fields.fields_for(role)?, [])
             }
-            EntityRole::Team => organization::<O::Team>(&organization_fields.schema_for(role)?, []),
+            EntityRole::Team => organization::<O::Team>(organization_fields.fields_for(role)?, []),
             EntityRole::TeamMember => {
                 organization::<O::TeamMember>(&model_fields.plugin_fields(role), [])
             }
             EntityRole::OrganizationRole => {
-                organization::<O::OrganizationRole>(&organization_fields.schema_for(role)?, [])
+                organization::<O::OrganizationRole>(organization_fields.fields_for(role)?, [])
             }
             EntityRole::ApiKey => plugin::<P::ApiKey>(role, &model_fields.plugin_fields(role)),
             EntityRole::DeviceCode => {
@@ -166,9 +165,8 @@ where
             EntityRole::WalletAddress => {
                 plugin::<P::WalletAddress>(role, &model_fields.plugin_fields(role))
             }
-            // RateLimit's atomic writer binds native columns directly without field policies.
             EntityRole::RateLimit => {
-                plugin::<P::RateLimit>(role, &ModelFields::plugin_native_fields(role))
+                plugin::<P::RateLimit>(role, &model_fields.plugin_fields(role))
             }
         })
         .collect()

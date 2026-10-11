@@ -16,7 +16,7 @@ impl EphemeralStore {
             .map(|id| self.organization_query(EntityRole::Team, "organizationId", id.clone()))
             .transpose()?;
         let member_fields = self.field_config(EntityRole::TeamMember)?;
-        let runtime = self.model_fields.organization_join_schema(&self.config);
+        let runtime = self.model_fields.organization_join_schema();
         let relation = include_members
             .then(|| {
                 ResolvedJoin::resolve(

@@ -932,7 +932,7 @@ async fn run<S: AuthSchema>(
         secondary_storage: cache.is_some(),
         database_rate_limit: false,
     }
-    .models();
+    .core_models();
     let (users, count) = adapter
         .list_users(ListUsersParams {
             limit: Some(100.0),

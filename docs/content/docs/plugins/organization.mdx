@@ -246,6 +246,8 @@ The `apikey` resource governs organization-owned keys from the [API Key plugin](
 
 Deleting an organization does not revoke its API keys, matching Better Auth 1.7.6. Applications that require revocation must delete those keys explicitly.
 
+Organization deletion deletes Member, Invitation, then Organization records in one transaction. Memory preserves Team, TeamMember, and OrganizationRole records; SQL foreign-key actions remain controlled by the database. The direct `delete_organization_records` adapter method omits the enclosing transaction and preserves earlier deletes if a later operation fails.
+
 ### Custom Roles
 
 Configure static roles with custom permissions. A nonempty `roles` map replaces the default permission definitions:

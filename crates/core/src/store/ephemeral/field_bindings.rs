@@ -23,12 +23,22 @@ impl EphemeralStore {
         value: Value,
     ) -> AuthResult<crate::SchemaValue<String>> {
         self.model_fields.begin_id_query(role)?;
-        if name == "id" {
+        if matches!(name, "id" | "_id") {
             return self
                 .memory_primary_id_query(&value)
                 .map(crate::SchemaValue::from_field);
         }
-        let value = self.memory_field_query(&self.field_config(role)?, name, value)?;
+        let schema = self
+            .model_fields
+            .runtime_fields(role, &self.field_config(role)?)?;
+        let model = crate::plugin_runtime::ModelFields::native_model_name(role)?;
+        let (logical, _) = crate::user_query::declared_field(name, &schema)
+            .ok_or_else(|| AuthError::config(format!("Field {name} not found in model {model}")))?;
+        let value = if logical == "id" {
+            self.memory_primary_id_query(&value)?
+        } else {
+            self.memory_field_query(&schema, logical, value)?
+        };
         Ok(crate::SchemaValue::from_field(value))
     }
 

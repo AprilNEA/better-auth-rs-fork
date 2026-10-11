@@ -38,7 +38,8 @@ impl UserConfig {
         .await
     }
 
-    /// Preserve backend-owned columns and resolve the adapter ID at its declaration slot.
+    /// Resolve declared fields and the adapter ID at their declaration slots.
+    /// Storage adapters write backend-owned columns outside this field policy.
     #[doc(hidden)]
     pub async fn organization_storage_fields_with_bound_id(
         &self,
@@ -48,15 +49,10 @@ impl UserConfig {
         resolve_id: impl FnMut() -> AuthResult<Option<Value>>,
         bind: impl Fn(&str, &UserFieldConfig, Value) -> AuthResult<Value>,
     ) -> AuthResult<FieldMap> {
-        let mut output = core.clone();
-        output.retain(|name, _| name != "id" && !self.fields().contains_key(name));
         let mut input = extras;
         input.extend(core);
-        output.extend(
-            self.storage_fields_with_bound_id(input, create, resolve_id, bind)
-                .await?,
-        );
-        Ok(output)
+        self.storage_fields_with_bound_id(input, create, resolve_id, bind)
+            .await
     }
 
     /// Validate Organization route fields without applying adapter defaults or transforms.

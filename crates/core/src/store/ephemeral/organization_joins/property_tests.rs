@@ -288,7 +288,7 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
             .insert(label.into(), child_output);
     }
     let mut models = crate::plugin_runtime::ModelFields::default();
-    models.register_organization_schema(&organization, true);
+    models.register_organization_schema(&organization, true, true);
     models.extend(EntityRole::TeamMember, membership_fields);
     models.set_model_name(child_role, Some(&physical))?;
     let reader = writer.with_runtime(Arc::new(config), Vec::new(), models)?;

@@ -124,7 +124,7 @@ async fn organization_role_batch_matches_native_scope_and_does_not_project_write
 }
 
 #[tokio::test]
-async fn memory_organization_deletion_cleans_teams_and_roles() {
+async fn memory_organization_deletion_preserves_teams_and_roles() {
     let store = EphemeralStore::new(test_config());
     let org = store
         .create_organization(CreateOrganization::new("one", "one"))
@@ -169,27 +169,40 @@ async fn memory_organization_deletion_cleans_teams_and_roles() {
         })
         .await
         .unwrap();
+    let team_before = store.get_team(team.id.typed().unwrap()).await.unwrap();
+    let members_before = store
+        .list_team_members(team.id.typed().unwrap())
+        .await
+        .unwrap();
+    let role_before = store
+        .get_organization_role(role.id.typed().unwrap())
+        .await
+        .unwrap();
     store
         .delete_organization(org.id.typed().unwrap())
         .await
         .unwrap();
-    assert!(
-        store
-            .get_team(team.id.typed().unwrap())
-            .await
-            .unwrap()
-            .is_none()
+    assert_eq!(
+        store.get_team(team.id.typed().unwrap()).await.unwrap(),
+        team_before
     );
-    assert!(
+    assert_eq!(
         store
             .list_team_members(team.id.typed().unwrap())
             .await
-            .unwrap()
-            .is_empty()
+            .unwrap(),
+        members_before
+    );
+    assert_eq!(
+        store
+            .get_organization_role(role.id.typed().unwrap())
+            .await
+            .unwrap(),
+        role_before
     );
     assert!(
         store
-            .get_organization_role(role.id.typed().unwrap())
+            .get_organization_by_id(org.id.typed().unwrap())
             .await
             .unwrap()
             .is_none()

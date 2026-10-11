@@ -404,7 +404,7 @@ async fn contract(name: &str) -> TestResult {
         );
         let mut init = AuthInitContext::new(config.clone(), raw.clone());
         init.register_model_schema(EntityRole::User, Some("linked_user"), UserConfig::default())?;
-        init.register_organization_schema(&fields, true);
+        init.register_organization_schema(&fields, true, false);
         let reader = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
         let result = async {
             reader

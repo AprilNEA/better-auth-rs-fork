@@ -158,11 +158,12 @@ async fn api_key_and_passkey_preflight_accepts_merged_columns_and_rejects_missin
     store.model_fields = init.into_parts().plugin_fields;
     let settings = SchemaConfiguration {
         config: store.config.clone(),
-        plugins: vec!["api-key", "passkey"],
+        plugins: Vec::new(),
         metadata: Default::default(),
         secondary_storage: false,
         database_rate_limit: false,
     };
+    store.model_fields.set_schema_configuration(&settings);
     let check = store
         .create_schema_check(&settings)?
         .ok_or_else(|| AuthError::internal("Expected the SQLite schema check"))?;
@@ -223,18 +224,28 @@ async fn passkey_and_two_factor_preflight_keep_undeclared_legacy_envelope_column
     super::super::migrator::run_migrations(&database)
         .await
         .map_err(map_db_err)?;
-    let store = SeaOrmStore::<BundledSchema>::new(
+    let mut store = SeaOrmStore::<BundledSchema>::new(
         AuthConfig::new("a-secret-that-is-at-least-32-characters"),
         database.clone(),
     );
+    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
+    for role in [EntityRole::Passkey, EntityRole::TwoFactor] {
+        init.register_model_fields(
+            role,
+            better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
+        )?;
+    }
+    store.model_fields = init.into_parts().plugin_fields;
+    let settings = SchemaConfiguration {
+        config: store.config.clone(),
+        plugins: vec!["passkey", "two-factor"],
+        metadata: Default::default(),
+        secondary_storage: false,
+        database_rate_limit: false,
+    };
+    store.model_fields.set_schema_configuration(&settings);
     let check = store
-        .create_schema_check(&SchemaConfiguration {
-            config: store.config.clone(),
-            plugins: vec!["passkey", "two-factor"],
-            metadata: Default::default(),
-            secondary_storage: false,
-            database_rate_limit: false,
-        })?
+        .create_schema_check(&settings)?
         .ok_or_else(|| AuthError::internal("Expected the SQLite schema check"))?;
     check.check().await?;
     let missing = [

@@ -94,7 +94,9 @@ pub struct OrganizationFields {
 }
 
 impl OrganizationFields {
-    pub(crate) fn fields_for(
+    /// Read one policy set without adding native declarations.
+    #[doc(hidden)]
+    pub fn fields_for(
         &self,
         role: better_auth_schema_registry::EntityRole,
     ) -> crate::AuthResult<&UserConfig> {
@@ -111,7 +113,19 @@ impl OrganizationFields {
         }
     }
 
-    /// Resolve query policies from the same declarations used for writes and output.
+    /// Clone options after the eager dynamic-role update endpoint makes its additional fields optional.
+    #[doc(hidden)]
+    pub fn initialized_options(&self) -> Self {
+        let mut fields = self.clone();
+        if let Some(additional) = &mut fields.organization_role.additional_fields {
+            for field in additional.values_mut() {
+                field.required = Some(false);
+            }
+        }
+        fields
+    }
+
+    /// Resolve raw options into native query declarations before adapter initialization.
     #[doc(hidden)]
     pub fn query_schema_for(
         &self,
@@ -120,7 +134,7 @@ impl OrganizationFields {
         self.schema_for(role)
     }
 
-    /// Resolve complete declarations with whole-field replacements in JavaScript property order.
+    /// Merge raw options with native declarations in JavaScript property order.
     #[doc(hidden)]
     pub fn schema_for(
         &self,
@@ -135,7 +149,7 @@ impl OrganizationFields {
     /// Resolve raw declarations in native schema order and apply dynamic-role storage requirements.
     pub fn into_storage(self) -> Self {
         let mut fields = crate::plugin_runtime::ModelFields::default();
-        fields.register_organization_schema(&self, true);
+        fields.register_organization_schema(&self, true, true);
         fields.organization_fields(self)
     }
 
@@ -238,7 +252,7 @@ mod tests {
         );
 
         let mut registered = ModelFields::default();
-        registered.register_organization_schema(&fields, true);
+        registered.register_organization_schema(&fields, true, true);
         assert_eq!(
             registered
                 .fields(EntityRole::OrganizationRole)
@@ -256,12 +270,12 @@ mod tests {
             query.fields().keys().collect::<Vec<_>>()
         );
         assert_eq!(storage.fields().get("role").unwrap().index, Some(true));
-        assert!(
-            storage
-                .fields()
-                .values()
-                .all(|field| field.required == Some(false))
-        );
+        for name in ["organizationId", "createdAt", "updatedAt"] {
+            assert_eq!(storage.fields().get(name).unwrap().required, Some(false));
+        }
+        for name in ["role", "permission"] {
+            assert_eq!(storage.fields().get(name).unwrap().required, Some(true));
+        }
         assert!(
             storage
                 .fields()

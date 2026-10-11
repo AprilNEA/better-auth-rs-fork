@@ -10,6 +10,23 @@ use super::plugin_rows::{self, SqlRow};
 
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
+pub(super) fn extra_updated_at_column<M: SeaOrmOrganizationModel>(
+    fields: &UserConfig,
+) -> AuthResult<Option<M::Column>> {
+    let column = M::column("auth_updated_at")?;
+    let logical = M::core_field_name(&column).unwrap_or("auth_updated_at");
+    if fields.fields().contains_key(logical) {
+        return Ok(None);
+    }
+    for (name, field) in fields.adapter_fields(&[]).fields() {
+        let storage = resolve_field_name(field.field_name.as_deref(), name);
+        if M::column(storage)?.as_str() == column.as_str() {
+            return Ok(None);
+        }
+    }
+    Ok(Some(column))
+}
+
 pub(super) fn raw_record<M: SeaOrmOrganizationModel>(
     row: &super::plugin_rows::SqlRow,
     fields: &UserConfig,
@@ -27,7 +44,7 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         if role == EntityRole::TeamMember {
             Ok(self.model_fields.plugin_fields(role))
         } else {
-            self.organization_fields()?.query_schema_for(role)
+            Ok(self.organization_fields()?.fields_for(role)?.clone())
         }
     }
 
@@ -243,7 +260,7 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
     policy: &better_auth_core::id::IdGeneration,
     (runtime, role): (&ModelFields, EntityRole),
 ) -> AuthResult<super::record_write::RecordWrite<Entity<M>>> {
-    let mut core = core
+    let core = core
         .into_iter()
         .map(|(name, value)| {
             let column = M::column(&name)?;
@@ -253,6 +270,14 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
             ))
         })
         .collect::<AuthResult<FieldMap>>()?;
+    let backend_updated_at = if role == EntityRole::Organization {
+        extra_updated_at_column::<M>(config)?.and_then(|column| {
+            let logical = M::core_field_name(&column).unwrap_or("auth_updated_at");
+            core.get(logical).cloned().map(|value| (column, value))
+        })
+    } else {
+        None
+    };
     let supplied = core.get("id").or_else(|| input.get("id")).cloned();
     runtime.begin_id_input(
         role,
@@ -261,18 +286,6 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
             supports_native_uuid: backend == DbBackend::Postgres,
         },
     )?;
-    // The primary key binds at its declaration slot, after preceding field callbacks.
-    let raw_id = core.remove("id");
-    crate::reference_id::prepare_core_fields(
-        &mut core,
-        policy,
-        Some(config),
-        M::column,
-        M::is_id_reference,
-    )?;
-    if let Some(id) = raw_id {
-        let _ = core.insert("id".into(), id);
-    }
     let fields = config
         .organization_storage_fields_with_bound_id(
             core,
@@ -307,19 +320,11 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
             },
         )
         .await?;
-    let declarations = config.adapter_fields(&[]);
     let mut active = super::record_write::RecordWrite::<Entity<M>>::default();
-    for (name, value) in fields {
-        let configured = declarations.fields().iter().any(|(logical, field)| {
-            resolve_field_name(field.field_name.as_deref(), logical) == name
-        });
-        let column = M::column(&name)?;
-        if configured {
-            active.field(column, value);
-        } else {
-            active.native_field(column, value);
-        }
+    if let Some((column, value)) = backend_updated_at {
+        active.native_field(column, value);
     }
+    active.apply_fields(fields, M::column)?;
     Ok(active)
 }
 

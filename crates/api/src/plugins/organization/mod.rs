@@ -282,8 +282,13 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
         &self,
         ctx: &mut better_auth_core::AuthInitContext<S>,
     ) -> better_auth_core::AuthResult<()> {
-        ctx.register_organization_schema(&self.config.schema, self.config.teams.enabled);
-        ctx.extensions.insert(self.config.schema.clone());
+        ctx.register_organization_schema(
+            &self.config.schema,
+            self.config.teams.enabled,
+            self.config.dynamic_access_control,
+        );
+        ctx.extensions
+            .insert(self.config.schema.initialized_options());
         ctx.extensions.insert(self.clone());
 
         S::Session::require_plugin_fields("organization", &["active_organization_id"])?;

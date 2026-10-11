@@ -6,7 +6,7 @@ use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
     AuthResult, AuthRoute, AuthSchema, AuthStore, CreateAccount, CreateUser, FieldDate, FieldMap,
     FieldValue, ListUsersParams, UserView,
-    store::{EphemeralStore, JoinValue},
+    store::{EphemeralStore, JoinValue, schema::EntityRole},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldReference, UserFieldTransform,
     },
@@ -21,6 +21,8 @@ use tracing_subscriber::prelude::*;
 mod core_models;
 #[path = "custom_model_join_reference_tests/models.rs"]
 mod models;
+#[path = "custom_model_join_reference_tests/native_models.rs"]
+mod native_models;
 #[path = "session_user_join_reference_tests/recorder.rs"]
 mod recorder;
 #[path = "custom_model_join_reference_tests/storage.rs"]
@@ -101,10 +103,14 @@ fn config(reference: Option<&str>, joins: bool, events: Option<&Events>) -> Auth
     config
 }
 
-struct Badge(Events);
+struct Declaration {
+    events: Events,
+    native: Option<(EntityRole, &'static str)>,
+    alias: Option<String>,
+}
 
 #[async_trait]
-impl<S: AuthSchema> AuthPlugin<S> for Badge {
+impl<S: AuthSchema> AuthPlugin<S> for Declaration {
     fn name(&self) -> &'static str {
         "custom-model-join-reference"
     }
@@ -114,15 +120,17 @@ impl<S: AuthSchema> AuthPlugin<S> for Badge {
     }
 
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
-        context.register_custom_model(
-            "badge",
-            None,
-            UserConfig {
-                additional_fields: Some(
-                    [("label".into(), field(Some(&self.0), "badge", "label"))].into(),
-                ),
-            },
-        )
+        let name = self.native.map_or("badge", |(_, name)| name);
+        let fields = UserConfig {
+            additional_fields: Some(
+                [("label".into(), field(Some(&self.events), name, "label"))].into(),
+            ),
+        };
+        if let Some((role, _)) = self.native {
+            context.register_model_schema(role, self.alias.as_deref(), fields)
+        } else {
+            context.register_custom_model(name, self.alias.as_deref(), fields)
+        }
     }
 
     async fn on_request(
@@ -207,18 +215,36 @@ async fn contract<S: AuthSchema>(
     let before = storage::snapshot(raw.as_ref(), database).await?;
     storage::assert_snapshot(&before, &case["before"], database.is_some());
     let reference = scenario["reference"].as_str();
+    let native = match scenario["model"].as_str() {
+        None => None,
+        Some("passkey") => Some((EntityRole::Passkey, "passkey")),
+        Some("rateLimit") => Some((EntityRole::RateLimit, "rateLimit")),
+        Some(name) => return Err(format!("Unknown native declaration: {name}").into()),
+    };
     let joins = case["joins"].as_bool().ok_or("Missing joins option")?;
     let operations = case["operations"].as_array().ok_or("Missing operations")?;
     assert_eq!(operations.len(), 10);
     let mut paired = 0;
     for expected in operations.iter().filter(|operation| {
-        operation["surface"] == "internal" || operation["name"] == "user-control"
+        operation["name"] == "user-control"
+            || if native.is_some() {
+                operation["name"] == "internal-owner-existing"
+            } else {
+                operation["surface"] == "internal"
+            }
     }) {
         let events = Events::default();
         let config = config(reference, joins, Some(&events));
         let builder = BetterAuth::new(config.clone()).store_arc(raw.clone());
         let auth = if scenario["declared"] == true {
-            builder.plugin(Badge(events.clone())).build().await?
+            builder
+                .plugin(Declaration {
+                    events: events.clone(),
+                    native,
+                    alias: scenario["alias"].as_str().map(str::to_owned),
+                })
+                .build()
+                .await?
         } else {
             builder.build().await?
         };
@@ -236,7 +262,13 @@ async fn contract<S: AuthSchema>(
                 assert_eq!(expected["returned"], true, "{expected}");
                 assert_eq!(value, values::revive(&expected["result"])?, "{expected}");
                 assert_eq!(value.json()?, Some(expected["json"].clone()), "{expected}");
-                if value.is_null() {
+                if native.is_some() {
+                    assert_eq!(
+                        native_models::key_order(&value)?,
+                        expected["keyOrder"],
+                        "{expected}"
+                    );
+                } else if value.is_null() {
                     assert_eq!(expected["keyOrder"], json!([]));
                 } else {
                     println!(
@@ -285,7 +317,7 @@ async fn contract<S: AuthSchema>(
         );
         paired += 1;
     }
-    assert_eq!(paired, 5);
+    assert_eq!(paired, if native.is_some() { 2 } else { 5 });
     storage::assert_snapshot(
         &storage::snapshot(raw.as_ref(), database).await?,
         &case["after"],

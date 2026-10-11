@@ -80,7 +80,7 @@ where
             };
             (member, None)
         };
-        let member_fields = MemberUser::field_schema(&fields).adapter_fields(&[]);
+        let member_fields = fields.adapter_fields(&[]);
         let backend = self.connection().get_database_backend();
         let record = super::organization_models::raw_record::<O::Member>(
             &member,
@@ -116,11 +116,7 @@ where
                 let value = member
                     .field_values()?
                     .remove(&relation.fallback_from(
-                        (
-                            EntityRole::Member,
-                            "member",
-                            &MemberUser::field_schema(&fields),
-                        ),
+                        (EntityRole::Member, "member", &fields),
                         &self.model_fields,
                     )?)
                     .unwrap_or_default();

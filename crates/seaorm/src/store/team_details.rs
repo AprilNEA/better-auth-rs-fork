@@ -60,7 +60,7 @@ where
             .model_fields
             .plugin_fields(EntityRole::TeamMember)
             .adapter_fields(&[]);
-        let runtime = self.model_fields.organization_join_schema(self.config());
+        let runtime = self.model_fields.organization_join_schema();
         let relation = include_members
             .then(|| {
                 ResolvedJoin::resolve(

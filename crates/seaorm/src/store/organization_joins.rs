@@ -67,7 +67,7 @@ where
             name,
             &value,
         )?;
-        let runtime = self.model_fields.organization_join_schema(self.config());
+        let runtime = self.model_fields.organization_join_schema();
         let default_limit = self.config().advanced.database.find_many_limit();
         let relation = |role, model, limit| -> AuthResult<DetailRelation> {
             let child_fields = self.organization_query_schema(role)?.adapter_fields(&[]);

@@ -95,7 +95,7 @@ impl EphemeralStore {
         let member_schema = self.field_config(EntityRole::TeamMember)?;
         let team_schema = self.field_config(EntityRole::Team)?;
         let user_id = self.organization_query(EntityRole::TeamMember, "userId", user_id.clone())?;
-        let runtime = self.model_fields.organization_join_schema(&self.config);
+        let runtime = self.model_fields.organization_join_schema();
         let join = crate::store::ResolvedJoin::resolve(
             (EntityRole::TeamMember, "teamMember", &member_schema),
             (EntityRole::Team, "team", &team_schema),

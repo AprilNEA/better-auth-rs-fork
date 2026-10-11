@@ -62,7 +62,7 @@ impl EphemeralStore {
         let fields = self.field_config(parent.role)?;
         let value = self.organization_query(parent.role, selector, value)?;
         let child_fields = self.field_config(EntityRole::Organization)?;
-        let runtime = self.model_fields.organization_join_schema(&self.config);
+        let runtime = self.model_fields.organization_join_schema();
         let relation = ResolvedJoin::resolve(
             (parent.role, parent.name, &fields),
             (EntityRole::Organization, "organization", &child_fields),

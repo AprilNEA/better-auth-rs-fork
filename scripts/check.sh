@@ -685,26 +685,12 @@ run_stage() {
       return "$projection_status"
       ;;
     schema-joins)
-      cargo fmt --all -- --check
-      cargo clippy --locked --keep-going -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings
-      cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests --test organization_list_relations_tests -- -D warnings
-      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- field_value:: schema_value:: user_fields::record:: store::joins:: store::plugin_rows::native_snapshot_tests:: store::ephemeral::rows::object_tests:: store::ephemeral::user_serial_tests:: store::ephemeral::organization_joins::detail_dependencies_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils::
-      cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin::
-      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
-        --test schema_join_reference_tests --test join_binding_tests \
-        --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests \
-        --test nullable_user_update_tests --test database_hook_updates_tests --test missing_user_transaction_tests \
-        --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests \
-        --test schema_join_reference_conflict_tests --test schema_preflight_tests \
-        --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests \
-        --test organization_native_join_tests --test organization_serial_reference_tests \
-        --test organization_list_relations_tests \
-        --test fallback_join_tests --test native_core_join_tests \
-        --test native_memory_join_tests --test account_owner_batch_tests
-      cargo test --locked --features axum,seaorm2,redis-cache --test organization_native_join_tests -- \
-        --ignored --exact postgres::live_postgres_full_organization_joins_decode_all_typed_children
+      schema_join_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/schema-join-reference.test.ts \
+        ./compat-tests/reference-server/contracts/model-alias-order.test.ts \
+        ./compat-tests/reference-server/contracts/effective-organization-declarations.test.ts \
+        ./compat-tests/reference-server/contracts/custom-model-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/schema-join-reference-conflict.test.ts \
         ./compat-tests/reference-server/contracts/schema-join-reference-unknown.test.ts \
         ./compat-tests/reference-server/contracts/schema-join-reference-field.test.ts \
@@ -717,7 +703,28 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
         ./compat-tests/reference-server/contracts/organization-list-relations.test.ts \
         ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
-        ./compat-tests/reference-server/contracts/relation-object-mutation.test.ts
+        ./compat-tests/reference-server/contracts/relation-object-mutation.test.ts || schema_join_status=1
+      cargo fmt --all -- --check || schema_join_status=1
+      cargo clippy --locked --keep-going -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || schema_join_status=1
+      cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test schema_preflight_tests --test effective_organization_declarations_tests --test model_alias_order_tests --test custom_model_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests --test organization_list_relations_tests -- -D warnings || schema_join_status=1
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- field_value:: schema_value:: user_fields::record:: store::joins:: store::plugin_rows::native_snapshot_tests:: store::ephemeral::rows::object_tests:: store::ephemeral::user_serial_tests:: serial_organization_lifecycle_binds_numbers_and_projects_public_ids memory_organization_deletion_preserves_teams_and_roles store::ephemeral::organization_joins::detail_dependencies_tests:: plugin_runtime::fields:: organization_fields:: reference_id::tests:: store::schema_preflight::roster_tests:: store::plugin_records::tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils:: || schema_join_status=1
+      cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin:: || schema_join_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test schema_join_reference_tests --test join_binding_tests \
+        --test model_alias_order_tests --test custom_model_join_reference_tests \
+        --test effective_organization_declarations_tests \
+        --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests \
+        --test nullable_user_update_tests --test database_hook_updates_tests --test missing_user_transaction_tests \
+        --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests \
+        --test schema_join_reference_conflict_tests --test schema_preflight_tests \
+        --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests \
+        --test organization_native_join_tests --test organization_serial_reference_tests \
+        --test organization_list_relations_tests \
+        --test fallback_join_tests --test native_core_join_tests \
+        --test native_memory_join_tests --test account_owner_batch_tests || schema_join_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --test organization_native_join_tests -- \
+        --ignored --exact postgres::live_postgres_full_organization_joins_decode_all_typed_children || schema_join_status=1
+      return "$schema_join_status"
       ;;
     passkey)
       cargo fmt --all -- --check

@@ -34,6 +34,7 @@ const operations = [
 ];
 
 function optionsFor(scenario, joins, state) {
+  const model = scenario.model ?? "badge";
   const output = field => value => {
     if (state.enabled) state.events.push(["output", field, observeValue(value)]);
     return value;
@@ -43,6 +44,7 @@ function optionsFor(scenario, joins, state) {
     secret: "custom-model-join-reference-contract-at-least-thirty-two-characters",
     logger: { disabled: true }, telemetry: { enabled: false },
     advanced: { database: { joins } },
+    ...(model === "rateLimit" ? { rateLimit: { storage: "memory" } } : {}),
     user: { additionalFields: {
       name: { type: "string", required: true, transform: { output: output("user.name") } },
       image: { type: "string", required: false, transform: { output: output("user.image") } },
@@ -55,8 +57,8 @@ function optionsFor(scenario, joins, state) {
         ...(scenario.reference ? { references: { model: scenario.reference, field: "id" } } : {}),
         transform: { output: output("account.badgeId") } },
     } },
-    plugins: scenario.declared ? [{ id: "custom-model-join-reference", schema: { badge: { fields: {
-      label: { type: "string", required: true, transform: { output: output("badge.label") } },
+    plugins: scenario.declared ? [{ id: "custom-model-join-reference", schema: { [model]: { modelName: scenario.alias, fields: {
+      label: { type: "string", required: true, transform: { output: output(`${model}.label`) } },
     } } } }] : [],
   };
 }
@@ -152,7 +154,7 @@ function assertOperation(scenario, joins, operation, observed, events, seed) {
   assert.deepEqual(events, expectedEvents, "Compare every query and callback; the unrelated model must not be read");
 }
 
-async function runtime(backend, scenario, joins, recorder, diagnostics) {
+async function runtime({ backend, scenario, joins, recorder, diagnostics, selectedOperations }) {
   const state = { enabled: false, events: [] };
   const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
   const memory = Object.fromEntries(tables.map(model => [model, []]));
@@ -172,8 +174,8 @@ async function runtime(backend, scenario, joins, recorder, diagnostics) {
     const captured = [];
     const options = { ...optionsFor(scenario, joins, state), database };
     const registeredModels = Object.keys(getAuthTables(options));
-    assert.deepEqual(registeredModels, scenario.declared ? tables : tables.slice(0, -1));
-    for (const operation of operations) {
+    assert.deepEqual(registeredModels, [...tables.slice(0, -1), ...(scenario.declared ? [scenario.model ?? "badge"] : [])]);
+    for (const operation of selectedOperations) {
       const context = await betterAuth(options).$context;
       state.events = [];
       state.enabled = true;
@@ -199,7 +201,11 @@ async function runtime(backend, scenario, joins, recorder, diagnostics) {
   } finally { state.enabled = false; recorder.events = null; sqlite?.close(); }
 }
 
-export async function captureCustomModelJoinReferences({ diagnostics = [] } = {}) {
+export async function captureCustomModelJoinReferences({
+  diagnostics = [], scenarios: selectedScenarios = scenarios, operationNames = operations.map(operation => operation.name),
+} = {}) {
+  const selectedOperations = operations.filter(operation => operationNames.includes(operation.name));
+  assert.equal(selectedOperations.length, operationNames.length, "Every requested operation must exist exactly once");
   const recorder = { events: null };
   let warmup = false;
   assert.equal(trace.setGlobalTracerProvider({ getTracer() { return {
@@ -219,12 +225,12 @@ export async function captureCustomModelJoinReferences({ diagnostics = [] } = {}
     }
     assert.equal(warmup, true, "The query recorder must be active before sampling");
     const cases = [];
-    for (const scenario of scenarios) for (const backend of ["memory", "sqlite"]) for (const joins of [false, true]) {
-      cases.push(await runtime(backend, scenario, joins, recorder, diagnostics));
+    for (const scenario of selectedScenarios) for (const backend of ["memory", "sqlite"]) for (const joins of [false, true]) {
+      cases.push(await runtime({ backend, scenario, joins, recorder, diagnostics, selectedOperations }));
     }
-    assert.equal(cases.length, 16);
-    assert.equal(cases.reduce((total, value) => total + value.operations.length, 0), 160);
-    return { version, scenarios, cases };
+    assert.equal(cases.length, selectedScenarios.length * 4);
+    assert.equal(cases.reduce((total, value) => total + value.operations.length, 0), cases.length * selectedOperations.length);
+    return { version, scenarios: selectedScenarios, cases };
   } finally { trace.disable(); }
 }
 

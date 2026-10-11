@@ -342,10 +342,8 @@ impl ModelFields {
     /// Merge complete replacement declarations without changing existing schema positions.
     #[doc(hidden)]
     pub fn plugin_fields(&self, role: EntityRole) -> UserConfig {
-        let fields = if self
-            .schema_models
-            .as_ref()
-            .is_some_and(|models| models.iter().any(|(model, _)| *model == role))
+        let fields = if self.schema_models.is_some()
+            && self.active_models().iter().any(|(model, _)| *model == role)
         {
             self.fields(role).clone()
         } else {

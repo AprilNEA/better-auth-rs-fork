@@ -233,7 +233,7 @@ async fn check<S: AuthSchema>(
     let config = Arc::new(config);
     let initial = raw.with_runtime(config.clone(), Vec::new(), Default::default())?;
     let mut init = AuthInitContext::new(config.clone(), initial);
-    init.register_organization_schema(&fields, true);
+    init.register_organization_schema(&fields, true, false);
     init.register_model_fields(EntityRole::TeamMember, membership)?;
     let reader = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
     let mut request = AuthRequest::new(HttpMethod::Get, "/team-projection-lifetime");

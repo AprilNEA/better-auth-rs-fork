@@ -43,9 +43,8 @@ fn bind_member_filter(
         better_auth_core::query::where_operator(operator),
         value,
     )?;
-    let schema = better_auth_core::store::MemberUser::field_schema(config);
     let before =
-        runtime.runtime_fields(better_auth_core::store::schema::EntityRole::Member, &schema)?;
+        runtime.runtime_fields(better_auth_core::store::schema::EntityRole::Member, config)?;
     let (logical, _) = super::value_filter::query_field_name(
         better_auth_core::store::schema::EntityRole::Member,
         &before,
@@ -59,7 +58,7 @@ fn bind_member_filter(
     let bound = super::value_filter::bind_factory_query_field(
         runtime,
         better_auth_core::store::schema::EntityRole::Member,
-        &schema,
+        config,
         field,
         value,
         policy,
@@ -81,9 +80,8 @@ fn apply_member_filter<M: SeaOrmOrganizationModel>(
         return Ok(query);
     };
     let operator = params.filter_operator.as_deref().unwrap_or("eq");
-    let schema = better_auth_core::store::MemberUser::field_schema(config);
     let (column, bound) =
-        bound.resolve(better_auth_core::store::schema::EntityRole::Member, &schema)?;
+        bound.resolve(better_auth_core::store::schema::EntityRole::Member, config)?;
     let column = M::column(&column)?;
     let value = &bound;
     let id_column = (id_field
@@ -443,12 +441,13 @@ mod tests {
     -> better_auth_core::AuthResult<()> {
         use crate::store::{entities::member, map_db_err, record_bindings::parameter};
         use better_auth_core::{
-            FieldValue, Utf16String, id::IdGeneration, user_fields::UserConfig,
+            FieldValue, Utf16String, id::IdGeneration, organization_fields::OrganizationFields,
         };
         use sea_orm::{
             ConnectOptions, ConnectionTrait, EntityTrait, QuerySelect, QueryTrait, sea_query::Query,
         };
 
+        let fields = OrganizationFields::default().into_storage().member;
         for encoding in ["UTF-8", "UTF-16le", "UTF-16be"] {
             let mut options = ConnectOptions::new("sqlite::memory:");
             let _ = options.max_connections(1);
@@ -501,7 +500,7 @@ mod tests {
                 };
                 let filter = super::bind_member_filter(
                     &params,
-                    &UserConfig::default(),
+                    &fields,
                     sea_orm::DbBackend::Sqlite,
                     &IdGeneration::Random,
                     &better_auth_core::plugin_runtime::ModelFields::default(),
@@ -511,7 +510,7 @@ mod tests {
                         .select_only()
                         .column(member::Column::Id),
                     &params,
-                    &UserConfig::default(),
+                    &fields,
                     sea_orm::DbBackend::Sqlite,
                     &IdGeneration::Random,
                     filter,

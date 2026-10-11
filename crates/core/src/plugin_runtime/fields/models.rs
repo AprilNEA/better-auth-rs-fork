@@ -31,7 +31,45 @@ const NATIVE_MODELS: &[(EntityRole, &str)] = &[
     (EntityRole::RateLimit, "rateLimit"),
 ];
 
+fn is_core(role: EntityRole) -> bool {
+    matches!(
+        role,
+        EntityRole::User | EntityRole::Session | EntityRole::Account | EntityRole::Verification
+    )
+}
+
 impl ModelFields {
+    pub(crate) fn native_model_name(role: EntityRole) -> AuthResult<&'static str> {
+        NATIVE_MODELS
+            .iter()
+            .find_map(|(candidate, name)| (*candidate == role).then_some(*name))
+            .ok_or_else(|| AuthError::config(format!("Model name is not registered for {role:?}")))
+    }
+
+    /// Read effective native models in schema order, including explicitly declared plugin roles.
+    #[doc(hidden)]
+    pub fn active_models(&self) -> Vec<(EntityRole, &'static str)> {
+        let mut models = indexmap::IndexMap::new();
+        for &(role, name) in NATIVE_MODELS.iter().filter(|(role, _)| is_core(*role)) {
+            if self
+                .schema_models
+                .as_ref()
+                .is_none_or(|configured| configured.iter().any(|(active, _)| *active == role))
+            {
+                let _ = models.insert(role, name);
+            }
+        }
+        for declaration in self.declarations.keys() {
+            if let ModelDeclaration::Native(role) = declaration
+                && !is_core(*role)
+                && let Some((_, name)) = NATIVE_MODELS.iter().find(|(native, _)| native == role)
+            {
+                let _ = models.insert(*role, *name);
+            }
+        }
+        models.into_iter().collect()
+    }
+
     /// Resolve the physical model name used by raw relation properties.
     /// Legacy field-only declarations retain the adapter's default model name.
     #[doc(hidden)]
@@ -47,12 +85,7 @@ impl ModelFields {
         role: EntityRole,
         model_name: Option<&str>,
     ) -> AuthResult<()> {
-        let logical = NATIVE_MODELS
-            .iter()
-            .find_map(|(candidate, name)| (*candidate == role).then_some(*name))
-            .ok_or_else(|| {
-                AuthError::config(format!("Model name is not registered for {role:?}"))
-            })?;
+        let logical = Self::native_model_name(role)?;
         let _ = self.declarations.insert(
             ModelDeclaration::Native(role),
             Some(resolve_field_name(model_name, logical).to_owned()),
@@ -101,22 +134,9 @@ impl ModelFields {
         candidate: &str,
         table_matches: &impl Fn(EntityRole, &str) -> bool,
     ) -> AuthResult<&str> {
-        let active = self.schema_models.as_deref().unwrap_or(&[
-            (EntityRole::User, "user"),
-            (EntityRole::Session, "session"),
-            (EntityRole::Account, "account"),
-            (EntityRole::Verification, "verification"),
-        ]);
+        let active = self.active_models();
         let mut models = indexmap::IndexMap::new();
-        for (role, name) in active.iter().filter(|(role, _)| {
-            matches!(
-                role,
-                EntityRole::User
-                    | EntityRole::Session
-                    | EntityRole::Account
-                    | EntityRole::Verification
-            )
-        }) {
+        for (role, name) in active.iter().filter(|(role, _)| is_core(*role)) {
             let alias = self.declarations.get(&ModelDeclaration::Native(*role));
             let _ = models.insert(*name, (Some(*role), alias.and_then(Option::as_deref)));
         }
@@ -136,7 +156,7 @@ impl ModelFields {
             }
         }
         for (role, name) in active {
-            let _ = models.entry(*name).or_insert((Some(*role), None));
+            let _ = models.entry(name).or_insert((Some(role), None));
         }
         models.sort_by_cached_key(|name, _| {
             crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))

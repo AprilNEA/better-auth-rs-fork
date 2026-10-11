@@ -554,15 +554,19 @@ impl<S: AuthSchema> AuthInitContext<S> {
         std::mem::take(&mut self.registered_model_field_names)
     }
 
-    /// Register the Organization plugin schema at its position in plugin initialization.
+    /// Register enabled Organization schemas at their positions in plugin initialization.
     #[doc(hidden)]
     pub fn register_organization_schema(
         &mut self,
         fields: &crate::organization_fields::OrganizationFields,
         teams_enabled: bool,
+        dynamic_access_control: bool,
     ) {
-        self.plugin_fields
-            .register_organization_schema(fields, teams_enabled);
+        self.plugin_fields.register_organization_schema(
+            fields,
+            teams_enabled,
+            dynamic_access_control,
+        );
     }
 
     /// Register a database hook before application-owned adapter hooks.

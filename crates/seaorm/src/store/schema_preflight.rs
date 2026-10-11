@@ -2,6 +2,8 @@
 
 mod catalog;
 mod mapping;
+#[cfg(test)]
+mod roster_tests;
 mod sqlite;
 
 use super::SeaOrmStore;

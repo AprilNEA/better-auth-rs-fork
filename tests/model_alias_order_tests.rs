@@ -26,6 +26,8 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+#[path = "model_alias_order_tests/effective_models.rs"]
+mod effective_models;
 #[path = "model_alias_order_tests/models.rs"]
 mod models;
 

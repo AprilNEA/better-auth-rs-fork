@@ -27,6 +27,9 @@ const ID: &str = "mapping-row";
 type Events = Arc<Mutex<Vec<Value>>>;
 type Snapshot = BTreeMap<String, Vec<Value>>;
 
+#[path = "effective_organization_declarations.rs"]
+mod effective_organization_declarations;
+
 #[derive(Clone, Copy, Debug)]
 enum Model {
     User,

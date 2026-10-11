@@ -36,20 +36,20 @@ impl OrganizationStore for EphemeralStore {
     }
     async fn delete_organization_records(&self, id: &str) -> AuthResult<()> {
         let member_schema = self.field_config(EntityRole::Member)?;
-        let invitation_schema = self.field_config(EntityRole::Invitation)?;
         let member_org =
             self.organization_query(EntityRole::Member, "organizationId", Value::from(id))?;
-        let invitation_org =
-            self.organization_query(EntityRole::Invitation, "organizationId", Value::from(id))?;
-        let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
         self.lock()?.members.retain(|record| {
             !organization_value(record, &member_schema, "organizationId")
                 .strict_equals(&member_org.field_value())
         })?;
+        let invitation_schema = self.field_config(EntityRole::Invitation)?;
+        let invitation_org =
+            self.organization_query(EntityRole::Invitation, "organizationId", Value::from(id))?;
         self.lock()?.invitations.retain(|record| {
             !organization_value(record, &invitation_schema, "organizationId")
                 .strict_equals(&invitation_org.field_value())
         })?;
+        let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
         let _ = self.lock()?.organizations.remove(&id)?;
         Ok(())
     }
@@ -230,58 +230,12 @@ impl OrganizationStore for EphemeralStore {
             .remove(0))
     }
     async fn delete_organization(&self, id: &str) -> AuthResult<()> {
-        let member_schema = self.field_config(EntityRole::Member)?;
-        let invitation_schema = self.field_config(EntityRole::Invitation)?;
-        let role_schema = self.field_config(EntityRole::OrganizationRole)?;
-        let team_schema = self.field_config(EntityRole::Team)?;
-        let team_member_schema = self.field_config(EntityRole::TeamMember)?;
-        let member_org =
-            self.organization_query(EntityRole::Member, "organizationId", Value::from(id))?;
-        let invitation_org =
-            self.organization_query(EntityRole::Invitation, "organizationId", Value::from(id))?;
-        let role_org = self.organization_query(
-            EntityRole::OrganizationRole,
-            "organizationId",
-            Value::from(id),
-        )?;
-        let team_org =
-            self.organization_query(EntityRole::Team, "organizationId", Value::from(id))?;
-        let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
-        let mut state = self.lock()?;
-        let _ = state.organizations.remove(&id)?;
-        state.members.retain(|member| {
-            !organization_value(member, &member_schema, "organizationId")
-                .strict_equals(&member_org.field_value())
-        })?;
-        state.invitations.retain(|invitation| {
-            !organization_value(invitation, &invitation_schema, "organizationId")
-                .strict_equals(&invitation_org.field_value())
-        })?;
-        state.organization_roles.retain(|role| {
-            !organization_value(role, &role_schema, "organizationId")
-                .strict_equals(&role_org.field_value())
-        })?;
-        let team_ids: Vec<_> = state
-            .teams
-            .snapshot()?
-            .iter()
-            .filter(|team| {
-                organization_value(team, &team_schema, "organizationId")
-                    .strict_equals(&team_org.field_value())
-            })
-            .map(organization_id)
-            .collect();
-        state.team_members.retain(|member| {
-            let team_id = organization_value(member, &team_member_schema, "teamId");
-            !team_ids
-                .iter()
-                .any(|id| id.field_value().strict_equals(&team_id))
-        })?;
-        state.teams.retain(|team| {
-            !organization_value(team, &team_schema, "organizationId")
-                .strict_equals(&team_org.field_value())
-        })?;
-        Ok(())
+        if self.pending_hooks.is_some() {
+            return self.delete_organization_records(id).await;
+        }
+        let (base, isolated, pending_hooks) = self.begin_adapter_transaction()?;
+        isolated.delete_organization_records(id).await?;
+        self.commit_transaction(base, isolated, pending_hooks).await
     }
     async fn list_user_organizations(
         &self,

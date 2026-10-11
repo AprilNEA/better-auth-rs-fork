@@ -123,3 +123,89 @@ test("native modelName omission and empty values replace aliases without changin
     expect(Object.keys(schema).indexOf("badge") < Object.keys(schema).indexOf("team")).toBe(true);
   }
 });
+
+function expectModel(schema: ReturnType<typeof getAuthTables>, candidate: string, expected: string | null) {
+  const resolve = initGetDefaultModelName({ usePlural: false, schema });
+  if (expected !== null) {
+    expect(resolve(candidate)).toBe(expected);
+    return;
+  }
+  let failure: unknown;
+  try { resolve(candidate); } catch (error) { failure = error; }
+  expect(failure).toBeInstanceOf(Error);
+  expect({ name: (failure as Error).name, message: (failure as Error).message, keys: Object.keys(failure as Error) })
+    .toStrictEqual({ name: "BetterAuthError", message: `Model "${candidate}" not found in schema`, keys: ["name"] });
+}
+
+test("explicit native models and memory rateLimit retain logical names and aliases without matching plugins", () => {
+  const events: unknown[] = [];
+  const marker: DBFieldAttribute = { type: "string", transform: { output(value) { events.push(value); return value; } } };
+  const schema = getAuthTables({ rateLimit: { storage: "memory" }, plugins: [{ id: "declarations", schema: {
+    passkey: { modelName: "key_store", fields: { marker } },
+    rateLimit: { modelName: "counter_store", fields: { marker } },
+  } }] });
+  expect(Object.keys(schema)).toStrictEqual(["user", "session", "account", "verification", "passkey", "rateLimit"]);
+  for (const [name, alias] of [["passkey", "key_store"], ["rateLimit", "counter_store"]]) {
+    expectModel(schema, name, name);
+    expectModel(schema, alias, name);
+    expect(schema[name].modelName).toBe(alias);
+    expect(Object.keys(schema[name].fields)).toStrictEqual(["marker"]);
+  }
+  expect(events).toStrictEqual([]);
+});
+
+test("organizationRole visibility retains explicit declarations and declaration-order alias precedence", () => {
+  for (const explicitBefore of [false, true]) for (const enabled of [false, true]) {
+    const events: unknown[] = [];
+    const marker: DBFieldAttribute = { type: "string", transform: { output(value) { events.push(value); return value; } } };
+    const schema = getAuthTables({ plugins: [
+      ...(explicitBefore ? [{ id: "explicit-role", schema: { organizationRole: { modelName: "shared", fields: { marker } } } }] : []),
+      organization({ teams: { enabled: true }, dynamicAccessControl: { enabled } }),
+      { id: "aliases", schema: {
+        ...(enabled ? { organizationRole: { modelName: "shared", fields: {} } } : {}),
+        team: { modelName: "shared", fields: {} },
+      } },
+    ] });
+    expect(Object.keys(schema)).toStrictEqual([
+      "user", "session", "account", "verification",
+      ...(explicitBefore ? ["organizationRole"] : []), "organization",
+      ...(enabled && !explicitBefore ? ["organizationRole"] : []),
+      "team", "teamMember", "member", "invitation",
+    ]);
+    expect(Object.keys(schema.organizationRole?.fields ?? {})).toStrictEqual([
+      ...(explicitBefore ? ["marker"] : []),
+      ...(enabled ? ["organizationId", "role", "permission", "createdAt", "updatedAt"] : []),
+    ]);
+    expectModel(schema, "team", "team");
+    expectModel(schema, "organizationRole", explicitBefore || enabled ? "organizationRole" : null);
+    expectModel(schema, "shared", explicitBefore || enabled ? "organizationRole" : "team");
+    expect(events).toStrictEqual([]);
+  }
+});
+
+test("secondary storage hides explicitly declared session and verification until database persistence is enabled", () => {
+  for (const storeCore of [false, true]) {
+    const events: unknown[] = [];
+    const marker: DBFieldAttribute = { type: "string", transform: { output(value) { events.push(value); return value; } } };
+    const schema = getAuthTables({
+      secondaryStorage: { async get() { return null; }, async set() {}, async delete() {} },
+      session: { modelName: "session_store", storeSessionInDatabase: storeCore },
+      verification: { modelName: "verification_store", storeInDatabase: storeCore },
+      plugins: [{ id: "explicit-core", schema: { session: { fields: { marker } }, verification: { fields: { marker } } } }],
+    });
+    expect(Object.keys(schema)).toStrictEqual(storeCore ? ["user", "session", "account", "verification"] : ["user", "account"]);
+    for (const [name, alias] of [["session", "session_store"], ["verification", "verification_store"]]) {
+      expectModel(schema, name, storeCore ? name : null);
+      expectModel(schema, alias, storeCore ? name : null);
+    }
+    expect(events).toStrictEqual([]);
+  }
+});
+
+test("a matching plugin ID does not declare a native model but an explicit empty schema does", () => {
+  for (const declared of [false, true]) {
+    const schema = getAuthTables({ plugins: [{ id: "passkey", ...(declared ? { schema: { passkey: { fields: {} } } } : {}) }] });
+    expect(Object.keys(schema)).toStrictEqual(["user", "session", "account", "verification", ...(declared ? ["passkey"] : [])]);
+    expectModel(schema, "passkey", declared ? "passkey" : null);
+  }
+});

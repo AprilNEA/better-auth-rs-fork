@@ -75,7 +75,7 @@ async fn database_rate_limit_replaces_the_complete_declaration_without_resetting
         );
         let active = fields.id_input_policy(EntityRole::RateLimit)?;
         assert!(active.is_some_and(|policy| policy.force_allow_id && policy.supports_native_uuid));
-        let schema = fields.fields(EntityRole::RateLimit);
+        let schema = fields.plugin_fields(EntityRole::RateLimit);
         if !database_rate_limit {
             assert_eq!(
                 schema
@@ -89,6 +89,9 @@ async fn database_rate_limit_replaces_the_complete_declaration_without_resetting
                 fields.storage_model_name(EntityRole::RateLimit, "configured_counter"),
                 "plugin_counter"
             );
+            for name in ["rateLimit", "plugin_counter"] {
+                assert_eq!(fields.resolve_model_name(name, &|_, _| false)?, "rateLimit");
+            }
             assert!(
                 schema
                     .fields()

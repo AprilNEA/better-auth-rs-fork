@@ -287,31 +287,6 @@ pub struct ResolvedJoin {
 }
 
 impl MemberUser {
-    #[doc(hidden)]
-    pub fn field_schema(configured: &UserConfig) -> UserConfig {
-        let mut defaults = ModelFields::default();
-        defaults.register_organization_schema(&Default::default(), true);
-        let mut fields = defaults.fields(EntityRole::Member).clone();
-        for (name, target) in better_auth_schema_registry::entity_foreign_keys("member") {
-            let mut parts = name.split('_');
-            let mut logical = parts.next().unwrap_or_default().to_owned();
-            for part in parts {
-                let mut characters = part.chars();
-                if let Some(first) = characters.next() {
-                    logical.extend(first.to_uppercase());
-                    logical.extend(characters);
-                }
-            }
-            fields.fields_mut().entry(logical).or_default().references = Some(UserFieldReference {
-                model: if *target == "users" { "user" } else { target }.into(),
-                field: "id".into(),
-                ..Default::default()
-            });
-        }
-        fields.fields_mut().extend(configured.fields().clone());
-        fields
-    }
-
     /// Resolve final Member/User references before reading either model.
     pub fn resolve_schema(
         config: &AuthConfig,
@@ -319,10 +294,9 @@ impl MemberUser {
         schema: &ModelFields,
         table_matches: impl Fn(EntityRole, &str) -> bool,
     ) -> AuthResult<ResolvedJoin> {
-        let schema = schema.organization_join_schema(config);
-        let fields = Self::field_schema(member_fields);
+        let schema = schema.organization_join_schema();
         resolve_references(
-            (EntityRole::Member, "member", &fields),
+            (EntityRole::Member, "member", member_fields),
             (EntityRole::User, "user", &config.user),
             &schema,
             table_matches,

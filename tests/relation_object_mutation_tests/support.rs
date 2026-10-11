@@ -116,7 +116,7 @@ pub(super) fn configured<S: AuthSchema>(
         UserConfig::default(),
     )?;
     if let Some((organization, child)) = organization {
-        init.register_organization_schema(&organization, true);
+        init.register_organization_schema(&organization, true, false);
         init.register_model_schema(EntityRole::Team, Some("linked_team"), UserConfig::default())?;
         init.register_model_schema(EntityRole::TeamMember, Some("linked_team_member"), child)?;
     }

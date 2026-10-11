@@ -73,7 +73,7 @@ where
         let organization_fields = self
             .organization_query_schema(EntityRole::Organization)?
             .adapter_fields(&[]);
-        let runtime = self.model_fields.organization_join_schema(self.config());
+        let runtime = self.model_fields.organization_join_schema();
         let relation = ResolvedJoin::resolve(
             (role, model, &parent_fields),
             (

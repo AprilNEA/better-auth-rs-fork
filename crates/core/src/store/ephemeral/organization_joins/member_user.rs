@@ -83,14 +83,8 @@ impl EphemeralStore {
             Some(JoinValue::One(user)) => user.into_iter().collect(),
             Some(JoinValue::Many(users)) => users,
             None => {
-                let from = join.fallback_from(
-                    (
-                        EntityRole::Member,
-                        "member",
-                        &MemberUser::field_schema(&fields),
-                    ),
-                    &self.model_fields,
-                )?;
+                let from = join
+                    .fallback_from((EntityRole::Member, "member", &fields), &self.model_fields)?;
                 let value = parent.get(&from).cloned().unwrap_or_default();
                 if value.is_null() || value.is_undefined() {
                     Vec::new()

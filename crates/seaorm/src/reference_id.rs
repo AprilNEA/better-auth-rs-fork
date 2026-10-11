@@ -413,7 +413,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_bindings_do_not_rebind_configured_storage_aliases() {
+    async fn declared_bindings_preserve_alias_order_and_drop_undeclared_core() {
         use better_auth_core::{FieldMap, FieldValue};
 
         let config = UserConfig {
@@ -439,27 +439,30 @@ mod tests {
                         },
                     ),
                     ("configuredOwner".into(), UserFieldConfig::default()),
+                    (
+                        "nativeOwner".into(),
+                        UserFieldConfig {
+                            references: Some(UserFieldReference {
+                                model: "user".into(),
+                                field: "id".into(),
+                                ..Default::default()
+                            }),
+                            ..Default::default()
+                        },
+                    ),
                 ]
                 .into(),
             ),
         };
         for id_first in [false, true] {
-            let mut core: FieldMap = [
+            let core: FieldMap = [
                 ("id".into(), FieldValue::from("007")),
                 ("nativeOwner".into(), FieldValue::from("003")),
                 ("configuredOwner".into(), FieldValue::from("0004")),
+                ("undeclaredOwner".into(), FieldValue::from("0005")),
             ]
             .into();
             let column = |_: &str| Ok(crate::store::entities::user::Column::Id);
-            super::prepare_core_fields(
-                &mut core,
-                &IdGeneration::Serial,
-                Some(&config),
-                column,
-                |_| true,
-            )
-            .unwrap();
-            assert_eq!(core["id"], FieldValue::from("7"));
             let mut config = config.clone();
             if id_first {
                 let _ =
@@ -468,7 +471,7 @@ mod tests {
                         .shift_insert(0, "id".into(), UserFieldConfig::default());
             }
             let fields = config
-                .organization_storage_fields_with_binding(
+                .organization_storage_fields_with_bound_id(
                     core,
                     [
                         ("firstAlias".into(), FieldValue::from("0011")),
@@ -476,6 +479,7 @@ mod tests {
                     ]
                     .into(),
                     false,
+                    || IdGeneration::Serial.adapter_id_input("007".into(), Default::default()),
                     |name, field, value| {
                         input_binding(
                             name,
@@ -491,14 +495,22 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(
+                fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                ["id", "configuredOwner", "nativeOwner"]
+            );
+            assert_eq!(
                 fields,
                 [
                     (
                         "id".into(),
-                        FieldValue::from(if id_first { "abc" } else { "7" })
+                        if id_first {
+                            FieldValue::from("abc")
+                        } else {
+                            FieldValue::from(7)
+                        }
                     ),
-                    ("nativeOwner".into(), FieldValue::from("3")),
                     ("configuredOwner".into(), FieldValue::from("0004")),
+                    ("nativeOwner".into(), FieldValue::from("3")),
                 ]
                 .into()
             );

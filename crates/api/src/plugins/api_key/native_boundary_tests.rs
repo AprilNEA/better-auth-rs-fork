@@ -54,6 +54,7 @@ async fn check_organization_reference(ctx: AuthContext<impl better_auth_core::Au
             ..Default::default()
         },
         false,
+        true,
     );
     let database = ctx
         .database

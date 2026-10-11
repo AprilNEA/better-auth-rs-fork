@@ -36,7 +36,7 @@ where
         let team_fields = self
             .organization_query_schema(EntityRole::Team)?
             .adapter_fields(&[]);
-        let runtime = self.model_fields.organization_join_schema(self.config());
+        let runtime = self.model_fields.organization_join_schema();
         let relation = ResolvedJoin::resolve(
             (EntityRole::TeamMember, "teamMember", &membership_fields),
             (EntityRole::Team, "team", &team_fields),

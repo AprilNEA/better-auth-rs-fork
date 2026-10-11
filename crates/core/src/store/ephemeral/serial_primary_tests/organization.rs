@@ -3,6 +3,7 @@ use crate::organization_fields::OrganizationFields;
 use crate::store::{OrganizationRoleStore, TeamMemberLimits, TeamStore};
 use crate::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType};
 use crate::{CreateOrganizationRole, CreateTeam, SchemaValue, UpdateOrganizationRole};
+use better_auth_schema_registry::EntityRole;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub(super) fn invitation() -> CreateInvitation {
@@ -107,14 +108,16 @@ async fn serial_organization_lifecycle_binds_numbers_and_projects_public_ids() -
             .as_deref(),
         Some("2")
     );
+    let teams_before = store.storage_rows(EntityRole::Team)?;
+    let roles_before = store.storage_rows(EntityRole::OrganizationRole)?;
     store.delete_organization("001").await?;
     let state = store.lock()?;
     assert_eq!(state.organizations.len(), 0);
     assert_eq!(state.members.len(), 0);
     assert_eq!(state.invitations.len(), 0);
-    assert_eq!(state.teams.len(), 0);
+    assert_eq!(state.teams.snapshot()?, teams_before);
     assert_eq!(state.team_members.len(), 0);
-    assert_eq!(state.organization_roles.len(), 0);
+    assert_eq!(state.organization_roles.snapshot()?, roles_before);
     Ok(())
 }
 

@@ -92,7 +92,7 @@ async fn native_user_team_joins_group_duplicate_parent_ids_before_projection() -
         store.configure_organization_fields(organization.clone())?;
         store
             .model_fields
-            .register_organization_schema(&organization, true);
+            .register_organization_schema(&organization, true, true);
         let fields = ["teamId", "userId", "membershipKey", "createdAt"]
             .into_iter()
             .map(|name| {
@@ -206,7 +206,7 @@ async fn team_details_null_query_matches_missing_id_without_coercing_native_join
                 store.configure_organization_fields(organization.clone())?;
                 store
                     .model_fields
-                    .register_organization_schema(&organization, true);
+                    .register_organization_schema(&organization, true, true);
                 store.model_fields.register(
                     EntityRole::TeamMember,
                     UserConfig {

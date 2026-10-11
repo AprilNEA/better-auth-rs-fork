@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod availability_tests;
 mod declarations;
 mod device;
 mod input;
@@ -125,7 +127,7 @@ impl ModelFields {
         Ok(fields)
     }
 
-    /// Retain the same active logical models used by runtime schema validation.
+    /// Install core persistence selection and the final database rate-limit declaration.
     pub fn set_schema_configuration(&mut self, config: &crate::store::schema::SchemaConfiguration) {
         if config.database_rate_limit {
             // getAuthTables replaces the complete plugin model after plugin declarations merge.
@@ -137,7 +139,7 @@ impl ModelFields {
                 .declarations
                 .insert(ModelDeclaration::Native(EntityRole::RateLimit), None);
         }
-        self.schema_models = Some(config.models());
+        self.schema_models = Some(config.core_models());
         self.user_plugin_fields =
             crate::wire::UserView::active_plugin_fields(&config.metadata).collect();
         self.session_plugin_fields =
@@ -158,28 +160,21 @@ impl ModelFields {
 
     /// Resolve standalone Organization store relationships without changing configured plugin model availability.
     #[doc(hidden)]
-    pub fn organization_join_schema(&self, config: &AuthConfig) -> Self {
+    pub fn organization_join_schema(&self) -> Self {
         let mut schema = self.clone();
         if schema.schema_models.is_none() {
             // Direct OrganizationStore calls support every organization model before plugin initialization.
-            schema.set_schema_configuration(&crate::store::schema::SchemaConfiguration {
-                config: Arc::new(config.clone()),
-                plugins: vec!["organization"],
-                metadata: [
-                    (
-                        "organization.teams_enabled".into(),
-                        serde_json::Value::Bool(true),
-                    ),
-                    (
-                        "organization.dynamic_access_control".into(),
-                        serde_json::Value::Bool(true),
-                    ),
-                ]
-                .into_iter()
-                .collect(),
-                secondary_storage: false,
-                database_rate_limit: false,
+            static DEFAULTS: LazyLock<ModelFields> = LazyLock::new(|| {
+                let mut fields = ModelFields::default();
+                fields.register_organization_schema(&Default::default(), true, true);
+                fields
             });
+            for (declaration, physical) in &DEFAULTS.declarations {
+                let _ = schema
+                    .declarations
+                    .entry(declaration.clone())
+                    .or_insert_with(|| physical.clone());
+            }
         }
         schema
     }
@@ -209,19 +204,23 @@ impl ModelFields {
         &mut self,
         fields: &crate::organization_fields::OrganizationFields,
         teams_enabled: bool,
+        dynamic_access_control: bool,
     ) {
+        let fields = fields.initialized_options();
         self.organization = Some(fields.clone());
         self.declare_native_fields(EntityRole::Organization, fields.organization.clone());
+        if dynamic_access_control {
+            self.declare_native_fields(
+                EntityRole::OrganizationRole,
+                fields.organization_role.clone(),
+            );
+        }
         if teams_enabled {
             self.declare_native_fields(EntityRole::Team, fields.team.clone());
             self.declare_native_fields(EntityRole::TeamMember, UserConfig::default());
         }
         self.declare_native_fields(EntityRole::Member, fields.member.clone());
         self.declare_native_fields(EntityRole::Invitation, fields.invitation.clone());
-        self.declare_native_fields(
-            EntityRole::OrganizationRole,
-            fields.organization_role.clone(),
-        );
     }
 
     fn declare_native_fields(&mut self, role: EntityRole, fields: UserConfig) {
@@ -235,7 +234,8 @@ impl ModelFields {
         self.extend(role, fields);
     }
 
-    /// Resolve complete Organization declarations in their registered schema order.
+    /// Resolve final Organization declarations once before adapter field reads and writes.
+    /// Standalone adapters retain native defaults; initialized adapters use exactly the registered declarations.
     pub fn organization_fields(
         &self,
         fields: crate::organization_fields::OrganizationFields,
@@ -248,6 +248,10 @@ impl ModelFields {
             (EntityRole::Invitation, &mut fields.invitation),
             (EntityRole::OrganizationRole, &mut fields.organization_role),
         ] {
+            if self.schema_models.is_some() {
+                *schema = self.fields(role).ordered_declarations(&[]);
+                continue;
+            }
             let Some(registered) = self.models.get(&role) else {
                 continue;
             };
@@ -259,10 +263,6 @@ impl ModelFields {
                     .or_insert_with(|| field.clone());
             }
             *schema = resolved;
-        }
-        // Upstream initializes the dynamic-role update schema eagerly as partial.
-        for field in fields.organization_role.fields_mut().values_mut() {
-            field.required = Some(false);
         }
         fields
     }

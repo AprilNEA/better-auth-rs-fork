@@ -108,7 +108,7 @@ impl EphemeralStore {
             OrganizationKey::Slug(slug) => ("slug", Value::from(slug)),
         };
         let value = self.organization_query(EntityRole::Organization, field, value)?;
-        let runtime = self.model_fields.organization_join_schema(&self.config);
+        let runtime = self.model_fields.organization_join_schema();
         let default_limit = self.config.advanced.database.find_many_limit();
         let relation = |role, model, limit, table| -> AuthResult<DetailRelation> {
             let child_fields = self.field_config(role)?;

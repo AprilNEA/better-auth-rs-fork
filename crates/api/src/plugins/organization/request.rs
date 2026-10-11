@@ -63,13 +63,11 @@ pub(super) fn read<T: Clone + Send + Sync + 'static>(
 }
 
 pub(super) fn prepared_schema(path: &str, schema: &OrganizationFields) -> OrganizationFields {
-    let mut schema = schema.clone();
     if path == "/organization/update-role" {
-        for field in schema.organization_role.fields_mut().values_mut() {
-            field.required = Some(false);
-        }
+        schema.initialized_options()
+    } else {
+        schema.clone()
     }
-    schema
 }
 
 fn schema_fields(
