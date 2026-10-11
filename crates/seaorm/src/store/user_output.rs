@@ -82,19 +82,11 @@ where
     ) -> AuthResult<Vec<Vec<FieldMap>>> {
         let fields = self.user_field_schema().adapter_fields(&[]);
         let backend = self.connection().get_database_backend();
-        let pages = super::joins::project_child_pages(&fields, pages, backend, &|row| {
+        super::joins::project_child_pages(&fields, pages, backend, &|row| {
             row.native_record(&fields, backend, S::User::field_column)
                 .map(|record| record.with_id_output(&self.model_fields, EntityRole::User))
         })
-        .await?;
-        Ok(pages
-            .into_iter()
-            .map(|page| {
-                page.into_iter()
-                    .map(|output| super::plugin_rows::ordered_output(&fields, output))
-                    .collect()
-            })
-            .collect())
+        .await
     }
 
     pub(super) fn query_user_record(

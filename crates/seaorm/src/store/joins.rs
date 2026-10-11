@@ -128,7 +128,7 @@ where
                             .into_iter()
                             .zip(remaining)
                             .map(|((index, first), mut rest)| {
-                                rest.insert(0, first);
+                                rest.insert(0, super::plugin_rows::ordered_output(fields, first));
                                 (index, rest)
                             })
                             .collect())

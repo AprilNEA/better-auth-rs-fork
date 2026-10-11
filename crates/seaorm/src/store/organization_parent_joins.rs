@@ -191,20 +191,7 @@ where
                                 .map(|((index, parent), page)| {
                                     (
                                         index,
-                                        (
-                                            parent,
-                                            super::joins::relation_value(
-                                                relation.many,
-                                                page.into_iter()
-                                                    .map(|row| {
-                                                        plugin_rows::ordered_output(
-                                                            organization_fields,
-                                                            row,
-                                                        )
-                                                    })
-                                                    .collect(),
-                                            ),
-                                        ),
+                                        (parent, super::joins::relation_value(relation.many, page)),
                                     )
                                 })
                                 .collect())
@@ -279,10 +266,6 @@ where
                 )
             })
             .await?;
-        Ok(pages
-            .remove(0)
-            .into_iter()
-            .map(|output| plugin_rows::ordered_output(fields, output))
-            .collect())
+        Ok(pages.remove(0))
     }
 }

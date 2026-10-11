@@ -169,11 +169,7 @@ where
                 },
             )
             .await?;
-            let members = pages
-                .remove(0)
-                .into_iter()
-                .map(|output| plugin_rows::ordered_output(&member_fields, output))
-                .collect();
+            let members = pages.remove(0);
             Some((members, relation.many))
         } else {
             None

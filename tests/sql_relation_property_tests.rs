@@ -200,7 +200,10 @@ async fn check(target: Target, joins: bool, reject: bool, missing: bool) -> Test
         Target::Account => account("parent", "Parent", "child"),
         Target::Session => session(),
     };
-    parent[target.child()] = json!(COLLISION);
+    let _ = parent
+        .as_object_mut()
+        .ok_or("Expected parent seed object")?
+        .insert(target.child().into(), json!(COLLISION));
     let children = if missing {
         Vec::new()
     } else if target.many() {
@@ -405,14 +408,23 @@ async fn check(target: Target, joins: bool, reject: bool, missing: bool) -> Test
         for (index, child) in children.iter().enumerate() {
             let mut child = child.clone();
             if !joins && index == 0 {
-                child[target.value_field()] = json!("After");
-                child["updatedAt"] = json!(CHANGED);
+                *child
+                    .get_mut(target.value_field())
+                    .ok_or("Expected child value field")? = json!("After");
+                *child
+                    .get_mut("updatedAt")
+                    .ok_or("Expected child update timestamp")? = json!(CHANGED);
             }
-            let text = child[target.value_field()]
+            let text = child
+                .get(target.value_field())
+                .ok_or("Expected child value field")?
                 .as_str()
                 .ok_or("Expected child value")?;
             expected_events.push(("child", text.into()));
-            child[target.value_field()] = json!(format!("visible:{text}"));
+            let visible = json!(format!("visible:{text}"));
+            *child
+                .get_mut(target.value_field())
+                .ok_or("Expected child value field")? = visible;
             projected_children.push(FieldValue::from(projected(&child)?));
         }
         assert_eq!(joined, relation(target.many(), projected_children));
@@ -427,8 +439,16 @@ async fn check(target: Target, joins: bool, reject: bool, missing: bool) -> Test
     );
     let mut after_children = before_children;
     if !missing {
-        after_children[0][target.value_field()] = json!("After");
-        after_children[0]["updatedAt"] = json!(CHANGED);
+        let child = after_children
+            .as_array_mut()
+            .and_then(|children| children.first_mut())
+            .ok_or("Expected persisted child row")?;
+        *child
+            .get_mut(target.value_field())
+            .ok_or("Expected persisted child value field")? = json!("After");
+        *child
+            .get_mut("updatedAt")
+            .ok_or("Expected persisted child update timestamp")? = json!(CHANGED);
     }
     assert_eq!(
         storage(&database, target.child(), &child_shape).await?,

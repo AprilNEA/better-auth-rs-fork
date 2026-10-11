@@ -132,16 +132,7 @@ where
                             Ok(ready
                                 .into_iter()
                                 .zip(output)
-                                .map(|((index, _), page)| {
-                                    (
-                                        index,
-                                        page.into_iter()
-                                            .map(|output| {
-                                                plugin_rows::ordered_output(team_fields, output)
-                                            })
-                                            .collect(),
-                                    )
-                                })
+                                .map(|((index, _), page)| (index, page))
                                 .collect())
                         }
                     },
@@ -213,10 +204,6 @@ where
                 )
             })
             .await?;
-        Ok(pages
-            .remove(0)
-            .into_iter()
-            .map(|output| plugin_rows::ordered_output(fields, output))
-            .collect())
+        Ok(pages.remove(0))
     }
 }

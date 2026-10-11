@@ -177,7 +177,7 @@ pub(super) fn ordered(actual: &FieldValue, expected: &FieldValue) -> AuthResult<
             expected.keys().collect::<Vec<_>>()
         );
         for (name, value) in &expected {
-            ordered(&actual[name], value)?;
+            ordered(required(actual.get(name), "Expected ordered field")?, value)?;
         }
     } else if let (Some(actual), Some(expected)) = (actual.as_array(), expected.as_array()) {
         for (actual, expected) in actual.iter().zip(expected) {

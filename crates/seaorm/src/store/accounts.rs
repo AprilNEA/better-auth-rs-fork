@@ -262,7 +262,7 @@ where
     }
 
     pub(super) async fn output_native_account(&self, account: &SqlRow) -> AuthResult<AccountView> {
-        let fields = self.config().account.field_schema();
+        let fields = self.config().account.field_schema().adapter_fields(&[]);
         let backend = self.connection().get_database_backend();
         let record = account
             .native_record(&fields, backend, S::Account::field_column)?
