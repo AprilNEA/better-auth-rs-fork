@@ -6,7 +6,7 @@ use crate::{
 };
 use better_auth_core::{AuthResult, store::schema::EntityRole, user_fields::AdapterRecord};
 use sea_orm::{
-    ConnectionTrait, EntityName, EntityTrait, IdenStatic, QueryTrait, Select,
+    ConnectionTrait, EntityName, IdenStatic, QueryTrait, Select,
     sea_query::{Asterisk, Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 

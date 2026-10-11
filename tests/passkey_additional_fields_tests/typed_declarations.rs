@@ -414,7 +414,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
                     let public = view.field_values()?;
                     assert_record(&public, &expected, stage);
                     let json = serde_json::to_value(&view)?;
-                    let expected_json = expected.json()?;
+                    let expected_json = Value::Object(expected.json()?);
                     assert_eq!(json, expected_json, "{stage} complete public JSON");
                     assert_eq!(
                         json.as_object()

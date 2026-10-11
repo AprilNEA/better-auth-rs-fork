@@ -1,5 +1,5 @@
 use sea_orm::{
-    ConnectionTrait, EntityName, EntityTrait, IdenStatic, QueryTrait, Select,
+    ConnectionTrait, EntityTrait, IdenStatic, QueryTrait, Select,
     sea_query::{Asterisk, Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 

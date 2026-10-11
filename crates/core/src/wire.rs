@@ -8,7 +8,7 @@ use crate::SchemaValue;
 #[cfg(test)]
 use chrono::Utc;
 use futures_util::future::BoxFuture;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Serialize, Serializer};
 use std::borrow::Cow;
 
 use crate::entity::{AuthInvitation, AuthPasskey, AuthSession, AuthUser};
