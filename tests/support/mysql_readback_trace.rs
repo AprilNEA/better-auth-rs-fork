@@ -66,16 +66,6 @@ where
     }
 }
 
-pub(super) const JWK_COLUMNS: [&str; 7] = [
-    "id",
-    "stored_public_key",
-    "stored_private_key",
-    "stored_created_at",
-    "stored_expires_at",
-    "stored_algorithm",
-    "stored_curve",
-];
-
 const CATALOG_SQL: &str = "select `columns`.`COLUMN_NAME`, `columns`.`COLUMN_DEFAULT`, `columns`.`TABLE_NAME`, `columns`.`TABLE_SCHEMA`, `tables`.`TABLE_TYPE`, `tables`.`ENGINE`, `columns`.`IS_NULLABLE`, `columns`.`DATA_TYPE`, `columns`.`EXTRA`, `columns`.`COLUMN_COMMENT` from `information_schema`.`columns` as `columns` inner join `information_schema`.`tables` as `tables` on `columns`.`TABLE_CATALOG` = `tables`.`TABLE_CATALOG` and `columns`.`TABLE_SCHEMA` = `tables`.`TABLE_SCHEMA` and `columns`.`TABLE_NAME` = `tables`.`TABLE_NAME` where `columns`.`TABLE_SCHEMA` = database() and `columns`.`TABLE_NAME` != ? and `columns`.`TABLE_NAME` != ? order by `columns`.`TABLE_NAME`, `columns`.`ORDINAL_POSITION`";
 
 fn parameters(statement: &Statement) -> Value {
@@ -122,14 +112,6 @@ fn driver_parameters(expected: &Value) -> Vec<Value> {
         .collect()
 }
 
-fn projection(table: &str, columns: &[&str]) -> String {
-    columns
-        .iter()
-        .map(|column| format!("`{table}`.`{column}`"))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 fn jwk_sql(expected: &Value) -> (String, Value) {
     let mut parameters = driver_parameters(&expected["parameters"]);
     let sql = match expected["sql"].as_str().expect("captured SQL") {
@@ -141,11 +123,11 @@ fn jwk_sql(expected: &Value) -> (String, Value) {
                 assert_eq!(parameters.remove(0), json!(1), "captured serial ID");
                 "`readback_jwks`.`id` = (1)"
             } else { "`readback_jwks`.`id` = ?" };
-            format!("SELECT {} FROM `readback_jwks` WHERE {predicate} LIMIT ?", projection("readback_jwks", &JWK_COLUMNS))
+            format!("SELECT * FROM `readback_jwks` WHERE {predicate} LIMIT ?")
         },
-        "select * from `readback_jwks` where `stored_public_key` = ? limit ?" => format!("SELECT {} FROM `readback_jwks` WHERE `readback_jwks`.`stored_public_key` = ? LIMIT ?", projection("readback_jwks", &JWK_COLUMNS)),
-        "select * from `readback_jwks` where `stored_private_key` = ? limit ?" => format!("SELECT {} FROM `readback_jwks` WHERE `readback_jwks`.`stored_private_key` = ? LIMIT ?", projection("readback_jwks", &JWK_COLUMNS)),
-        "select * from `readback_jwks` where `stored_public_key` = ? and `stored_private_key` = ? and `stored_created_at` = ? and `stored_expires_at` is null and `stored_algorithm` = ? limit ?" => format!("SELECT {} FROM `readback_jwks` WHERE `readback_jwks`.`stored_public_key` = ? AND `readback_jwks`.`stored_private_key` = ? AND `readback_jwks`.`stored_created_at` = ? AND `readback_jwks`.`stored_expires_at` IS NULL AND `readback_jwks`.`stored_algorithm` = ? LIMIT ?", projection("readback_jwks", &JWK_COLUMNS)),
+        "select * from `readback_jwks` where `stored_public_key` = ? limit ?" => "SELECT * FROM `readback_jwks` WHERE `readback_jwks`.`stored_public_key` = ? LIMIT ?".to_owned(),
+        "select * from `readback_jwks` where `stored_private_key` = ? limit ?" => "SELECT * FROM `readback_jwks` WHERE `readback_jwks`.`stored_private_key` = ? LIMIT ?".to_owned(),
+        "select * from `readback_jwks` where `stored_public_key` = ? and `stored_private_key` = ? and `stored_created_at` = ? and `stored_expires_at` is null and `stored_algorithm` = ? limit ?" => "SELECT * FROM `readback_jwks` WHERE `readback_jwks`.`stored_public_key` = ? AND `readback_jwks`.`stored_private_key` = ? AND `readback_jwks`.`stored_created_at` = ? AND `readback_jwks`.`stored_expires_at` IS NULL AND `readback_jwks`.`stored_algorithm` = ? LIMIT ?".to_owned(),
         sql => panic!("Unspecified upstream SQL boundary: {sql}"),
     };
     (sql, json!(parameters))
@@ -232,33 +214,6 @@ pub(super) fn check_missing_id_error(error: &Value) {
 
 fn lifecycle_sql(expected: &Value) -> (String, Value) {
     let mut parameters = driver_parameters(&expected["parameters"]);
-    let user_columns = [
-        "id",
-        "name",
-        "email",
-        "emailVerified",
-        "image",
-        "createdAt",
-        "updatedAt",
-    ];
-    let session_columns = [
-        "id",
-        "expiresAt",
-        "token",
-        "createdAt",
-        "updatedAt",
-        "ipAddress",
-        "userAgent",
-        "userId",
-    ];
-    let verification_columns = [
-        "id",
-        "identifier",
-        "value",
-        "expiresAt",
-        "createdAt",
-        "updatedAt",
-    ];
     let sql = match expected["sql"].as_str().expect("captured lifecycle SQL") {
         "insert into `user` (`name`, `email`, `emailVerified`, `image`, `createdAt`, `updatedAt`, `id`) values (?, ?, ?, ?, ?, ?, ?)" => {
             assert_eq!(parameters.remove(2), json!(1), "upstream MySQL boolean input encoding");
@@ -266,13 +221,13 @@ fn lifecycle_sql(expected: &Value) -> (String, Value) {
         },
         "insert into `session` (`expiresAt`, `token`, `createdAt`, `updatedAt`, `ipAddress`, `userAgent`, `userId`, `id`) values (?, ?, ?, ?, ?, ?, ?, ?)" => "INSERT INTO `session` (`expiresAt`, `token`, `createdAt`, `updatedAt`, `ipAddress`, `userAgent`, `userId`, `id`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)".to_owned(),
         "insert into `verification` (`identifier`, `value`, `expiresAt`, `createdAt`, `updatedAt`, `id`) values (?, ?, ?, ?, ?, ?)" => "INSERT INTO `verification` (`identifier`, `value`, `expiresAt`, `createdAt`, `updatedAt`, `id`) VALUES (?, ?, ?, ?, ?, ?)".to_owned(),
-        "select * from `user` where `id` = ? limit ?" => format!("SELECT {} FROM `user` WHERE `user`.`id` = ? LIMIT ?", projection("user", &user_columns)),
+        "select * from `user` where `id` = ? limit ?" => "SELECT * FROM `user` WHERE `user`.`id` = ? LIMIT ?".to_owned(),
         "select `primary`.* from (select * from `user` where `user`.`id` = ?) as `primary`" => {
             parameters.push(json!(1));
-            format!("SELECT {} FROM `user` WHERE `user`.`id` = ? LIMIT ?", projection("user", &user_columns))
+            "SELECT * FROM `user` WHERE `user`.`id` = ? LIMIT ?".to_owned()
         },
-        "select * from `session` where `id` = ? limit ?" => format!("SELECT {} FROM `session` WHERE `session`.`id` = ? LIMIT ?", projection("session", &session_columns)),
-        "select * from `verification` where `id` = ? limit ?" => format!("SELECT {} FROM `verification` WHERE `verification`.`id` = ? LIMIT ?", projection("verification", &verification_columns)),
+        "select * from `session` where `id` = ? limit ?" => "SELECT * FROM `session` WHERE `session`.`id` = ? LIMIT ?".to_owned(),
+        "select * from `verification` where `id` = ? limit ?" => "SELECT * FROM `verification` WHERE `verification`.`id` = ? LIMIT ?".to_owned(),
         sql => panic!("Unspecified lifecycle SQL boundary: {sql}"),
     };
     (sql, json!(parameters))

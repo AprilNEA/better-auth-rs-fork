@@ -230,7 +230,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         database_operation::<Entity<P::DeviceCode>, _>(self.config(), "findOne", async {
             connection
                 .query_one_raw(
-                    Entity::<P::DeviceCode>::find()
+                    super::plugin_rows::select_all::<Entity<P::DeviceCode>>()
                         .filter(filter)
                         .build(connection.get_database_backend()),
                 )

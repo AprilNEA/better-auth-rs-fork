@@ -256,7 +256,11 @@ async fn check(database: DatabaseConnection, backend: &str) -> TestResult {
     Ok(())
 }
 
-async fn isolated(backend: &'static str) -> TestResult {
+pub(super) async fn isolated<F, Fut>(backend: &'static str, check: F) -> TestResult
+where
+    F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = TestResult> + Send + 'static,
+{
     let variable = if backend == "postgres" {
         "BETTER_AUTH_TEST_POSTGRES_URL"
     } else {
@@ -283,7 +287,7 @@ async fn isolated(backend: &'static str) -> TestResult {
     let worker = database.clone();
     let result = tokio::spawn(async move {
         let _ = worker.execute_unprepared(&select).await?;
-        check(worker, backend).await
+        check(worker).await
     })
     .await;
     let cleanup = database.execute_unprepared(&drop).await;
@@ -296,11 +300,11 @@ async fn isolated(backend: &'static str) -> TestResult {
 #[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
 async fn live_postgres_raw_numeric_and_date_columns() -> TestResult {
-    isolated("postgres").await
+    isolated("postgres", |database| check(database, "postgres")).await
 }
 
 #[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
 async fn live_mysql_raw_decimal_and_date_columns() -> TestResult {
-    isolated("mysql").await
+    isolated("mysql", |database| check(database, "mysql")).await
 }

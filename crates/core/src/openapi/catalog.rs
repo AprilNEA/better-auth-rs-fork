@@ -53,7 +53,6 @@ pub(super) struct Model {
     pub key: String,
     pub fields: Vec<Field>,
     pub condition: Option<String>,
-    pub placement: Option<String>,
 }
 
 #[derive(Deserialize)]

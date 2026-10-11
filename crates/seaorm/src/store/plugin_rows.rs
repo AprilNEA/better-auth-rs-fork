@@ -8,6 +8,7 @@ use sea_orm::sqlx::{Row, TypeInfo, ValueRef};
 use sea_orm::{
     ConnectionTrait, DbBackend, EntityTrait, IdenStatic, Iterable, QueryResult, QuerySelect,
     QueryTrait, Select,
+    sea_query::{Asterisk, Expr},
 };
 use std::sync::{Arc, Mutex};
 
@@ -100,6 +101,11 @@ impl SqlRow {
             super::field_output::capabilities(backend),
         ))
     }
+}
+
+/// Read physical columns before applying the effective declarations to the SQL snapshot.
+pub(super) fn select_all<E: EntityTrait>() -> Select<E> {
+    E::find().select_only().expr(Expr::col(Asterisk))
 }
 
 pub(super) async fn all<E: EntityTrait>(
@@ -240,6 +246,16 @@ pub(super) fn value(row: &QueryResult, column: &str) -> AuthResult<FieldValue> {
             .map_err(|cause| error(column, cause))?;
         if raw.is_null() {
             return Ok(FieldValue::Null);
+        }
+        if matches!(
+            raw.type_info().kind(),
+            sea_orm::sqlx::postgres::PgTypeKind::Enum(_)
+        ) {
+            // PostgreSQL sends enum labels in both protocols; SQLx excludes enums from String's type check.
+            return raw
+                .as_str()
+                .map(FieldValue::from)
+                .map_err(|cause| error(column, cause));
         }
         return Ok(match raw.type_info().name() {
             "BOOL" => read!(row, bool).into(),

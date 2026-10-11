@@ -232,7 +232,7 @@ where
         )?;
         let row = super::plugin_rows::one(
             self.connection(),
-            Entity::<O::Organization>::find().filter(filter),
+            super::plugin_rows::select_all::<Entity<O::Organization>>().filter(filter),
         )
         .await?;
         match row {
@@ -265,11 +265,13 @@ where
         models::project::<O::Organization>(
             super::plugin_rows::all(
                 self.connection(),
-                Entity::<O::Organization>::find().filter(super::value_filter::is_in(
-                    column,
-                    &value,
-                    self.connection().get_database_backend(),
-                )?),
+                super::plugin_rows::select_all::<Entity<O::Organization>>().filter(
+                    super::value_filter::is_in(
+                        column,
+                        &value,
+                        self.connection().get_database_backend(),
+                    )?,
+                ),
             )
             .await?,
             &config,
@@ -389,7 +391,7 @@ impl<
     ) -> AuthResult<Option<Organization>> {
         let row = super::plugin_rows::one(
             db,
-            Entity::<O::Organization>::find().filter(
+            super::plugin_rows::select_all::<Entity<O::Organization>>().filter(
                 self.organization_field_equals::<O::Organization>(
                     better_auth_core::store::schema::EntityRole::Organization,
                     "id",

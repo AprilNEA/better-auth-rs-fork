@@ -83,9 +83,7 @@ where
     if db.support_returning() {
         let backend = db.get_database_backend();
         let mut query = query.into_query();
-        let _ = query.returning(Query::returning().exprs(
-            E::Column::iter().map(|column| column.select_as(column.into_returning_expr(backend))),
-        ));
+        let _ = query.returning(Query::returning().all());
         return db
             .query_one_raw(backend.build(&query))
             .await
@@ -95,9 +93,13 @@ where
         return Ok(None);
     }
     // Ordinary updates use the updated selector; guarded increments retain the locked ID.
-    db.query_one_raw(E::find().filter(reselect).build(db.get_database_backend()))
-        .await
-        .map_err(map_db_err)
+    db.query_one_raw(
+        super::plugin_rows::select_all::<E>()
+            .filter(reselect)
+            .build(db.get_database_backend()),
+    )
+    .await
+    .map_err(map_db_err)
 }
 
 pub(super) async fn increment_returning_raw<E>(

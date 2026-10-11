@@ -151,7 +151,8 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         let config = self.organization_fields()?.organization_role;
         let row = super::plugin_rows::one(
             self.connection(),
-            Entity::<O::OrganizationRole>::find().filter(self.organization_role_filter(selectors)?),
+            super::plugin_rows::select_all::<Entity<O::OrganizationRole>>()
+                .filter(self.organization_role_filter(selectors)?),
         )
         .await?;
         match row {
@@ -182,7 +183,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
     ) -> AuthResult<Vec<OrganizationRole>> {
         let rows = super::plugin_rows::all(
             self.connection(),
-            Entity::<O::OrganizationRole>::find()
+            super::plugin_rows::select_all::<Entity<O::OrganizationRole>>()
                 .filter(self.organization_field_equals::<O::OrganizationRole>(
                     EntityRole::OrganizationRole,
                     "organizationId",
@@ -241,7 +242,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         let backend = self.connection().get_database_backend();
         let rows = super::plugin_rows::all(
             self.connection(),
-            Entity::<O::OrganizationRole>::find()
+            super::plugin_rows::select_all::<Entity<O::OrganizationRole>>()
                 .filter(super::value_filter::equals(
                     organization_column,
                     &organization,

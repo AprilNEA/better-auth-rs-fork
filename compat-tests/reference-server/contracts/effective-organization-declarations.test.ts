@@ -6,6 +6,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { getMigrations } from "better-auth/db/migration";
 import { organization } from "better-auth/plugins";
 import { observeSqliteCatalog } from "./sqlite-catalog";
+import { captureFreshServerCatalog } from "./server-catalog-shared.mjs";
 
 const { getOrgAdapter } = await import(new URL("../node_modules/better-auth/dist/plugins/organization/adapter.mjs", import.meta.url).href);
 
@@ -15,7 +16,7 @@ const tables = ["user", "session", "account", "verification", "team"];
 const id = "mapping-row";
 const date = new Date("2030-01-01T00:00:00.000Z");
 
-async function setup(backend: "memory" | "sqlite", partial: boolean) {
+async function setup(backend: "memory" | "sqlite", partial: boolean, minimalTable = false) {
   const events: Events = [];
   const state: { failure?: { phase: "input" | "output"; error: Error } } = {};
   const memory: Record<string, Row[]> = Object.fromEntries(tables.map(table => [table, []]));
@@ -45,10 +46,12 @@ async function setup(backend: "memory" | "sqlite", partial: boolean) {
     } }],
   };
   if (database) {
-    database.exec(`CREATE TABLE team (
-      id TEXT PRIMARY KEY NOT NULL, name TEXT, organization_id TEXT,
-      created_at TEXT, updated_at TEXT, member_count INTEGER NOT NULL DEFAULT 0
-    )`);
+    database.exec(minimalTable
+      ? `CREATE TABLE team (id TEXT PRIMARY KEY NOT NULL${partial ? ", name TEXT" : ""})`
+      : `CREATE TABLE team (
+        id TEXT PRIMARY KEY NOT NULL, name TEXT, organization_id TEXT,
+        created_at TEXT, updated_at TEXT, member_count INTEGER NOT NULL DEFAULT 0
+      )`);
     await (await getMigrations(options)).runMigrations();
   }
   return {
@@ -76,9 +79,9 @@ for (const partial of [false, true]) {
     } finally { fixture.close(); }
   });
 
-  for (const backend of ["memory", "sqlite"] as const) {
-    test(`${backend} explicit ${partial ? "partial" : "empty"} Team declaration controls complete adapter writes and reads`, async () => {
-      const fixture = await setup(backend, partial);
+  for (const [backend, minimalTable] of [["memory", false], ["sqlite", false], ["sqlite", true]] as const) {
+    test(`${backend}${minimalTable ? " minimal table" : ""} explicit ${partial ? "partial" : "empty"} Team declaration controls complete adapter writes and reads`, async () => {
+      const fixture = await setup(backend, partial, minimalTable);
       try {
         const { adapter } = await betterAuth(fixture.options).$context;
         expect(fixture.events).toStrictEqual([]);
@@ -105,7 +108,9 @@ for (const partial of [false, true]) {
           ] : []);
           const stored = backend === "memory"
             ? partial ? { name: `stored:${input}`, id } : { id }
-            : { id, name: partial ? `stored:${input}` : null, organization_id: null, created_at: null, updated_at: null, member_count: 0 };
+            : minimalTable
+              ? partial ? { id, name: `stored:${input}` } : { id }
+              : { id, name: partial ? `stored:${input}` : null, organization_id: null, created_at: null, updated_at: null, member_count: 0 };
           expect(fixture.snapshot()).toStrictEqual({ ...before, team: [stored] });
           if (fixture.database) {
             expect(observeSqliteCatalog(fixture.database, "team", "CRUD must preserve the declared Team table")).toStrictEqual(catalog);
@@ -289,3 +294,142 @@ for (const transactional of [false, true]) {
     expect(memory).toStrictEqual(transactional ? before : { ...before, member: before.member!.slice(1) });
   });
 }
+
+for (const [model, table] of [["apikey", "api_keys"], ["passkey", "passkeys"]] as const) {
+  test(`SQLite ${model} complete raw CRUD uses only declared physical columns`, async () => {
+    const database = new Database(":memory:");
+    const events: Events = [];
+    const names = ["user", "session", "account", "verification", table];
+    const options: BetterAuthOptions = {
+      database, baseURL: "http://effective-organization-declarations.test",
+      secret: "effective-organization-declarations-at-least-thirty-two-characters",
+      logger: { disabled: true }, telemetry: { enabled: false },
+      plugins: [{ id: `explicit-${model}`, schema: {
+        [model]: { modelName: table, fields: {
+          name: { type: "string", required: false, fieldName: "name", transform: {
+            input(value) { events.push(["input", "name", value]); return `stored:${value}`; },
+            output(value) { events.push(["output", "name", value]); return `visible:${value}`; },
+          } },
+        } },
+      } }],
+    };
+    try {
+      database.exec(`CREATE TABLE "${table}" (id TEXT PRIMARY KEY NOT NULL, name TEXT)`);
+      await (await getMigrations(options)).runMigrations();
+      const snapshot = () => Object.fromEntries(names.map(name => [
+        name, database.query(`SELECT * FROM "${name}" ORDER BY id`).all(),
+      ]));
+      const before = snapshot();
+      expect(before).toStrictEqual(Object.fromEntries(names.map(name => [name, []])));
+      const catalog = observeSqliteCatalog(database, table, "The declared model table must exist");
+      const { adapter } = await betterAuth(options).$context;
+      expect(events).toStrictEqual([]);
+      const where = [{ field: "id", value: id }];
+      let input = "source";
+      for (const stage of ["create", "read", "list", "update", "read", "delete", "missing"] as const) {
+        if (stage === "update") input = "next";
+        const actual = stage === "create"
+          ? await adapter.create({ model, forceAllowId: true, data: { id, name: input } })
+          : stage === "update"
+            ? await adapter.update({ model, where, update: { name: input } })
+            : stage === "list"
+              ? await adapter.findMany({ model, where })
+              : stage === "delete"
+                ? await adapter.delete({ model, where })
+                : await adapter.findOne({ model, where });
+        const deleted = stage === "delete" || stage === "missing";
+        const visible = { name: `visible:stored:${input}`, id };
+        expect(actual).toStrictEqual(stage === "delete" ? undefined : stage === "missing" ? null : stage === "list" ? [visible] : visible);
+        if (!deleted) {
+          for (const record of stage === "list" ? actual as Row[] : [actual as Row]) {
+            expect(Object.keys(record)).toStrictEqual(["name", "id"]);
+          }
+        }
+        expect(events.splice(0)).toStrictEqual(deleted ? [] : [
+          ...(stage === "create" || stage === "update" ? [["input", "name", input]] : []),
+          ["output", "name", `stored:${input}`],
+        ]);
+        expect(snapshot()).toStrictEqual({ ...before, [table]: deleted ? [] : [{ id, name: `stored:${input}` }] });
+        expect(observeSqliteCatalog(database, table, "CRUD must preserve the declared model table")).toStrictEqual(catalog);
+      }
+    } finally { database.close(); }
+  });
+}
+
+test("PostgreSQL native enum labels reach complete JWK CRUD policies before record decoding", async () => {
+  const events: Events = [];
+  const failure = new Error("enum-output-stop");
+  const names = ["user", "session", "account", "verification", "raw_enum_jwks"];
+  await captureFreshServerCatalog("postgres", names, {
+    plugins: [{ id: "explicit-enum-jwk", schema: { jwks: {
+      modelName: "raw_enum_jwks", fields: {
+        publicKey: { type: "string", required: false, fieldName: "stored_public_key", transform: {
+          input(value: unknown) {
+            events.push(["input", "publicKey", value]);
+            return value === null ? null : `stored:${value}`;
+          },
+          output(value: unknown) {
+            events.push(["output", "publicKey", value]);
+            if (value === "stored:reject") throw failure;
+            return value === null ? null : `visible:${value}`;
+          },
+        } },
+      },
+    } } }],
+  }, async ({ options, query }: any) => {
+    await query("CREATE TYPE raw_jwk_label AS ENUM ('stored:source','stored:next','stored:reject')");
+    await query('ALTER TABLE raw_enum_jwks ALTER COLUMN stored_public_key TYPE raw_jwk_label USING stored_public_key::raw_jwk_label');
+    const columns = async () => await query("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'raw_enum_jwks' ORDER BY ordinal_position");
+    const physicalColumns = await columns();
+    expect(physicalColumns).toStrictEqual([{ column_name: "id" }, { column_name: "stored_public_key" }]);
+    const snapshot = async () => {
+      const rows: Record<string, Row[]> = {};
+      for (const name of names) rows[name] = await query(`SELECT * FROM "${name}" ORDER BY id`);
+      return rows;
+    };
+    const before = await snapshot();
+    expect(before).toStrictEqual(Object.fromEntries(names.map(name => [name, []])));
+    const { adapter } = await betterAuth(options).$context;
+    expect(events).toStrictEqual([]);
+    const where = [{ field: "id", value: id }];
+    let stored: string | null | undefined;
+    for (const stage of [
+      "create", "read", "list", "update", "read-updated", "update-null", "read-null",
+      "update-rejected", "read-rejected", "delete", "create-rejected", "read-create-rejected", "delete-rejected", "missing",
+    ]) {
+      const create = stage === "create" || stage === "create-rejected";
+      const update = stage.startsWith("update");
+      const remove = stage.startsWith("delete");
+      const input = stage === "create" ? "source" : stage === "update-null" ? null : stage.endsWith("rejected") ? "reject" : "next";
+      if (create || update) stored = input === null ? null : `stored:${input}`;
+      if (remove) stored = undefined;
+      const execute = () => create
+        ? adapter.create({ model: "jwks", forceAllowId: true, data: { id, publicKey: input } })
+        : update
+          ? adapter.update({ model: "jwks", where, update: { publicKey: input } })
+          : remove
+            ? adapter.delete({ model: "jwks", where })
+            : stage === "list"
+              ? adapter.findMany({ model: "jwks", where })
+              : adapter.findOne({ model: "jwks", where });
+      if (stored === "stored:reject") {
+        await expect(execute()).rejects.toBe(failure);
+      } else {
+        const actual = await execute();
+        const visible = { publicKey: stored === null ? null : `visible:${stored}`, id };
+        expect(actual).toStrictEqual(remove ? undefined : stored === undefined ? null : stage === "list" ? [visible] : visible);
+        if (stored !== undefined) {
+          for (const record of stage === "list" ? actual as Row[] : [actual as Row]) {
+            expect(Object.keys(record)).toStrictEqual(["publicKey", "id"]);
+          }
+        }
+      }
+      expect(events.splice(0)).toStrictEqual(stored === undefined ? [] : [
+        ...(create || update ? [["input", "publicKey", input]] : []),
+        ["output", "publicKey", stored],
+      ]);
+      expect(await snapshot()).toStrictEqual({ ...before, raw_enum_jwks: stored === undefined ? [] : [{ id, stored_public_key: stored }] });
+      expect(await columns()).toStrictEqual(physicalColumns);
+    }
+  });
+}, 120_000);

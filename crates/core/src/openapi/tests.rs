@@ -8,7 +8,6 @@ fn core_spec() -> OpenApiSpec {
         &UserConfig::default(),
         [],
         false,
-        false,
         &Default::default(),
     )
     .unwrap()

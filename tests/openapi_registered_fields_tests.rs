@@ -5,7 +5,7 @@ use better_auth::{
 };
 use better_auth_core::{
     AuthConfig, AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, OpenApiPluginMetadata, RateLimitConfig,
+    AuthRoute, AuthSchema, RateLimitConfig,
     organization_fields::OrganizationFields,
     store::schema::EntityRole,
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
@@ -15,6 +15,9 @@ use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+
+#[path = "openapi_registered_fields_tests/documentation_overlays.rs"]
+mod documentation_overlays;
 
 #[derive(Default)]
 struct CallbackCalls {
@@ -54,21 +57,6 @@ impl<S: AuthSchema> AuthPlugin<S> for RegisteredFields {
         Vec::new()
     }
 
-    fn openapi(&self) -> AuthResult<OpenApiPluginMetadata> {
-        let documentation = string(false, Some("documentation-only"));
-        Ok(
-            OpenApiPluginMetadata::from_routes("ordinary-openapi-registered-fields", Vec::new())?
-                .model(
-                    "jwks",
-                    &fields([
-                        ("label", string(false, Some("stale-documentation"))),
-                        ("docsNote", documentation.clone()),
-                    ]),
-                )?
-                .model("widget", &fields([("label", documentation)]))?,
-        )
-    }
-
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
         let core = UserFieldConfig {
             input: Some(false),
@@ -95,15 +83,18 @@ impl<S: AuthSchema> AuthPlugin<S> for RegisteredFields {
         )?;
         context.register_model_fields(
             EntityRole::Jwk,
-            fields([(
-                "label",
-                UserFieldConfig {
-                    field_name: Some("stored_jwk_label".into()),
-                    input: Some(false),
-                    returned: Some(false),
-                    ..string(true, Some("jwk-default"))
-                },
-            )]),
+            fields([
+                (
+                    "label",
+                    UserFieldConfig {
+                        field_name: Some("stored_jwk_label".into()),
+                        input: Some(false),
+                        returned: Some(false),
+                        ..string(true, Some("jwk-default"))
+                    },
+                ),
+                ("docsNote", string(false, Some("documentation-only"))),
+            ]),
         )?;
         let defaults = self.0.clone();
         let inputs = self.0.clone();
@@ -163,7 +154,11 @@ impl<S: AuthSchema> AuthPlugin<S> for RegisteredFields {
             context
                 .register_model_fields(role, fields([("label", string(false, Some(default)))]))?;
         }
-        Ok(())
+        context.register_custom_model(
+            "widget",
+            None,
+            fields([("label", string(false, Some("documentation-only")))]),
+        )
     }
 
     async fn on_request(

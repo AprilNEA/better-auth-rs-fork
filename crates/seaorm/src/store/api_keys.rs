@@ -78,7 +78,7 @@ where
         let model = database_operation::<Entity<P::ApiKey>, _>(self.config(), "findOne", async {
             self.connection()
                 .query_one_raw(
-                    Entity::<P::ApiKey>::find()
+                    super::plugin_rows::select_all::<Entity<P::ApiKey>>()
                         .filter(self.plugin_equals::<P::ApiKey>(
                             EntityRole::ApiKey,
                             "key",
@@ -102,11 +102,13 @@ where
         sort: Option<(&str, &str)>,
     ) -> AuthResult<Vec<ApiKey>> {
         let models = database_operation::<Entity<P::ApiKey>, _>(self.config(), "findMany", async {
-            let mut query = Entity::<P::ApiKey>::find().filter(self.plugin_equals::<P::ApiKey>(
-                EntityRole::ApiKey,
-                "referenceId",
-                reference_id.clone(),
-            )?);
+            let mut query = super::plugin_rows::select_all::<Entity<P::ApiKey>>().filter(
+                self.plugin_equals::<P::ApiKey>(
+                    EntityRole::ApiKey,
+                    "referenceId",
+                    reference_id.clone(),
+                )?,
+            );
             if let Some((field, direction)) = sort {
                 query = query.order_by(
                     self.plugin_column::<P::ApiKey>(EntityRole::ApiKey, field)?,

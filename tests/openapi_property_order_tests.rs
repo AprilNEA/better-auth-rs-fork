@@ -5,7 +5,7 @@ use better_auth::{
 };
 use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, OpenApiPluginMetadata, RateLimitConfig,
+    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
     organization_fields::OrganizationFields,
     store::schema::EntityRole,
     user_fields::{UserConfig, UserFieldConfig},
@@ -77,16 +77,6 @@ impl<S: AuthSchema> AuthPlugin<S> for DisplayFields {
 
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
-    }
-
-    fn openapi(&self) -> AuthResult<OpenApiPluginMetadata> {
-        let mut metadata = OpenApiPluginMetadata::from_routes(self.id(), Vec::new())?;
-        if matches!(self, Self::Note) {
-            for model in ["user", "session", "account", "verification"] {
-                metadata = metadata.model(model, &self.fields())?;
-            }
-        }
-        Ok(metadata)
     }
 
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {

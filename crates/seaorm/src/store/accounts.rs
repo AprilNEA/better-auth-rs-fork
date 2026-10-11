@@ -150,7 +150,7 @@ where
             async {
                 super::plugin_rows::all(
                     self.connection(),
-                    <S::Account as SeaOrmAccountModel>::Entity::find()
+                    super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
                         .filter(condition)
                         .limit(2),
                 )
@@ -207,7 +207,7 @@ where
             async {
                 super::plugin_rows::all(
                     self.connection(),
-                    <S::Account as SeaOrmAccountModel>::Entity::find()
+                    super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
                         .filter(self.account_selector("userId", user_id)?)
                         .limit(super::pagination::default_limit(
                             self.config(),
@@ -297,7 +297,7 @@ where
         let (physical_to, value) =
             self.query_field_binding(EntityRole::Account, &fields, &relation.to, &value, backend)?;
         let column = S::Account::field_column(&physical_to)?;
-        let query = <S::Account as SeaOrmAccountModel>::Entity::find()
+        let query = super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
             .filter(super::value_filter::equals(column, &value, backend)?);
         database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
             self.config(),
@@ -536,7 +536,7 @@ where
                 <S::Account as SeaOrmAccountModel>::Entity,
                 <S::User as SeaOrmUserModel>::Entity,
             >(
-                <S::Account as SeaOrmAccountModel>::Entity::find()
+                super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
                     .filter(self.account_selectors([
                         ("providerId", &provider.into()),
                         ("accountId", &account_id.into()),
@@ -660,7 +660,8 @@ where
             async {
                 super::plugin_rows::one(
                     self.connection(),
-                    <S::Account as SeaOrmAccountModel>::Entity::find().filter(condition),
+                    super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
+                        .filter(condition),
                 )
                 .await
             },
@@ -796,12 +797,14 @@ where
                 "findMany",
                 async {
                     super::plugin_rows::all(
-                        self.connection(),
-                        <S::Account as SeaOrmAccountModel>::Entity::find()
+                            self.connection(),
+                            super::plugin_rows::select_all::<
+                                <S::Account as SeaOrmAccountModel>::Entity,
+                            >()
                             .filter(self.account_selector("id", id)?)
                             .limit(1),
-                    )
-                    .await
+                        )
+                        .await
                 },
             )
             .await?

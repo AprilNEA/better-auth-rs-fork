@@ -12,7 +12,7 @@ use better_auth_core::{
 };
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
-use sea_orm::{EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{QueryFilter, QuerySelect};
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -33,7 +33,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
         ]);
         let rows = super::plugin_rows::all(
             connection,
-            Entity::<O::Invitation>::find()
+            super::plugin_rows::select_all::<Entity<O::Invitation>>()
                 .filter(self.organization_fields_equal::<O::Invitation>(
                     EntityRole::Invitation,
                     selectors.iter().map(|(name, value)| (*name, value)),
@@ -241,7 +241,7 @@ where
     ) -> AuthResult<Vec<Invitation>> {
         let rows = super::plugin_rows::all(
             self.connection(),
-            Entity::<O::Invitation>::find()
+            super::plugin_rows::select_all::<Entity<O::Invitation>>()
                 .filter(self.organization_field_equals::<O::Invitation>(
                     EntityRole::Invitation,
                     "organizationId",

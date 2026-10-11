@@ -11,16 +11,6 @@ use super::{OpenApiPluginMetadata, metadata::property_key_order};
 impl OpenApiPluginMetadata {
     /// Apply the Organization plugin's configured field schemas at their route-specific merge boundaries.
     pub fn organization_fields(mut self, fields: &OrganizationFields) -> AuthResult<Self> {
-        for (model, fields) in [
-            ("organization", &fields.organization),
-            ("member", &fields.member),
-            ("invitation", &fields.invitation),
-            ("team", &fields.team),
-        ] {
-            if self.models.contains_key(model) {
-                self = self.model(model, fields)?;
-            }
-        }
         for (key, model, pointer, base_last, partial, force_optional) in [
             (
                 "createOrganization",
@@ -102,13 +92,6 @@ impl OpenApiPluginMetadata {
                     ))
                 })?;
             overlay(schema, model, base_last, partial, force_optional);
-        }
-        if self.models.contains_key("organizationRole") {
-            let mut role = fields.organization_role.clone();
-            for field in role.fields_mut().values_mut() {
-                field.required = Some(false);
-            }
-            self = self.model("organizationRole", &role)?;
         }
         Ok(self)
     }

@@ -205,14 +205,15 @@ where
         organization_id: &str,
         user_id: &str,
     ) -> AuthResult<Option<better_auth_core::store::MemberUser>> {
-        let query =
-            Entity::<O::Member>::find().filter(self.organization_fields_equal::<O::Member>(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
+            self.organization_fields_equal::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 [
                     ("organizationId", &organization_id.into()),
                     ("userId", &user_id.into()),
                 ],
-            )?);
+            )?,
+        );
         self.read_member_user(query, false).await
     }
     async fn get_member_with_user_value(
@@ -220,23 +221,25 @@ where
         organization_id: &FieldValue,
         user_id: &FieldValue,
     ) -> AuthResult<Option<better_auth_core::store::MemberUser>> {
-        let query =
-            Entity::<O::Member>::find().filter(self.organization_fields_equal::<O::Member>(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
+            self.organization_fields_equal::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 [("organizationId", organization_id), ("userId", user_id)],
-            )?);
+            )?,
+        );
         self.read_member_user(query, false).await
     }
     async fn get_member_by_id_with_user(
         &self,
         id: &str,
     ) -> AuthResult<Option<better_auth_core::store::MemberUser>> {
-        let query =
-            Entity::<O::Member>::find().filter(self.organization_field_equals::<O::Member>(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
+            self.organization_field_equals::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 "id",
                 &id.into(),
-            )?);
+            )?,
+        );
         self.read_member_user(query, true).await
     }
 
@@ -255,12 +258,13 @@ where
     }
 
     async fn get_member_by_id(&self, id: &str) -> AuthResult<Option<Member>> {
-        let query =
-            Entity::<O::Member>::find().filter(self.organization_field_equals::<O::Member>(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
+            self.organization_field_equals::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 "id",
                 &id.into(),
-            )?);
+            )?,
+        );
         self.read_organization_model::<O::Member>(
             self.connection(),
             query,
@@ -339,7 +343,7 @@ where
     ) -> AuthResult<Vec<Member>> {
         let rows = super::plugin_rows::all(
             self.connection(),
-            Entity::<O::Member>::find()
+            super::plugin_rows::select_all::<Entity<O::Member>>()
                 .filter(self.organization_field_equals::<O::Member>(
                     better_auth_core::store::schema::EntityRole::Member,
                     "organizationId",
@@ -657,11 +661,12 @@ impl<
         organization_id: &FieldValue,
         user_id: &FieldValue,
     ) -> AuthResult<Option<Member>> {
-        let query =
-            Entity::<O::Member>::find().filter(self.organization_fields_equal::<O::Member>(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
+            self.organization_fields_equal::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 [("organizationId", organization_id), ("userId", user_id)],
-            )?);
+            )?,
+        );
         self.read_organization_model::<O::Member>(
             db,
             query,
@@ -739,7 +744,7 @@ impl<
             .map_err(map_db_err)?;
         let teams = super::plugin_rows::all(
             db,
-            Entity::<O::Team>::find()
+            super::plugin_rows::select_all::<Entity<O::Team>>()
                 .filter(self.organization_field_equals::<O::Team>(
                     better_auth_core::store::schema::EntityRole::Team,
                     "organizationId",

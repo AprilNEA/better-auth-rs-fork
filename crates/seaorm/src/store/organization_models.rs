@@ -4,7 +4,7 @@ use better_auth_core::{
     AuthError, AuthResult, id::AdapterIdInput, plugin_runtime::ModelFields, user_fields::UserConfig,
 };
 use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, Select};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, IdenStatic, QueryFilter, Select};
 
 use super::plugin_rows::{self, SqlRow};
 
@@ -113,7 +113,8 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
     ) -> AuthResult<Option<SqlRow>> {
         plugin_rows::one(
             conn,
-            Entity::<M>::find().filter(self.organization_field_equals::<M>(role, "id", id)?),
+            super::plugin_rows::select_all::<Entity<M>>()
+                .filter(self.organization_field_equals::<M>(role, "id", id)?),
         )
         .await
     }

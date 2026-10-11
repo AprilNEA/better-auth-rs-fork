@@ -4,7 +4,7 @@ use crate::SeaOrmPluginModel;
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FromFieldMap, SchemaField};
 use chrono::Utc;
-use sea_orm::{ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait};
+use sea_orm::{ConnectionTrait, QueryFilter, QuerySelect, QueryTrait};
 
 use better_auth_core::store::{PasskeyStore, schema::EntityRole};
 use better_auth_core::{PasskeyCredentialState, PasskeyStorage, UpdatePasskey};
@@ -98,7 +98,7 @@ where
         let model = database_operation::<Entity<P::Passkey>, _>(self.config(), "findOne", async {
             self.connection()
                 .query_one_raw(
-                    Entity::<P::Passkey>::find()
+                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
                         .filter(self.plugin_equals::<P::Passkey>(
                             EntityRole::Passkey,
                             "credentialID",
@@ -124,7 +124,7 @@ where
             database_operation::<Entity<P::Passkey>, _>(self.config(), "findMany", async {
                 self.connection()
                     .query_all_raw(
-                        Entity::<P::Passkey>::find()
+                        super::plugin_rows::select_all::<Entity<P::Passkey>>()
                             .filter(self.plugin_equals::<P::Passkey>(
                                 EntityRole::Passkey,
                                 "userId",
@@ -188,7 +188,7 @@ where
             let Some(_model) = self
                 .connection()
                 .query_one_raw(
-                    Entity::<P::Passkey>::find()
+                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
                         .filter(filter.clone())
                         .build(self.connection().get_database_backend()),
                 )
@@ -256,7 +256,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         database_operation::<Entity<P::Passkey>, _>(self.config(), "findOne", async {
             self.connection()
                 .query_one_raw(
-                    Entity::<P::Passkey>::find()
+                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
                         .filter(filter)
                         .build(self.connection().get_database_backend()),
                 )
@@ -275,7 +275,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             let Some(_model) = self
                 .connection()
                 .query_one_raw(
-                    Entity::<P::Passkey>::find()
+                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
                         .filter(filter.clone())
                         .build(self.connection().get_database_backend()),
                 )

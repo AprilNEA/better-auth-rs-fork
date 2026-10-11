@@ -128,12 +128,14 @@ where
                 "findMany",
                 async {
                     super::plugin_rows::all(
-                        db,
-                        <S::Session as SeaOrmSessionModel>::Entity::find()
+                            db,
+                            super::plugin_rows::select_all::<
+                                <S::Session as SeaOrmSessionModel>::Entity,
+                            >()
                             .filter(condition)
                             .limit(super::pagination::default_limit(self.config(), backend)?),
-                    )
-                    .await
+                        )
+                        .await
                 },
             )
             .await?;

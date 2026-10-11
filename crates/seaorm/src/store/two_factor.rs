@@ -146,7 +146,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         database_operation::<Entity<P::TwoFactor>, _>(self.config(), "findOne", async {
             self.connection()
                 .query_one_raw(
-                    Entity::<P::TwoFactor>::find()
+                    super::plugin_rows::select_all::<Entity<P::TwoFactor>>()
                         .filter(filter)
                         .build(self.connection().get_database_backend()),
                 )

@@ -147,7 +147,7 @@ where
     ) -> AuthResult<Vec<Team>> {
         let rows = super::plugin_rows::all(
             self.connection(),
-            Entity::<O::Team>::find()
+            super::plugin_rows::select_all::<Entity<O::Team>>()
                 .filter(self.organization_field_equals::<O::Team>(
                     EntityRole::Team,
                     "organizationId",
@@ -224,7 +224,7 @@ where
         &self,
         team_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Vec<TeamMember>> {
-        let query = Entity::<O::TeamMember>::find()
+        let query = super::plugin_rows::select_all::<Entity<O::TeamMember>>()
             .filter(self.organization_field_equals::<O::TeamMember>(
                 better_auth_core::store::schema::EntityRole::TeamMember,
                 "teamId",

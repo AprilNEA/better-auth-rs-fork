@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use better_auth::{BetterAuth, plugins::OpenApiPlugin};
 use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, OpenApiPluginMetadata, RateLimitConfig,
+    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
     store::{SecondaryStorage, schema::EntityRole},
     user_fields::{UserConfig, UserFieldConfig},
 };
@@ -37,13 +37,6 @@ impl<S: AuthSchema> AuthPlugin<S> for VerificationDisplay {
 
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
-    }
-
-    fn openapi(&self) -> AuthResult<OpenApiPluginMetadata> {
-        Ok(
-            OpenApiPluginMetadata::from_routes("ordinary-verification-display", Vec::new())?
-                .model("verification", &plugin_fields())?,
-        )
     }
 
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {

@@ -49,7 +49,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         let row = database_operation::<Entity<M>, _>(self.config(), "findOne", async {
             connection
                 .query_one_raw(
-                    Entity::<M>::find()
+                    super::plugin_rows::select_all::<Entity<M>>()
                         .filter(filter)
                         .build(connection.get_database_backend()),
                 )
@@ -119,7 +119,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         let rows = database_operation::<Entity<M>, _>(self.config(), "findMany", async {
             connection
                 .query_all_raw(
-                    Entity::<M>::find()
+                    super::plugin_rows::select_all::<Entity<M>>()
                         .limit(super::pagination::default_limit(
                             self.config(),
                             connection.get_database_backend(),

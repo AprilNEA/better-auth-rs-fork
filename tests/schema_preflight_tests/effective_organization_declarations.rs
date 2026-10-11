@@ -16,6 +16,22 @@ async fn database() -> DatabaseConnection {
     database
 }
 
+async fn minimal_database(partial: bool) -> DatabaseConnection {
+    let database = Database::connect("sqlite::memory:").await.unwrap();
+    migrator::run_migrations(&database).await.unwrap();
+    execute(&database, "DROP TABLE team").await;
+    execute(
+        &database,
+        if partial {
+            "CREATE TABLE team (id TEXT NOT NULL PRIMARY KEY, name TEXT)"
+        } else {
+            "CREATE TABLE team (id TEXT NOT NULL PRIMARY KEY)"
+        },
+    )
+    .await;
+    database
+}
+
 async fn auth(
     database: &DatabaseConnection,
     partial: bool,
@@ -65,8 +81,12 @@ async fn explicit_empty_and_partial_team_declarations_do_not_require_native_colu
 
 #[tokio::test]
 async fn explicit_team_declarations_control_complete_writes_and_readback() {
-    for partial in [false, true] {
-        let database = database().await;
+    for (partial, minimal) in [(false, false), (true, false), (false, true), (true, true)] {
+        let database = if minimal {
+            minimal_database(partial).await
+        } else {
+            database().await
+        };
         let schema = sqlite::catalog(&database).await;
         let empty = sqlite::snapshot(&database).await;
         let events = Events::default();
@@ -108,14 +128,23 @@ async fn explicit_team_declarations_control_complete_writes_and_readback() {
             assert_eq!(*events.lock().unwrap(), expected_events);
             events.lock().unwrap().clear();
             let mut expected_storage = empty.clone();
-            expected_storage.get_mut("team").unwrap().push(json!({
-                "id":ID,
-                "name": if partial { json!(format!("stored:{input}")) } else { Value::Null },
-                "organization_id":null,
-                "created_at":null,
-                "updated_at":null,
-                "member_count":0,
-            }));
+            let stored = if minimal {
+                if partial {
+                    json!({"id":ID,"name":format!("stored:{input}")})
+                } else {
+                    json!({"id":ID})
+                }
+            } else {
+                json!({
+                    "id":ID,
+                    "name": if partial { json!(format!("stored:{input}")) } else { Value::Null },
+                    "organization_id":null,
+                    "created_at":null,
+                    "updated_at":null,
+                    "member_count":0,
+                })
+            };
+            expected_storage.get_mut("team").unwrap().push(stored);
             assert_eq!(sqlite::snapshot(&database).await, expected_storage);
             assert_eq!(sqlite::catalog(&database).await, schema);
         }

@@ -9,7 +9,7 @@ use better_auth_core::{
     store::{ResolvedJoin, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{DbBackend, EntityName, QueryFilter, QuerySelect};
 use std::sync::Arc;
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
@@ -25,7 +25,7 @@ where
         user_id: &FieldValue,
     ) -> AuthResult<Vec<Team>> {
         let backend = self.connection().get_database_backend();
-        let parent = Entity::<O::TeamMember>::find()
+        let parent = super::plugin_rows::select_all::<Entity<O::TeamMember>>()
             .filter(self.organization_field_equals::<O::TeamMember>(
                 EntityRole::TeamMember,
                 "userId",
@@ -188,11 +188,9 @@ where
             return Ok(Vec::new());
         }
         let backend = self.connection().get_database_backend();
-        let query = Entity::<O::Team>::find().filter(self.organization_field_equals::<O::Team>(
-            EntityRole::Team,
-            &relation.to,
-            &value,
-        )?);
+        let query = super::plugin_rows::select_all::<Entity<O::Team>>().filter(
+            self.organization_field_equals::<O::Team>(EntityRole::Team, &relation.to, &value)?,
+        );
         let rows = if relation.many {
             plugin_rows::all(
                 self.connection(),

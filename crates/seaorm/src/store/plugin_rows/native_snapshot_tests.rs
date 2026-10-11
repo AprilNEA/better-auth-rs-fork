@@ -4,7 +4,7 @@ use crate::{
     store::{entities::team, joins, map_db_err},
 };
 use better_auth_core::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform};
-use sea_orm::{Database, sea_query::Query};
+use sea_orm::Database;
 use std::sync::MutexGuard;
 
 fn locked<T>(value: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
@@ -42,14 +42,7 @@ async fn native_relation_mutations_share_projection_source_without_writing_datab
         )
         .await
         .map_err(map_db_err)?;
-    let query = Query::select()
-        .columns([
-            team::Column::Id,
-            team::Column::Name,
-            team::Column::OrganizationId,
-        ])
-        .from(team::Entity)
-        .to_owned();
+    let query = select_all::<team::Entity>().into_query();
     for failure in [Failure::None, Failure::Parent, Failure::Child] {
         let row = SqlRow::from(
             db.query_one(&query)

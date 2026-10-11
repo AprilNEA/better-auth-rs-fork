@@ -86,7 +86,10 @@ where
                     )?;
                     plugin_rows::one(
                         self.connection(),
-                        <S::Verification as SeaOrmVerificationModel>::Entity::find().filter(filter),
+                        super::plugin_rows::select_all::<
+                            <S::Verification as SeaOrmVerificationModel>::Entity,
+                        >()
+                        .filter(filter),
                     )
                     .await
                 })
@@ -214,7 +217,10 @@ where
                 )?;
                 plugin_rows::one(
                     self.connection(),
-                    <S::Verification as SeaOrmVerificationModel>::Entity::find().filter(condition),
+                    super::plugin_rows::select_all::<
+                        <S::Verification as SeaOrmVerificationModel>::Entity,
+                    >()
+                    .filter(condition),
                 )
                 .await
             },
@@ -240,7 +246,10 @@ where
                     self.verification_live_selector([("value", &value.into())], backend)?;
                 plugin_rows::one(
                     self.connection(),
-                    <S::Verification as SeaOrmVerificationModel>::Entity::find().filter(condition),
+                    super::plugin_rows::select_all::<
+                        <S::Verification as SeaOrmVerificationModel>::Entity,
+                    >()
+                    .filter(condition),
                 )
                 .await
             },
@@ -269,7 +278,10 @@ where
                     self.verification_live_selector([("identifier", &identifier.into())], backend)?;
                 plugin_rows::one(
                     self.connection(),
-                    <S::Verification as SeaOrmVerificationModel>::Entity::find().filter(condition),
+                    super::plugin_rows::select_all::<
+                        <S::Verification as SeaOrmVerificationModel>::Entity,
+                    >()
+                    .filter(condition),
                 )
                 .await
             },
@@ -365,12 +377,14 @@ where
                 async {
                     plugin_rows::all(
                         connection,
-                        <S::Verification as SeaOrmVerificationModel>::Entity::find()
-                            .filter(filter.clone())
-                            .limit(super::pagination::default_limit(
-                                self.config(),
-                                connection.get_database_backend(),
-                            )?),
+                        super::plugin_rows::select_all::<
+                            <S::Verification as SeaOrmVerificationModel>::Entity,
+                        >()
+                        .filter(filter.clone())
+                        .limit(super::pagination::default_limit(
+                            self.config(),
+                            connection.get_database_backend(),
+                        )?),
                     )
                     .await
                 },
@@ -552,9 +566,14 @@ where
                 async {
                     plugin_rows::one(
                         db,
-                        <S::Verification as SeaOrmVerificationModel>::Entity::find().filter(
-                            self.verification_selector(name, &value, db.get_database_backend())?,
-                        ),
+                        super::plugin_rows::select_all::<
+                            <S::Verification as SeaOrmVerificationModel>::Entity,
+                        >()
+                        .filter(self.verification_selector(
+                            name,
+                            &value,
+                            db.get_database_backend(),
+                        )?),
                     )
                     .await
                 },
@@ -721,13 +740,15 @@ where
             async {
                 plugin_rows::one(
                     connection,
-                    <S::Verification as SeaOrmVerificationModel>::Entity::find()
-                        .filter(self.verification_selector(
-                            "identifier",
-                            &identifier.into(),
-                            connection.get_database_backend(),
-                        )?)
-                        .order_by_desc(self.verification_column("createdAt")?),
+                    super::plugin_rows::select_all::<
+                        <S::Verification as SeaOrmVerificationModel>::Entity,
+                    >()
+                    .filter(self.verification_selector(
+                        "identifier",
+                        &identifier.into(),
+                        connection.get_database_backend(),
+                    )?)
+                    .order_by_desc(self.verification_column("createdAt")?),
                 )
                 .await
             },

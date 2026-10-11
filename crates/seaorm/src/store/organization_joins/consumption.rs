@@ -7,7 +7,7 @@ use better_auth_core::{
     AuthResult, FieldMap,
     store::{JoinValue, OrganizationDetails, schema::EntityRole},
 };
-use sea_orm::{EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{QueryFilter, QuerySelect};
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
@@ -42,13 +42,12 @@ where
                 "findMany",
                 async {
                     let (column, owners) = bound.resolve(EntityRole::User, &fields)?;
-                    let query = <S::User as SeaOrmUserModel>::Entity::find().filter(
-                        crate::store::value_filter::is_in(
+                    let query = plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>()
+                        .filter(crate::store::value_filter::is_in(
                             S::User::field_column(&column)?,
                             &owners,
                             backend,
-                        )?,
-                    );
+                        )?);
                     let (limit, _) =
                         crate::store::pagination::sql_pagination(backend, Some(users_limit), None)?;
                     plugin_rows::all(self.connection(), query.limit(limit)).await

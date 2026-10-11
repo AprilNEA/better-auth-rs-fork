@@ -109,6 +109,8 @@ macro_rules! model {
                 pub alg: Option<String>,
                 #[sea_orm(column_name = "stored_curve")]
                 pub crv: Option<String>,
+                // The physical fixture omits this undeclared column.
+                pub undeclared_column: Option<String>,
             }
             #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
             pub enum Relation {}
@@ -281,10 +283,9 @@ pub(super) async fn jwk(mut database: DatabaseConnection, name: &str) -> TestRes
                 trace::check_missing_id_error(
                     operation.error.as_ref().expect("captured readback error"),
                 );
-                // SeaORM selects explicit columns, so MySQL reports the missing ID in the projection.
                 assert_eq!(
                     message,
-                    "Query Error: error returned from database: 1054 (42S22): Unknown column 'readback_jwks.id' in 'field list'",
+                    "Query Error: error returned from database: 1054 (42S22): Unknown column 'readback_jwks.id' in 'where clause'",
                     "{label} SQLx diagnostic"
                 );
             }

@@ -26,15 +26,17 @@ where
                 "findMany",
                 async {
                     super::plugin_rows::all(
-                        db,
-                        <S::Account as SeaOrmAccountModel>::Entity::find()
+                            db,
+                            super::plugin_rows::select_all::<
+                                <S::Account as SeaOrmAccountModel>::Entity,
+                            >()
                             .filter(self.account_selector("userId", user_id)?)
                             .limit(super::pagination::default_limit(
                                 self.config(),
                                 db.get_database_backend(),
                             )?),
-                    )
-                    .await
+                        )
+                        .await
                 },
             )
             .await

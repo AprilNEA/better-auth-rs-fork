@@ -2,7 +2,7 @@ use super::instrumentation::database_operation;
 use async_trait::async_trait;
 use better_auth_core::id::AdapterIdInput;
 use better_auth_core::store::schema::EntityRole;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityName, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityName, QueryFilter, QuerySelect};
 
 use better_auth_core::store::{ResolvedJoin, UserStore};
 use better_auth_core::{FieldMap, FieldValue};
@@ -75,7 +75,7 @@ where
             backend,
         )?;
         let column = S::User::field_column(&physical_to)?;
-        let query = <S::User as SeaOrmUserModel>::Entity::find()
+        let query = super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>()
             .filter(super::value_filter::equals(column, &value, backend)?);
         database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
             self.config(),
@@ -119,11 +119,13 @@ where
     ) -> AuthResult<sea_orm::Select<<S::User as SeaOrmUserModel>::Entity>> {
         let (physical, bound) = self.user_field_selector(db, name, value)?;
         Ok(
-            <S::User as SeaOrmUserModel>::Entity::find().filter(super::value_filter::equals(
-                S::User::field_column(&physical)?,
-                &bound,
-                db.get_database_backend(),
-            )?),
+            super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>().filter(
+                super::value_filter::equals(
+                    S::User::field_column(&physical)?,
+                    &bound,
+                    db.get_database_backend(),
+                )?,
+            ),
         )
     }
 
@@ -531,7 +533,7 @@ where
             async {
                 super::plugin_rows::all(
                     self.connection(),
-                    <S::User as SeaOrmUserModel>::Entity::find()
+                    super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>()
                         .filter(filter)
                         .limit(
                             super::pagination::sql_pagination(
@@ -771,7 +773,7 @@ where
             async {
                 super::plugin_rows::all(
                     self.connection(),
-                    <S::User as SeaOrmUserModel>::Entity::find(),
+                    super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>(),
                 )
                 .await
             },
@@ -796,7 +798,7 @@ where
             async {
                 let rows = super::plugin_rows::all(
                     self.connection(),
-                    <S::User as SeaOrmUserModel>::Entity::find(),
+                    super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>(),
                 )
                 .await?;
                 let records = rows

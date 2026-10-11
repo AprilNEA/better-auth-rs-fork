@@ -2,7 +2,7 @@
 
 use better_auth_core::{AuthResult, FieldValue};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, Iden, Iterable,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, Iden,
     QueryFilter, QueryResult,
     sea_query::{Query, Value},
 };
@@ -193,12 +193,7 @@ impl<E: EntityTrait> RecordWrite<E> {
             .columns(columns.iter().copied())
             .values_panic(values);
         if db.support_returning() {
-            let _ = query.returning(
-                Query::returning().exprs(
-                    E::Column::iter()
-                        .map(|column| column.select_as(column.into_returning_expr(backend))),
-                ),
-            );
+            let _ = query.returning(Query::returning().all());
             return db
                 .query_one_raw(backend.build(&query))
                 .await

@@ -13,6 +13,9 @@ use better_auth_core::{
 use sea_orm::Database;
 use std::sync::Arc;
 
+#[path = "raw_physical_table_tests.rs"]
+mod raw_physical_tables;
+
 #[expect(
     unreachable_pub,
     reason = "SeaORM derives require public fixture entity types"

@@ -12,7 +12,7 @@ use better_auth_core::{
     store::{InvitationOrganization, JoinValue, ResolvedJoin, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect, Select};
+use sea_orm::{DbBackend, EntityName, QueryFilter, QuerySelect, Select};
 use std::sync::Arc;
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
@@ -26,7 +26,7 @@ where
         &self,
         user_id: &FieldValue,
     ) -> AuthResult<Vec<JoinValue<FieldMap>>> {
-        let query = Entity::<O::Member>::find().filter(
+        let query = super::plugin_rows::select_all::<Entity<O::Member>>().filter(
             self.organization_field_equals::<O::Member>(EntityRole::Member, "userId", user_id)?,
         );
         Ok(self
@@ -41,7 +41,7 @@ where
         &self,
         email: &str,
     ) -> AuthResult<Vec<InvitationOrganization>> {
-        let query = Entity::<O::Invitation>::find().filter(
+        let query = super::plugin_rows::select_all::<Entity<O::Invitation>>().filter(
             self.organization_field_equals::<O::Invitation>(
                 EntityRole::Invitation,
                 "email",
@@ -250,7 +250,7 @@ where
             return Ok(Vec::new());
         }
         let backend = self.connection().get_database_backend();
-        let query = Entity::<O::Organization>::find().filter(
+        let query = super::plugin_rows::select_all::<Entity<O::Organization>>().filter(
             self.organization_field_equals::<O::Organization>(
                 EntityRole::Organization,
                 &relation.to,

@@ -136,7 +136,7 @@ async fn select_one<E: EntityTrait>(
     value: &Binding,
 ) -> AuthResult<Option<QueryResult>> {
     let backend = db.get_database_backend();
-    let query = E::find()
+    let query = super::plugin_rows::select_all::<E>()
         .filter(
             column
                 .into_expr()
@@ -152,7 +152,7 @@ fn full_match<E: EntityTrait>(
     fields: &[(E::Column, Binding)],
     backend: DbBackend,
 ) -> AuthResult<Option<sea_orm::Select<E>>> {
-    let mut query = E::find();
+    let mut query = super::plugin_rows::select_all::<E>();
     let mut has_conditions = false;
     for (column, value) in fields {
         if is_undefined(value) {

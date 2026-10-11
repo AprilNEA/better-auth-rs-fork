@@ -244,7 +244,6 @@ pub struct AuthRoute {
 pub struct AuthInitContext<S: AuthSchema> {
     request_runtime: crate::request_runtime::RequestRuntime,
     plugin_fields: crate::plugin_runtime::ModelFields,
-    registered_model_field_names: Vec<(crate::store::schema::EntityRole, Vec<String>)>,
     database_hooks: Vec<Arc<dyn crate::store::database_hooks::DatabaseHooks<S>>>,
     runtime: crate::plugin_runtime::PluginRuntime<S>,
     pub extensions: crate::RuntimeExtensions,
@@ -425,7 +424,6 @@ impl<S: AuthSchema> AuthInitContext<S> {
         Self {
             request_runtime: Default::default(),
             plugin_fields: Default::default(),
-            registered_model_field_names: Vec::new(),
             database_hooks: Vec::new(),
             runtime: Default::default(),
             extensions: crate::RuntimeExtensions::default(),
@@ -451,16 +449,8 @@ impl<S: AuthSchema> AuthInitContext<S> {
 
     /// Register user schema fields in plugin registration order.
     pub fn register_user_fields(&mut self, fields: crate::user_fields::UserConfig) {
-        let names = fields
-            .additional_fields
-            .as_ref()
-            .map(|fields| fields.keys().cloned().collect());
         self.plugin_fields
             .extend(crate::store::schema::EntityRole::User, fields);
-        if let Some(names) = names {
-            self.registered_model_field_names
-                .push((crate::store::schema::EntityRole::User, names));
-        }
     }
 
     /// Register one plugin's native User declarations at its initialization position.
@@ -506,14 +496,7 @@ impl<S: AuthSchema> AuthInitContext<S> {
         role: crate::store::schema::EntityRole,
         fields: crate::user_fields::UserConfig,
     ) -> AuthResult<()> {
-        let names = fields
-            .additional_fields
-            .as_ref()
-            .map(|fields| fields.keys().cloned().collect());
         self.plugin_fields.register(role, fields);
-        if let Some(names) = names {
-            self.registered_model_field_names.push((role, names));
-        }
         Ok(())
     }
 
@@ -546,12 +529,10 @@ impl<S: AuthSchema> AuthInitContext<S> {
     }
 
     /// Take successful declarations after one plugin initializes, before the next plugin runs.
-    /// Each role group retains explicit empty declarations and its field insertion order.
+    /// Each model retains explicit empty declarations and its field insertion order.
     #[doc(hidden)]
-    pub fn take_registered_model_field_names(
-        &mut self,
-    ) -> Vec<(crate::store::schema::EntityRole, Vec<String>)> {
-        std::mem::take(&mut self.registered_model_field_names)
+    pub fn take_registered_model_field_names(&mut self) -> AuthResult<Vec<(String, Vec<String>)>> {
+        self.plugin_fields.take_registered_declarations()
     }
 
     /// Register enabled Organization schemas at their positions in plugin initialization.

@@ -11,9 +11,7 @@ use better_auth_core::{
     store::{ResolvedJoin, TeamDetails, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{
-    Condition, ConnectionTrait, DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect,
-};
+use sea_orm::{Condition, ConnectionTrait, DbBackend, EntityName, QueryFilter, QuerySelect};
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -54,7 +52,9 @@ where
         include_members: bool,
     ) -> AuthResult<Option<TeamDetails>> {
         let backend = conn.get_database_backend();
-        let parent = Entity::<O::Team>::find().filter(condition).limit(1);
+        let parent = super::plugin_rows::select_all::<Entity<O::Team>>()
+            .filter(condition)
+            .limit(1);
         let team_fields = self.organization_query_schema(EntityRole::Team)?;
         let member_fields = self
             .model_fields
@@ -192,7 +192,7 @@ where
         if value.is_null() || value.is_undefined() {
             return Ok(Vec::new());
         }
-        let query = Entity::<O::TeamMember>::find().filter(
+        let query = super::plugin_rows::select_all::<Entity<O::TeamMember>>().filter(
             self.organization_field_equals::<O::TeamMember>(
                 EntityRole::TeamMember,
                 &relation.to,

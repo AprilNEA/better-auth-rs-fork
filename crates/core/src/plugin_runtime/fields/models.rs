@@ -108,11 +108,49 @@ impl ModelFields {
         let _ = self
             .declarations
             .insert(ModelDeclaration::Custom(name.clone()), Some(physical_name));
+        self.registered_declarations.push((
+            ModelDeclaration::Custom(name.clone()),
+            fields.fields().keys().cloned().collect(),
+        ));
         let declaration = self.custom_models.entry(name).or_default();
         if let Some(fields) = fields.additional_fields {
             declaration.fields_mut().extend(fields);
         }
         Ok(())
+    }
+
+    /// Read complete final declarations without applying runtime ID replacements.
+    pub(crate) fn declared_models(&self) -> AuthResult<indexmap::IndexMap<String, UserConfig>> {
+        self.declarations
+            .keys()
+            .map(|declaration| match declaration {
+                ModelDeclaration::Native(role) => Ok((
+                    Self::native_model_name(*role)?.to_owned(),
+                    self.fields(*role).clone(),
+                )),
+                ModelDeclaration::Custom(name) => Ok((
+                    name.clone(),
+                    self.custom_models.get(name).cloned().ok_or_else(|| {
+                        AuthError::internal(format!("Custom model {name} has no field declaration"))
+                    })?,
+                )),
+            })
+            .collect()
+    }
+
+    pub(crate) fn take_registered_declarations(
+        &mut self,
+    ) -> AuthResult<Vec<(String, Vec<String>)>> {
+        std::mem::take(&mut self.registered_declarations)
+            .into_iter()
+            .map(|(declaration, fields)| {
+                let name = match declaration {
+                    ModelDeclaration::Native(role) => Self::native_model_name(role)?.to_owned(),
+                    ModelDeclaration::Custom(name) => name,
+                };
+                Ok((name, fields))
+            })
+            .collect()
     }
 
     /// Read custom logical names, physical names, and merged field policies in declaration order.

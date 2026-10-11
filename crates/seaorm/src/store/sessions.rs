@@ -139,7 +139,7 @@ where
         token: &better_auth_core::FieldValue,
     ) -> AuthResult<Option<better_auth_core::wire::SessionView>> {
         let db = self.connection();
-        let query = <S::Session as SeaOrmSessionModel>::Entity::find()
+        let query = super::plugin_rows::select_all::<<S::Session as SeaOrmSessionModel>::Entity>()
             .filter(self.session_token_filter(token, db.get_database_backend())?)
             .filter(
                 Condition::all()
@@ -179,7 +179,7 @@ where
             &self.model_fields,
             super::model_names::table_matches::<S, O, P>,
         )?;
-        let parent = <S::Session as SeaOrmSessionModel>::Entity::find()
+        let parent = super::plugin_rows::select_all::<<S::Session as SeaOrmSessionModel>::Entity>()
             .filter(filter)
             .filter(
                 Condition::all()
@@ -265,12 +265,13 @@ where
             <S::Session as SeaOrmSessionModel>::Entity,
             _,
         >(self.config(), "findMany", async {
-            let parent = <S::Session as SeaOrmSessionModel>::Entity::find()
-                .filter(condition)
-                .limit(super::pagination::default_limit(
-                    self.config(),
-                    self.connection().get_database_backend(),
-                )?);
+            let parent =
+                super::plugin_rows::select_all::<<S::Session as SeaOrmSessionModel>::Entity>()
+                    .filter(condition)
+                    .limit(super::pagination::default_limit(
+                        self.config(),
+                        self.connection().get_database_backend(),
+                    )?);
             if self.config().advanced.database.joins == Some(true) {
                 self.model_fields
                     .canonicalize_id(better_auth_core::store::schema::EntityRole::User)?;
@@ -363,7 +364,7 @@ where
             async {
                 super::plugin_rows::all(
                     self.connection(),
-                    <S::Session as SeaOrmSessionModel>::Entity::find()
+                    super::plugin_rows::select_all::<<S::Session as SeaOrmSessionModel>::Entity>()
                         .filter(condition)
                         .filter(
                             Condition::all().add_option(
@@ -448,7 +449,7 @@ where
                 "findMany",
                 super::plugin_rows::all(
                     db,
-                    <S::Session as SeaOrmSessionModel>::Entity::find()
+                    super::plugin_rows::select_all::<<S::Session as SeaOrmSessionModel>::Entity>()
                         .filter(filter)
                         .limit(1),
                 ),

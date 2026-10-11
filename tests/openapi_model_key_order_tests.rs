@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use better_auth::{BetterAuth, plugins::OpenApiPlugin};
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, OpenApiPluginMetadata, RateLimitConfig,
+    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
+    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
     user_fields::{UserConfig, UserFieldConfig},
 };
 use serde_json::{Value, json};
@@ -19,9 +19,7 @@ impl<S: AuthSchema> AuthPlugin<S> for ExplicitModels {
         Vec::new()
     }
 
-    fn openapi(&self) -> AuthResult<OpenApiPluginMetadata> {
-        let mut metadata =
-            OpenApiPluginMetadata::from_routes("ordinary-model-key-order", Vec::new())?;
+    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
         for name in ["tail", "10", "2", "01", "4294967294", "4294967295"] {
             let fields = UserConfig {
                 additional_fields: Some(
@@ -36,9 +34,9 @@ impl<S: AuthSchema> AuthPlugin<S> for ExplicitModels {
                     .into(),
                 ),
             };
-            metadata = metadata.model(name, &fields)?;
+            context.register_custom_model(name, None, fields)?;
         }
-        Ok(metadata)
+        Ok(())
     }
 
     async fn on_request(

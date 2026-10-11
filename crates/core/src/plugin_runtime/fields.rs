@@ -22,6 +22,7 @@ pub struct ModelFields {
     models: IndexMap<EntityRole, UserConfig>,
     schema_models: Option<Vec<(EntityRole, &'static str)>>,
     declarations: IndexMap<ModelDeclaration, Option<String>>,
+    registered_declarations: Vec<(ModelDeclaration, Vec<String>)>,
     custom_models: IndexMap<String, UserConfig>,
     user_plugin_fields: Vec<&'static str>,
     session_plugin_fields: Vec<&'static str>,
@@ -191,6 +192,10 @@ impl ModelFields {
             .declarations
             .entry(ModelDeclaration::Native(role))
             .or_default();
+        self.registered_declarations.push((
+            ModelDeclaration::Native(role),
+            fields.fields().keys().cloned().collect(),
+        ));
         if let Some(fields) = fields.additional_fields {
             self.models
                 .entry(role)
@@ -224,14 +229,9 @@ impl ModelFields {
     }
 
     fn declare_native_fields(&mut self, role: EntityRole, fields: UserConfig) {
-        let _ = self
-            .declarations
-            .insert(ModelDeclaration::Native(role), None);
-        let registered = self.models.entry(role).or_default().fields_mut();
-        for (name, declaration) in Self::plugin_native_fields(role).fields() {
-            let _ = registered.insert(name.clone(), declaration.clone());
-        }
-        self.extend(role, fields);
+        let mut declarations = Self::plugin_native_fields(role);
+        declarations.fields_mut().extend(fields.fields().clone());
+        self.register(role, declarations);
     }
 
     /// Resolve final Organization declarations once before adapter field reads and writes.
@@ -271,17 +271,6 @@ impl ModelFields {
     pub fn fields(&self, role: EntityRole) -> &UserConfig {
         static EMPTY: LazyLock<UserConfig> = LazyLock::new(UserConfig::default);
         self.models.get(&role).unwrap_or(&EMPTY)
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = (EntityRole, &UserConfig)> {
-        self.models.iter().map(|(role, fields)| (*role, fields))
-    }
-
-    pub(crate) fn organization_output_field_names(&self, policies: &UserConfig) -> Vec<String> {
-        let mut names: Vec<_> = policies.fields().keys().cloned().collect();
-        names.retain(|name| name != "id");
-        names.push("id".into());
-        names
     }
 
     /// Merge core policies and retain plugin-table policies for `RuntimeStore::with_runtime`.

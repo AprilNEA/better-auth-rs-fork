@@ -17,7 +17,7 @@ use better_auth_core::{
     },
     user_fields::UserConfig,
 };
-use sea_orm::{DbBackend, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{DbBackend, QueryFilter, QuerySelect};
 
 mod consumption;
 mod native;
@@ -97,7 +97,9 @@ where
                 .then(|| relation(EntityRole::Team, "team", default_limit))
                 .transpose()?,
         };
-        let query = Entity::<O::Organization>::find().filter(predicate).limit(1);
+        let query = super::plugin_rows::select_all::<Entity<O::Organization>>()
+            .filter(predicate)
+            .limit(1);
         let selected = if self.config().advanced.database.joins == Some(true) {
             self.select_native_organization_details(query, &relations)
                 .await?
@@ -246,7 +248,7 @@ where
             async {
                 let (column, value) =
                     self.resolve_organization_query_field::<M>(relation.role, bound)?;
-                let query = Entity::<M>::find()
+                let query = super::plugin_rows::select_all::<Entity<M>>()
                     .filter(super::value_filter::equals(column, &value, backend)?);
                 if relation.join.many {
                     let (limit, _) =

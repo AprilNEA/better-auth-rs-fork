@@ -4,7 +4,7 @@ use better_auth_core::{
     AuthResult, AuthSchema, FieldMap, FieldValue, SchemaValue, WalletAddress,
     store::{WalletStore, schema::EntityRole},
 };
-use sea_orm::{ConnectionTrait, EntityTrait, QueryFilter, QueryTrait};
+use sea_orm::{ConnectionTrait, QueryFilter, QueryTrait};
 
 #[async_trait]
 impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> WalletStore
@@ -137,7 +137,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                 self.bind_plugin_query_field(EntityRole::WalletAddress, "chainId", value.clone())
             })
             .transpose()?;
-        let query = Entity::<P::WalletAddress>::find().filter(
+        let query = super::plugin_rows::select_all::<Entity<P::WalletAddress>>().filter(
             self.resolve_plugin_equals::<P::WalletAddress>(EntityRole::WalletAddress, address)?,
         );
         let query = match chain_id {

@@ -8,7 +8,7 @@ use better_auth_core::{
     AuthError, AuthResult, FieldValue, TeamMember, entity::FromFieldMap, store::schema::EntityRole,
     user_fields::AdapterRecord,
 };
-use sea_orm::{ConnectionTrait, DbBackend, EntityTrait, QueryFilter};
+use sea_orm::{ConnectionTrait, DbBackend, QueryFilter};
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -55,7 +55,7 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
     ) -> AuthResult<Option<TeamMember>> {
         let row = plugin_rows::one(
             db,
-            Entity::<O::TeamMember>::find().filter(
+            super::plugin_rows::select_all::<Entity<O::TeamMember>>().filter(
                 self.organization_fields_equal::<O::TeamMember>(EntityRole::TeamMember, selectors)?,
             ),
         )

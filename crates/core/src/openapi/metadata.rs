@@ -1,7 +1,6 @@
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
 
-use crate::store::schema::EntityRole;
 use crate::{AuthError, AuthResult, AuthRoute, HttpMethod, user_fields::UserConfig};
 
 use super::{
@@ -17,7 +16,8 @@ pub struct OpenApiPluginMetadata {
     pub(super) id: String,
     pub(super) endpoints: Vec<Endpoint>,
     pub(super) models: IndexMap<String, ModelFields>,
-    pub(super) registered_field_names: Vec<(EntityRole, Vec<String>)>,
+    catalog_models: IndexMap<String, ModelFields>,
+    pub(super) registered_field_names: Vec<(String, Vec<String>)>,
 }
 
 impl OpenApiPluginMetadata {
@@ -143,7 +143,7 @@ impl OpenApiPluginMetadata {
             Some("organization-roles") => roles,
             _ => true,
         };
-        let models = catalog
+        let catalog_models = catalog
             .models(Some(id.as_str()))
             .iter()
             .filter(|model| enabled(model.condition.as_deref()))
@@ -162,15 +162,16 @@ impl OpenApiPluginMetadata {
         Ok(Self {
             id,
             endpoints,
-            models,
+            models: IndexMap::new(),
+            catalog_models,
             registered_field_names: Vec::new(),
         })
     }
 
     /// Attach successful declarations from this plugin's initialization without replacing policies.
-    /// Role groups preserve explicit empty models and model/field insertion order.
+    /// Model groups preserve explicit empty models and model/field insertion order.
     #[doc(hidden)]
-    pub fn registered_field_names(mut self, fields: Vec<(EntityRole, Vec<String>)>) -> Self {
+    pub fn registered_field_names(mut self, fields: Vec<(String, Vec<String>)>) -> Self {
         self.registered_field_names = fields;
         self
     }
@@ -189,6 +190,7 @@ impl OpenApiPluginMetadata {
 
     pub fn remove_model(mut self, name: &str) -> Self {
         let _ = self.models.shift_remove(name);
+        let _ = self.catalog_models.shift_remove(name);
         self
     }
 
@@ -196,18 +198,36 @@ impl OpenApiPluginMetadata {
         if let Some(fields) = self.models.get_mut(model) {
             let _ = fields.shift_remove(field);
         }
+        if let Some(fields) = self.catalog_models.get_mut(model) {
+            let _ = fields.shift_remove(field);
+        }
         self
     }
 
-    /// Change a configured builtin default without constructing a runtime value factory.
+    /// Add an explicit documentation default from an existing field or builtin descriptor.
+    /// Final registered policies still replace this metadata.
     pub fn model_default(mut self, model: &str, field: &str, value: Value) -> AuthResult<Self> {
-        let property = self
+        let mut metadata = self
             .models
-            .get_mut(model)
-            .and_then(|fields| fields.get_mut(field))
-            .and_then(|field| field.property.as_object_mut())
+            .get(model)
+            .and_then(|fields| fields.get(field))
+            .or_else(|| {
+                self.catalog_models
+                    .get(model)
+                    .and_then(|fields| fields.get(field))
+            })
+            .cloned()
+            .ok_or_else(|| AuthError::config(format!("OpenAPI field {model}.{field} is absent")))?;
+        let property = metadata
+            .property
+            .as_object_mut()
             .ok_or_else(|| AuthError::config(format!("OpenAPI field {model}.{field} is absent")))?;
         let _ = property.insert("default".into(), value);
+        let _ = self
+            .models
+            .entry(model.to_owned())
+            .or_default()
+            .insert(field.to_owned(), metadata);
         Ok(self)
     }
 

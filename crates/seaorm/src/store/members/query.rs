@@ -42,7 +42,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             EntityRole::Member,
             bound.organization,
         )?;
-        let query = Entity::<O::Member>::find().filter(value_filter::equals(
+        let query = plugin_rows::select_all::<Entity<O::Member>>().filter(value_filter::equals(
             column,
             &value,
             self.connection().get_database_backend(),

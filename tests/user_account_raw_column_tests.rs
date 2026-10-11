@@ -30,6 +30,9 @@ mod contract;
 #[path = "support/user_account_raw_server.rs"]
 mod server;
 
+#[path = "support/postgres_enum_record.rs"]
+mod postgres_enum;
+
 type Events = Arc<Mutex<Vec<Value>>>;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

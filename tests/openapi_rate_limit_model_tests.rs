@@ -1,9 +1,10 @@
 use async_trait::async_trait;
 use better_auth::{BetterAuth, plugins::OpenApiPlugin};
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, OpenApiPluginMetadata, RateLimitConfig,
+    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
+    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
     middleware::RateLimitStorageKind,
+    store::schema::EntityRole,
     user_fields::{UserConfig, UserFieldConfig},
 };
 use serde_json::{Value, json};
@@ -26,7 +27,7 @@ impl<S: AuthSchema> AuthPlugin<S> for RateLimitModel {
         Vec::new()
     }
 
-    fn openapi(&self) -> AuthResult<OpenApiPluginMetadata> {
+    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
         let ordinary = UserConfig {
             additional_fields: Some(
                 [(
@@ -67,10 +68,9 @@ impl<S: AuthSchema> AuthPlugin<S> for RateLimitModel {
                 .into(),
             ),
         };
-        OpenApiPluginMetadata::from_routes("ordinary-rate-limit-model", Vec::new())?
-            .model("beforeRateLimit", &ordinary)?
-            .model("rateLimit", &declared)?
-            .model("afterRateLimit", &ordinary)
+        context.register_custom_model("beforeRateLimit", None, ordinary.clone())?;
+        context.register_model_fields(EntityRole::RateLimit, declared)?;
+        context.register_custom_model("afterRateLimit", None, ordinary)
     }
 
     async fn on_request(
