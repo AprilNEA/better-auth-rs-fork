@@ -74,7 +74,8 @@ permissions:
 
 concurrency:
   # Batch selections can exceed GitHub's 400-character concurrency-group limit.
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}-${{ contains(inputs.profile, ',') && github.run_id || inputs.profile || 'all' }}
+  # Preserved runs from earlier commits must not block the current commit's checks.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.sha }}-${{ github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}-${{ contains(inputs.profile, ',') && github.run_id || inputs.profile || 'all' }}
   # A skipped push run must not cancel manual acceptance on the same branch.
   cancel-in-progress: false
 
