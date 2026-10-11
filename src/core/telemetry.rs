@@ -250,7 +250,10 @@ pub(super) fn init_payload<S: AuthSchema>(
     option(
         &mut rate_limit,
         "modelName",
-        options.rate_limit_model.and_then(|model| model.model_name),
+        options
+            .rate_limit
+            .and_then(|config| config.model_name.as_deref())
+            .or_else(|| options.rate_limit_model.and_then(|model| model.model_name)),
     )?;
     option(
         &mut rate_limit,

@@ -130,15 +130,30 @@ impl ModelFields {
 
     /// Install core persistence selection and the final database rate-limit declaration.
     pub fn set_schema_configuration(&mut self, config: &crate::store::schema::SchemaConfiguration) {
-        if config.database_rate_limit {
+        if config.rate_limit.storage == Some(crate::middleware::RateLimitStorageKind::Database) {
             // getAuthTables replaces the complete plugin model after plugin declarations merge.
-            let _ = self.models.insert(
-                EntityRole::RateLimit,
-                Self::plugin_native_fields(EntityRole::RateLimit),
-            );
+            let mut fields = Self::plugin_native_fields(EntityRole::RateLimit);
+            for (name, field) in fields.fields_mut() {
+                field.field_name = Some(
+                    crate::store::schema::resolve_field_name(
+                        config
+                            .rate_limit
+                            .fields
+                            .as_ref()
+                            .and_then(|fields| fields.get(name))
+                            .map(String::as_str),
+                        name,
+                    )
+                    .to_owned(),
+                );
+            }
+            let _ = self.models.insert(EntityRole::RateLimit, fields);
+            let model_name = config.rate_limit.model_name.as_deref().map(|name| {
+                crate::store::schema::resolve_field_name(Some(name), "rateLimit").to_owned()
+            });
             let _ = self
                 .declarations
-                .insert(ModelDeclaration::Native(EntityRole::RateLimit), None);
+                .insert(ModelDeclaration::Native(EntityRole::RateLimit), model_name);
         }
         self.schema_models = Some(config.core_models());
         self.user_plugin_fields =

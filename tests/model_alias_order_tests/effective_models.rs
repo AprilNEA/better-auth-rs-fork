@@ -43,7 +43,7 @@ fn finish(
         plugins,
         metadata: context.metadata.clone(),
         secondary_storage,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     };
     let mut fields = context.into_parts().plugin_fields;
     fields.set_schema_configuration(&settings);

@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 use crate::{AuthRecordFields, FieldMap, FieldValue as Value, FromFieldMap, SchemaField};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+#[cfg(test)]
 use indexmap::IndexMap;
 
 use crate::config::AuthConfig;
@@ -110,6 +111,7 @@ pub struct EphemeralStore {
     config: Arc<AuthConfig>,
     model_fields: crate::plugin_runtime::ModelFields,
     state: Arc<Mutex<State>>,
+    rate_limit_operations: Arc<tokio::sync::Mutex<()>>,
     verification_locks: Arc<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>>,
     device_code_transaction: Option<Arc<Mutex<device_codes::DeviceCodeTransaction>>>,
     session_config: crate::config::SessionConfig,
@@ -125,39 +127,6 @@ impl Default for EphemeralStore {
 }
 
 impl EphemeralStore {
-    fn generated_id(
-        &self,
-        model: &str,
-        supplied: Option<String>,
-        row_count: usize,
-    ) -> AuthResult<Option<String>> {
-        let policy = crate::id::AdapterIdInput {
-            force_allow_id: supplied.is_some(),
-            supports_native_uuid: false,
-        };
-        self.generated_id_with_policy(model, supplied, row_count, policy)
-    }
-
-    fn generated_id_with_policy(
-        &self,
-        model: &str,
-        supplied: Option<String>,
-        row_count: usize,
-        policy: crate::id::AdapterIdInput,
-    ) -> AuthResult<Option<String>> {
-        if matches!(
-            self.config.advanced.database.generate_id(),
-            crate::id::IdGeneration::Serial
-        ) {
-            return Ok(Some((row_count + 1).to_string()));
-        }
-        self.config
-            .advanced
-            .database
-            .generate_id()
-            .adapter_id_with_policy(model, supplied, policy)
-    }
-
     fn next_serial_id(&self, row_count: usize) -> Option<Value> {
         matches!(
             self.config.advanced.database.generate_id(),
@@ -173,6 +142,7 @@ impl EphemeralStore {
             session_config: config.session.clone(),
             config,
             state: Arc::default(),
+            rate_limit_operations: Arc::default(),
             verification_locks: Arc::default(),
             device_code_transaction: None,
             organization_fields: Arc::new(RwLock::new(

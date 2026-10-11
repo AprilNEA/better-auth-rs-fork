@@ -76,3 +76,44 @@ async fn sql_storage_reports_its_adapter_without_querying_a_schema() -> AuthResu
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn direct_rate_limit_options_preserve_the_captured_telemetry_projection() -> AuthResult<()> {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../fixtures/telemetry-rate-limit-model-1.7.6.json"
+    ))?;
+    let cases = fixture
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Expected RateLimit telemetry cases"))?;
+    for (name, case) in cases {
+        let (config, reports) = configuration();
+        let options = case
+            .get("options")
+            .and_then(|options| options.get("rateLimit"));
+        let rate_limit = RateLimitConfig {
+            storage: Some(RateLimitStorageKind::Database),
+            model_name: options
+                .and_then(|options| options.get("modelName"))
+                .and_then(Value::as_str)
+                .map(str::to_owned),
+            fields: options
+                .and_then(|options| options.get("fields"))
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()?,
+            ..Default::default()
+        };
+        let _auth = BetterAuth::new(config.clone())
+            .store(EphemeralStore::new(Arc::new(config)))
+            .rate_limit(rate_limit)
+            .build()
+            .await?;
+        let observed = reports.config()?;
+        assert_eq!(
+            observed.get("rateLimit"),
+            case.get("expected"),
+            "{name}: complete RateLimit telemetry"
+        );
+    }
+    Ok(())
+}

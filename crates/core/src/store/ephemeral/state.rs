@@ -19,7 +19,7 @@ pub(super) struct State {
     pub(super) device_codes: Rows<FieldMap>,
     pub(super) api_keys: Rows<FieldMap>,
     pub(super) passkeys: Rows<FieldMap>,
-    pub(super) rate_limits: IndexMap<String, crate::store::RateLimitRecord>,
+    pub(super) rate_limits: Rows<FieldMap>,
 }
 
 impl State {
@@ -42,14 +42,7 @@ impl State {
         cloned.sessions = self.sessions.deep_clone(&mut context)?;
         cloned.accounts = self.accounts.deep_clone(&mut context)?;
         cloned.verifications = self.verifications.deep_clone(&mut context)?;
-        cloned.rate_limits = self
-            .rate_limits
-            .iter()
-            .map(|(key, row)| {
-                row.structured_clone(&mut context)
-                    .map(|row| (key.clone(), row))
-            })
-            .collect::<AuthResult<_>>()?;
+        cloned.rate_limits = self.rate_limits.deep_clone(&mut context)?;
         Ok(cloned)
     }
 }

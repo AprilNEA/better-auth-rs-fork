@@ -153,7 +153,7 @@ async fn check(database: DatabaseConnection) -> TestResult {
         plugins: Vec::new(),
         metadata: Default::default(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     });
     let store = raw.with_runtime(config, Vec::new(), fields)?;
     let id = SchemaValue::<String>::from("mapping-row");

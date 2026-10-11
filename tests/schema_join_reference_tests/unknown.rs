@@ -40,7 +40,7 @@ fn configuration(config: AuthConfig, secondary_storage: bool) -> SchemaConfigura
         plugins: Vec::new(),
         metadata: Default::default(),
         secondary_storage,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     }
 }
 

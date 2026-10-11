@@ -155,7 +155,7 @@ The [device authorization plugin](docs/content/docs/plugins/device-authorization
 
 The [Admin plugin](docs/content/docs/plugins/admin.mdx) preserves a cancelled user update as a nullable response. Database-hook errors continue to propagate. User cache refresh errors use the instance logger and preserve the update result; see [commit ordering](docs/content/docs/concepts/hooks.mdx#provisioning-after-signup).
 
-[HTTP rate limits](docs/content/docs/reference/configuration-options.mdx#ratelimitconfig) support memory, database, secondary, and custom storage. Database selection restores the native RateLimit declarations after plugin registration; generated entity mappings still bind physical columns. Use `BetterAuth::call_endpoint` for trusted [native endpoint calls](docs/content/docs/concepts/plugins.mdx) with the registered plugin hooks.
+[HTTP rate limits](docs/content/docs/reference/configuration-options.mdx#ratelimitconfig) support memory, database, secondary, and custom storage. Database selection restores the native RateLimit declarations after plugin registration. `RateLimitConfig.model_name` and `fields` configure the final table alias and column mappings; SQL mappings must match the bound generated entity. Use `BetterAuth::call_endpoint` for trusted [native endpoint calls](docs/content/docs/concepts/plugins.mdx) with the registered plugin hooks.
 
 Passwords use Better Auth's scrypt format by default. The [password guide](docs/content/docs/authentication/email-password.mdx) explains explicit Argon2 migration. Add [HaveIBeenPwnedPlugin](docs/content/docs/plugins/have-i-been-pwned.mdx) to reject compromised passwords before hashing.
 

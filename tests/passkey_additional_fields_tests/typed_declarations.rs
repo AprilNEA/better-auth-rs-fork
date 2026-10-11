@@ -279,7 +279,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
         plugins: Vec::new(),
         metadata: Default::default(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     });
     let store = raw.with_runtime(config, Vec::new(), model_fields)?;
     let mut raw_observations = Vec::new();
@@ -525,7 +525,7 @@ async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_
             plugins: Vec::new(),
             metadata: Default::default(),
             secondary_storage: false,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         });
         let store = raw_store.with_runtime(config, Vec::new(), model_fields)?;
         for (stage, counter) in [("create", 1), ("auth", 2)] {

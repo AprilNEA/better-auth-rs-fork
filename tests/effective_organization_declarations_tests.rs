@@ -419,7 +419,7 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
             plugins: vec!["organization"],
             metadata: context.metadata.clone(),
             secondary_storage: false,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         };
         let mut fields = context.into_parts().plugin_fields;
         fields.set_schema_configuration(&settings);

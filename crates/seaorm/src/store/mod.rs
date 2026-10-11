@@ -206,39 +206,6 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         &self.config
     }
 
-    fn generated_id(&self, model: &str, supplied: Option<String>) -> AuthResult<Option<String>> {
-        let policy = better_auth_core::id::AdapterIdInput {
-            force_allow_id: supplied.is_some(),
-            supports_native_uuid: self.db.get_database_backend() == sea_orm::DbBackend::Postgres,
-        };
-        self.generated_id_with_policy(model, supplied, policy)
-    }
-
-    fn generated_id_with_policy(
-        &self,
-        model: &str,
-        supplied: Option<String>,
-        policy: better_auth_core::id::AdapterIdInput,
-    ) -> AuthResult<Option<String>> {
-        self.config
-            .advanced
-            .database
-            .generate_id()
-            .adapter_id_with_policy(model, supplied, policy)
-    }
-
-    fn create_fields(
-        &self,
-        model: &str,
-        supplied: Option<String>,
-        mut fields: better_auth_core::FieldMap,
-    ) -> AuthResult<better_auth_core::FieldMap> {
-        if let Some(id) = self.generated_id(model, supplied)? {
-            let _ = fields.insert("id".into(), better_auth_core::FieldValue::String(id));
-        }
-        Ok(fields)
-    }
-
     fn readback_scope(
         &self,
         tx: Option<HookTransaction<'_, S>>,

@@ -563,15 +563,23 @@ async fn serial_rate_limit_consumption_keeps_numeric_ids_and_reuses_existing_rec
             .allowed
     );
     let state = store.lock()?;
-    let first = required(state.rate_limits.get("first"))?;
-    let second = required(state.rate_limits.get("second"))?;
+    let first = required(
+        state
+            .rate_limits
+            .find(|row| row.get("key") == Some(&"first".into()))?,
+    )?;
+    let second = required(
+        state
+            .rate_limits
+            .find(|row| row.get("key") == Some(&"second".into()))?,
+    )?;
     assert_eq!(
-        (first.id.field_value(), first.count),
-        (Value::Number(1.0), 2.0)
+        (first.get("id"), first.get("count")),
+        (Some(&Value::Number(1.0)), Some(&Value::Number(2.0)))
     );
     assert_eq!(
-        (second.id.field_value(), second.count),
-        (Value::Number(2.0), 1.0)
+        (second.get("id"), second.get("count")),
+        (Some(&Value::Number(2.0)), Some(&Value::Number(1.0)))
     );
     assert_eq!(state.rate_limits.len(), 2);
     Ok(())

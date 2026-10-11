@@ -144,7 +144,7 @@ pub(crate) mod test_helpers {
             plugins: plugins.iter().map(|plugin| plugin.name()).collect(),
             metadata: parts.metadata.clone(),
             secondary_storage: parts.secondary_storage.is_some(),
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         });
         let database = database.with_runtime(adapter, parts.database_hooks.clone(), fields)?;
         parts

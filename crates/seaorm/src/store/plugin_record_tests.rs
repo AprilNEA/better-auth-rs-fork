@@ -164,7 +164,7 @@ async fn api_key_and_passkey_preflight_accepts_merged_columns_and_rejects_missin
         plugins: Vec::new(),
         metadata: Default::default(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     };
     store.model_fields.set_schema_configuration(&settings);
     let check = store
@@ -244,7 +244,7 @@ async fn passkey_and_two_factor_preflight_keep_undeclared_legacy_envelope_column
         plugins: vec!["passkey", "two-factor"],
         metadata: Default::default(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     };
     store.model_fields.set_schema_configuration(&settings);
     let check = store

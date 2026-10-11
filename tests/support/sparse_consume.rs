@@ -20,7 +20,9 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
+#[path = "sparse_consume/device.rs"]
 mod device;
+#[path = "sparse_consume/verification.rs"]
 mod verification;
 
 type Events = Arc<Mutex<Vec<(&'static str, FieldValue)>>>;

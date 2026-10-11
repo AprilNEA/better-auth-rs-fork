@@ -169,6 +169,8 @@ Ordinary sign-in preserves stored scopes. With `update_account_on_sign_in: Some(
 
 Configure HTTP rate limits with `BetterAuth::rate_limit`. `RateLimitConfig.window`, `max_requests`, and `enabled` use `Option` to retain omission. These fields replace the previous materialized `default` rule. Direct assignments use `Some(value)`; `.default_limit(duration, max)` and `.enabled(bool)` keep their scalar arguments. `default_rule()` returns the concrete `EndpointRateLimit` used at runtime. Omitted, zero, or NaN window and maximum values resolve to 10 seconds and 100 requests. Native endpoint calls do not consume HTTP rate limits.
 
+`RateLimitConfig.model_name` and `fields` retain the upstream `modelName` and `fields` options. With database storage, `fields` maps `key`, `count`, and `lastRequest` to physical columns. Empty names resolve to native names; omitted mappings use the bound entity mappings in SQL. The final native declarations replace plugin fields, defaults, transforms, references, and aliases without changing field order. Extra mapping keys do not add declarations. SQL uses the compiled entity table, so configure matching generated entities when setting `model_name` or `fields`. These options do not rename an existing table or validate a runtime table-name mismatch.
+
 When `enabled` is omitted, the middleware reads `NODE_ENV` once at initialization and enables limits only for `production`. Set the environment before building auth. Explicit true and false override the environment. Upstream captures its production flag at JavaScript module import; changing environment values between import, configuration creation, and initialization is outside the matched timing contract.
 
 ```rust

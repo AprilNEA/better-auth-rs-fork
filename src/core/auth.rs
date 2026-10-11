@@ -252,8 +252,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
             plugins: self.plugins.iter().map(|plugin| plugin.name()).collect(),
             metadata: init_parts.metadata.clone(),
             secondary_storage: init_parts.secondary_storage.is_some(),
-            database_rate_limit: rate_limit_config.storage
-                == Some(better_auth_core::middleware::RateLimitStorageKind::Database),
+            rate_limit: rate_limit_config.clone(),
         };
         model_fields.set_schema_configuration(&schema_configuration);
         let openapi_fields = model_fields.clone();

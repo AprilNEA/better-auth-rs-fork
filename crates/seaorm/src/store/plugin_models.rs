@@ -169,33 +169,6 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
     }
 }
 
-pub(super) fn apply<M: SeaOrmPluginModel>(
-    active: &mut Write<M>,
-    mut fields: FieldMap,
-    policy: &IdGeneration,
-) -> AuthResult<()> {
-    crate::reference_id::prepare_core_fields(
-        &mut fields,
-        policy,
-        None,
-        M::column,
-        M::is_id_reference,
-    )?;
-    for (name, value) in fields {
-        active.native_field(M::column(&name)?, value);
-    }
-    Ok(())
-}
-
-pub(super) fn active<M: SeaOrmPluginModel>(
-    fields: FieldMap,
-    policy: &IdGeneration,
-) -> AuthResult<Write<M>> {
-    let mut active = Write::<M>::default();
-    apply::<M>(&mut active, fields, policy)?;
-    Ok(active)
-}
-
 fn additional_field_input<M: SeaOrmPluginModel>(
     name: &str,
     field: &better_auth_core::user_fields::UserFieldConfig,

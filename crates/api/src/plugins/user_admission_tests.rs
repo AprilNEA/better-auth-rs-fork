@@ -736,7 +736,7 @@ async fn signup_preserves_native_phone_fields_from_enabled_plugin_declarations()
         plugins: vec!["phone-number", "anonymous"],
         metadata: parts.metadata.clone(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     });
     let trace = Arc::new(SignupTrace {
         mode: "native-phone",

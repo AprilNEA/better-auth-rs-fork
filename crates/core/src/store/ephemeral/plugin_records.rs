@@ -14,6 +14,7 @@ impl State {
             EntityRole::TwoFactor => Ok(&self.two_factors),
             EntityRole::Jwk => Ok(&self.jwks),
             EntityRole::WalletAddress => Ok(&self.wallets),
+            EntityRole::RateLimit => Ok(&self.rate_limits),
             _ => Err(AuthError::config(format!(
                 "Plugin record storage is not implemented for {role:?}"
             ))),
@@ -28,6 +29,7 @@ impl State {
             EntityRole::TwoFactor => Ok(&mut self.two_factors),
             EntityRole::Jwk => Ok(&mut self.jwks),
             EntityRole::WalletAddress => Ok(&mut self.wallets),
+            EntityRole::RateLimit => Ok(&mut self.rate_limits),
             _ => Err(AuthError::config(format!(
                 "Plugin record storage is not implemented for {role:?}"
             ))),
@@ -43,6 +45,7 @@ fn model(role: EntityRole) -> AuthResult<&'static str> {
         EntityRole::TwoFactor => Ok("twoFactor"),
         EntityRole::Jwk => Ok("jwks"),
         EntityRole::WalletAddress => Ok("walletAddress"),
+        EntityRole::RateLimit => Ok("rateLimit"),
         _ => Err(AuthError::config(format!(
             "Plugin record storage is not implemented for {role:?}"
         ))),
@@ -266,11 +269,6 @@ impl EphemeralStore {
             EntityRole::Team => state.teams.snapshot(),
             EntityRole::TeamMember => state.team_members.snapshot(),
             EntityRole::OrganizationRole => state.organization_roles.snapshot(),
-            EntityRole::RateLimit => state
-                .rate_limits
-                .values()
-                .map(AuthRecordFields::field_values)
-                .collect(),
             _ => state.plugin_rows(role)?.snapshot(),
         }
     }

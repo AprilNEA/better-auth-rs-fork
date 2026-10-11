@@ -18,7 +18,7 @@ pub struct SchemaConfiguration {
     pub plugins: Vec<&'static str>,
     pub metadata: MetadataMap,
     pub secondary_storage: bool,
-    pub database_rate_limit: bool,
+    pub rate_limit: crate::middleware::RateLimitConfig,
 }
 
 impl SchemaConfiguration {

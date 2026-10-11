@@ -115,6 +115,10 @@ pub struct RateLimitConfig {
     pub max_requests: Option<f64>,
     pub custom_rules: IndexMap<String, CustomRateLimitRule>,
     pub enabled: Option<bool>,
+    /// Adapter model name for database counters. Empty names use `rateLimit`.
+    pub model_name: Option<String>,
+    /// Physical names for native counter fields, keyed by their logical names.
+    pub fields: Option<IndexMap<String, String>>,
     /// Omission selects secondary storage when configured, otherwise process memory.
     pub storage: Option<RateLimitStorageKind>,
     /// Custom storage takes precedence over the selected built-in backend.
@@ -129,6 +133,8 @@ impl std::fmt::Debug for RateLimitConfig {
             .field("max_requests", &self.max_requests)
             .field("custom_rules", &self.custom_rules)
             .field("enabled", &self.enabled)
+            .field("model_name", &self.model_name)
+            .field("fields", &self.fields)
             .field("storage", &self.storage)
             .field(
                 "custom_storage",

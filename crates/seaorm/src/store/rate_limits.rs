@@ -1,15 +1,15 @@
 use async_trait::async_trait;
 use better_auth_core::middleware::{EndpointRateLimit, RateLimitDecision};
-use better_auth_core::store::{RateLimitRecord, RateLimitStore};
-use better_auth_core::{AuthResult, AuthSchema};
-use better_auth_core::{FieldMap, SchemaField};
+use better_auth_core::query::{field_add, field_number};
+use better_auth_core::store::{RateLimitStore, schema::EntityRole};
+use better_auth_core::{AuthResult, AuthSchema, FieldMap};
 use chrono::Utc;
-use sea_orm::sea_query::{Expr, ExprTrait};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::sea_query::{BinOper, Expr, ExprTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait};
 
 use super::plugin_models::Entity;
-use super::{SeaOrmStore, entities::rate_limit, map_db_err};
-use crate::{SeaOrmOrganizationSchema, SeaOrmPluginModel, SeaOrmPluginSchema};
+use super::{SeaOrmStore, entities::rate_limit, instrumentation::database_operation, map_db_err};
+use crate::{SeaOrmOrganizationSchema, SeaOrmPluginSchema};
 
 pub(super) struct RateLimitCounters;
 
@@ -43,19 +43,47 @@ impl sea_orm_migration::MigrationTrait for RateLimitCounters {
 }
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P> {
-    async fn rate_limit_record(&self, key: &str) -> AuthResult<Option<RateLimitRecord>> {
-        Entity::<P::RateLimit>::find()
-            .filter(super::value_filter::equals(
-                P::RateLimit::column("key")?,
-                &key.into(),
-                self.connection().get_database_backend(),
-            )?)
-            .one(self.connection())
-            .await
-            .map_err(map_db_err)?
-            .as_ref()
-            .map(SeaOrmPluginModel::record)
-            .transpose()
+    async fn rate_limit_record(&self, key: &str) -> AuthResult<Option<FieldMap>> {
+        let filter =
+            self.plugin_equals::<P::RateLimit>(EntityRole::RateLimit, "key", key.into())?;
+        let rows =
+            database_operation::<Entity<P::RateLimit>, _>(self.config(), "findMany", async {
+                self.connection()
+                    .query_all_raw(
+                        super::plugin_rows::select_all::<Entity<P::RateLimit>>()
+                            .filter(filter)
+                            .limit(super::pagination::default_limit(
+                                self.config(),
+                                self.connection().get_database_backend(),
+                            )?)
+                            .build(self.connection().get_database_backend()),
+                    )
+                    .await
+                    .map_err(map_db_err)
+            })
+            .await?;
+        Ok(self
+            .project_plugin_rows::<P::RateLimit, FieldMap>(EntityRole::RateLimit, &rows)
+            .await?
+            .into_iter()
+            .next())
+    }
+
+    async fn prune_rate_limits(&self, now: i64, cleanup_window: f64) -> AuthResult<()> {
+        let (last_request, cutoff) = self.plugin_query_parameter::<P::RateLimit>(
+            EntityRole::RateLimit,
+            "lastRequest",
+            (now as f64 - cleanup_window * 1000.0).into(),
+        )?;
+        database_operation::<Entity<P::RateLimit>, _>(self.config(), "deleteMany", async {
+            let _ = Entity::<P::RateLimit>::delete_many()
+                .filter(last_request.into_expr().lt(last_request.save_as(cutoff)))
+                .exec(self.connection())
+                .await
+                .map_err(map_db_err)?;
+            Ok(())
+        })
+        .await
     }
 }
 
@@ -74,30 +102,19 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> RateLimi
             let row = self.rate_limit_record(key).await?;
             let now = Utc::now().timestamp_millis();
             let Some(row) = row else {
-                let insert = super::plugin_models::active::<P::RateLimit>(
-                    self.create_fields(
+                let insert = self
+                    .create_plugin_record::<P::RateLimit>(
+                        self.connection(),
+                        super::create_readback::ReadbackScope::Direct(self.connection()),
+                        EntityRole::RateLimit,
                         "rateLimit",
-                        None,
                         FieldMap::from_iter([
-                            ("key".to_owned(), key.to_owned().into_field()),
-                            ("count".to_owned(), (1).into_field()),
-                            ("last_request".to_owned(), (now).into_field()),
+                            ("key".to_owned(), key.into()),
+                            ("count".to_owned(), 1.into()),
+                            ("lastRequest".to_owned(), now.into()),
                         ]),
-                    )?,
-                    self.config().advanced.database.generate_id(),
-                )?
-                .insert(
-                    self.connection(),
-                    super::create_readback::CreateReadback {
-                        schema: &self
-                            .model_fields
-                            .plugin_fields(better_auth_core::store::schema::EntityRole::RateLimit),
-                        policy: self.config().advanced.database.generate_id(),
-                        scope: super::create_readback::ReadbackScope::Direct(self.connection()),
-                        column: P::RateLimit::column,
-                    },
-                )
-                .await;
+                    )
+                    .await;
                 if let Err(error) = insert {
                     // Upstream retries a competing creation only when the key now exists.
                     if self.rate_limit_record(key).await?.is_none() {
@@ -110,80 +127,126 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> RateLimi
                     retry_after: None,
                 });
             };
-            if now as f64 - row.last_request as f64 >= window {
-                let result = Entity::<P::RateLimit>::update_many()
-                    .col_expr(P::RateLimit::column("count")?, Expr::value(1))
-                    .col_expr(P::RateLimit::column("last_request")?, Expr::value(now))
-                    .filter(super::value_filter::equals(
-                        P::RateLimit::column("key")?,
-                        &key.into(),
-                        self.connection().get_database_backend(),
-                    )?)
-                    .filter(P::RateLimit::column("last_request")?.lte(row.last_request))
-                    .exec(self.connection())
-                    .await
-                    .map_err(map_db_err)?;
-                if result.rows_affected == 0 {
-                    continue;
-                }
-                let connection = self.connection().clone();
-                // Only pruning failures use this catch. Counter writes already committed.
-                better_auth_core::background::run_or_await_with_error_message(
-                    Some(Box::pin(async move {
-                        let _ = Entity::<P::RateLimit>::delete_many()
-                            .filter(
-                                P::RateLimit::column("last_request")?
-                                    .lt(now as f64 - cleanup_window * 1000.0),
-                            )
-                            .exec(&connection)
-                            .await
-                            .map_err(map_db_err)?;
-                        Ok(())
-                    })),
-                    self.config.advanced.background_tasks.as_ref(),
-                    &self.config.logger,
-                    "Error pruning rate limit rows",
+            let previous = row.get("lastRequest").cloned().unwrap_or_default();
+            let reset = now as f64 - field_number(&previous)? >= window;
+            let by_key = self.bind_plugin_query_field(EntityRole::RateLimit, "key", key.into())?;
+            let previous = self.bind_plugin_query_field(
+                EntityRole::RateLimit,
+                "lastRequest",
+                if reset {
+                    previous
+                } else {
+                    (now as f64 - window).into()
+                },
+            )?;
+            let maximum = if reset {
+                None
+            } else {
+                Some(self.bind_plugin_query_field(
+                    EntityRole::RateLimit,
+                    "count",
+                    rule.max_requests.into(),
+                )?)
+            };
+            let increment = if reset {
+                None
+            } else {
+                Some(self.plugin_column::<P::RateLimit>(EntityRole::RateLimit, "count")?)
+            };
+            let mut set = FieldMap::new();
+            if reset {
+                let _ = set.insert("count".to_owned(), 1.into());
+            }
+            let _ = set.insert("lastRequest".to_owned(), now.into());
+            let mut fields = self
+                .prepare_plugin_fields::<P::RateLimit>(
+                    EntityRole::RateLimit,
+                    "rateLimit",
+                    set,
+                    false,
                 )
-                .await;
+                .await?;
+            let reselect =
+                self.resolve_plugin_equals::<P::RateLimit>(EntityRole::RateLimit, by_key)?;
+            let (last_request, previous) = self
+                .resolve_plugin_query_parameter::<P::RateLimit>(EntityRole::RateLimit, previous)?;
+            let mut guard = reselect.clone().and(last_request.into_expr().binary(
+                if reset {
+                    BinOper::SmallerThanOrEqual
+                } else {
+                    BinOper::GreaterThan
+                },
+                last_request.save_as(previous),
+            ));
+            if let Some(maximum) = maximum {
+                let (count, maximum) = self.resolve_plugin_query_parameter::<P::RateLimit>(
+                    EntityRole::RateLimit,
+                    maximum,
+                )?;
+                guard = guard.and(count.into_expr().lt(count.save_as(maximum)));
+            }
+            if let Some(count) = increment {
+                // Kysely replaces a colliding set assignment after applying all input policies.
+                fields.not_set(count);
+            }
+            let mut query = fields.update(self.connection().get_database_backend())?;
+            if let Some(count) = increment {
+                query = query.col_expr(count, Expr::col(count).add(1));
+            }
+            let row = database_operation::<Entity<P::RateLimit>, _>(
+                self.config(),
+                "incrementOne",
+                async {
+                    super::updates::increment_returning_raw::<Entity<P::RateLimit>>(
+                        self.connection(),
+                        query.filter(guard.clone()),
+                        guard,
+                        reselect,
+                    )
+                    .await
+                },
+            )
+            .await?;
+            let updated = self
+                .project_plugin_rows::<P::RateLimit, FieldMap>(
+                    EntityRole::RateLimit,
+                    row.as_slice(),
+                )
+                .await?;
+            if !updated.is_empty() {
+                if reset {
+                    let store = self.clone();
+                    // Only pruning failures use this catch. Counter writes already committed.
+                    better_auth_core::background::run_or_await_with_error_message(
+                        Some(Box::pin(async move {
+                            store.prune_rate_limits(now, cleanup_window).await
+                        })),
+                        self.config.advanced.background_tasks.as_ref(),
+                        &self.config.logger,
+                        "Error pruning rate limit rows",
+                    )
+                    .await;
+                }
                 return Ok(RateLimitDecision {
                     allowed: true,
                     retry_after: None,
                 });
             }
-            let result = Entity::<P::RateLimit>::update_many()
-                .col_expr(
-                    P::RateLimit::column("count")?,
-                    Expr::col(P::RateLimit::column("count")?).add(1),
-                )
-                .col_expr(P::RateLimit::column("last_request")?, Expr::value(now))
-                .filter(super::value_filter::equals(
-                    P::RateLimit::column("key")?,
-                    &key.into(),
-                    self.connection().get_database_backend(),
-                )?)
-                .filter(P::RateLimit::column("last_request")?.gt(now as f64 - window))
-                .filter(P::RateLimit::column("count")?.lt(rule.max_requests))
-                .exec(self.connection())
-                .await
-                .map_err(map_db_err)?;
-            if result.rows_affected != 0 {
-                return Ok(RateLimitDecision {
-                    allowed: true,
-                    retry_after: None,
-                });
+            if reset {
+                continue;
             }
             let Some(fresh) = self.rate_limit_record(key).await? else {
                 continue;
             };
-            if now as f64 - fresh.last_request as f64 >= window {
+            let last_request = fresh.get("lastRequest").cloned().unwrap_or_default();
+            if now as f64 - field_number(&last_request)? >= window {
                 continue;
             }
+            let expires = field_number(&field_add(&last_request, &window.into())?)?;
             return Ok(RateLimitDecision {
                 allowed: false,
                 retry_after: Some(
-                    ((fresh.last_request as f64 + window - Utc::now().timestamp_millis() as f64)
-                        / 1000.0)
-                        .ceil(),
+                    ((expires - Utc::now().timestamp_millis() as f64) / 1000.0).ceil(),
                 ),
             });
         }

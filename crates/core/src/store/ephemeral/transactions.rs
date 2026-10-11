@@ -328,28 +328,6 @@ impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
     }
 }
 
-fn merge_map<T: Clone + crate::AuthRecordFields>(
-    live: &mut IndexMap<String, T>,
-    base: &IndexMap<String, T>,
-    working: IndexMap<String, T>,
-) -> AuthResult<()> {
-    live.retain(|id, _| !base.contains_key(id) || working.contains_key(id));
-    for (id, row) in live.iter_mut() {
-        if let Some(changed) = working.get(id)
-            && base.get(id).map(super::rows::row_json).transpose()?
-                != Some(super::rows::row_json(changed)?)
-        {
-            row.clone_from(changed);
-        }
-    }
-    for (id, row) in working {
-        if !base.contains_key(&id) && !live.contains_key(&id) {
-            let _ = live.insert(id, row);
-        }
-    }
-    Ok(())
-}
-
 impl State {
     fn merge(&mut self, base: &Self, working: Self) -> AuthResult<()> {
         self.users.merge(&base.users, working.users)?;
@@ -371,11 +349,8 @@ impl State {
             .merge(&base.device_codes, working.device_codes)?;
         self.api_keys.merge(&base.api_keys, working.api_keys)?;
         self.passkeys.merge(&base.passkeys, working.passkeys)?;
-        merge_map(
-            &mut self.rate_limits,
-            &base.rate_limits,
-            working.rate_limits,
-        )?;
+        self.rate_limits
+            .merge(&base.rate_limits, working.rate_limits)?;
         self.team_members
             .merge(&base.team_members, working.team_members)?;
         self.jwks.merge(&base.jwks, working.jwks)?;
@@ -401,6 +376,7 @@ impl EphemeralStore {
             config: self.config.clone(),
             model_fields: self.model_fields.clone(),
             state: Arc::new(Mutex::new(working)),
+            rate_limit_operations: self.rate_limit_operations.clone(),
             verification_locks: self.verification_locks.clone(),
             device_code_transaction: Some(Arc::new(Mutex::new(devices))),
             session_config: self.session_config.clone(),

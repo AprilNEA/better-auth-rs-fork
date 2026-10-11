@@ -198,7 +198,7 @@ async fn check_signup<S: AuthSchema>(
         plugins: vec!["phone-number", "phone-signup-field-contract"],
         metadata: parts.metadata.clone(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     });
     let store = store.with_runtime(adapter, vec![trace.clone()], fields)?;
     let mut context = AuthContext::new(Arc::new(endpoint), store);

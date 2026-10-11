@@ -930,7 +930,7 @@ async fn run<S: AuthSchema>(
         plugins: vec!["oauth"],
         metadata: context.metadata.clone(),
         secondary_storage: cache.is_some(),
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     }
     .core_models();
     let (users, count) = adapter

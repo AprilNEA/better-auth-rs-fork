@@ -11,7 +11,7 @@ use better_auth_core::{
 };
 use better_auth_seaorm::{
     PluginModels, SeaOrmStore,
-    sea_orm::{ConnectionTrait, Database, Schema},
+    sea_orm::{ConnectionTrait, Database},
     store::{
         __private_test_support::{bundled_schema::BundledSchema, migrator},
         entities,
@@ -30,8 +30,8 @@ mod mapped {
     use better_auth_seaorm::sea_orm::{self, entity::prelude::*};
 
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel, better_auth_seaorm::AuthEntity)]
-    #[auth(role = "rate_limit", model_name = "configured_counter")]
-    #[sea_orm(table_name = "configured_counter")]
+    #[auth(role = "rate_limit", model_name = "runtime_counter")]
+    #[sea_orm(table_name = "runtime_counter")]
     pub struct Model {
         #[sea_orm(primary_key, auto_increment = false)]
         pub id: String,
@@ -41,6 +41,12 @@ mod mapped {
         pub count: better_auth_seaorm::SqlNumber,
         #[sea_orm(column_name = "touched")]
         pub last_request: i64,
+        #[sea_orm(unique)]
+        pub runtime_bucket: Option<String>,
+        #[sea_orm(column_type = "Integer")]
+        pub runtime_hits: Option<better_auth_seaorm::SqlNumber>,
+        pub runtime_touched: Option<i64>,
+        pub unused_details: Option<String>,
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -180,10 +186,76 @@ fn config(calls: &Arc<Calls>) -> AuthConfig {
     config
 }
 
-fn rate_limit() -> RateLimitConfig {
-    RateLimitConfig::new()
-        .enabled(true)
-        .storage(RateLimitStorageKind::Database)
+#[derive(Clone, Copy, Debug)]
+enum Mapping {
+    Native,
+    Mapped,
+    Empty,
+}
+
+impl Mapping {
+    const ALL: [Self; 3] = [Self::Native, Self::Mapped, Self::Empty];
+
+    fn config(self) -> RateLimitConfig {
+        let mut config = RateLimitConfig::new()
+            .enabled(true)
+            .storage(RateLimitStorageKind::Database);
+        match self {
+            Self::Native => {}
+            Self::Mapped => {
+                config.model_name = Some("runtime_counter".into());
+                config.fields = Some(
+                    [
+                        ("lastRequest".into(), "runtime_touched".into()),
+                        ("count".into(), "runtime_hits".into()),
+                        ("key".into(), "runtime_bucket".into()),
+                    ]
+                    .into(),
+                );
+            }
+            Self::Empty => {
+                config.model_name = Some(String::new());
+                config.fields = Some(
+                    ["lastRequest", "count", "key"]
+                        .map(|name| (name.into(), String::new()))
+                        .into(),
+                );
+            }
+        }
+        config
+    }
+
+    fn memory(self) -> (&'static str, [&'static str; 3]) {
+        match self {
+            Self::Mapped => (
+                "runtime_counter",
+                ["runtime_bucket", "runtime_hits", "runtime_touched"],
+            ),
+            Self::Native | Self::Empty => ("rateLimit", ["key", "count", "lastRequest"]),
+        }
+    }
+
+    fn sqlite(self) -> (&'static str, [&'static str; 3]) {
+        match self {
+            Self::Mapped => self.memory(),
+            Self::Native | Self::Empty => ("rate_limit", ["key", "count", "last_request"]),
+        }
+    }
+}
+
+fn assert_rows(actual: &[FieldMap], expected: &[FieldMap]) {
+    assert_eq!(actual, expected, "Complete physical counter rows");
+    assert_eq!(
+        actual
+            .iter()
+            .map(|row| row.keys().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        expected
+            .iter()
+            .map(|row| row.keys().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        "Physical counter field presence and order"
+    );
 }
 
 async fn exercise<S: AuthSchema>(
@@ -200,13 +272,19 @@ async fn exercise<S: AuthSchema>(
         max_requests: 2.0,
     };
     let expected = |count: i32, last: FieldValue| -> FieldMap {
-        [
-            ("id".into(), "counter".into()),
+        let mut row = FieldMap::new();
+        if matches!(&storage, Storage::Sqlite(_)) {
+            let _ = row.insert("id".into(), "counter".into());
+        }
+        row.extend([
             (names[0].into(), key.into()),
             (names[1].into(), count.into()),
             (names[2].into(), last),
-        ]
-        .into()
+        ]);
+        if matches!(&storage, Storage::Memory(_)) {
+            let _ = row.insert("id".into(), "counter".into());
+        }
+        row
     };
     assert_eq!(
         *calls
@@ -235,7 +313,7 @@ async fn exercise<S: AuthSchema>(
             .as_f64()
             .ok_or_else(|| AuthError::internal("Counter timestamp must be numeric"))?;
         assert!((start..=finish).contains(&time));
-        assert_eq!(rows, &[expected(count, last)]);
+        assert_rows(rows, &[expected(count, last)]);
     }
     let before = storage.snapshot(&tables).await?;
     let denied = store.consume_rate_limit(key, rule, 600.0).await?;
@@ -245,7 +323,16 @@ async fn exercise<S: AuthSchema>(
             .retry_after
             .is_some_and(|value| value > 0.0 && value <= 600.0)
     );
-    assert_eq!(storage.snapshot(&tables).await?, before);
+    let after = storage.snapshot(&tables).await?;
+    assert_eq!(after, before);
+    assert_rows(
+        after
+            .get("counter")
+            .ok_or("Missing denied counter snapshot")?,
+        before
+            .get("counter")
+            .ok_or("Missing previous counter snapshot")?,
+    );
     let start = chrono::Utc::now().timestamp_millis() as f64;
     let reset = store
         .consume_rate_limit(
@@ -274,7 +361,7 @@ async fn exercise<S: AuthSchema>(
         .as_f64()
         .ok_or_else(|| AuthError::internal("Reset timestamp must be numeric"))?;
     assert!((start..=finish).contains(&time));
-    assert_eq!(rows, &[expected(1, last)]);
+    assert_rows(rows, &[expected(1, last)]);
     assert_eq!(calls.callbacks.load(Ordering::Relaxed), 0);
     assert_eq!(calls.ids.load(Ordering::Relaxed), 1);
     Ok(())
@@ -282,46 +369,47 @@ async fn exercise<S: AuthSchema>(
 
 #[tokio::test]
 async fn memory_counter_consumption_ignores_replaced_plugin_declarations() -> TestResult {
-    let calls = Arc::new(Calls::default());
-    let config = config(&calls);
-    let raw = EphemeralStore::new(Arc::new(config.clone()));
-    let auth = BetterAuth::new(config)
-        .store(raw.clone())
-        .plugin(Declaration {
-            last: false,
-            calls: calls.clone(),
-        })
-        .plugin(Declaration {
-            last: true,
-            calls: calls.clone(),
-        })
-        .rate_limit(rate_limit())
-        .build()
+    for mapping in Mapping::ALL {
+        let calls = Arc::new(Calls::default());
+        let config = config(&calls);
+        let raw = EphemeralStore::new(Arc::new(config.clone()));
+        let auth = BetterAuth::new(config)
+            .store(raw.clone())
+            .plugin(Declaration {
+                last: false,
+                calls: calls.clone(),
+            })
+            .plugin(Declaration {
+                last: true,
+                calls: calls.clone(),
+            })
+            .rate_limit(mapping.config())
+            .build()
+            .await?;
+        let (table, names) = mapping.memory();
+        exercise(
+            auth.context().database.as_ref(),
+            Storage::Memory(Box::new(raw)),
+            table,
+            names,
+            &calls,
+        )
         .await?;
-    exercise(
-        auth.context().database.as_ref(),
-        Storage::Memory(Box::new(raw)),
-        "rateLimit",
-        ["key", "count", "lastRequest"],
-        &calls,
-    )
-    .await
+    }
+    Ok(())
 }
 
 #[tokio::test]
 async fn sqlite_counter_consumption_preserves_native_and_mapped_columns_after_replacement()
 -> TestResult {
-    for custom in [false, true] {
+    for mapping in Mapping::ALL {
         let calls = Arc::new(Calls::default());
         let config = config(&calls);
         let database = Database::connect("sqlite::memory:").await?;
         migrator::run_migrations(&database).await?;
-        let auth = if custom {
+        let auth = if matches!(mapping, Mapping::Mapped) {
             let _ = database
-                .execute(
-                    &Schema::new(database.get_database_backend())
-                        .create_table_from_entity(mapped::Entity),
-                )
+                .execute_unprepared("CREATE TABLE runtime_counter (id TEXT PRIMARY KEY, runtime_bucket TEXT UNIQUE NOT NULL, runtime_hits INTEGER NOT NULL, runtime_touched BIGINT NOT NULL)")
                 .await?;
             BetterAuth::<BundledSchema>::new(config.clone())
                 .store(
@@ -336,7 +424,7 @@ async fn sqlite_counter_consumption_preserves_native_and_mapped_columns_after_re
                     last: true,
                     calls: calls.clone(),
                 })
-                .rate_limit(rate_limit())
+                .rate_limit(mapping.config())
                 .build()
                 .await?
         } else {
@@ -350,15 +438,11 @@ async fn sqlite_counter_consumption_preserves_native_and_mapped_columns_after_re
                     last: true,
                     calls: calls.clone(),
                 })
-                .rate_limit(rate_limit())
+                .rate_limit(mapping.config())
                 .build()
                 .await?
         };
-        let (table, names) = if custom {
-            ("configured_counter", ["bucket", "hits", "touched"])
-        } else {
-            ("rate_limit", ["key", "count", "last_request"])
-        };
+        let (table, names) = mapping.sqlite();
         exercise(
             auth.context().database.as_ref(),
             Storage::Sqlite(database.clone()),

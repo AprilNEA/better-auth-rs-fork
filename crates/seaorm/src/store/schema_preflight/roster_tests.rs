@@ -47,7 +47,7 @@ async fn a_plugin_name_without_a_declaration_does_not_require_a_passkey_table() 
         plugins: vec!["passkey"],
         metadata: Default::default(),
         secondary_storage: false,
-        database_rate_limit: false,
+        rate_limit: Default::default(),
     };
     store.model_fields.set_schema_configuration(&settings);
     assert!(findings(&store, &settings).await?.is_empty());
@@ -90,7 +90,11 @@ async fn rate_limit_preflight_uses_declared_memory_fields_and_replaced_database_
             plugins: Vec::new(),
             metadata: Default::default(),
             secondary_storage: false,
-            database_rate_limit,
+            rate_limit: better_auth_core::middleware::RateLimitConfig {
+                storage: database_rate_limit
+                    .then_some(better_auth_core::middleware::RateLimitStorageKind::Database),
+                ..Default::default()
+            },
         };
         store.model_fields.set_schema_configuration(&settings);
         let unwritten = if database_rate_limit {
@@ -149,7 +153,7 @@ async fn secondary_storage_hides_explicit_core_declarations_from_physical_prefli
             plugins: Vec::new(),
             metadata: Default::default(),
             secondary_storage,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         };
         store.model_fields.set_schema_configuration(&settings);
         let expected = if secondary_storage {

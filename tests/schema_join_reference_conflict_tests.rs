@@ -106,7 +106,7 @@ fn logical_reference_resolution_matches_the_pinned_adapter_boundary()
             plugins: Vec::new(),
             metadata: Default::default(),
             secondary_storage: case.secondary_storage,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         };
         let mut fields = ModelFields::default();
         fields.set_schema_configuration(&settings);

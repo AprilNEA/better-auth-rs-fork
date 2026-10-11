@@ -91,7 +91,7 @@ impl Fixture {
             plugins: vec!["two-factor"],
             metadata: ctx.metadata.clone(),
             secondary_storage: false,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         });
         ctx.database = ctx
             .database

@@ -119,7 +119,7 @@ async fn store(
             plugins: Vec::new(),
             metadata: Default::default(),
             secondary_storage: false,
-            database_rate_limit: false,
+            rate_limit: Default::default(),
         });
     Ok(store)
 }
