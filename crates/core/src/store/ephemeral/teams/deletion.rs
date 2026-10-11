@@ -115,7 +115,8 @@ impl EphemeralStore {
                     Ok((id, patch.apply(row)))
                 })
                 .collect::<AuthResult<Vec<_>>>()?;
-            let _ = self.snapshot_table(&state, EntityRole::Team)?.remove(&id)?;
+            let mut teams = self.snapshot_table(&state, EntityRole::Team)?.clone();
+            let _ = teams.remove(&id)?;
             let removed = self
                 .snapshot_table(&state, EntityRole::TeamMember)?
                 .select_refs(|row| {
@@ -132,10 +133,7 @@ impl EphemeralStore {
                     .snapshot_table(&state, EntityRole::Invitation)?
                     .replace(&id, invitation)?;
             }
-            op.replace_table(
-                EntityRole::Team,
-                self.snapshot_table(&state, EntityRole::Team)?.clone(),
-            )?;
+            op.replace_table(EntityRole::Team, teams)?;
             op.replace_table(EntityRole::TeamMember, memberships)
         })
     }

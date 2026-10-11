@@ -21,7 +21,7 @@ for (const hit of [false, true]) {
         database: memoryAdapter(memory), baseURL: "http://memory-root-join.test",
         secret: "memory-root-join-contract-at-least-thirty-two-characters",
         logger: { disabled, log(level, message, ...args) { logs.push([level, message, args]); } },
-        telemetry: { enabled: false }, experimental: { joins: true },
+        telemetry: { enabled: false }, advanced: { database: { joins: true } },
       }).$context;
       let result;
       let failure;
