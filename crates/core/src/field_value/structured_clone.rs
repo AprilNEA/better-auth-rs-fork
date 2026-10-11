@@ -247,7 +247,7 @@ impl<'a> Graph<'a> {
             })
             .collect();
         for index in 0..self.nodes.len() {
-            materialize_array(index, &self.nodes, &mut values)?;
+            let _ = materialize_array(index, &self.nodes, &mut values)?;
         }
         let values = values
             .into_iter()
