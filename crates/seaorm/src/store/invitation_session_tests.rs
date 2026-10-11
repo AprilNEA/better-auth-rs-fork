@@ -180,7 +180,10 @@ impl SeaOrmHooks<BundledSchema> for ObserveSession {
     ) -> AuthResult<()> {
         assert!(context.transaction.is_none());
         assert!(context.tx.is_none());
-        assert_eq!(required(user)?.email, "hook@example.com");
+        assert_eq!(
+            required(user)?.email.field_value(),
+            "hook@example.com".into()
+        );
         assert_eq!(
             member::Entity::find()
                 .all(context.db)

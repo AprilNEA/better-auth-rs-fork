@@ -10,7 +10,7 @@ pub(super) struct Values {
 }
 
 impl Values {
-    pub fn new(events: &Events) -> Self {
+    pub(super) fn new(events: &Events) -> Self {
         fn function(events: &Events, name: &'static str) -> FieldValue {
             let events = events.clone();
             let function: UserFieldFactory = Arc::new(move || {

@@ -306,7 +306,8 @@ async fn check<S: AuthSchema>(
             .map_err(|error| AuthError::internal(error.to_string()))?;
         if let Some(Value::Object(fields)) = &query {
             for (name, value) in fields {
-                url.query_pairs_mut()
+                let _ = url
+                    .query_pairs_mut()
                     .append_pair(name, required(value.as_str(), "Expected string query")?);
             }
         }

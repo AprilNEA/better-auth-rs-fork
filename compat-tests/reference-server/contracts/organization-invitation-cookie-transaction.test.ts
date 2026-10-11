@@ -78,6 +78,7 @@ async function checkCookieTransaction(backend: Backend, mode: Mode, storage: Sto
     let context: typeof fixture.context;
     const auth = betterAuth({
       ...fixture.options,
+      verification: { storeInDatabase: true },
       ...(cache ? { secondaryStorage: {
         async get(key: string) { return entries.get(key) ?? null; },
         async set(key: string, value: string, seconds?: number) {

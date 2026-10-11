@@ -293,7 +293,7 @@ async fn database(fixture: &Fixture, case: &Case) -> TestResult<DatabaseConnecti
     let database = Database::connect("sqlite::memory:").await?;
     for (table, columns) in &fixture.catalog {
         let columns = columns.as_object().ok_or("Expected SQL catalog columns")?;
-        let columns = columns
+        let mut columns = columns
             .iter()
             .map(|(name, kind)| {
                 Ok(format!(
@@ -301,8 +301,11 @@ async fn database(fixture: &Fixture, case: &Case) -> TestResult<DatabaseConnecti
                     kind.as_str().ok_or("Expected SQL type")?
                 ))
             })
-            .collect::<TestResult<Vec<_>>>()?
-            .join(",");
+            .collect::<TestResult<Vec<_>>>()?;
+        if table == "organization" {
+            columns.push("\"updated_at\" TEXT NOT NULL".into());
+        }
+        let columns = columns.join(",");
         let _ = database
             .execute_raw(Statement::from_string(
                 DbBackend::Sqlite,
@@ -315,7 +318,16 @@ async fn database(fixture: &Fixture, case: &Case) -> TestResult<DatabaseConnecti
             .and_then(Value::as_array)
             .ok_or("Missing physical seed table")?
         {
-            insert(&database, table, row).await?;
+            let mut row = row.clone();
+            if table == "organization" {
+                let fields = row.as_object_mut().ok_or("Expected Organization seed")?;
+                let updated = fields
+                    .get("createdAt")
+                    .cloned()
+                    .ok_or("Missing Organization creation time")?;
+                assert!(fields.insert("updated_at".into(), updated).is_none());
+            }
+            insert(&database, table, &row).await?;
         }
     }
     Ok(database)
@@ -324,11 +336,37 @@ async fn database(fixture: &Fixture, case: &Case) -> TestResult<DatabaseConnecti
 async fn snapshot(
     database: &DatabaseConnection,
     fixture: &Fixture,
+    case: &Case,
 ) -> TestResult<serde_json::Map<String, Value>> {
     let mut tables = serde_json::Map::new();
     for (table, columns) in &fixture.catalog {
         let _ = tables.insert(table.clone(), storage(database, table, columns).await?);
     }
+    // The Rust-only update column is checked separately from the captured upstream rows.
+    let expected = case
+        .before
+        .get("organization")
+        .and_then(Value::as_array)
+        .ok_or("Missing Organization seed table")?
+        .iter()
+        .map(|row| {
+            Ok(json!({
+                "id": row.get("id").ok_or("Missing Organization seed ID")?,
+                "updated_at": row.get("createdAt").ok_or("Missing Organization creation time")?,
+            }))
+        })
+        .collect::<TestResult<Vec<_>>>()?;
+    assert_eq!(
+        storage(
+            database,
+            "organization",
+            &json!({"id": "TEXT", "updated_at": "TEXT"})
+        )
+        .await?,
+        Value::Array(expected),
+        "{}: internal Organization update column",
+        case.scenario
+    );
     Ok(tables)
 }
 
@@ -352,7 +390,7 @@ async fn contract(name: &str) -> TestResult {
         assert_eq!(case.before, case.after, "{}", case.scenario);
         let database = database(&fixture, case).await?;
         assert_eq!(
-            snapshot(&database, &fixture).await?,
+            snapshot(&database, &fixture, case).await?,
             case.before,
             "{}",
             case.scenario
@@ -418,7 +456,7 @@ async fn contract(name: &str) -> TestResult {
             );
         }
         assert_eq!(
-            snapshot(&database, &fixture).await?,
+            snapshot(&database, &fixture, case).await?,
             case.after,
             "{}",
             case.scenario

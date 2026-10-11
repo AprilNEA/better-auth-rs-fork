@@ -20,6 +20,8 @@ pub(super) mod organization {
         pub metadata: Option<String>,
         #[sea_orm(column_name = "createdAt")]
         pub created_at: DateTimeUtc,
+        #[sea_orm(column_name = "updated_at")]
+        pub auth_updated_at: DateTimeUtc,
         pub invitation: Option<String>,
         pub member: Option<String>,
         pub stored_invitation: Option<String>,

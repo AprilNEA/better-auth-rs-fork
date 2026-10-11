@@ -47,54 +47,6 @@ fn encode_references(references: &[SessionReference]) -> AuthResult<String> {
 }
 
 impl<S: AuthSchema> SecondaryStore<S> {
-    pub(super) async fn session_fields(
-        &self,
-        session: &crate::wire::SessionView,
-    ) -> AuthResult<FieldMap> {
-        let mut config = self.config.session.clone();
-        for field in config.fields_mut().values_mut() {
-            field.returned = Some(true);
-            if !self.database_sessions() {
-                field.transform.get_or_insert_default().output = None;
-            }
-        }
-        let mut view = SessionView::with_fields_for_adapter(
-            session,
-            &config,
-            !self.database_sessions() || self.inner.supports_native_json(),
-        )
-        .await?;
-        view.visible_fields = Some(
-            SessionView::active_plugin_fields(&self.metadata)
-                .filter(|field| {
-                    session
-                        .field_presence()
-                        .is_none_or(|fields| fields.contains(*field))
-                })
-                .map(str::to_owned)
-                .collect(),
-        );
-        let mut fields: FieldMap = view.into();
-        if !self.database_sessions() {
-            for name in self
-                .config
-                .session
-                .fields()
-                .keys()
-                .map(String::as_str)
-                .chain(["impersonatedBy", "activeOrganizationId", "activeTeamId"])
-            {
-                let has_default = self.config.session.fields().get(name).is_some_and(|field| {
-                    field.default_value.is_some() || field.default_value_fn.is_some()
-                });
-                if !has_default && fields.get(name).is_some_and(FieldValue::is_null) {
-                    let _ = fields.remove(name);
-                }
-            }
-        }
-        Ok(fields)
-    }
-
     pub(super) fn session_create_writer(
         &self,
         owner: crate::SchemaValue<String>,
@@ -256,72 +208,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
         }
     }
 
-    async fn add_reference(&self, session: &crate::wire::SessionView) -> AuthResult<()> {
-        let now = self.now().timestamp_millis() as f64;
-        let user_id = session.user_id.field_value();
-        let mut references = self.references_value(&user_id).await?;
-        retain_references(&mut references, |reference| {
-            Ok(
-                crate::query::field_number(&reference.expires_at.field_value())? > now
-                    && !reference
-                        .token
-                        .field_value()
-                        .strict_equals(&session.token.field_value()),
-            )
-        })?;
-        references.push(SessionReference {
-            token: session.token.clone(),
-            expires_at: session.expires_at().date_milliseconds()?.into(),
-        });
-        self.write_references(&user_id, references).await
-    }
-
-    pub(super) async fn mirror_session(
-        &self,
-        session: &crate::wire::SessionView,
-    ) -> AuthResult<()> {
-        self.mirror_session_in_transaction(session, None).await
-    }
-
-    pub(super) async fn mirror_session_in_transaction(
-        &self,
-        session: &crate::wire::SessionView,
-        transaction: Option<&dyn crate::store::AuthTransaction<S>>,
-    ) -> AuthResult<()> {
-        if self.storage.is_none() {
-            return Ok(());
-        }
-        let seconds = session.expires_at().cache_ttl(self.now())?;
-        if seconds <= 0.0 {
-            return Ok(());
-        }
-        self.add_reference(session).await?;
-        let user = match transaction {
-            Some(transaction) => transaction.get_user_by_id_field(&session.user_id).await?,
-            None => self.inner.get_user_by_id_field(&session.user_id).await?,
-        };
-        let user = match user {
-            Some(user) => Some(
-                UserView::with_internal_fields_for_adapter(
-                    &user,
-                    &self.config.user,
-                    &self.metadata,
-                    self.inner.supports_native_json(),
-                )
-                .await?,
-            ),
-            None => None,
-        };
-        let value = cache::session_envelope(self.session_fields(session).await?, user);
-        self.secondary()?
-            .set_native(
-                &session.token().field_value(),
-                &cache::stringify(&value)?,
-                Some(seconds),
-            )
-            .await
-    }
-
     async fn update_cached_session(
         &self,
         token: &FieldValue,
@@ -406,7 +292,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
     }
 
     pub(super) fn session_update_writer_factory(&self) -> Option<SessionUpdateWriterFactory> {
-        self.storage.as_ref()?;
+        let _ = self.storage.as_ref()?;
         let runtime = self.clone();
         Some(SessionUpdateWriterFactory {
             write_database: self.database_sessions(),
