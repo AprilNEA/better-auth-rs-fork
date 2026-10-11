@@ -1,5 +1,8 @@
 use super::*;
-use better_auth_core::{FieldMap, SchemaValue, store::JoinValue};
+use better_auth_core::{
+    FieldMap, SchemaValue,
+    store::{JoinValue, UserStore},
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[tokio::test]
