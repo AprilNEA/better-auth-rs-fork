@@ -1,8 +1,4 @@
 #![cfg(feature = "seaorm2")]
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract asserts complete records, property presence, identity, ordering, callbacks, and storage."
-)]
 
 use better_auth_core::{
     AuthConfig, AuthError, AuthRecordFields, AuthResult, AuthSchema, AuthStore, CreateAccount,

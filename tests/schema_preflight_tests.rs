@@ -30,6 +30,9 @@ mod mysql;
 #[path = "schema_preflight_tests/native_mappings.rs"]
 mod native_mappings;
 
+#[path = "schema_preflight_tests/projection_transaction.rs"]
+mod projection_transaction;
+
 #[derive(Clone)]
 struct Observe(Arc<AtomicUsize>);
 
@@ -401,7 +404,7 @@ async fn active_transaction_does_not_reenter_global_schema_queries_after_invalid
     assert_eq!(http(&auth).await.unwrap().status, 200);
 }
 
-#[allow(unreachable_pub, reason = "SeaORM derives require public entity types")]
+#[expect(unreachable_pub, reason = "SeaORM derives require public entity types")]
 mod mapped_user {
     use better_auth_seaorm::{
         AuthEntity,

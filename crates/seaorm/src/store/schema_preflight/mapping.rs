@@ -11,11 +11,12 @@ use better_auth_core::{
 };
 use sea_orm::{ColumnTrait, EntityTrait};
 
-fn model<E: EntityTrait>(columns: Vec<String>) -> SchemaTable {
+fn model<E: EntityTrait>((id_column, columns): (String, Vec<String>)) -> SchemaTable {
     let entity = E::default();
     SchemaTable {
         name: entity.table_name().to_owned(),
         schema: entity.schema_name().map(str::to_owned),
+        id_column,
         columns,
         disable_migrations: false,
     }
@@ -25,8 +26,9 @@ fn columns<C: ColumnTrait>(
     fields: &UserConfig,
     column: impl Fn(&str) -> AuthResult<C>,
     extra_insert_columns: impl IntoIterator<Item = C>,
-) -> AuthResult<Vec<String>> {
-    let mut names = vec![column("id")?.as_str().to_owned()];
+) -> AuthResult<(String, Vec<String>)> {
+    let id_column = column("id")?.as_str().to_owned();
+    let mut names = Vec::new();
     for (logical, field) in fields.fields() {
         let name = column(resolve_field_name(field.field_name.as_deref(), logical))?
             .as_str()
@@ -41,7 +43,7 @@ fn columns<C: ColumnTrait>(
             names.push(name);
         }
     }
-    Ok(names)
+    Ok((id_column, names))
 }
 
 fn organization<M: SeaOrmOrganizationModel>(

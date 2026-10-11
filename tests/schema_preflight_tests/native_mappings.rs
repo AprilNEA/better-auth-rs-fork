@@ -14,6 +14,8 @@ use std::{collections::BTreeMap, sync::Mutex};
 
 #[path = "native_mapping_id.rs"]
 mod id;
+#[path = "native_mapping_order.rs"]
+mod order;
 #[path = "native_mapping_records.rs"]
 mod records;
 #[path = "native_mapping_sqlite.rs"]
@@ -112,7 +114,7 @@ fn callback(events: &Events, phase: &'static str, field: &'static str) -> UserFi
             } else {
                 "visible"
             },
-            value.display_string()?
+            better_auth_core::SchemaValue::<String>::from_field(value).display_string()?
         )
         .into())
     })

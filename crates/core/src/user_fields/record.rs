@@ -323,9 +323,72 @@ impl UserConfig {
         records: Vec<AdapterRecord>,
         supports_native_json: bool,
     ) -> AuthResult<Vec<FieldMap>> {
-        self.organization_output_records_then(records, supports_native_json, |_, output| {
+        self.organization_output_records_owned_then(records, supports_native_json, |_, output| {
             std::future::ready(Ok(output))
         })
+        .await
+    }
+
+    /// Retain owned row continuations after the first projection or continuation error.
+    #[doc(hidden)]
+    pub async fn organization_output_records_owned_then<R: Send + 'static, F>(
+        &self,
+        records: Vec<AdapterRecord>,
+        supports_native_json: bool,
+        complete: impl Fn(usize, FieldMap) -> F + Send + Sync + 'static,
+    ) -> AuthResult<Vec<R>>
+    where
+        F: std::future::Future<Output = AuthResult<R>> + Send + 'static,
+    {
+        let schema = self.adapter_fields(&[]);
+        super::batch::project_owned_fields_then(
+            schema.organization_records(records),
+            schema.fields().clone(),
+            move |row, name, field| {
+                Box::pin(project_organization_field(
+                    row,
+                    name,
+                    field,
+                    supports_native_json,
+                ))
+            },
+            move |index, record| complete(index, std::mem::take(&mut record.output)),
+        )
+        .await
+    }
+
+    /// Retain ready row batches and their owned continuations after a peer fails.
+    #[doc(hidden)]
+    pub async fn organization_output_records_owned_batches_then<
+        V: Send + 'static,
+        R: Send + 'static,
+        F,
+    >(
+        &self,
+        records: Vec<AdapterRecord>,
+        supports_native_json: bool,
+        decode: impl Fn(usize, FieldMap) -> AuthResult<V> + Send + Sync + 'static,
+        complete: impl Fn(Vec<(usize, V)>) -> F + Send + Sync + 'static,
+    ) -> AuthResult<Vec<R>>
+    where
+        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send + 'static,
+    {
+        let schema = self.adapter_fields(&[]);
+        super::batch::project_owned_source_fields_batches_then(
+            schema.organization_records(records),
+            schema.fields().clone(),
+            |_, _, _| Ok(()),
+            move |row, name, field, ()| {
+                Box::pin(project_organization_field(
+                    row,
+                    name,
+                    field,
+                    supports_native_json,
+                ))
+            },
+            move |index, record| decode(index, std::mem::take(&mut record.output)),
+            complete,
+        )
         .await
     }
 
@@ -472,11 +535,10 @@ impl UserConfig {
         supports_native_json: bool,
         supports_native_dates: bool,
     ) -> AuthResult<Vec<FieldMap>> {
-        self.project_records_then(
-            storage,
+        self.project_adapter_records(
+            adapter_records(storage)?,
             supports_native_json,
             supports_native_dates,
-            |_, fields| std::future::ready(Ok(fields)),
         )
         .await
     }
@@ -577,7 +639,7 @@ impl UserConfig {
         supports_native_json: bool,
         supports_native_dates: bool,
     ) -> AuthResult<Vec<FieldMap>> {
-        self.project_adapter_records_then(
+        self.project_adapter_records_owned_then(
             records,
             supports_native_json,
             supports_native_dates,
@@ -589,19 +651,83 @@ impl UserConfig {
     /// Project adapter fields with the database's JSON, array, boolean, and date conversions.
     pub async fn project_adapter_records_with_capabilities(
         &self,
-        mut records: Vec<AdapterRecord>,
+        records: Vec<AdapterRecord>,
         capabilities: FieldOutputCapabilities,
     ) -> AuthResult<Vec<FieldMap>> {
-        super::batch::project_fields(&mut records, self.fields(), |record, name, field| {
-            Box::pin(project_adapter_field_with_capabilities(
-                record,
-                name,
-                field,
-                capabilities,
-            ))
-        })
-        .await?;
-        Ok(records.into_iter().map(|record| record.output).collect())
+        super::batch::project_owned_fields_then(
+            records,
+            self.fields().clone(),
+            move |record, name, field| {
+                Box::pin(project_adapter_field_with_capabilities(
+                    record,
+                    name,
+                    field,
+                    capabilities,
+                ))
+            },
+            |_, record| std::future::ready(Ok(std::mem::take(&mut record.output))),
+        )
+        .await
+    }
+
+    /// Retain owned row continuations after the first projection or continuation error.
+    #[doc(hidden)]
+    pub async fn project_adapter_records_owned_then<R: Send + 'static, F>(
+        &self,
+        records: Vec<AdapterRecord>,
+        supports_native_json: bool,
+        supports_native_dates: bool,
+        complete: impl Fn(usize, FieldMap) -> F + Send + Sync + 'static,
+    ) -> AuthResult<Vec<R>>
+    where
+        F: std::future::Future<Output = AuthResult<R>> + Send + 'static,
+    {
+        super::batch::project_owned_fields_then(
+            records,
+            self.fields().clone(),
+            move |record, name, field| {
+                Box::pin(project_adapter_field(
+                    record,
+                    name,
+                    field,
+                    supports_native_json,
+                    supports_native_dates,
+                ))
+            },
+            move |index, record| complete(index, std::mem::take(&mut record.output)),
+        )
+        .await
+    }
+
+    /// Retain ready adapter row batches and their continuations after a peer fails.
+    #[doc(hidden)]
+    pub async fn project_adapter_records_owned_batches_then<R: Send + 'static, F>(
+        &self,
+        records: Vec<AdapterRecord>,
+        supports_native_json: bool,
+        supports_native_dates: bool,
+        complete: impl Fn(Vec<(usize, FieldMap)>) -> F + Send + Sync + 'static,
+    ) -> AuthResult<Vec<R>>
+    where
+        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send + 'static,
+    {
+        super::batch::project_owned_source_fields_batches_then(
+            records,
+            self.fields().clone(),
+            |_, _, _| Ok(()),
+            move |record, name, field, ()| {
+                Box::pin(project_adapter_field(
+                    record,
+                    name,
+                    field,
+                    supports_native_json,
+                    supports_native_dates,
+                ))
+            },
+            |_, record| Ok(std::mem::take(&mut record.output)),
+            complete,
+        )
+        .await
     }
 
     /// Complete each extracted row after its output policies, retaining the original row order.

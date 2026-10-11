@@ -120,7 +120,7 @@ impl OrganizationFields {
         self.schema_for(role)
     }
 
-    /// Resolve complete declarations with whole-field replacements in native schema order.
+    /// Resolve complete declarations with whole-field replacements in JavaScript property order.
     #[doc(hidden)]
     pub fn schema_for(
         &self,
@@ -129,7 +129,7 @@ impl OrganizationFields {
         let configured = self.fields_for(role)?;
         let mut fields = crate::plugin_runtime::ModelFields::plugin_native_fields(role);
         fields.fields_mut().extend(configured.fields().clone());
-        Ok(fields)
+        Ok(fields.ordered_declarations(&[]))
     }
 
     /// Resolve raw declarations in native schema order and apply dynamic-role storage requirements.

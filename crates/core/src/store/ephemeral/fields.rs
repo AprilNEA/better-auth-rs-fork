@@ -359,13 +359,19 @@ impl EphemeralStore {
             .await
     }
 
-    pub(super) async fn output_record_refs<T: FromFieldMap + Send>(
+    pub(super) async fn output_record_refs<T: FromFieldMap + Send + 'static>(
         &self,
         role: EntityRole,
         values: Vec<super::rows::RowRef<FieldMap>>,
     ) -> AuthResult<Vec<T>> {
-        self.output_record_refs_batches_then(role, values, |rows| std::future::ready(Ok(rows)))
-            .await
+        self.project_record_sources_owned_batches_then(
+            role,
+            &self.field_config(role)?,
+            values.into_iter().map(RecordSource::Live).collect(),
+            |_, fields| T::from_field_values(fields),
+            |ready| std::future::ready(Ok(ready)),
+        )
+        .await
     }
 
     pub(super) fn output_record_pages<'a>(
@@ -373,45 +379,70 @@ impl EphemeralStore {
         role: EntityRole,
         pages: Vec<&'a [super::rows::RowRef<FieldMap>]>,
     ) -> futures_util::future::BoxFuture<'a, AuthResult<Vec<Vec<FieldMap>>>> {
+        let store = self.clone();
+        let pages = pages.into_iter().map(|page| (Arc::from(page), 0)).collect();
+        store.output_owned_record_pages(role, pages)
+    }
+
+    fn output_owned_record_pages(
+        &self,
+        role: EntityRole,
+        pages: Vec<(Arc<[super::rows::RowRef<FieldMap>]>, usize)>,
+    ) -> futures_util::future::BoxFuture<'static, AuthResult<Vec<Vec<FieldMap>>>> {
+        let store = self.clone();
         Box::pin(async move {
             let mut output = vec![Vec::new(); pages.len()];
             let mut active = Vec::new();
             let mut sources = Vec::new();
-            for (index, page) in pages.into_iter().enumerate() {
-                if let Some((first, rest)) = page.split_first() {
-                    active.push((index, rest));
-                    sources.push(first.clone());
+            for (index, (page, position)) in pages.into_iter().enumerate() {
+                if let Some(first) = page.get(position) {
+                    sources.push(RecordSource::Live(first.clone()));
+                    active.push((index, (page, position + 1)));
                 }
             }
             if sources.is_empty() {
                 return Ok(output);
             }
-            let projected = self
-                .output_record_refs_batches_then(role, sources, |ready: Vec<(usize, FieldMap)>| {
-                    let active = &active;
-                    async move {
-                        let tails = ready
-                            .iter()
-                            .map(|(index, _)| {
-                                active.get(*index).map(|(_, tail)| *tail).ok_or_else(|| {
-                                    AuthError::internal("Child projection lost its parent page")
+            let active = std::sync::Arc::new(active);
+            let continuation = store.clone();
+            let active_pages = active.clone();
+            let projected = store
+                .project_record_sources_owned_batches_then(
+                    role,
+                    &store.field_config(role)?,
+                    sources,
+                    |_, fields| Ok(fields),
+                    move |ready: Vec<(usize, FieldMap)>| {
+                        let active = active_pages.clone();
+                        let store = continuation.clone();
+                        async move {
+                            let tails = ready
+                                .iter()
+                                .map(|(index, _)| {
+                                    active.get(*index).map(|(_, tail)| tail.clone()).ok_or_else(
+                                        || {
+                                            AuthError::internal(
+                                                "Child projection lost its parent page",
+                                            )
+                                        },
+                                    )
                                 })
-                            })
-                            .collect::<AuthResult<Vec<_>>>()?;
-                        let remaining = self.output_record_pages(role, tails).await?;
-                        Ok(ready
-                            .into_iter()
-                            .zip(remaining)
-                            .map(|((index, first), mut rest)| {
-                                rest.insert(0, first);
-                                (index, rest)
-                            })
-                            .collect())
-                    }
-                })
+                                .collect::<AuthResult<Vec<_>>>()?;
+                            let remaining = store.output_owned_record_pages(role, tails).await?;
+                            Ok(ready
+                                .into_iter()
+                                .zip(remaining)
+                                .map(|((index, first), mut rest)| {
+                                    rest.insert(0, first);
+                                    (index, rest)
+                                })
+                                .collect())
+                        }
+                    },
+                )
                 .await?;
-            for ((index, _), page) in active.into_iter().zip(projected) {
-                *output.get_mut(index).ok_or_else(|| {
+            for ((index, _), page) in active.iter().zip(projected) {
+                *output.get_mut(*index).ok_or_else(|| {
                     AuthError::internal("Child projection lost its result page")
                 })? = page;
             }

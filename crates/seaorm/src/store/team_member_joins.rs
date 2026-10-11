@@ -114,17 +114,16 @@ where
                                     })
                                 })
                                 .collect::<AuthResult<Vec<_>>>()?;
+                            let record_fields = team_fields.clone();
+                            let runtime = self.model_fields.clone();
                             let output = super::joins::project_child_pages(
                                 team_fields,
                                 pages,
                                 backend,
-                                &|row: &SqlRow| {
-                                    row.native_record(team_fields, backend, O::Team::column)
+                                &move |row: &SqlRow| {
+                                    row.native_record(&record_fields, backend, O::Team::column)
                                         .map(|record| {
-                                            record.with_id_output(
-                                                &self.model_fields,
-                                                EntityRole::Team,
-                                            )
+                                            record.with_id_output(&runtime, EntityRole::Team)
                                         })
                                 },
                             )
@@ -194,16 +193,22 @@ where
                 .into_iter()
                 .collect()
         };
-        let mut pages =
-            super::joins::project_child_pages(fields, vec![rows.as_slice()], backend, &|row| {
+        let record_fields = fields.clone();
+        let runtime = self.model_fields.clone();
+        let mut pages = super::joins::project_child_pages(
+            fields,
+            vec![rows.as_slice()],
+            backend,
+            &move |row| {
                 models::raw_record::<O::Team>(
                     row,
-                    fields,
+                    &record_fields,
                     backend,
-                    (&self.model_fields, EntityRole::Team),
+                    (&runtime, EntityRole::Team),
                 )
-            })
-            .await?;
+            },
+        )
+        .await?;
         Ok(pages.remove(0))
     }
 }

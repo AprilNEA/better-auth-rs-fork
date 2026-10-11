@@ -37,8 +37,9 @@ fn data(model: Model) -> Value {
 pub(super) fn expected(model: Model, input: &str) -> Value {
     let mut output = data(model);
     let (_, source, destination, _) = model.mapping();
-    output[destination] = json!(format!("stored:{input}"));
-    output[source] = json!(format!("visible:stored:{input}"));
+    let fields = output.as_object_mut().unwrap();
+    let _ = fields.insert(destination.into(), json!(format!("stored:{input}")));
+    let _ = fields.insert(source.into(), json!(format!("visible:stored:{input}")));
     output
 }
 
@@ -75,7 +76,7 @@ pub(super) fn stored(model: Model, old: OldColumn, input: &str) -> Value {
 async fn create(model: Model, store: &dyn AuthStore<BundledSchema>) -> FieldMap {
     match model {
         Model::User => {
-            let mut fields = FieldMap::from_json(data(model)).unwrap();
+            let mut fields = FieldMap::from_json(data(model).as_object().unwrap().clone()).unwrap();
             let _ = fields.insert("createdAt".into(), date().into());
             let _ = fields.insert("updatedAt".into(), date().into());
             store
@@ -156,7 +157,7 @@ async fn create(model: Model, store: &dyn AuthStore<BundledSchema>) -> FieldMap 
             .field_values()
             .unwrap(),
         Model::Passkey => {
-            let mut fields = FieldMap::from_json(data(model)).unwrap();
+            let mut fields = FieldMap::from_json(data(model).as_object().unwrap().clone()).unwrap();
             let _ = fields.insert("createdAt".into(), date().into());
             store.create_passkey_record(fields).await.unwrap().unwrap()
         }

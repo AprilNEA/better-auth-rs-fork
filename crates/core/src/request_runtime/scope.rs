@@ -60,16 +60,18 @@ pub(crate) fn spawn<T: Send + 'static>(
     let contexts = CONTEXTS.try_with(Clone::clone).unwrap_or_default();
     let request = crate::hooks::current_request_hook_context();
     tokio::spawn(
-        CONTEXTS
-            .scope(contexts, async move {
+        crate::store::schema::SchemaValidation::inherit_transaction_scope(CONTEXTS.scope(
+            contexts,
+            async move {
                 match request {
                     Some(request) => {
                         crate::hooks::with_request_hook_context_value(request, future).await
                     }
                     None => future.await,
                 }
-            })
-            .in_current_span(),
+            },
+        ))
+        .in_current_span(),
     )
 }
 

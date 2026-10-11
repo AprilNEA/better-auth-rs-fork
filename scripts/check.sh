@@ -635,15 +635,24 @@ run_stage() {
     field-projection)
       cargo fmt --all -- --check
       local projection_status=0
-      bun --no-install test ./compat-tests/reference-server/contracts/schema-preflight-native-mapping.test.ts || projection_status=1
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/schema-preflight-native-mapping.test.ts \
+        ./compat-tests/reference-server/contracts/projection-error-lifecycle.test.ts \
+        ./compat-tests/reference-server/contracts/async-field-transforms.test.ts \
+        ./tests/fixtures/organization-join-continuation-upstream.test.ts || projection_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || projection_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests -- -D warnings || projection_status=1
+        --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
+        --test async_field_transform_tests --test relation_object_mutation_tests -- -D warnings || projection_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: || projection_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
         --test async_field_transform_tests \
         --test transform_batch_tests --test account_owner_batch_tests \
-        --test fallback_continuation_tests --test organization_join_continuation_tests || projection_status=1
+        --test fallback_continuation_tests --test organization_join_continuation_tests \
+        --test organization_native_join_tests --test organization_list_relations_tests \
+        --test relation_object_mutation_tests || projection_status=1
       cargo test --locked --features axum,seaorm2,redis-cache --test schema_preflight_tests -- \
         --ignored --exact mysql::live_mysql_preflight_tracks_migrations_defaults_and_auto_increment \
         live_postgres_preflight_tracks_migrations_defaults_and_search_path || projection_status=1

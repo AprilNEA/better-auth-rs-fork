@@ -13,6 +13,7 @@ use better_auth_core::{
     user_fields::UserConfig,
 };
 use sea_orm::{DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect, Select};
+use std::sync::Arc;
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
@@ -64,7 +65,7 @@ where
         &self,
         parent: Select<Entity<M>>,
         role: EntityRole,
-        model: &str,
+        model: &'static str,
     ) -> AuthResult<Vec<(FieldMap, JoinValue<FieldMap>)>> {
         let backend = self.connection().get_database_backend();
         let parent = parent.limit(super::pagination::default_limit(self.config(), backend)?);
@@ -146,16 +147,22 @@ where
             })
             .collect::<AuthResult<Vec<_>>>()?;
         if let Some(children) = children {
+            let decode_fields = parent_fields.clone();
+            let continuation = Arc::new((
+                children,
+                organization_fields,
+                relation,
+                self.model_fields.clone(),
+            ));
             parent_fields
-                .organization_output_records_batches_then(
+                .organization_output_records_owned_batches_then(
                     records,
                     backend == DbBackend::Postgres,
-                    |_, output| Ok(plugin_rows::ordered_output(&parent_fields, output)),
-                    |ready| {
-                        let children = &children;
-                        let organization_fields = &organization_fields;
-                        let relation = &relation;
+                    move |_, output| Ok(plugin_rows::ordered_output(&decode_fields, output)),
+                    move |ready| {
+                        let continuation = continuation.clone();
                         async move {
+                            let (children, organization_fields, relation, runtime) = &*continuation;
                             let pages = ready
                                 .iter()
                                 .map(|(index, _)| {
@@ -166,21 +173,20 @@ where
                                     })
                                 })
                                 .collect::<AuthResult<Vec<_>>>()?;
+                            let record_fields = organization_fields.clone();
+                            let runtime = runtime.clone();
                             let output = super::joins::project_child_pages(
                                 organization_fields,
                                 pages,
                                 backend,
-                                &|row: &SqlRow| {
+                                &move |row: &SqlRow| {
                                     row.native_record(
-                                        organization_fields,
+                                        &record_fields,
                                         backend,
                                         O::Organization::column,
                                     )
                                     .map(|record| {
-                                        record.with_id_output(
-                                            &self.model_fields,
-                                            EntityRole::Organization,
-                                        )
+                                        record.with_id_output(&runtime, EntityRole::Organization)
                                     })
                                 },
                             )
@@ -200,20 +206,27 @@ where
                 )
                 .await
         } else {
+            let continuation = Arc::new((
+                parent_fields.clone(),
+                organization_fields,
+                relation,
+                runtime,
+            ));
+            let store = self.clone();
             parent_fields
-                .organization_output_records_then(
+                .organization_output_records_owned_then(
                     records,
                     backend == DbBackend::Postgres,
-                    |_, output| {
-                        let relation = &relation;
-                        let parent_fields = &parent_fields;
-                        let organization_fields = &organization_fields;
-                        let runtime = &runtime;
+                    move |_, output| {
+                        let continuation = continuation.clone();
+                        let store = store.clone();
                         async move {
+                            let (parent_fields, organization_fields, relation, runtime) =
+                                &*continuation;
                             let from =
                                 relation.fallback_from((role, model, parent_fields), runtime)?;
                             let value = output.get(&from).cloned().unwrap_or_default();
-                            let organizations = self
+                            let organizations = store
                                 .selected_parent_organizations(relation, organization_fields, value)
                                 .await?;
                             Ok((
@@ -256,16 +269,22 @@ where
                 .into_iter()
                 .collect()
         };
-        let mut pages =
-            super::joins::project_child_pages(fields, vec![rows.as_slice()], backend, &|row| {
+        let record_fields = fields.clone();
+        let runtime = self.model_fields.clone();
+        let mut pages = super::joins::project_child_pages(
+            fields,
+            vec![rows.as_slice()],
+            backend,
+            &move |row| {
                 models::raw_record::<O::Organization>(
                     row,
-                    fields,
+                    &record_fields,
                     backend,
-                    (&self.model_fields, EntityRole::Organization),
+                    (&runtime, EntityRole::Organization),
                 )
-            })
-            .await?;
+            },
+        )
+        .await?;
         Ok(pages.remove(0))
     }
 }

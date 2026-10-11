@@ -19,9 +19,9 @@ pub(super) async fn snapshot(database: &DatabaseConnection) -> Snapshot {
     for table in catalog(database)
         .await
         .into_iter()
-        .filter(|row| row["type"] == "table")
+        .filter(|row| row.get("type").unwrap() == "table")
     {
-        let table = table["name"].as_str().unwrap();
+        let table = table.get("name").unwrap().as_str().unwrap();
         let columns = database
             .query_all_raw(Statement::from_string(
                 database.get_database_backend(),
@@ -62,18 +62,22 @@ fn column_constraint(sql: &str, column: &str, constraint: &str) -> String {
 pub(super) async fn prepare(database: &DatabaseConnection, model: Model, old: OldColumn) {
     let before = snapshot(database).await;
     let (table, _, _, column) = model.mapping();
-    assert!(before[table].is_empty());
+    assert!(before.get(table).unwrap().is_empty());
     let mut expected_catalog = catalog(database).await;
     let entry = expected_catalog
         .iter_mut()
-        .find(|entry| entry["type"] == "table" && entry["name"] == table)
+        .find(|entry| entry.get("type").unwrap() == "table" && entry.get("name").unwrap() == table)
         .unwrap();
     let constraint = match old {
         OldColumn::Required => " NOT NULL",
         OldColumn::Nullable => "",
         OldColumn::Defaulted => " NOT NULL DEFAULT 'legacy-default'",
     };
-    let mut sql = column_constraint(entry["sql"].as_str().unwrap(), column, constraint);
+    let mut sql = column_constraint(
+        entry.get("sql").unwrap().as_str().unwrap(),
+        column,
+        constraint,
+    );
     if matches!(model, Model::Passkey) {
         // The native record API omits the bundled Rust credential and update timestamp.
         sql = column_constraint(&sql, "credential", " NOT NULL DEFAULT 'legacy-credential'");
@@ -83,14 +87,13 @@ pub(super) async fn prepare(database: &DatabaseConnection, model: Model, old: Ol
             " NOT NULL DEFAULT '2030-01-01T00:00:00.000Z'",
         );
     }
-    entry["sql"] = json!(sql);
+    *entry.get_mut("sql").unwrap() = json!(sql);
     execute(database, &format!("DROP TABLE \"{table}\"")).await;
     execute(database, &sql).await;
-    for entry in expected_catalog
-        .iter()
-        .filter(|entry| entry["table"] == table && entry["type"] != "table")
-    {
-        if let Some(sql) = entry["sql"].as_str() {
+    for entry in expected_catalog.iter().filter(|entry| {
+        entry.get("table").unwrap() == table && entry.get("type").unwrap() != "table"
+    }) {
+        if let Some(sql) = entry.get("sql").unwrap().as_str() {
             execute(database, sql).await;
         }
     }

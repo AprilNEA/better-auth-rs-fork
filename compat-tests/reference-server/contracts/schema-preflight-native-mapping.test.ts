@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { diffSchema, getExpectedSchema, SchemaMismatchError } from "@better-auth/core/db/internal";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { getMigrations } from "better-auth/db/migration";
@@ -227,3 +228,105 @@ for (const mode of ["missing-alias", "both-columns", "missing-primary-key"] as c
     });
   });
 }
+
+function orderedMismatch(table: string, columns: string[], required: string[] = []) {
+  return { error: {
+    name: "BetterAuthError", code: "SCHEMA_MISMATCH", source: "database",
+    findings: [
+      ...columns.map(column => ({ kind: "missing-column", table, column })),
+      ...required.map(column => ({ kind: "unexpected-required-column", table, column })),
+    ],
+    message: `Database schema mismatch\n\n  Missing columns\n    ${columns.map(column => `${table}.${column}`).join("\n    ")}`
+      + (required.length ? `\n\n  Required columns Better Auth never writes\n    ${required.map(column => `${table}.${column}`).join("\n    ")}\n\n  Inserts into ${table} will fail.` : "")
+      + "\n\n  help: " + (required.length ? "Make the listed columns nullable, give them defaults, or remove them.\n        " : "")
+      + "Run `npx auth migrate` to add the missing tables and columns.",
+  } };
+}
+
+for (const model of ["user", "organization"] as const) {
+  test(`SQLite ${model} enumerates numeric declarations and physical aliases at their own boundaries`, async () => {
+    await withRestoredSchema(passkey().schema, async () => {
+      const database = new Database(":memory:");
+      const events: Events = [];
+      const options = base(database);
+      try {
+        await (await getMigrations(options)).runMigrations();
+        database.exec(`DROP TABLE "${model}"`);
+        database.exec(model === "user"
+          ? 'CREATE TABLE "user" (emailVerified BLOB, image BLOB, createdAt BLOB, updatedAt BLOB)'
+          : 'CREATE TABLE "organization" (sentinel BLOB)');
+        const mappings: [string, string][] = model === "user" ? [["name", "10"], ["email", "2"]] : [
+          ["tail", "metadata"], ["10", "slug"], ["2", "logo"], ["01", "name"],
+          ["4294967294", "createdAt"], ["4294967295", "metadata"],
+        ];
+        options.plugins!.push({ id: "numeric-order-preflight", schema: {
+          [model]: { fields: Object.fromEntries(mappings.map(([name, destination]) => [name, field(name, destination, events)])) },
+        } });
+        const catalog = observeSqliteCatalog(database, model, "The order fixture table must exist");
+        const empty = Object.fromEntries(tables.map(table => [table, database.query(`SELECT * FROM "${table}"`).all()]));
+        expect(empty).toStrictEqual(Object.fromEntries(tables.map(table => [table, []])));
+        const missing = model === "user" ? ["id", "2", "10"] : ["id", "logo", "slug", "createdAt", "name", "metadata"];
+        expect(await outcome(betterAuth(options))).toStrictEqual(orderedMismatch(model, missing));
+        expect(events).toStrictEqual([]);
+        expect(Object.fromEntries(tables.map(table => [table, database.query(`SELECT * FROM "${table}"`).all()]))).toStrictEqual(empty);
+        expect(observeSqliteCatalog(database, model, "Preflight must preserve the order fixture")).toStrictEqual(catalog);
+      } finally { database.close(); }
+    });
+  });
+}
+
+for (const idColumn of ["id", "20"]) {
+  test(`shared physical table enumerates merged fields after the independent ${idColumn} primary key`, () => {
+    const events: Events = [];
+    const replacement = field("secondTen", "10", events);
+    const expected = getExpectedSchema({ plugins: [{ id: "shared-schema-order", schema: {
+      first: { modelName: "shared", disableMigration: true, fields: {
+        tail: field("tail", "tail", events), firstTen: field("firstTen", "10", events),
+        leading: field("leading", "01", events), lastIndex: field("lastIndex", "4294967294", events),
+        boundary: field("boundary", "4294967295", events), explicitId: field("explicitId", idColumn, events),
+      } },
+      second: { modelName: "shared", fields: {
+        two: field("two", "2", events), secondTen: replacement, other: field("other", "other", events),
+      } },
+    } }] });
+    const shared = expected.shared!;
+    shared.idColumn = idColumn;
+    expect(shared.disableMigrations).toBe(false);
+    expect(shared.fields["10"]).toBe(replacement);
+    const actual = [{ name: "shared", columns: [
+      { name: "legacy-z", nullable: false, hasDefault: false },
+      { name: "legacy-a", nullable: false, hasDefault: false },
+      { name: "optional", nullable: true, hasDefault: false },
+      { name: "defaulted", nullable: false, hasDefault: true },
+    ] }];
+    const finding = new SchemaMismatchError(diffSchema({ shared }, actual), "database");
+    expect({ error: {
+      name: finding.name, message: finding.message, code: finding.code,
+      source: finding.source, findings: finding.findings,
+    } }).toStrictEqual(orderedMismatch("shared", [
+      idColumn, "2", "10", "4294967294", "tail", "01", "4294967295", "other",
+    ], ["legacy-z", "legacy-a"]));
+    expect(events).toStrictEqual([]);
+  });
+}
+
+test("numeric physical table names follow JavaScript property order after modelName mapping", () => {
+  const expected = getExpectedSchema({
+    user: { modelName: "tail" }, session: { modelName: "10" },
+    account: { modelName: "2" }, verification: { modelName: "01" },
+    plugins: [{ id: "numeric-table-order", schema: {
+      lastIndex: { modelName: "4294967294", fields: {} },
+      boundary: { modelName: "4294967295", fields: {} },
+    } }],
+  });
+  const finding = new SchemaMismatchError(diffSchema(expected, []), "database");
+  expect({
+    name: finding.name, message: finding.message, code: finding.code,
+    source: finding.source, findings: finding.findings,
+  }).toStrictEqual({
+    name: "BetterAuthError", code: "SCHEMA_MISMATCH", source: "database",
+    findings: ["2", "10", "4294967294", "tail", "01", "4294967295"]
+      .map(table => ({ kind: "missing-table", table })),
+    message: "Database schema mismatch\n\n  Missing tables\n    2, 10, 4294967294, tail, 01, 4294967295\n\n  help: Run `npx auth migrate` to add the missing tables and columns.",
+  });
+});

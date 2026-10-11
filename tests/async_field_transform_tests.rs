@@ -1,5 +1,8 @@
 #![cfg(feature = "seaorm2")]
 
+#[path = "async_field_transform_tests/temporal.rs"]
+mod temporal;
+
 use better_auth_core::{
     AuthConfig, AuthError, AuthResult, AuthSchema, AuthStore, CreateAccount, CreateSession,
     CreateUser, CreateVerification, FieldMap, FieldValue, SchemaValue, UpdateUser, UserView,

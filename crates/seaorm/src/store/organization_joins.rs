@@ -194,21 +194,19 @@ where
             self.select_detail_relation::<M>(relation, value).await?
         };
         let backend = self.connection().get_database_backend();
+        let record_fields = relation.fields.clone();
+        let record_runtime = self.model_fields.clone();
+        let role = relation.role;
         let mut pages = super::joins::project_child_pages(
             &relation.fields,
             vec![rows.as_slice()],
             backend,
-            &|row: &SqlRow| {
+            &move |row: &SqlRow| {
                 if native {
-                    row.native_record(&relation.fields, backend, M::column)
-                        .map(|record| record.with_id_output(&self.model_fields, relation.role))
+                    row.native_record(&record_fields, backend, M::column)
+                        .map(|record| record.with_id_output(&record_runtime, role))
                 } else {
-                    models::raw_record::<M>(
-                        row,
-                        &relation.fields,
-                        backend,
-                        (&self.model_fields, relation.role),
-                    )
+                    models::raw_record::<M>(row, &record_fields, backend, (&record_runtime, role))
                 }
             },
         )

@@ -13,13 +13,10 @@ enum Progress {
     Failed(AuthError),
 }
 
-async fn report<T>(
-    future: impl Future<Output = AuthResult<T>>,
-    progress: UnboundedSender<Progress>,
-) -> Option<T> {
+async fn started<T>(future: impl Future<Output = T>, progress: UnboundedSender<Progress>) -> T {
     let mut future = pin!(future);
     let mut started = false;
-    let result = poll_fn(|context| {
+    poll_fn(|context| {
         let result = future.as_mut().poll(context);
         if !started {
             started = true;
@@ -27,7 +24,14 @@ async fn report<T>(
         }
         result
     })
-    .await;
+    .await
+}
+
+async fn report<T>(
+    future: impl Future<Output = AuthResult<T>>,
+    progress: UnboundedSender<Progress>,
+) -> Option<T> {
+    let result = started(future, progress.clone()).await;
     match result {
         Ok(value) => Some(value),
         Err(error) => {
@@ -35,6 +39,28 @@ async fn report<T>(
             None
         }
     }
+}
+
+pub(crate) struct FailureReporter(UnboundedSender<Progress>);
+
+impl FailureReporter {
+    pub(crate) fn failed(&self, error: AuthError) {
+        let _ = self.0.send(Progress::Failed(error));
+    }
+}
+
+/// Retain an owned collector after its first reported error without changing its scheduling.
+pub(crate) async fn retain<T: Send + 'static, F>(
+    name: &'static str,
+    work: impl FnOnce(FailureReporter) -> F + Send + 'static,
+) -> AuthResult<T>
+where
+    F: Future<Output = Option<T>> + Send + 'static,
+{
+    supervise(name, 1, move |progress| async move {
+        started(work(FailureReporter(progress.clone())), progress).await
+    })
+    .await
 }
 
 async fn supervise<T: Send + 'static, F>(

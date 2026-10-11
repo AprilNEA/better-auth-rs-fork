@@ -150,22 +150,24 @@ where
                         .await?
                 }
             };
+            let record_fields = member_fields.clone();
+            let record_runtime = self.model_fields.clone();
             let mut pages = super::joins::project_child_pages(
                 &member_fields,
                 vec![rows.as_slice()],
                 backend,
-                &|row: &SqlRow| {
+                &move |row: &SqlRow| {
                     let record = if native {
-                        row.native_record(&member_fields, backend, O::TeamMember::column)?
+                        row.native_record(&record_fields, backend, O::TeamMember::column)?
                     } else {
                         row.record::<Entity<O::TeamMember>>(
-                            &member_fields,
+                            &record_fields,
                             backend,
                             O::TeamMember::column("id")?,
                             O::TeamMember::column,
                         )?
                     };
-                    Ok(record.with_id_output(&self.model_fields, EntityRole::TeamMember))
+                    Ok(record.with_id_output(&record_runtime, EntityRole::TeamMember))
                 },
             )
             .await?;

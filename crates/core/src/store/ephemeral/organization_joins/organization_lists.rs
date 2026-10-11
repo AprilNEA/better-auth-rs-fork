@@ -111,16 +111,26 @@ impl EphemeralStore {
                 Ok((sources, Some(children)))
             })
             .await?;
-        self.project_record_sources_batches_then(
-            parent.role,
+        let continuation = std::sync::Arc::new((
+            children,
+            fields.clone(),
+            child_fields,
+            relation,
+            runtime,
+            parent,
+        ));
+        let store = self.clone();
+        self.project_record_sources_owned_batches_then(
+            continuation.5.role,
             &fields,
             sources,
             |_, fields| Ok(fields),
-            |ready: Vec<(usize, FieldMap)>| {
-                let (children, fields, child_fields, relation, runtime) =
-                    (&children, &fields, &child_fields, &relation, &runtime);
-                let parent = &parent;
+            move |ready: Vec<(usize, FieldMap)>| {
+                let continuation = continuation.clone();
+                let store = store.clone();
                 async move {
+                    let (children, fields, child_fields, relation, runtime, parent) =
+                        continuation.as_ref();
                     let mut pages = Vec::with_capacity(ready.len());
                     for (index, output) in &ready {
                         let rows = if let Some(children) = children {
@@ -140,34 +150,39 @@ impl EphemeralStore {
                                     (EntityRole::Organization, "organization", child_fields),
                                     runtime,
                                 )?;
-                                let value = self.organization_query(
+                                let value = store.organization_query(
                                     EntityRole::Organization,
                                     &logical,
                                     value,
                                 )?;
-                                self.raw(
-                                    "organization",
-                                    if relation.many { "findMany" } else { "findOne" },
-                                    |state| {
-                                        let rows = state.organizations.select_refs(|row| {
-                                            crate::query::field_matches_equality(
-                                                row.get(&physical).unwrap_or(&Value::Undefined),
-                                                &value.field_value(),
-                                            )
-                                        })?;
-                                        Ok(if relation.many {
-                                            crate::query::paginate_memory(rows, Some(limit), None)
-                                        } else {
-                                            rows.into_iter().take(1).collect()
-                                        })
-                                    },
-                                )
-                                .await?
+                                store
+                                    .raw(
+                                        "organization",
+                                        if relation.many { "findMany" } else { "findOne" },
+                                        |state| {
+                                            let rows = state.organizations.select_refs(|row| {
+                                                crate::query::field_matches_equality(
+                                                    row.get(&physical).unwrap_or(&Value::Undefined),
+                                                    &value.field_value(),
+                                                )
+                                            })?;
+                                            Ok(if relation.many {
+                                                crate::query::paginate_memory(
+                                                    rows,
+                                                    Some(limit),
+                                                    None,
+                                                )
+                                            } else {
+                                                rows.into_iter().take(1).collect()
+                                            })
+                                        },
+                                    )
+                                    .await?
                             }
                         };
                         pages.push(rows);
                     }
-                    let output = self
+                    let output = store
                         .output_record_pages(
                             EntityRole::Organization,
                             pages.iter().map(Vec::as_slice).collect(),

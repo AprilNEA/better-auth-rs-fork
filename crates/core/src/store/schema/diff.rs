@@ -1,3 +1,4 @@
+use crate::{FieldMap, FieldValue};
 use serde::Serialize;
 use std::{collections::HashSet, fmt};
 
@@ -6,7 +7,9 @@ use std::{collections::HashSet, fmt};
 pub struct SchemaTable {
     pub name: String,
     pub schema: Option<String>,
-    /// Include the physical primary-key column; custom adapters need not name it `id`.
+    /// The independent physical primary-key column; custom adapters need not name it `id`.
+    pub id_column: String,
+    /// Physical declaration columns, including any explicit ID field alias.
     pub columns: Vec<String>,
     pub disable_migrations: bool,
 }
@@ -43,7 +46,7 @@ pub fn diff(expected: &[SchemaTable], actual: &[StoredSchemaTable]) -> Vec<Schem
             .find(|entry| entry.name == table.name && entry.schema == table.schema)
         {
             existing.disable_migrations &= table.disable_migrations;
-            for name in &table.columns {
+            for name in std::iter::once(&table.id_column).chain(&table.columns) {
                 if !existing.columns.contains(name) {
                     existing.columns.push(name.clone());
                 }
@@ -52,6 +55,10 @@ pub fn diff(expected: &[SchemaTable], actual: &[StoredSchemaTable]) -> Vec<Schem
             merged.push(table.clone());
         }
     }
+    // Schema namespaces select tables; equal physical names retain their relative order.
+    merged.sort_by_key(|table| {
+        crate::utils::json::array_index(&table.name).map_or((true, 0), |index| (false, index))
+    });
     let mut findings = Vec::new();
     for table in merged.iter().filter(|table| !table.disable_migrations) {
         let Some(stored) = actual.iter().find(|stored| {
@@ -62,7 +69,16 @@ pub fn diff(expected: &[SchemaTable], actual: &[StoredSchemaTable]) -> Vec<Schem
             });
             continue;
         };
-        for column in &table.columns {
+        // Upstream enumerates the merged physical fields before prepending the independent primary key.
+        let mut columns: FieldMap = table
+            .columns
+            .iter()
+            .map(|name| (name.clone(), FieldValue::Undefined))
+            .collect();
+        columns.sort_property_order();
+        let mut written = FieldMap::from([(table.id_column.clone(), FieldValue::Undefined)]);
+        written.extend(columns);
+        for column in written.keys() {
             if !stored.columns.iter().any(|stored| stored.name == *column) {
                 findings.push(SchemaFinding::MissingColumn {
                     table: table.name.clone(),
@@ -71,7 +87,7 @@ pub fn diff(expected: &[SchemaTable], actual: &[StoredSchemaTable]) -> Vec<Schem
             }
         }
         for column in &stored.columns {
-            if !table.columns.contains(&column.name) && !column.nullable && !column.has_default {
+            if !written.contains_key(&column.name) && !column.nullable && !column.has_default {
                 findings.push(SchemaFinding::UnexpectedRequiredColumn {
                     table: table.name.clone(),
                     column: column.name.clone(),

@@ -8,15 +8,70 @@ use super::*;
 use crate::session::SessionData;
 use crate::store::JoinValue;
 use crate::store::schema::resolve_field_name;
-use crate::user_fields::{project_adapter_value, project_source_fields_batches_then};
+use crate::user_fields::{
+    UserFieldConfig, project_adapter_value, project_owned_source_fields_batches_then,
+    project_source_fields_batches_then,
+};
+use futures_util::future::BoxFuture;
 
 type UserRef = RowRef<UserView>;
+type UserProjection = (UserRef, bool, FieldMap);
 type SessionSnapshot = (SessionView, Option<SessionData<JoinValue<UserView>>>);
+
+fn read_user_field(
+    runtime: &crate::plugin_runtime::ModelFields,
+    (source, started, _): &mut UserProjection,
+    name: &str,
+    field: &UserFieldConfig,
+) -> AuthResult<Option<Value>> {
+    if !*started {
+        runtime.begin_id_output(crate::store::schema::EntityRole::User)?;
+        *started = true;
+    }
+    let physical = resolve_field_name(field.field_name.as_deref(), name);
+    source.read(|user| Ok(FieldMap::from(user.clone()).get(physical).cloned()))
+}
+
+fn apply_user_field<'a>(
+    (_, _, output): &'a mut UserProjection,
+    name: &'a str,
+    field: &'a UserFieldConfig,
+    value: Option<Value>,
+) -> BoxFuture<'a, AuthResult<()>> {
+    Box::pin(async move {
+        let value = if name == "id" {
+            EphemeralStore::project_id(&crate::SchemaValue::from_field(value.unwrap_or_default()))?
+                .into_field_value()
+        } else {
+            project_adapter_value(
+                value.unwrap_or_default(),
+                field,
+                field.references_id(),
+                true,
+            )
+            .await?
+        };
+        let _ = output.insert(name.to_owned(), value);
+        Ok(())
+    })
+}
 
 impl EphemeralStore {
     pub(super) async fn output_user_refs(&self, users: Vec<UserRef>) -> AuthResult<Vec<UserView>> {
-        self.output_user_refs_batches_then(users, |ready| std::future::ready(Ok(ready)))
-            .await
+        let fields = self.user_schema();
+        let runtime = self.model_fields.clone();
+        project_owned_source_fields_batches_then(
+            users
+                .into_iter()
+                .map(|user| (user, false, FieldMap::new()))
+                .collect(),
+            fields.fields().clone(),
+            move |row, name, field| read_user_field(&runtime, row, name, field),
+            apply_user_field,
+            |_, (_, _, output)| UserView::from_field_values(std::mem::take(output)),
+            |ready| std::future::ready(Ok(ready)),
+        )
+        .await
     }
 
     pub(super) async fn output_user_refs_batches_then<R: Send, F>(
@@ -35,35 +90,8 @@ impl EphemeralStore {
         project_source_fields_batches_then(
             &mut rows,
             fields.fields(),
-            |(source, started, _), name, field| {
-                if !*started {
-                    self.model_fields
-                        .begin_id_output(crate::store::schema::EntityRole::User)?;
-                    *started = true;
-                }
-                let physical = resolve_field_name(field.field_name.as_deref(), name);
-                source.read(|user| Ok(FieldMap::from(user.clone()).get(physical).cloned()))
-            },
-            |(_, _, output), name, field, value| {
-                Box::pin(async move {
-                    let value = if name == "id" {
-                        Self::project_id(&crate::SchemaValue::from_field(
-                            value.unwrap_or_default(),
-                        ))?
-                        .into_field_value()
-                    } else {
-                        project_adapter_value(
-                            value.unwrap_or_default(),
-                            field,
-                            field.references_id(),
-                            true,
-                        )
-                        .await?
-                    };
-                    let _ = output.insert(name.to_owned(), value);
-                    Ok(())
-                })
-            },
+            |row, name, field| read_user_field(&self.model_fields, row, name, field),
+            apply_user_field,
             |_, (_, _, output)| UserView::from_field_values(std::mem::take(output)),
             complete,
         )

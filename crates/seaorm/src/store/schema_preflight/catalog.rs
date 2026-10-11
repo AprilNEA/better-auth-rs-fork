@@ -140,7 +140,8 @@ mod tests {
         let mut expected = vec![SchemaTable {
             name: "user".into(),
             schema: None,
-            columns: vec!["id".into()],
+            id_column: "id".into(),
+            columns: Vec::new(),
             disable_migrations: false,
         }];
         resolve_search_path(&mut expected, &actual, &["tenant".into(), "public".into()]);

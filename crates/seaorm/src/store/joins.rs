@@ -10,6 +10,7 @@ use better_auth_core::{
     store::schema::resolve_field_name,
     user_fields::{AdapterRecord, UserConfig, UserFieldConfig},
 };
+use std::sync::Arc;
 
 const PARENT: &str = "_auth_parent";
 const CHILD: &str = "_auth_child";
@@ -82,53 +83,78 @@ type ChildPagesFuture<'a> = std::pin::Pin<
     Box<dyn std::future::Future<Output = AuthResult<Vec<Vec<FieldMap>>>> + Send + 'a>,
 >;
 
-pub(super) fn project_child_pages<'a, M: Sync, F>(
-    fields: &'a UserConfig,
-    pages: Vec<&'a [M]>,
+pub(super) fn project_child_pages<M: Clone + Send + Sync + 'static, F>(
+    fields: &UserConfig,
+    pages: Vec<&[M]>,
     backend: sea_orm::DbBackend,
-    record: &'a F,
-) -> ChildPagesFuture<'a>
+    record: &F,
+) -> ChildPagesFuture<'static>
 where
-    F: Fn(&M) -> AuthResult<AdapterRecord> + Sync,
+    F: Fn(&M) -> AuthResult<AdapterRecord> + Clone + Send + Sync + 'static,
+{
+    project_owned_child_pages(
+        Arc::new(fields.clone()),
+        pages.into_iter().map(|page| (Arc::from(page), 0)).collect(),
+        backend,
+        Arc::new(record.clone()),
+    )
+}
+
+fn project_owned_child_pages<M: Send + Sync + 'static, F>(
+    fields: Arc<UserConfig>,
+    pages: Vec<(Arc<[M]>, usize)>,
+    backend: sea_orm::DbBackend,
+    record: Arc<F>,
+) -> ChildPagesFuture<'static>
+where
+    F: Fn(&M) -> AuthResult<AdapterRecord> + Send + Sync + 'static,
 {
     Box::pin(async move {
         let mut output: Vec<Vec<FieldMap>> = pages.iter().map(|_| Vec::new()).collect();
         let mut active = Vec::new();
         let mut records = Vec::new();
-        for (index, page) in pages.into_iter().enumerate() {
-            if let Some((first, rest)) = page.split_first() {
-                active.push((index, rest));
+        for (index, (page, position)) in pages.into_iter().enumerate() {
+            if let Some(first) = page.get(position) {
                 records.push(record(first)?);
+                active.push((index, (page, position + 1)));
             }
         }
         if records.is_empty() {
             return Ok(output);
         }
+        let active = Arc::new(active);
+        let continuation = (active.clone(), fields.clone());
         let projected = fields
-            .project_adapter_records_batches_then(
+            .project_adapter_records_owned_batches_then(
                 records,
                 backend == sea_orm::DbBackend::Postgres,
                 backend != sea_orm::DbBackend::Sqlite,
-                |ready| {
-                    let active = &active;
+                move |ready| {
+                    let (active, fields) = continuation.clone();
+                    let record = record.clone();
                     async move {
                         let tails = ready
                             .iter()
                             .map(|(index, _)| {
-                                active.get(*index).map(|(_, tail)| *tail).ok_or_else(|| {
-                                    crate::error::AuthError::internal(
-                                        "Child projection lost its parent page",
-                                    )
-                                })
+                                active
+                                    .get(*index)
+                                    .map(|(_, tail)| tail.clone())
+                                    .ok_or_else(|| {
+                                        crate::error::AuthError::internal(
+                                            "Child projection lost its parent page",
+                                        )
+                                    })
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
                         // Ready parents advance together; each page completes one child at a time.
-                        let remaining = project_child_pages(fields, tails, backend, record).await?;
+                        let remaining =
+                            project_owned_child_pages(fields.clone(), tails, backend, record)
+                                .await?;
                         Ok(ready
                             .into_iter()
                             .zip(remaining)
                             .map(|((index, first), mut rest)| {
-                                rest.insert(0, super::plugin_rows::ordered_output(fields, first));
+                                rest.insert(0, super::plugin_rows::ordered_output(&fields, first));
                                 (index, rest)
                             })
                             .collect())
@@ -136,8 +162,8 @@ where
                 },
             )
             .await?;
-        for ((index, _), page) in active.into_iter().zip(projected) {
-            *output.get_mut(index).ok_or_else(|| {
+        for ((index, _), page) in active.iter().zip(projected) {
+            *output.get_mut(*index).ok_or_else(|| {
                 crate::error::AuthError::internal("Child projection lost its result page")
             })? = page;
         }

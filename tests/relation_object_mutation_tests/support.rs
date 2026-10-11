@@ -330,7 +330,10 @@ pub(super) async fn sql_fixture(
             json!({"id":"parent","name":"Parent","memberCount":2,"organizationId":"organization","createdAt":time,"updatedAt":null})
         }
     };
-    parent[target.physical()] = json!(COLLISION);
+    let _ = parent
+        .as_object_mut()
+        .ok_or_else(|| AuthError::internal("Fixture parent must be an object"))?
+        .insert(target.physical().into(), json!(COLLISION));
     let parent_table = match target {
         Target::User => "linked_user",
         Target::Account => "linked_account",

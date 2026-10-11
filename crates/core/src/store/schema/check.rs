@@ -5,11 +5,17 @@ use futures_util::{
     FutureExt,
     future::{BoxFuture, Shared},
 };
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 
+#[derive(Clone)]
+struct TransactionBinding {
+    check: Arc<SchemaCheck>,
+    active: Weak<()>,
+}
+
 tokio::task_local! {
-    static TRANSACTIONS: Vec<Arc<SchemaCheck>>;
+    static TRANSACTIONS: Vec<TransactionBinding>;
 }
 
 /// Adapter-owned introspection. A revision changes only after an explicit schema invalidation.
@@ -114,7 +120,11 @@ pub struct SchemaValidation {
 impl SchemaValidation {
     pub async fn check_runtime(&self) -> AuthResult<()> {
         let active = TRANSACTIONS
-            .try_with(|checks| checks.iter().any(|check| Arc::ptr_eq(check, &self.check)))
+            .try_with(|bindings| {
+                bindings.iter().any(|binding| {
+                    Arc::ptr_eq(&binding.check, &self.check) && binding.active.upgrade().is_some()
+                })
+            })
             .unwrap_or(false);
         if self.runtime_enabled && !active {
             self.check.check().await?;
@@ -124,9 +134,23 @@ impl SchemaValidation {
 
     /// Scope the active transaction without treating another auth instance's check as completed.
     pub async fn in_transaction<T>(&self, operation: impl std::future::Future<Output = T>) -> T {
-        let mut checks = TRANSACTIONS.try_with(Clone::clone).unwrap_or_default();
-        checks.push(self.check.clone());
-        TRANSACTIONS.scope(checks, Box::pin(operation)).await
+        let active = Arc::new(());
+        let mut bindings = TRANSACTIONS.try_with(Clone::clone).unwrap_or_default();
+        bindings.push(TransactionBinding {
+            check: self.check.clone(),
+            active: Arc::downgrade(&active),
+        });
+        let result = TRANSACTIONS.scope(bindings, Box::pin(operation)).await;
+        drop(active);
+        result
+    }
+
+    /// Spawned callbacks inherit active checks without extending the original transaction scope.
+    pub(crate) fn inherit_transaction_scope<T>(
+        future: impl std::future::Future<Output = T>,
+    ) -> impl std::future::Future<Output = T> {
+        let bindings = TRANSACTIONS.try_with(Clone::clone).unwrap_or_default();
+        TRANSACTIONS.scope(bindings, future)
     }
 
     /// Initialization reports failure but must not prevent the auth context from resolving.
