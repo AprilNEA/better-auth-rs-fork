@@ -17,16 +17,22 @@ pub(super) struct OtpCallbacksFixture {
     events: Arc<Mutex<Vec<Value>>>,
 }
 impl OtpCallbacksFixture {
-    fn event(&self, name: &str, data: Value, endpoint: &EndpointContext<'_, TestSchema>) {
+    fn event(
+        &self,
+        name: &str,
+        data: Value,
+        endpoint: &EndpointContext<'_, TestSchema>,
+    ) -> AuthResult<()> {
         let request = endpoint.request;
         self.events.lock().unwrap().push(json!({
             "name":name, "data":data, "path":endpoint.path,
             "requestPath":request.map(|req| req.path()),
-            "body":endpoint.body.json().expect("The callback body must serialize"), "header":request.and_then(|req| req.headers.get("x-callback-tag")),
+            "body":endpoint.body.json()?, "header":request.and_then(|req| req.headers.get("x-callback-tag")),
             "basePath": endpoint.auth.config.base_path,
             "hasResponse":endpoint.response.is_some(),
-            "sessionEmail":endpoint.session.as_ref().map(|data|data.user_field("email").json()).transpose().expect("The callback User email must serialize").flatten(),
+            "sessionEmail":endpoint.session.as_ref().map(|data|data.user_field("email")?.json()).transpose()?.flatten(),
         }));
+        Ok(())
     }
     fn fail(endpoint: &EndpointContext<'_, TestSchema>, name: &str) -> AuthResult<()> {
         if endpoint
@@ -51,7 +57,7 @@ impl OtpCallbacksFixture {
             .change_email(true)
             .callbacks(EmailOtpCallbacks::<TestSchema>::default()
                 .generate(move |email, kind, endpoint| {
-                    generate.event("email.generate", json!({"email":email,"type":kind}), endpoint);
+                    generate.event("email.generate", json!({"email":email,"type":kind}), endpoint)?;
                     Self::fail(endpoint, "generate")?;
                     Ok(Some("123456".into()))
                 })
@@ -65,7 +71,7 @@ impl OtpCallbacksFixture {
                             Some(transaction) => transaction.get_user_by_email(&message.email).await?,
                             None => endpoint.auth.database.get_user_by_email(&message.email).await?,
                         }.is_some();
-                        fixture.event("email.send", json!({"email":message.email,"type":message.kind,"userExists":exists}), &endpoint);
+                        fixture.event("email.send", json!({"email":message.email,"type":message.kind,"userExists":exists}), &endpoint)?;
                         Self::fail(&endpoint, "email-send")
                     })))
                 }))
@@ -81,23 +87,23 @@ impl OtpCallbacksFixture {
                 .send_otp(move |message, endpoint| { let fixture=send.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(Box::pin(async move {
                     let endpoint=endpoint.as_endpoint();
                     let exists=endpoint.auth.database.get_user_by_phone_number(&message.phone_number).await?.is_some();
-                    fixture.event("phone.send", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint);
+                    fixture.event("phone.send", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint)?;
                     Self::fail(&endpoint,"phone-send")
                 }))) })
                 .send_password_reset_otp(move |message, endpoint| { let fixture=reset.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(Box::pin(async move {
                     let endpoint=endpoint.as_endpoint();
                     let exists=endpoint.auth.database.get_user_by_phone_number(&message.phone_number).await?.is_some();
-                    fixture.event("phone.reset", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint);
+                    fixture.event("phone.reset", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint)?;
                     Self::fail(&endpoint,"phone-reset")
                 }))) })
                 .verify_otp(move |message, endpoint| { let fixture=verify.clone(); Box::pin(async move {
-                    fixture.event("phone.verify", json!({"phoneNumber":message.phone_number}), endpoint);
+                    fixture.event("phone.verify", json!({"phoneNumber":message.phone_number}), endpoint)?;
                     Self::fail(endpoint,"phone-verify")?;
                     Ok(message.code == "246810")
                 }) })
                 .on_verification(move |message, endpoint| { let fixture=verified.clone(); Box::pin(async move {
                     let user=endpoint.auth.database.get_user_by_id(message.user.id.typed().unwrap()).await?.unwrap();
-                    fixture.event("phone.verified", json!({"phoneNumber":message.phone_number,"persistedVerified":user.phone_number_verified(),"name":message.user.name}), endpoint);
+                    fixture.event("phone.verified", json!({"phoneNumber":message.phone_number,"persistedVerified":user.phone_number_verified(),"name":message.user.name}), endpoint)?;
                     Self::fail(endpoint,"verified")
                 }) }))
     }

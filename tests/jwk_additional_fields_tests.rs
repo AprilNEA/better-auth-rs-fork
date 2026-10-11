@@ -11,6 +11,7 @@ use better_auth::{
         store::{EphemeralStore, MemoryCacheAdapter, transaction},
     },
     BetterAuth,
+    plugins::JwtPlugin,
 };
 use contract::{Fields, Scenario, Trace};
 use serde_json::json;
@@ -42,6 +43,7 @@ async fn sqlite_jwk_display_fields_match_pinned_adapter_phases() -> AuthResult<(
 async fn secondary_jwk_display_fields_forward_policies() -> AuthResult<()> {
     let auth = BetterAuth::new(contract::config())
         .store(EphemeralStore::new(Arc::new(contract::config())))
+        .plugin(JwtPlugin::new())
         .secondary_storage(Arc::new(MemoryCacheAdapter::new()))
         .build()
         .await?;
@@ -59,6 +61,7 @@ async fn transaction_contract<S: AuthSchema>(
     let events = Trace::default();
     let mut builder = BetterAuth::new(contract::config())
         .store_arc(raw.clone())
+        .plugin(JwtPlugin::new())
         .plugin(Fields(contract::policies(
             Some(events.clone()),
             Scenario::Success,
@@ -119,6 +122,7 @@ async fn transaction_contract<S: AuthSchema>(
     let failed_events = Trace::default();
     let mut failed_builder = BetterAuth::new(contract::config())
         .store_arc(raw)
+        .plugin(JwtPlugin::new())
         .plugin(Fields(contract::policies(
             Some(failed_events.clone()),
             Scenario::OutputError,

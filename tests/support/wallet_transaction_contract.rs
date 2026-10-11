@@ -21,6 +21,7 @@ pub(super) async fn contract<S: AuthSchema>(
 ) -> AuthResult<()> {
     let reader = BetterAuth::new(fields::config())
         .store_arc(raw.clone())
+        .plugin(fields::wallet_plugin())
         .plugin(Fields(fields::policies(None, Scenario::Success)))
         .build()
         .await?;
@@ -36,6 +37,7 @@ pub(super) async fn contract<S: AuthSchema>(
     let events = Trace::default();
     let mut builder = BetterAuth::new(fields::config())
         .store_arc(raw)
+        .plugin(fields::wallet_plugin())
         .plugin(Fields(fields::policies(Some(events.clone()), scenario)));
     if secondary {
         builder = builder.secondary_storage(Arc::new(MemoryCacheAdapter::new()));

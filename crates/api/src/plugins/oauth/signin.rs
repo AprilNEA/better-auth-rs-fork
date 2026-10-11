@@ -1,5 +1,5 @@
 use better_auth_core::entity::{AuthSession, AuthUser};
-use better_auth_core::wire::{SessionView, UserView};
+use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount, CreateUser,
     UpdateAccount, UpdateUser,
@@ -54,8 +54,6 @@ impl OAuthSignInOptions<'_> {
 
 pub(super) struct ProcessOAuthUserResult {
     pub(super) issued: better_auth_core::session::NativeSessionData,
-    pub(super) session: SessionView,
-    pub(super) user: better_auth_core::FieldValue,
     pub(super) is_register: bool,
     pub(super) account_cookie: Option<AccountCookiePayload>,
 }
@@ -446,7 +444,11 @@ pub(super) async fn process_oauth_sign_in(
             }
         });
 
-        return finish_oauth_user(issued, false, account_cookie, ctx).await;
+        return Ok(ProcessOAuthUserResult {
+            issued,
+            is_register: false,
+            account_cookie,
+        });
     }
 
     if let Some(existing_user) = existing_user {
@@ -585,7 +587,11 @@ pub(super) async fn process_oauth_sign_in(
             .store_account_cookie()
             .then(|| created_account.clone());
 
-        finish_oauth_user(issued, false, account_cookie, ctx).await
+        Ok(ProcessOAuthUserResult {
+            issued,
+            is_register: false,
+            account_cookie,
+        })
     } else {
         if options.disable_sign_up {
             return Err(OAuthSignInError::Generic("signup disabled".to_string()));
@@ -705,7 +711,11 @@ pub(super) async fn process_oauth_sign_in(
             .then_some(created_account)
             .flatten();
 
-        finish_oauth_user(issued, true, account_cookie, ctx).await
+        Ok(ProcessOAuthUserResult {
+            issued,
+            is_register: true,
+            account_cookie,
+        })
     }
 }
 
@@ -736,21 +746,6 @@ fn provider_profile_update<S: better_auth_core::AuthSchema>(
         image: user_info.image.clone().map(Into::into).unwrap_or_default(),
         email: Some(provider_email.to_lowercase()),
         ..Default::default()
-    })
-}
-
-async fn finish_oauth_user(
-    issued: better_auth_core::session::NativeSessionData,
-    is_register: bool,
-    account_cookie: Option<AccountCookiePayload>,
-    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> Result<ProcessOAuthUserResult, OAuthSignInError> {
-    Ok(ProcessOAuthUserResult {
-        user: issued.public_user(&ctx.config.user)?,
-        session: ctx.session_view(&issued.session).await?,
-        issued,
-        is_register,
-        account_cookie,
     })
 }
 
@@ -802,13 +797,13 @@ pub(crate) async fn sign_in_verified_profile(
         OAuthSignInError::Endpoint(response) => response.into(),
     })?;
     ctx.session_manager()
-        .set_native_session_cookie(req, outcome.issued, None)
+        .set_native_session_cookie(req, outcome.issued.clone(), None)
         .await?;
     Ok(AuthResponse::native(
         None,
         better_auth_core::FieldMap::from([
-            ("token".into(), outcome.session.token().field_value()),
-            ("user".into(), outcome.user),
+            ("token".into(), outcome.issued.session.token().field_value()),
+            ("user".into(), outcome.issued.public_user(&ctx.config.user)?),
         ])
         .into(),
     ))

@@ -31,7 +31,7 @@ impl TwoFactorContextFixture {
                 let endpoint = endpoint.to_owned();
                 Ok(Some(Box::pin(async move {
                     let endpoint = endpoint.as_endpoint();
-                    let stored = endpoint.auth.database.get_user_by_id_value(user.model_property("id")?).await?.expect("callback user exists");
+                    let stored = endpoint.auth.database.get_user_by_id_value(&user.model_property("id")?).await?.expect("callback user exists");
                     fixture.events.lock().unwrap().push(json!({
                         "user": { "id":user.model_property("id")?.json()?, "email":user.model_property("email")?.json()?, "secretNote":user.model_property("secretNote")?.json()? },
                         "databaseUser": { "id":stored.id(), "email":stored.email() },
@@ -39,7 +39,7 @@ impl TwoFactorContextFixture {
                         "requestPath": endpoint.request.map(|request| request.path()),
                         "body": endpoint.body.json()?,
                         "header": endpoint.request.and_then(|request| request.header("x-callback-tag")),
-                        "sessionEmail": endpoint.session.as_ref().map(|data| data.user_field("email").json()).transpose()?.flatten(),
+                        "sessionEmail": endpoint.session.as_ref().map(|data| data.user_field("email")?.json()).transpose()?.flatten(),
                         "hasResponse": endpoint.response.is_some(),
                         "otpLength": otp.len(),
                     }));

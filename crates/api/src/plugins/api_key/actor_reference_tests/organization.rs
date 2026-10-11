@@ -1,8 +1,12 @@
 use super::*;
+use crate::plugins::organization::OrganizationPlugin;
 use better_auth_core::{CreateMember, CreateOrganization, SchemaValue};
 
 async fn check_organization_actor<S: AuthSchema>(ctx: AuthContext<S>) {
-    let (mut ctx, _, sessions, _, callbacks) = harness(ctx, false).await;
+    let mut model_fields = ModelFields::default();
+    better_auth_core::AuthPlugin::<S>::schema(&OrganizationPlugin::new(), &mut model_fields)
+        .unwrap();
+    let (mut ctx, _, sessions, _, callbacks) = harness(ctx, false, model_fields).await;
     let _ = ctx.metadata.insert(
         crate::plugins::organization::METADATA_ENABLED.into(),
         json!(true),

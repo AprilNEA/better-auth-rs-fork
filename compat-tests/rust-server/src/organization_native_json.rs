@@ -111,7 +111,9 @@ impl better_auth::plugins::organization::hooks::OrganizationHooks for JsonHooks 
             .metadata
             .as_ref()
             .and_then(FieldValue::as_object)
-            .is_some_and(|value| value.contains_key("clear"))
+            .map(|value| value.own_keys())
+            .transpose()?
+            .is_some_and(|keys| keys.iter().any(|key| key == "clear"))
         {
             data.metadata = Some(FieldValue::Null);
         }

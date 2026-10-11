@@ -92,6 +92,8 @@ mod google_test_support;
 #[cfg(test)]
 mod google_tests;
 #[cfg(test)]
+mod native_projection_tests;
+#[cfg(test)]
 mod native_session_contract_tests;
 #[cfg(test)]
 mod verifier_context_tests;

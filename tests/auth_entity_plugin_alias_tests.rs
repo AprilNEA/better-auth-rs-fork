@@ -103,7 +103,7 @@ async fn contract() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .map(FieldMap::json)
                 .collect::<AuthResult<Vec<_>>>()?
         )?,
-        json!([{"key":"after"}]),
+        json!([{"id":"limit", "key":"after", "count":1, "lastRequest":42}]),
     );
     Ok(())
 }

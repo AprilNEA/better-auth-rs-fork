@@ -19,6 +19,8 @@ mod passkey;
 mod two_factor;
 #[path = "support/wallet_fields.rs"]
 mod wallet;
+#[path = "support/wallet_plugin.rs"]
+mod wallet_plugin;
 
 use better_auth::{
     __private_core::{
@@ -31,7 +33,8 @@ use better_auth::{
         },
     },
     AuthConfig, BetterAuth,
-    plugins::TwoFactorPlugin,
+    plugin::ModelFields,
+    plugins::{ApiKeyPlugin, DeviceAuthorizationPlugin, JwtPlugin, PasskeyPlugin, TwoFactorPlugin},
     seaorm::sea_orm::entity::prelude::DateTimeUtc,
 };
 use rows::{create, read};
@@ -164,10 +167,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut ModelFields) -> AuthResult<()> {
         context.register_model_fields(self.0, self.1.clone())
     }
     async fn on_request(
@@ -310,9 +310,17 @@ async fn contract<S: AuthSchema>(
 
     let trace = Trace::default();
     let mode = Arc::new(AtomicU8::new(0));
-    let reader = BetterAuth::new(config())
-        .store_arc(raw.clone())
-        .plugin(TwoFactorPlugin::new())
+    let builder = || {
+        BetterAuth::new(config())
+            .store_arc(raw.clone())
+            .plugin(ApiKeyPlugin::builder().build())
+            .plugin(PasskeyPlugin::new())
+            .plugin(DeviceAuthorizationPlugin::new())
+            .plugin(TwoFactorPlugin::new())
+            .plugin(JwtPlugin::new())
+            .plugin(wallet_plugin::wallet_plugin())
+    };
+    let reader = builder()
         .plugin(Fields(role(model)?, fields(None, &mode)))
         .build()
         .await?;
@@ -327,9 +335,7 @@ async fn contract<S: AuthSchema>(
         .id
         .typed()?
         .clone();
-    let auth = BetterAuth::new(config())
-        .store_arc(raw)
-        .plugin(TwoFactorPlugin::new())
+    let auth = builder()
         .plugin(Fields(role(model)?, fields(Some(&trace), &mode)))
         .build()
         .await?;

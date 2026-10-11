@@ -50,7 +50,8 @@ fn context<S: AuthSchema>(
     let mut keys = endpoint
         .body
         .as_object()
-        .map(|body| body.keys().cloned().collect::<Vec<_>>())
+        .map(|body| body.own_keys())
+        .transpose()?
         .unwrap_or_default();
     keys.sort();
     let mut value = json!({"path":endpoint.path,"request":endpoint.request.is_some(),"headers":endpoint.headers().is_some(),"bodyKeys":keys,"session":endpoint.session.is_some(),"newSession":endpoint.new_session()?.is_some()});

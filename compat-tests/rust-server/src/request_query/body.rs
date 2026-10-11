@@ -239,7 +239,9 @@ impl better_auth_core::email::SendVerificationEmail for BodyTrace {
     ) -> AuthResult<()> {
         self.current("email.sender", None);
         let user = better_auth_core::wire::UserView::try_from(
-            user.as_object().expect("Verification User").clone(),
+            user.as_object()
+                .expect("Verification User")
+                .snapshot_fields()?,
         )?;
         self.email("verification", &user, None, url, token)
     }
@@ -296,7 +298,7 @@ impl better_auth::plugins::SendChangeEmailConfirmation for BodyTrace {
         })?;
         self.email(
             "confirmation",
-            &better_auth_core::wire::UserView::try_from(fields.clone())?,
+            &better_auth_core::wire::UserView::try_from(fields.snapshot_fields()?)?,
             Some(new_email),
             url,
             token,

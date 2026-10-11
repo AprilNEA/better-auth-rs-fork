@@ -250,3 +250,73 @@ async fn custom_sign_json_callback_projects_once_without_entering_local_jose_clo
     assert_eq!(reads.load(Ordering::SeqCst), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn invalid_claims_precede_native_key_id_json_without_losing_receiver() -> AuthResult<()> {
+    let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let native_id: FieldValue = FieldMap::from([(
+        "toJSON".into(),
+        better_auth_core::FieldFunction::contextual({
+            let calls = calls.clone();
+            move |receiver, arguments| {
+                calls
+                    .lock()
+                    .unwrap()
+                    .push((receiver.clone(), arguments.to_vec()));
+                Ok("encoded-key".into())
+            }
+        })
+        .into(),
+    )])
+    .into();
+    let mut stored = key(JwtAlgorithm::EdDsa)?;
+    stored.id = SchemaValue::from_field(native_id.clone());
+    let plugin = JwtPlugin::new().disable_private_key_encryption(true);
+    let (ctx, reads) = context(&plugin, vec![stored]).await?;
+    for issued in [f64::NAN, 1_700_000_000.0] {
+        let result = plugin
+            .sign_session(
+                Some(better_auth_core::session::NativeSessionData {
+                    session: Default::default(),
+                    user: FieldMap::from([
+                        ("id".into(), "owner".into()),
+                        ("iat".into(), issued.into()),
+                        ("exp".into(), 1_900_000_000.0.into()),
+                    ])
+                    .into(),
+                }),
+                &EndpointContext::native(None, None, FieldValue::Null, &ctx),
+            )
+            .await;
+        if issued.is_nan() {
+            assert!(matches!(result, Err(AuthError::TypeError(message))
+                if message == "\"iat\" claim must be a finite number"));
+            assert!(calls.lock().unwrap().is_empty());
+            assert_eq!(reads.load(Ordering::SeqCst), 1);
+        } else {
+            let token = result?;
+            assert_eq!(
+                tests::header(&token),
+                json!({"alg":"EdDSA", "kid":"encoded-key"})
+            );
+            let claims: Value = serde_json::from_slice(
+                &URL_SAFE_NO_PAD
+                    .decode(token.split('.').nth(1).unwrap())
+                    .map_err(|error| AuthError::internal(error.to_string()))?,
+            )?;
+            assert_eq!(
+                claims,
+                json!({
+                    "iat": 1_700_000_000, "id":"owner", "exp":1_900_000_000,
+                    "sub":"owner", "iss":ctx.base_url(), "aud":ctx.base_url()
+                })
+            );
+            let calls = calls.lock().unwrap();
+            assert_eq!(calls.len(), 1);
+            assert!(calls[0].0.strict_equals(&native_id));
+            assert_eq!(calls[0].1, [FieldValue::from("kid")]);
+            assert_eq!(reads.load(Ordering::SeqCst), 2);
+        }
+    }
+    Ok(())
+}

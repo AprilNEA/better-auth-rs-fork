@@ -58,6 +58,7 @@ where
     assert!(!id.is_empty());
     assert!(created.created_at.typed()?.is_some());
     let mut expected = Passkey {
+        field_order: Default::default(),
         additional_fields: Default::default(),
         id: created.id.clone(),
         user_id: input.user_id,

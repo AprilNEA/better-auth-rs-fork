@@ -10,6 +10,8 @@ use better_auth::{
         },
     },
     AuthConfig, BetterAuth,
+    plugin::ModelFields,
+    plugins::JwtPlugin,
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -47,10 +49,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         Vec::new()
     }
 
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut ModelFields) -> AuthResult<()> {
         context.register_model_fields(EntityRole::Jwk, self.0.clone())
     }
 
@@ -194,12 +193,14 @@ pub(crate) async fn contract<S: AuthSchema>(
 ) -> AuthResult<()> {
     let reader = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(JwtPlugin::new())
         .plugin(Fields(policies(None, Scenario::Success)))
         .build()
         .await?;
     let events = Trace::default();
     let auth = BetterAuth::new(config())
         .store_arc(raw)
+        .plugin(JwtPlugin::new())
         .plugin(Fields(policies(Some(events.clone()), scenario)))
         .build()
         .await?;

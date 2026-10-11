@@ -202,10 +202,6 @@ impl FieldArray {
     }
 
     // Infallible typed narrowing must preserve holes and must not evaluate fallible live getters.
-    pub(crate) fn is_live(&self) -> bool {
-        matches!(&self.0, ArrayStorage::Live(_))
-    }
-
     pub(crate) fn owned_values(&self) -> Option<Vec<FieldValue>> {
         let ArrayStorage::Owned(values) = &self.0 else {
             return None;

@@ -71,14 +71,21 @@ impl<S: AuthSchema> LastLoginMethodResolver<S> for Events {
             .push(json!({"kind":"resolve","path":context.path,"http":context.request.is_some(),"header":context.headers().and_then(|headers|headers.get("x-login-context"))}));
         let mode = trace.controls["resolve"].as_str();
         if mode == Some("body") {
-            let name = context.body.as_object().and_then(|body| body.get("name"));
+            let name = context
+                .body
+                .as_object()
+                .map(|body| body.get("name"))
+                .transpose()?
+                .flatten();
             trace.events.last_mut().unwrap()["bodyName"] = name
+                .as_ref()
                 .map(FieldValue::json)
                 .transpose()?
                 .flatten()
                 .unwrap_or(Value::Null);
             return Ok(Some(
-                name.and_then(FieldValue::as_str)
+                name.as_ref()
+                    .and_then(FieldValue::as_str)
                     .unwrap_or("missing")
                     .into(),
             ));
@@ -107,7 +114,10 @@ impl<S: AuthSchema> BeforeStoreLastLoginCookie<S> for Events {
             trace.events.last_mut().unwrap()["bodyName"] = context
                 .body
                 .as_object()
-                .and_then(|body| body.get("name"))
+                .map(|body| body.get("name"))
+                .transpose()?
+                .flatten()
+                .as_ref()
                 .map(FieldValue::json)
                 .transpose()?
                 .flatten()

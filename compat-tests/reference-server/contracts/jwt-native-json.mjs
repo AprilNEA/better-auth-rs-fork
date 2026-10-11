@@ -164,3 +164,34 @@ test("JOSE checks final native claims before serializing protected header extens
   expect(result.source).toBe(JSON.stringify({ iat: 1_700_000_000, exp: 1_900_000_000, iss: baseURL, aud: baseURL }));
   expect(events).toStrictEqual(["keys", "keys", "header-json"]);
 });
+
+
+test("JWT validates payload before native key ID JSON and preserves its receiver", async () => {
+  const events = [];
+  const nativeId = { toJSON(name) {
+    expect(this).toBe(nativeId);
+    expect(name).toBe("kid");
+    events.push("kid-json");
+    return "encoded-key";
+  } };
+  const user = { id: "owner", iat: NaN, exp: 1_900_000_000 };
+  const { ctx, options } = setup(events, user);
+  options.adapter.getJwks = async () => {
+    events.push("keys");
+    return [{ ...key, id: nativeId }];
+  };
+  let caught;
+  try { await getJwtToken(ctx, options); } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(TypeError);
+  expect(caught.message).toBe('"iat" claim must be a finite number');
+  expect(events).toStrictEqual(["keys"]);
+  user.iat = 1_700_000_000;
+  const result = await decoded(await getJwtToken(ctx, options));
+  expect(result.header).toStrictEqual({ alg: "EdDSA", kid: "encoded-key" });
+  expect(result.source).toBe(JSON.stringify({
+    iat: 1_700_000_000, id: "owner", exp: 1_900_000_000,
+    sub: "owner", iss: baseURL, aud: baseURL,
+  }));
+  expect(events).toStrictEqual(["keys", "keys", "kid-json"]);
+  expect(user).toStrictEqual({ id: "owner", iat: 1_700_000_000, exp: 1_900_000_000 });
+});

@@ -158,25 +158,16 @@ async fn test_custom_admin_role_can_use_permission_engine() {
     assert!(native.get("offset").unwrap().unwrap().is_undefined());
 
     let mut rejected = req.clone();
-    let _ = rejected
-        .query
-        .insert("sortBy".into(), "unknownField".into());
+    rejected.query = Some(serde_json::json!({"sortBy":"unknownField"}));
     let resp = plugin.on_request(&rejected, &ctx).await.unwrap().unwrap();
     assert_eq!(resp.status, 200);
     assert_eq!(
         json_body(&resp),
         serde_json::json!({"users": [], "total": 0})
     );
-    assert_eq!(
-        resp.body
-            .field_value()
-            .unwrap()
-            .as_object()
-            .unwrap()
-            .own_keys()
-            .unwrap(),
-        ["users", "total"]
-    );
+    let native = resp.body.field_value().unwrap();
+    let native = native.as_object().unwrap();
+    assert_eq!(native.own_keys().unwrap(), ["users", "total"]);
 }
 
 #[tokio::test]

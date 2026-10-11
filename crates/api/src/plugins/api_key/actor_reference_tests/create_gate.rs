@@ -21,6 +21,7 @@ async fn typed_and_http_creation_preserve_gate_order_before_side_effects() {
     let (ctx, _, _, _, callbacks) = harness(
         AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
         false,
+        ModelFields::default(),
     )
     .await;
     let contract = contract();
@@ -76,6 +77,7 @@ async fn typed_and_http_creation_cannot_replace_the_authenticated_user() {
     let (ctx, _, sessions, _, callbacks) = harness(
         AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
         false,
+        ModelFields::default(),
     )
     .await;
     let mut owner = CreateUser::new()

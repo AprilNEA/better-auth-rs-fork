@@ -91,7 +91,7 @@ impl FieldObject {
     }
 
     /// Capture property names without evaluating property values.
-    pub(crate) fn own_keys(&self) -> AuthResult<Vec<String>> {
+    pub fn own_keys(&self) -> AuthResult<Vec<String>> {
         let mut keys = match &self.0 {
             ObjectStorage::Owned(fields) => fields
                 .lock()

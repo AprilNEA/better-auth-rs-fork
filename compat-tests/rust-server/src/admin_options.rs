@@ -177,16 +177,26 @@ impl SeaOrmHooks<TestSchema> for AdminOptionsFixture {
         let Some(user) = user else {
             return Ok(());
         };
-        if !ctx.request.as_ref().is_some_and(|request| {
-            request.path.as_deref() == Some("/admin/update-user")
-                && request
-                    .body
-                    .as_object()
-                    .and_then(|body| body.get("data"))
-                    .and_then(FieldValue::as_object)
-                    .and_then(|data| data.get("banned"))
-                    == Some(&FieldValue::Bool(true))
-        }) {
+        let Some(request) = ctx
+            .request
+            .as_ref()
+            .filter(|request| request.path.as_deref() == Some("/admin/update-user"))
+        else {
+            return Ok(());
+        };
+        let data = request
+            .body
+            .as_object()
+            .map(|body| body.get("data"))
+            .transpose()?
+            .flatten();
+        let banned = data
+            .as_ref()
+            .and_then(FieldValue::as_object)
+            .map(|data| data.get("banned"))
+            .transpose()?
+            .flatten();
+        if banned != Some(FieldValue::Bool(true)) {
             return Ok(());
         }
         let query = Statement::from_sql_and_values(

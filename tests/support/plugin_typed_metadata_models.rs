@@ -131,7 +131,7 @@ impl Model {
         let id = ID.into();
         let record = if stage == "create" {
             match self {
-                Self::ApiKey => Record::ApiKey(
+                Self::ApiKey => Record::ApiKey(Box::new(
                     store
                         .create_api_key(CreateApiKey {
                             additional_fields: extras,
@@ -153,7 +153,7 @@ impl Model {
                             enabled: true.into(),
                         })
                         .await?,
-                ),
+                )),
                 Self::TwoFactor => Record::TwoFactor(
                     store
                         .create_two_factor(CreateTwoFactor {
@@ -195,7 +195,7 @@ impl Model {
             let mut extras = extras;
             let _ = extras.remove("id");
             match self {
-                Self::ApiKey => Record::ApiKey(
+                Self::ApiKey => Record::ApiKey(Box::new(
                     store
                         .update_api_key(
                             &id,
@@ -206,7 +206,7 @@ impl Model {
                             },
                         )
                         .await?,
-                ),
+                )),
                 Self::TwoFactor => Record::TwoFactor(
                     store
                         .update_two_factor(
@@ -229,9 +229,9 @@ impl Model {
             }
         } else {
             match self {
-                Self::ApiKey => {
-                    Record::ApiKey(store.get_api_key_by_id(ID).await?.ok_or_else(missing)?)
-                }
+                Self::ApiKey => Record::ApiKey(Box::new(
+                    store.get_api_key_by_id(ID).await?.ok_or_else(missing)?,
+                )),
                 Self::TwoFactor => Record::TwoFactor(
                     store
                         .get_two_factor_by_user_id("owner")
@@ -256,7 +256,7 @@ fn missing() -> AuthError {
 }
 
 enum Record {
-    ApiKey(ApiKey),
+    ApiKey(Box<ApiKey>),
     TwoFactor(TwoFactor),
     Jwk(Jwk),
     Wallet(WalletAddress),

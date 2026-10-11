@@ -6,6 +6,7 @@
 use super::*;
 use crate::{
     AuthError, AuthResult,
+    endpoint_input::ValidatedBody,
     field_value::{FieldObject, FieldObjectSource},
 };
 use std::sync::{
@@ -121,7 +122,7 @@ fn json_reads_children_before_later_properties_and_preserves_original_errors() -
             } else {
                 let projected = if boundary == "input" {
                     let mut request = crate::AuthRequest::new(crate::HttpMethod::Post, "/input");
-                    request.set_endpoint_body(crate::ValidatedBody::unvalidated_native(value));
+                    request.set_endpoint_body(ValidatedBody::unvalidated_native(value));
                     request.input_body()
                 } else {
                     value.json()
@@ -426,7 +427,7 @@ fn endpoint_input_projection_keeps_native_reads_without_calling_json_methods() -
         }),
     })));
     let mut request = crate::AuthRequest::new(crate::HttpMethod::Post, "/input");
-    request.set_endpoint_body(crate::ValidatedBody::unvalidated_native(value.clone()));
+    request.set_endpoint_body(ValidatedBody::unvalidated_native(value.clone()));
     assert!(request.input_field_value()?.strict_equals(&value));
     assert_eq!(
         request.input_body()?,

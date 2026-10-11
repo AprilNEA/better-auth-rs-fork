@@ -156,10 +156,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Policy {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut better_auth::plugin::ModelFields) -> AuthResult<()> {
         context.register_model_fields(self.target.role, self.fields())
     }
     async fn on_request(

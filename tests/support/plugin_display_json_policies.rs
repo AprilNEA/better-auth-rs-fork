@@ -55,10 +55,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Policy {
         Ok(None)
     }
 
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut better_auth::plugin::ModelFields) -> AuthResult<()> {
         let target = self.target;
         let inputs = self.state.clone();
         let outputs = self.state.clone();

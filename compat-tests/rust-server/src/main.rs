@@ -326,9 +326,13 @@ impl SendVerificationEmail for CompatVerificationSender {
         url: &str,
         token: &str,
     ) -> better_auth::AuthResult<()> {
-        if let Some(email) = user
+        let email = user
             .as_object()
-            .and_then(|fields| fields.get("email"))
+            .map(|fields| fields.get("email"))
+            .transpose()?
+            .flatten();
+        if let Some(email) = email
+            .as_ref()
             .and_then(better_auth_core::FieldValue::as_str)
         {
             self.outbox.lock().await.insert(
@@ -356,9 +360,13 @@ impl SendTwoFactorOtp for CompatTwoFactorOtpSender {
         user: &better_auth_core::FieldValue,
         otp: &str,
     ) -> better_auth::AuthResult<()> {
-        if let Some(email) = user
+        let email = user
             .as_object()
-            .and_then(|fields| fields.get("email"))
+            .map(|fields| fields.get("email"))
+            .transpose()?
+            .flatten();
+        if let Some(email) = email
+            .as_ref()
             .and_then(better_auth_core::FieldValue::as_str)
         {
             self.outbox
@@ -389,11 +397,13 @@ impl SendChangeEmailConfirmation for CompatChangeEmailSender {
             better_auth::AuthError::type_error("Confirmation User must be an object")
         })?;
         if fields
-            .get("emailVerified")
+            .get("emailVerified")?
+            .as_ref()
             .is_some_and(better_auth_core::FieldValue::is_truthy)
         {
             if let Some(email) = fields
-                .get("email")
+                .get("email")?
+                .as_ref()
                 .and_then(better_auth_core::FieldValue::as_str)
             {
                 self.outbox.lock().await.insert(

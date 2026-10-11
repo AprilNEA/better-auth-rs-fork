@@ -145,10 +145,6 @@ impl Backend {
     }
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions compare complete records, callback order, and failure persistence; Result propagates adapter errors"
-)]
 async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
     backend: Backend,

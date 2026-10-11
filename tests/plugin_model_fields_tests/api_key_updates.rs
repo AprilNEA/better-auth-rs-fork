@@ -127,10 +127,22 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
                 },
             )
             .await?;
-        expected_stored["name"] = json!("Mobile");
-        expected_stored["updatedAt"] = json!(if on_update { STORED } else { OLD });
-        expected_public["name"] = json!("Mobile");
-        expected_public["updatedAt"] = json!(if replacement { PROJECTED } else { OLD });
+        *required(
+            expected_stored.get_mut("name"),
+            "Expected name in the complete record",
+        )? = json!("Mobile");
+        *required(
+            expected_stored.get_mut("updatedAt"),
+            "Expected updatedAt in the complete record",
+        )? = json!(if on_update { STORED } else { OLD });
+        *required(
+            expected_public.get_mut("name"),
+            "Expected name in the complete record",
+        )? = json!("Mobile");
+        *required(
+            expected_public.get_mut("updatedAt"),
+            "Expected updatedAt in the complete record",
+        )? = json!(if replacement { PROJECTED } else { OLD });
         assert_eq!(
             serde_json::to_value(updated)?,
             expected_public,
@@ -170,11 +182,20 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
                 },
             )
             .await?;
-        expected_stored["name"] = json!("Typed");
-        expected_stored["updatedAt"] = json!(if replacement { STORED } else { SUPPLIED });
+        *required(
+            expected_stored.get_mut("name"),
+            "Expected name in the complete record",
+        )? = json!("Typed");
+        *required(
+            expected_stored.get_mut("updatedAt"),
+            "Expected updatedAt in the complete record",
+        )? = json!(if replacement { STORED } else { SUPPLIED });
         let mut expected_result = expected_stored.clone();
         if replacement {
-            expected_result["updatedAt"] = json!(PROJECTED);
+            *required(
+                expected_result.get_mut("updatedAt"),
+                "Expected updatedAt in the complete record",
+            )? = json!(PROJECTED);
         }
         assert_eq!(
             serde_json::to_value(updated)?,
@@ -202,10 +223,16 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
                 .await?,
             "Expected the explicit usage timestamp write",
         )?;
-        expected_stored["updatedAt"] = json!(if replacement { STORED } else { USAGE });
+        *required(
+            expected_stored.get_mut("updatedAt"),
+            "Expected updatedAt in the complete record",
+        )? = json!(if replacement { STORED } else { USAGE });
         expected_result = expected_stored.clone();
         if replacement {
-            expected_result["updatedAt"] = json!(PROJECTED);
+            *required(
+                expected_result.get_mut("updatedAt"),
+                "Expected updatedAt in the complete record",
+            )? = json!(PROJECTED);
         }
         assert_eq!(serde_json::to_value(updated)?, expected_result);
         assert_eq!(stored(raw.as_ref(), &key).await?, expected_stored);
@@ -238,7 +265,10 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
                     })?;
                 original_error(error, &format!("ordinary updatedAt {name} error"));
                 if phase == 3 {
-                    expected_stored["name"] = json!("Rejected");
+                    *required(
+                        expected_stored.get_mut("name"),
+                        "Expected name in the complete record",
+                    )? = json!("Rejected");
                 }
                 assert_eq!(stored(raw.as_ref(), &key).await?, expected_stored, "{name}");
                 let expected_events = [

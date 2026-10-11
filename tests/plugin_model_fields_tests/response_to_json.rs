@@ -348,7 +348,7 @@ async fn contract<S: AuthSchema>(
                 "Expected complete baseline fields",
             )?;
             if matches!(mode, Mode::Omit) {
-                let _ = expected_fields.remove("name");
+                let _ = expected_fields.shift_remove("name");
             } else {
                 let _ = expected_fields.insert(
                     "name".into(),

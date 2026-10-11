@@ -34,10 +34,22 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
             },
         )
         .await?;
-    expected_public["name"] = json!("Mobile");
-    expected_public["metadata"] = metadata.clone();
-    expected_stored["name"] = json!("Mobile");
-    expected_stored["metadata"] = metadata;
+    *required(
+        expected_public.get_mut("name"),
+        "Expected name in the complete record",
+    )? = json!("Mobile");
+    *required(
+        expected_public.get_mut("metadata"),
+        "Expected metadata in the complete record",
+    )? = metadata.clone();
+    *required(
+        expected_stored.get_mut("name"),
+        "Expected name in the complete record",
+    )? = json!("Mobile");
+    *required(
+        expected_stored.get_mut("metadata"),
+        "Expected metadata in the complete record",
+    )? = metadata;
     assert_eq!(serde_json::to_value(updated)?, expected_public);
     assert_eq!(stored(raw.as_ref(), &key).await?, expected_stored);
     Ok(())

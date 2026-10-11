@@ -1,6 +1,7 @@
 use super::*;
 use better_auth_core::{
     AuthInitContext, AuthSchema, FieldValue,
+    plugin_runtime::ModelFields,
     store::{EphemeralStore, MemoryCacheAdapter, SecondaryStorage, secondary::SecondaryStore},
 };
 use serde_json::{Value, json};
@@ -37,6 +38,7 @@ impl ApiKeyDefaultPermissions for Permissions {
 async fn harness<S: AuthSchema>(
     ctx: AuthContext<S>,
     secondary: bool,
+    mut model_fields: ModelFields,
 ) -> (
     AuthContext<S>,
     ApiKeyPlugin,
@@ -57,7 +59,6 @@ async fn harness<S: AuthSchema>(
         .enable_metadata(true)
         .default_permissions_callback(Arc::new(Permissions(callbacks.clone())))
         .build();
-    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
     better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields).unwrap();
     plugin.on_init(&mut init).await.unwrap();
@@ -122,7 +123,8 @@ async fn list<S: AuthSchema>(plugin: &ApiKeyPlugin, ctx: &AuthContext<S>) -> Val
 }
 
 async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sqlite: bool) {
-    let (ctx, plugin, sessions, keys, callbacks) = harness(ctx, secondary).await;
+    let (ctx, plugin, sessions, keys, callbacks) =
+        harness(ctx, secondary, ModelFields::default()).await;
     let cases = cases();
     for sample in cases["owners"].as_array().unwrap() {
         actor(&sessions, Some(&sample["actor"])).await;
@@ -407,6 +409,7 @@ async fn secondary_null_and_missing_references_retain_distinct_strict_owners() {
     let (ctx, plugin, sessions, keys, callbacks) = harness(
         AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
         true,
+        ModelFields::default(),
     )
     .await;
     let null = Value::Null;
@@ -491,6 +494,7 @@ async fn deleting_api_keys_only_rejects_a_strict_boolean_ban() {
     let (ctx, plugin, sessions, keys, _) = harness(
         AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
         true,
+        ModelFields::default(),
     )
     .await;
     for banned in [

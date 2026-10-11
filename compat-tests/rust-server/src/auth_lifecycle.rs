@@ -35,7 +35,11 @@ impl AuthLifecycleFixture {
         let fields = user
             .as_object()
             .ok_or_else(|| AuthError::type_error("Lifecycle User must be an object"))?;
-        self.record(name, &UserView::try_from(fields.clone())?, request)
+        self.record(
+            name,
+            &UserView::try_from(fields.snapshot_fields()?)?,
+            request,
+        )
     }
     fn record(&self, name: &str, user: &UserView, request: Option<&AuthRequest>) -> AuthResult<()> {
         self.state.lock().unwrap().events.push(json!({"name":name,"email":user.email,"userName":user.name,"image":user.image,

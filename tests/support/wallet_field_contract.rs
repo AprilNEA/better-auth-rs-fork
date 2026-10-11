@@ -1,3 +1,8 @@
+#[path = "wallet_plugin.rs"]
+mod wallet_plugin;
+
+pub(crate) use wallet_plugin::wallet_plugin;
+
 use better_auth::__private_core::__private_async_trait::async_trait;
 use better_auth::seaorm::sea_orm::entity::prelude::DateTimeUtc;
 use better_auth::{
@@ -10,6 +15,7 @@ use better_auth::{
         },
     },
     AuthConfig, BetterAuth,
+    plugin::ModelFields,
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -48,10 +54,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         Vec::new()
     }
 
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut ModelFields) -> AuthResult<()> {
         context.register_model_fields(EntityRole::WalletAddress, self.0.clone())
     }
 
@@ -194,6 +197,7 @@ pub(crate) async fn contract<S: AuthSchema>(
 ) -> AuthResult<()> {
     let reader = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(wallet_plugin())
         .plugin(Fields(policies(None, Scenario::Success)))
         .build()
         .await?;
@@ -209,6 +213,7 @@ pub(crate) async fn contract<S: AuthSchema>(
     let events = Trace::default();
     let auth = BetterAuth::new(config())
         .store_arc(raw)
+        .plugin(wallet_plugin())
         .plugin(Fields(policies(Some(events.clone()), scenario)))
         .build()
         .await?;

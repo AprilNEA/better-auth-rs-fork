@@ -456,15 +456,15 @@ async fn sign_in_with_id_token_core(
         Err(error) => return error.into_auth_response(),
     };
 
+    ctx.session_manager()
+        .set_native_session_cookie(req, outcome.issued.clone(), None)
+        .await?;
     let response = better_auth_core::FieldMap::from([
         ("redirect".into(), false.into()),
-        ("token".into(), outcome.session.token().field_value()),
+        ("token".into(), outcome.issued.session.token().field_value()),
         ("url".into(), better_auth_core::FieldValue::Undefined),
-        ("user".into(), outcome.user),
+        ("user".into(), outcome.issued.public_user(&ctx.config.user)?),
     ]);
-    ctx.session_manager()
-        .set_native_session_cookie(req, outcome.issued, None)
-        .await?;
     Ok(AuthResponse::native(None, response.into()))
 }
 

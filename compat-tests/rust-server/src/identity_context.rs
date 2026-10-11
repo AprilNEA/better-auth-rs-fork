@@ -56,20 +56,17 @@ impl Fixture {
     }
 }
 
-fn context(endpoint: &EndpointContext<'_, StatelessSchema>) -> Value {
-    let returned: Option<Value> = endpoint.response.and_then(|response| {
-        serde_json::from_slice(
-            &response
-                .body
-                .bytes()
-                .expect("The fixture response must serialize"),
-        )
-        .ok()
-    });
+fn context(endpoint: &EndpointContext<'_, StatelessSchema>) -> AuthResult<Value> {
+    let returned: Option<Value> = endpoint
+        .response
+        .map(|response| Ok::<_, AuthError>(serde_json::from_slice(&response.body.bytes()?).ok()))
+        .transpose()?
+        .flatten();
     let mut keys: Vec<_> = endpoint
         .body
         .as_object()
-        .map(|body| body.keys().cloned().collect())
+        .map(|body| body.own_keys())
+        .transpose()?
         .unwrap_or_default();
     keys.sort();
     let mut returned_keys: Vec<_> = returned
@@ -78,13 +75,15 @@ fn context(endpoint: &EndpointContext<'_, StatelessSchema>) -> Value {
         .map(|body| body.keys().cloned().collect())
         .unwrap_or_default();
     returned_keys.sort();
-    json!({"path":endpoint.path,"request":endpoint.request.is_some(),"headers":endpoint.headers().is_some(),
+    Ok(
+        json!({"path":endpoint.path,"request":endpoint.request.is_some(),"headers":endpoint.headers().is_some(),
         "tag":endpoint.headers().and_then(|headers|headers.get("x-probe-tag")),"bodyKeys":keys,
         "hasReturned":endpoint.response.is_some(),"returnedKeys":returned_keys,
         "returnedHidden":returned.as_ref().and_then(|body|body.get("user")).and_then(|user|user.get("secretNote")),
         "hasSetCookie":endpoint.response.is_some_and(|response|response.headers.contains_key("set-cookie")),
         "location":endpoint.response.and_then(|response|response.headers.get("location")),
-        "actorAnonymous":endpoint.session.as_ref().map(|data|data.user_field("isAnonymous").json()).transpose().expect("The fixture User anonymous flag must serialize").flatten()})
+        "actorAnonymous":endpoint.session.as_ref().map(|data|data.user_field("isAnonymous")?.json()).transpose()?.flatten()}),
+    )
 }
 
 fn json_field(fields: &FieldMap, name: &str) -> AuthResult<Option<Value>> {
@@ -118,10 +117,11 @@ impl AuthPlugin<StatelessSchema> for Fixture {
     ) -> AuthResult<()> {
         if self.input["mutate"] == true && request.path() == "/sign-in/email" {
             let data = request.new_session()?.unwrap();
+            let user_id = data.user_field("id")?;
             let _ = ctx
                 .database
                 .update_user(
-                    data.user_field("id").as_str().ok_or_else(|| {
+                    user_id.as_str().ok_or_else(|| {
                         AuthError::internal("Issued fixture User has no string ID")
                     })?,
                     UpdateUser {
@@ -134,7 +134,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
                     },
                 )
                 .await?;
-            self.record(json!({"event":"application","name":data.user_field("name").json()?,"secret":data.user_field("secretNote").json()?}));
+            self.record(json!({"event":"application","name":data.user_field("name")?.json()?,"secret":data.user_field("secretNote")?.json()?}));
         }
         Ok(())
     }
@@ -173,27 +173,28 @@ async fn build(base: &str, input: &Value, events: Arc<Mutex<Vec<Value>>>) -> Aut
     let magic = fixture.clone();
     let anonymous = AnonymousPlugin::new().callbacks(AnonymousCallbacks::<StatelessSchema>::default()
         .generate_name(move |endpoint| { let fixture=name.clone(); Box::pin(async move {
-            fixture.record(json!({"event":"name","context":context(endpoint)}));
+            fixture.record(json!({"event":"name","context":context(endpoint)?}));
             if fixture.input["kind"] == "name" { fixture.fail()?; }
             Ok("Anonymous fixture".into())
         }) })
         .on_link_account(move |linked, endpoint| { let fixture=link.clone(); Box::pin(async move {
             let new_user = linked.new_user.as_object().ok_or_else(|| AuthError::internal("Linked fixture User is not an object"))?;
-            let new_id = new_user.get("id").and_then(FieldValue::as_str).ok_or_else(|| AuthError::internal("Linked fixture User has no string ID"))?;
+            let new_id = new_user.get("id")?;
+            let new_id = new_id.as_ref().and_then(FieldValue::as_str).ok_or_else(|| AuthError::internal("Linked fixture User has no string ID"))?;
             let stored = endpoint.auth.database.get_user_by_id(new_id).await?.unwrap();
             let snapshot=endpoint.new_session()?.unwrap();
-            fixture.record(json!({"event":"link","context":context(endpoint),
+            fixture.record(json!({"event":"link","context":context(endpoint)?,
                 "oldHidden":json_field(&linked.anonymous_user.additional_fields, "secretNote")?,"oldSessionHidden":json_field(&linked.anonymous_session.additional_fields, "secretSession")?,
-                "newHidden":json_field(new_user, "secretNote")?,"newSessionHidden":json_field(&linked.new_session.additional_fields, "secretSession")?,
-                "newName":json_field(new_user, "name")?,"storedName":stored.name,"storedHidden":json_field(&stored.additional_fields, "secretNote")?,
-                "sameSnapshot":snapshot.user_field("id") == new_user.get("id").unwrap_or(&FieldValue::Undefined) && snapshot.user_field("name") == new_user.get("name").unwrap_or(&FieldValue::Undefined),
+                "newHidden":linked.new_user.model_property("secretNote")?.json()?,"newSessionHidden":json_field(&linked.new_session.additional_fields, "secretSession")?,
+                "newName":linked.new_user.model_property("name")?.json()?,"storedName":stored.name,"storedHidden":json_field(&stored.additional_fields, "secretNote")?,
+                "sameSnapshot":snapshot.user_field("id")? == new_user.get("id")?.unwrap_or_default() && snapshot.user_field("name")? == new_user.get("name")?.unwrap_or_default(),
                 "oldExists":endpoint.auth.database.get_user_by_id(linked.anonymous_user.id.typed().unwrap()).await?.is_some()}));
             endpoint.set_header("x-callback-observed","anonymous-link")?;
             fixture.fail()
         }) }));
     let magic = MagicLinkPlugin::new().generate_token(Arc::new(|_| Box::pin(async { Ok("magic-fixture-token".into()) }))).callbacks(MagicLinkCallbacks::<StatelessSchema>::new(move |message, endpoint| {
         let fixture=magic.clone(); Box::pin(async move {
-            fixture.record(json!({"event":"magic","context":context(endpoint),"email":message.email,"metadata":message.metadata,
+            fixture.record(json!({"event":"magic","context":context(endpoint)?,"email":message.email,"metadata":message.metadata,
                 "stored":endpoint.auth.database.get_verification_by_identifier("magic-fixture-token").await?.is_some()}));
             endpoint.set_header("x-callback-observed","magic-send")?;
             fixture.fail()

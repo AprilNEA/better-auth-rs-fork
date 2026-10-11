@@ -44,12 +44,24 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     assert!((earliest as f64..=latest as f64).contains(&timestamp));
     assert_ne!(actual.get("updatedAt"), Some(&json!(OLD)));
     let mut expected = serde_json::to_value(ApiKeyView::try_from_api_key(&key)?)?;
-    expected["name"] = json!("Cached");
-    expected["updatedAt"] = actual["updatedAt"].clone();
+    *required(
+        expected.get_mut("name"),
+        "Expected name in the complete record",
+    )? = json!("Cached");
+    *required(
+        expected.get_mut("updatedAt"),
+        "Expected updatedAt in the complete record",
+    )? = required(actual.get("updatedAt"), "Expected the updated timestamp")?.clone();
     assert_eq!(actual, expected);
     let mut expected_cache = before.clone();
-    expected_cache["name"] = json!("Cached");
-    expected_cache["updatedAt"] = actual["updatedAt"].clone();
+    *required(
+        expected_cache.get_mut("name"),
+        "Expected name in the complete record",
+    )? = json!("Cached");
+    *required(
+        expected_cache.get_mut("updatedAt"),
+        "Expected updatedAt in the complete record",
+    )? = required(actual.get("updatedAt"), "Expected the updated timestamp")?.clone();
     let cached = required(
         cache.get(&cache_key).await?,
         "Expected the updated cache record",
