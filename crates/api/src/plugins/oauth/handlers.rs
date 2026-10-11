@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 
 use better_auth_core::entity::AuthSession;
 use better_auth_core::session::NativeSessionData;
+use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount,
     CreateVerification, FieldValue, UpdateAccount, UpdateUser, Utf16String,
@@ -338,7 +339,7 @@ pub(super) async fn complete_link_social(
             .await
             .map_err(|error| error.to_string())?;
 
-        apply_link_user_info(link.user_id(), user_info, ctx).await;
+        let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
         return Ok(());
     }
 
@@ -383,7 +384,7 @@ pub(super) async fn complete_link_social(
         .map_err(|_| "unable_to_link_account".to_string())?
         .ok_or_else(|| "unable_to_link_account".to_string())?;
 
-    apply_link_user_info(link.user_id(), user_info, ctx).await;
+    let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
     Ok(())
 }
 
@@ -545,7 +546,7 @@ async fn link_with_id_token_core(
                 },
             )
             .await?;
-        apply_link_user_info(&current_user_id, &response.user, ctx).await;
+        let _ = apply_link_user_info(&current_user_id, &response.user, ctx).await;
         return Ok(SocialSignInResponse {
             url: Some(String::new()),
             redirect: false,
@@ -623,7 +624,7 @@ async fn link_with_id_token_core(
         code: "LINKING_FAILED",
         message: "Account not linked - unable to create account",
     })?;
-    apply_link_user_info(&current_user_id, &response.user, ctx).await;
+    let _ = apply_link_user_info(&current_user_id, &response.user, ctx).await;
 
     Ok(SocialSignInResponse {
         url: Some(String::new()),
@@ -634,33 +635,27 @@ async fn link_with_id_token_core(
     })
 }
 
-async fn apply_link_user_info(
+pub(super) async fn apply_link_user_info(
     user_id: &FieldValue,
     user_info: &OAuthUserInfo,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) {
+) -> Option<UserView> {
     if !ctx
         .config
         .account
         .account_linking
         .update_user_info_on_link()
     {
-        return;
+        return None;
     }
     let result = async {
         ctx.database
             .update_user_by_id_value(
                 user_id,
                 UpdateUser {
-                    additional_fields: ctx
-                        .config
-                        .user
-                        .parse_provider_input(&user_info.additional_fields, false)?,
-                    name: user_info
-                        .name()?
-                        .map(|value| Some(value.to_owned()).into())
-                        .unwrap_or_default(),
-                    image: user_info.image.clone().map(Into::into).unwrap_or_default(),
+                    additional_fields: super::signin::provider_profile_fields(
+                        ctx, user_info, false,
+                    )?,
                     ..Default::default()
                 },
             )
@@ -668,11 +663,15 @@ async fn apply_link_user_info(
     }
     .await;
     // Upstream treats profile synchronization as optional after the account write succeeds.
-    if let Err(error) = result {
-        better_auth_core::observability::logger::current().warn(
-            "Could not update user info on account link",
-            &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
+    match result {
+        Ok(user) => user,
+        Err(error) => {
+            better_auth_core::observability::logger::current().warn(
+                "Could not update user info on account link",
+                &[better_auth_core::observability::LogArgument::Error(&error)],
+            );
+            None
+        }
     }
 }
 

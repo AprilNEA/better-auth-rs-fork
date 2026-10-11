@@ -20,6 +20,22 @@ type Generator = dyn Fn() -> FutureResult<String> + Send + Sync;
 type NameGenerator = dyn Fn(AuthRequest) -> FutureResult<String> + Send + Sync;
 type LinkCallback = dyn Fn(AnonymousLink) -> FutureResult<()> + Send + Sync;
 
+async fn session_without_refresh<S: AuthSchema>(
+    req: &AuthRequest,
+    ctx: &AuthContext<S>,
+) -> AuthResult<Option<better_auth_core::session::NativeSessionData>> {
+    let mut request = req.clone();
+    let mut query = request
+        .query
+        .take()
+        .and_then(|query| query.as_object().cloned())
+        .unwrap_or_default();
+    let _ = query.insert("disableRefresh".into(), true.into());
+    request.query = Some(query.into());
+    ctx.native_session(&request, better_auth_core::session::SessionRead::Cached)
+        .await
+}
+
 /// The authenticated identities involved when an anonymous session is upgraded.
 #[derive(Debug, Clone)]
 pub struct AnonymousLink {
@@ -92,22 +108,7 @@ impl AnonymousPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
-        let mut session_request = req.clone();
-        let mut query = session_request
-            .query
-            .take()
-            .and_then(|query| query.as_object().cloned())
-            .unwrap_or_default();
-        let _ = query.insert("disableRefresh".into(), serde_json::Value::Bool(true));
-        session_request.query = Some(query.into());
-        let previous = ctx
-            .session_manager()
-            .resolve_native(
-                &session_request,
-                better_auth_core::session::SessionRead::Cached,
-            )
-            .await?
-            .data;
+        let previous = session_without_refresh(req, ctx).await?;
         if let Some(data) = &previous
             && data.user_field("isAnonymous")?.is_truthy()
         {
@@ -305,22 +306,7 @@ impl AnonymousPlugin {
         if cookie.value().split('.').next().is_none_or(str::is_empty) {
             return Ok(());
         }
-        let mut session_request = req.clone();
-        let mut query = session_request
-            .query
-            .take()
-            .and_then(|query| query.as_object().cloned())
-            .unwrap_or_default();
-        let _ = query.insert("disableRefresh".into(), serde_json::Value::Bool(true));
-        session_request.query = Some(query.into());
-        let previous = ctx
-            .session_manager()
-            .resolve_native(
-                &session_request,
-                better_auth_core::session::SessionRead::Cached,
-            )
-            .await?
-            .data;
+        let previous = session_without_refresh(req, ctx).await?;
         let previous = match previous {
             Some(previous) if previous.user_field("isAnonymous")?.is_truthy() => Some(previous),
             _ => {
@@ -467,14 +453,7 @@ better_auth_core::impl_auth_plugin!(AnonymousPlugin, "anonymous";
             if req.path() != "/sign-in/social" { return Ok(None); }
             better_auth_core::observability::instrumentation::with_endpoint_hook(
                 &ctx.config, req, "before", "plugin:anonymous", async {
-                    let mut session_request = req.clone();
-                    let mut query = session_request.query.take()
-                        .and_then(|query| query.as_object().cloned()).unwrap_or_default();
-                    let _ = query.insert("disableRefresh".into(), true.into());
-                    session_request.query = Some(query.into());
-                    let session = ctx.session_manager()
-                        .resolve_native(&session_request, better_auth_core::session::SessionRead::Cached)
-                        .await?.data;
+                    let session = session_without_refresh(req, ctx).await?;
                     if let Some(session) = session
                         && session.user_field("isAnonymous")?.is_truthy() {
                         req.set_server_context("anonymousUserId", session.user_field("id")?)?;

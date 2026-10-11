@@ -303,6 +303,7 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
     if (callback) assert.deepEqual(stored(), before, "Cookie state setup must not change database rows");
     const input = scenario.route === "social" ? { provider: "google", idToken: { token: idToken, nonce } }
       : { email: "a@account-user-auth-boundary.test", password };
+    capture?.input?.(input);
     const request = callback?.request ?? new Request(`${origin}/api/auth/sign-in/${scenario.route}`, {
       method: "POST", headers: requestHeaders, body: JSON.stringify(input),
     });
@@ -316,9 +317,9 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
     const after = stored();
     const observationAfter = capture?.snapshot?.(after);
     let verified;
-    try { verified = extension ? extension.verify({ backend, scenario, joins, before, after, response, body,
+    try { verified = extension ? await extension.verify({ backend, scenario, joins, before, after, response, body,
       events: state.events, requestWindow, requestHeaders, idToken, nonce, milliseconds,
-      observationBefore, observationAfter, secret, expiresIn }) : callback
+      observationBefore, observationAfter, secret, expiresIn, callback }) : callback
       ? verifyCallbackOverride({ backend, joins, before, after, response, body, events: state.events, requestWindow, callback,
         requestHeaders, idToken, secret, expiresIn, milliseconds })
       : verifyResult(backend, scenario, joins, before, after, response, body, state.events, requestWindow); }
@@ -330,6 +331,7 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
       throw error;
     }
     const { dynamic, replacements, cookie } = verified;
+    const record = verified.normalizeRecord ?? ((model, row) => normalizeRecord(model, row, dynamic, replacements));
     const headers = [...response.headers].map(([name, value]) => {
       if (name !== "set-cookie" || !cookie) return [name, value];
       if (callback) return [name, value.replaceAll(cookie.raw, cookie.normalized)];
@@ -337,7 +339,7 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
       return [name, cookie.normalized];
     });
     const cookies = response.headers.getSetCookie().map(value => cookie && value === cookie.raw ? cookie.normalized : value);
-    const normalizedBody = [...replacements].reduce((text, [from, to]) => text.replaceAll(from, to), body);
+    const normalizedBody = verified.normalizedBody ?? [...replacements].reduce((text, [from, to]) => text.replaceAll(from, to), body);
     return {
       backend, scenario: scenario.name, joins,
       ...(callback ? { setup: normalize(callback.setup, replacements, true) } : {}),
@@ -348,11 +350,13 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
       events: state.events.map(event => {
         const observed = verified.normalizeEvent ? verified.normalizeEvent(event) : event;
         return observed.kind === "hook"
-          ? { ...observed, data: normalizeRecord(observed.model, observed.data, dynamic, replacements) }
+          ? normalize({ ...observed, data: record(observed.model, observed.data) }, replacements, Boolean(callback) || verified.embeddedStrings)
           : normalize(observed, replacements, Boolean(callback) || verified.embeddedStrings);
       }),
-      response: { status: response.status, statusText: response.statusText, headers, cookies, body: normalizedBody },
-      after: Object.fromEntries(tables.map(model => [model, after[model]?.map(row => normalizeRecord(model, row, dynamic, replacements)) ?? null])),
+      response: { status: response.status, statusText: response.statusText,
+        headers: verified.normalizeHeaders ? verified.normalizeHeaders(headers) : headers,
+        cookies: verified.normalizeCookies ? verified.normalizeCookies(cookies) : cookies, body: normalizedBody },
+      after: Object.fromEntries(tables.map(model => [model, after[model]?.map(row => record(model, row)) ?? null])),
       ...(verified.observations ? { observations: normalize(verified.observations, replacements, true) } : {}),
       checked: verified.checked ?? { noNetwork: true, completeStorage: true, admissionMatchesSessionInput: !scenario.accountsOne && (!callback || Boolean(dynamic.session)),
         preservedCanonicalAccountOwner: !scenario.accountsOne, sessionDatesWithinRequest: Boolean(dynamic.session),

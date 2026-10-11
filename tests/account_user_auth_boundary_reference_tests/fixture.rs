@@ -20,6 +20,10 @@ pub(super) struct Scenario {
     pub(super) send_on_sign_in: bool,
     #[serde(default)]
     pub(super) email_sender: bool,
+    #[serde(default)]
+    pub(super) branch: String,
+    #[serde(default)]
+    pub(super) mode: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -74,6 +78,35 @@ pub(super) struct Fixture {
 }
 
 impl Fixture {
+    pub(super) fn read_order() -> TestResult<Self> {
+        let path = std::env::var("BETTER_AUTH_OAUTH_SIGNIN_ORDER_FIXTURE")?;
+        let fixture: Self = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+        assert_eq!(fixture.version, "1.7.6");
+        assert_eq!(fixture.scenarios.len(), 15);
+        assert_eq!(fixture.cases.len(), 60);
+        for scenario in &fixture.scenarios {
+            assert_eq!(scenario.relation, "default");
+            assert!(matches!(
+                scenario.branch.as_str(),
+                "existing" | "implicit" | "new"
+            ));
+            for backend in ["memory", "sqlite"] {
+                for joins in [false, true] {
+                    assert_eq!(
+                        fixture
+                            .cases
+                            .iter()
+                            .filter(|case| case.scenario == scenario.name
+                                && case.backend == backend
+                                && case.joins == joins)
+                            .count(),
+                        1
+                    );
+                }
+            }
+        }
+        Ok(fixture)
+    }
     pub(super) fn read_secondary() -> AuthResult<Self> {
         let fixture: Self = serde_json::from_str(include_str!(
             "../fixtures/account-user-auth-secondary-1.7.6.json"

@@ -17,6 +17,7 @@ pub(super) struct Callbacks {
     pub(super) events: Events,
     pub(super) accounts_one: bool,
     pub(super) callback: bool,
+    pub(super) branch: String,
 }
 
 #[async_trait::async_trait]
@@ -84,21 +85,30 @@ impl OAuthUserInfoHandler for Callbacks {
         self.events.push(
             json!({"kind": "provider.userInfo", "tokens": values::observe(&token_fields.into())?}),
         )?;
-        let id = if self.accounts_one {
+        let id = if self.branch == "new" {
+            "external-new"
+        } else if self.branch == "implicit" {
+            "external-implicit"
+        } else if self.accounts_one {
             "external-unlinked"
         } else {
             "external-owner"
+        };
+        let email = if self.branch == "new" {
+            "fresh@account-user-auth-boundary.test"
+        } else {
+            "a@account-user-auth-boundary.test"
         };
         Ok(Some(OAuthUserInfoResponse {
             user: OAuthUserInfo {
                 id: id.into(),
                 name: Some("Provider User".into()).into(),
-                email: Some("a@account-user-auth-boundary.test".into()).into(),
+                email: Some(email.into()).into(),
                 email_verified: Some(true).into(),
                 image: Some(Some("provider-image".into())),
                 additional_fields: Default::default(),
             },
-            data: json!({"sub": id, "name": "Provider User", "email": "a@account-user-auth-boundary.test", "email_verified": true, "picture": "provider-image"}),
+            data: json!({"sub": id, "name": "Provider User", "email": email, "email_verified": true, "picture": "provider-image"}),
         }))
     }
 }
@@ -151,6 +161,17 @@ impl PasswordHasher for Callbacks {
 
 impl<S: AuthSchema> ApiErrorHandler<S> for Callbacks {
     fn on_error(&self, error: &AuthError, _: &AuthContext<S>) -> AuthResult<Option<ApiErrorTask>> {
+        if !self.branch.is_empty() {
+            let AuthError::Internal(message) = error else {
+                return Err(AuthError::internal(format!(
+                    "Unexpected order contract router error: {error:?}"
+                )));
+            };
+            self.events.push(
+                json!({"kind": "api-error", "error": {"name": "Error", "message": message}}),
+            )?;
+            return Ok(None);
+        }
         let variant = match error {
             AuthError::Internal(_) => "internal",
             AuthError::Database(_) => "database",

@@ -234,8 +234,12 @@ pub(crate) fn create_account_cookie_value<'a>(
     payload: &AccountCookiePayload,
     max_age: f64,
 ) -> AuthResult<String> {
-    let fields = serde_json::from_value(serde_json::to_value(payload)?)?;
-    better_auth_core::utils::jwe::encode(fields, secret, "better-auth-account", max_age)
+    better_auth_core::utils::jwe::encode_fields(
+        payload.internal_fields()?,
+        secret,
+        "better-auth-account",
+        max_age,
+    )
 }
 
 pub(crate) fn decode_account_cookie_value<'a>(

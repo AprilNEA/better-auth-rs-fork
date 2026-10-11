@@ -905,7 +905,9 @@ async fn test_get_access_token_without_cookie_returns_account_not_found() {
         Ok(Some(resp)) => resp,
         Err(error) => error.to_auth_response(),
         other => panic!("get-access-token should return a 400 response, got {other:?}"),
-    };
+    }
+    .into_http_response()
+    .expect("get-access-token response should materialize as HTTP");
 
     assert_eq!(resp.status, 400);
     let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap();
@@ -984,7 +986,9 @@ async fn test_get_access_token_rejects_cookie_for_the_wrong_user() {
         Ok(Some(resp)) => resp,
         Err(error) => error.to_auth_response(),
         other => panic!("get-access-token should return a 400 response, got {other:?}"),
-    };
+    }
+    .into_http_response()
+    .expect("get-access-token response should materialize as HTTP");
 
     assert_eq!(resp.status, 400);
     let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap();
@@ -1029,7 +1033,9 @@ async fn test_account_info_returns_provider_not_configured_message() {
         Ok(Some(resp)) => resp,
         Err(error) => error.to_auth_response(),
         other => panic!("account-info should return a 400 response, got {other:?}"),
-    };
+    }
+    .into_http_response()
+    .expect("account-info response should materialize as HTTP");
 
     assert_eq!(resp.status, 400);
     let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap();

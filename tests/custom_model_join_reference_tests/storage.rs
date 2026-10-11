@@ -50,6 +50,7 @@ pub(super) async fn seed<S: AuthSchema>(store: &dyn AuthStore<S>) -> TestResult 
             .await?;
         let _ = store
             .create_account(CreateAccount {
+                field_order: Vec::new(),
                 id: format!("account-{suffix}").into(),
                 account_id: format!("external-{suffix}").into(),
                 provider_id: "provider".into(),

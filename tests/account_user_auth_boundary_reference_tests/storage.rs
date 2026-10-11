@@ -19,6 +19,7 @@ pub(super) async fn sqlite(scenario: &Scenario) -> TestResult<DatabaseConnection
         .ok_or("Missing foreign_keys setting")?;
     assert_eq!(foreign_keys.try_get::<i64>("", "foreign_keys")?, 1);
     let (image_constraint, owner_constraint, token_constraint) = match scenario.relation.as_str() {
+        "default" => ("", " REFERENCES user(id) ON DELETE CASCADE", ""),
         "alternate-account-reference" => ("", "", " REFERENCES user(id) ON DELETE CASCADE"),
         "reverse-user-reference-many" => (" REFERENCES account(id) ON DELETE CASCADE", "", ""),
         "unique-account-reference" => ("", " UNIQUE REFERENCES user(id) ON DELETE CASCADE", ""),

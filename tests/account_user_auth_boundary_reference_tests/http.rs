@@ -32,10 +32,22 @@ pub(super) async fn auth_with_secondary<S: AuthSchema>(
     events: &Events,
     secondary: Option<Arc<dyn better_auth_core::store::SecondaryStorage>>,
 ) -> TestResult<Harness<S>> {
+    auth_with_after(store, config, scenario, events, secondary, None).await
+}
+
+pub(super) async fn auth_with_after<S: AuthSchema>(
+    store: Arc<dyn AuthStore<S>>,
+    config: AuthConfig,
+    scenario: &Scenario,
+    events: &Events,
+    secondary: Option<Arc<dyn better_auth_core::store::SecondaryStorage>>,
+    after: Option<Arc<dyn better_auth_core::observability::AfterEndpointHook<S>>>,
+) -> TestResult<Harness<S>> {
     let callbacks = Arc::new(callbacks::Callbacks {
         events: events.clone(),
         accounts_one: scenario.accounts_one,
         callback: scenario.callback,
+        branch: scenario.branch.clone(),
     });
     let flow = if scenario.callback {
         Some(super::oauth_flow::Flow::start(events.clone()).await?)
@@ -83,6 +95,12 @@ pub(super) async fn auth_with_secondary<S: AuthSchema>(
     if let Some(secondary) = secondary {
         builder = builder.secondary_storage(secondary);
     }
+    if let Some(after) = after {
+        builder = builder.hooks(better_auth_core::observability::EndpointHooks {
+            before: None,
+            after: Some(after),
+        });
+    }
     let auth = Arc::new(builder.build().await?);
     Ok(Harness { auth, flow })
 }
@@ -119,7 +137,7 @@ pub(super) async fn request<S: AuthSchema>(
         .iter()
         .map(|(name, value)| Ok([name.to_string(), value.to_str()?.to_owned()]))
         .collect::<TestResult<Vec<_>>>()?;
-    headers.sort();
+    headers.sort_by(|left, right| left[0].cmp(&right[0]));
     let cookies = response
         .headers()
         .get_all("set-cookie")

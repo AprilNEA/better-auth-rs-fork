@@ -346,7 +346,9 @@ async fn missing_token_endpoint_preserves_account_route_errors_and_stored_creden
             )
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .into_http_response()
+            .unwrap();
         assert_eq!(response.status, 400, "{path}");
         assert_eq!(
             serde_json::from_slice::<Value>(&response.body.bytes().unwrap()).unwrap(),

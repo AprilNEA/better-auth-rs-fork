@@ -9,7 +9,7 @@ use better_auth::server_api::EndpointInput;
 use better_auth::{AuthConfig, AuthError, AuthResult, BetterAuth};
 use better_auth_core::observability::{AfterEndpointHook, BeforeEndpointHook, EndpointHooks};
 use better_auth_core::{
-    AuthContext, AuthRequest, AuthResponse, BeforeRequestAction, HttpMethod,
+    AuthContext, AuthRequest, AuthResponse, BeforeRequestAction, HttpMethod, ResponseBody,
     store::StatelessSchema as S,
 };
 use serde::Deserialize;
@@ -125,7 +125,7 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
         } else {
             HttpMethod::Post
         };
-        let response = auth
+        let (status, body) = match auth
             .call_endpoint(
                 method,
                 &case.path,
@@ -138,9 +138,15 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
                 },
             )
             .await
-            .unwrap_or_else(AuthError::to_auth_response);
-        let bytes = response.body.bytes()?;
-        let result: Value = if response.body.is_empty() {
+        {
+            Ok(response) => (response.status, response.body),
+            Err(error) => (
+                error.status_code()?.typed().copied()?,
+                ResponseBody::Native(error.body_value()?),
+            ),
+        };
+        let bytes = body.bytes()?;
+        let result: Value = if body.is_empty() {
             Value::Null
         } else {
             serde_json::from_slice(&bytes)?
@@ -153,7 +159,7 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
                 case.path,
                 case.kind
             );
-            let native = response.body.field_value()?.enumerable_fields()?;
+            let native = body.field_value()?.enumerable_fields()?;
             let expected = case
                 .result
                 .as_object()
@@ -166,16 +172,16 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
                 case.kind
             );
         }
-        if (response.status, &result) != (case.status, &case.result) {
+        if (status, &result) != (case.status, &case.result) {
             mismatches.push(format!(
                 "{}/{}: actual ({}, {}), expected ({}, {})",
-                case.path, case.kind, response.status, result, case.status, case.result
+                case.path, case.kind, status, result, case.status, case.result
             ));
         }
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
     hooks.trace()?.clear();
-    let response = auth
+    let status = match auth
         .call_endpoint(
             HttpMethod::Post,
             "/revoke-session",
@@ -185,8 +191,11 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
             },
         )
         .await
-        .unwrap_or_else(AuthError::to_auth_response);
-    assert_eq!(response.status, 400);
+    {
+        Ok(response) => response.status,
+        Err(error) => error.status_code()?.typed().copied()?,
+    };
+    assert_eq!(status, 400);
     assert_eq!(*hooks.trace()?, oracle.trace);
     Ok(())
 }

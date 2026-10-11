@@ -33,6 +33,8 @@ mod models;
 mod oauth_flow;
 #[path = "account_user_auth_boundary_reference_tests/observe.rs"]
 mod observe;
+#[path = "account_user_auth_boundary_reference_tests/order.rs"]
+mod order;
 #[path = "account_user_auth_boundary_reference_tests/recorder.rs"]
 mod recorder;
 #[path = "account_user_auth_boundary_reference_tests/secondary.rs"]

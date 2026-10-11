@@ -425,7 +425,8 @@ async fn request_bearing_team_lifecycle_calls_still_require_a_session() -> AuthR
                     },
                 )
                 .await
-                .unwrap_or_else(AuthError::to_auth_response);
+                .unwrap_or_else(AuthError::to_auth_response)
+                .into_http_response()?;
             assert_empty_unauthorized(&response);
         }
         let request = AuthRequest::from_parts(
@@ -438,7 +439,8 @@ async fn request_bearing_team_lifecycle_calls_still_require_a_session() -> AuthR
         let response = auth
             .handle_request(request)
             .await
-            .unwrap_or_else(AuthError::to_auth_response);
+            .unwrap_or_else(AuthError::to_auth_response)
+            .into_http_response()?;
         assert_empty_unauthorized(&response);
     }
     Ok(())

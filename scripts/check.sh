@@ -8,6 +8,18 @@ if (( $# > 1 )); then
   exit 1
 fi
 
+check_oauth_signin_order() {
+  local fixture_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/oauth-signin-order"
+  mkdir -p "$fixture_dir" &&
+    git rev-parse HEAD > "$fixture_dir/source-sha.txt" &&
+    bun --no-install ./compat-tests/reference-server/contracts/account-user-auth-order-capture.mjs \
+      "$fixture_dir/fixture.json" 2>&1 | tee "$fixture_dir/capture.log" &&
+    BETTER_AUTH_OAUTH_SIGNIN_ORDER_FIXTURE="$fixture_dir/fixture.json" \
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test account_user_auth_boundary_reference_tests -- --ignored --exact \
+        order::oauth_signin_order_matches_upstream_http 2>&1 | tee "$fixture_dir/rust.log"
+}
+
 run_stage() {
   echo "Running check stage: $1"
   case "$1" in
@@ -34,7 +46,12 @@ run_stage() {
     consumer-schema) ./scripts/consumer-check.sh ;;
     fullstack) cargo check --locked --manifest-path examples/fullstack/backend/Cargo.toml ;;
     quick-start) bun scripts/quick-start-check.ts ;;
-    alignment) ./scripts/alignment-check.sh --skip-build ;;
+    alignment)
+      local alignment_status=0
+      check_oauth_signin_order || alignment_status=1
+      ./scripts/alignment-check.sh --skip-build || alignment_status=1
+      return "$alignment_status"
+      ;;
     reference-contracts) ./scripts/alignment-check.sh --reference-only ;;
     client-configuration)
       cargo clippy --locked --test client_compat_tests -- -D warnings
@@ -687,6 +704,7 @@ run_stage() {
     account-user-auth)
       cargo fmt --all -- --check
       local account_status=0
+      check_oauth_signin_order || account_status=1
       local account_tests=(
         --test account_user_auth_boundary_reference_tests --test compat_consistency_tests
         --test wire_compat_smoke_tests --test two_factor_cookie_duration_tests
@@ -711,9 +729,13 @@ run_stage() {
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         "${account_tests[@]}" || account_status=1
       cargo test --locked -p better-auth-api --lib -- \
-        plugins::two_factor:: plugins::oauth::generic_profile::result_tests:: || account_status=1
+        plugins::two_factor:: plugins::oauth:: plugins::anonymous:: || account_status=1
+      cargo test --locked -p better-auth-api \
+        --test account_oauth_tests --test oauth_session_revocation_tests || account_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test required_headers_tests --test organization_native_team_tests || account_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        plugin_runtime::fields::models::tests:: plugin_runtime::fields::rate_limit_tests:: session::native::tests:: \
+        types_account:: plugin_runtime::fields::models::tests:: plugin_runtime::fields::rate_limit_tests:: session::native::tests:: \
         store::ephemeral::user_serial_tests:: store::ephemeral::sessions::live_output_tests:: \
         store::ephemeral::id_slot_tests::sessions:: request_runtime::concurrent:: || account_status=1
       cargo test --locked -p better-auth-seaorm --lib -- \

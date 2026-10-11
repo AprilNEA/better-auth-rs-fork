@@ -25,6 +25,24 @@ pub(super) struct OAuthSignInOptions<'a> {
 }
 
 impl OAuthSignInOptions<'_> {
+    fn set_account_cookie(
+        &self,
+        account: Option<&AccountCookiePayload>,
+        ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+    ) -> AuthResult<()> {
+        if !ctx.config.account.store_account_cookie() {
+            return Ok(());
+        }
+        let account =
+            account.ok_or_else(|| AuthError::type_error("JWT Claims Set MUST be an object"))?;
+        for cookie in
+            super::handlers::create_account_cookie_headers(self.request, &ctx.config, account)?
+        {
+            self.request.append_response_header("Set-Cookie", cookie)?;
+        }
+        Ok(())
+    }
+
     async fn check_email_verification(
         &self,
         provider: &ResolvedProvider,
@@ -55,14 +73,12 @@ impl OAuthSignInOptions<'_> {
 pub(super) struct ProcessOAuthUserResult {
     pub(super) issued: better_auth_core::session::NativeSessionData,
     pub(super) is_register: bool,
-    pub(super) account_cookie: Option<AccountCookiePayload>,
 }
 
 pub(super) enum OAuthSignInError {
     Auth(AuthError),
     Generic(String),
     Banned(String),
-    Admission(crate::plugins::user_admission::UserValidationRejection),
 }
 
 impl OAuthSignInError {
@@ -80,7 +96,6 @@ impl OAuthSignInError {
                 &serde_json::json!({"code": "OAUTH_LINK_ERROR", "message": message}),
             )?,
             Self::Banned(message) => AuthError::banned_user(message).to_auth_response(),
-            Self::Admission(error) => error.into_auth_error().to_auth_response(),
         })
     }
 
@@ -92,10 +107,6 @@ impl OAuthSignInError {
                 "BANNED_USER".into(),
                 (!message.is_empty()).then_some(message),
             ),
-            Self::Admission(error) => {
-                let message = error.message().to_owned();
-                (error.error, (!message.is_empty()).then_some(message))
-            }
         })
     }
 }
@@ -205,33 +216,13 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .map_err(|error| account_query_error(error, ctx))?;
 
-    let token_bundle = encrypt_token_set(
-        ctx,
-        tokens.access_token.clone(),
-        tokens.refresh_token.clone(),
-        tokens.id_token.clone(),
-    )
-    .map_err(|error| error.to_string())?;
-
     let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
         Some(options.request),
         better_auth_core::FieldValue::from_json(options.body.clone())?,
         ctx,
     );
     endpoint.path = Some(callback_path(options.request));
-    if options.request.path() == "/sign-in/social"
-        && ctx.metadata.get("anonymous.enabled") == Some(&serde_json::Value::Bool(true))
-    {
-        endpoint.session = ctx
-            .session_manager()
-            .resolve_native(
-                options.request,
-                better_auth_core::session::SessionRead::Cached,
-            )
-            .await
-            .map_err(|error| error.to_string())?
-            .data;
-    }
+    endpoint.session = options.request.native_session_snapshot()?;
     let (account_owner, existing_user) = match account_owner {
         Some(owner) => (Some(owner), None),
         None => {
@@ -281,40 +272,73 @@ pub(super) async fn process_oauth_sign_in(
             &endpoint,
         )
         .await?;
-        if ctx.config.account.update_account_on_sign_in() {
-            let _ = ctx
-                .database
-                .update_account(
-                    existing_account
-                        .id
-                        .typed()
-                        .map_err(|error| error.to_string())?,
-                    UpdateAccount {
-                        provider_id: provider_name.to_owned().into(),
-                        access_token: (token_bundle.access_token.clone())
-                            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                            .unwrap_or_default(),
-                        refresh_token: (token_bundle.refresh_token.clone())
-                            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                            .unwrap_or_default(),
-                        id_token: (token_bundle.id_token.clone())
-                            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                            .unwrap_or_default(),
-                        access_token_expires_at: tokens
-                            .access_token_expires_at
-                            .clone()
-                            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                            .unwrap_or_default(),
-                        refresh_token_expires_at: tokens
-                            .refresh_token_expires_at
-                            .clone()
-                            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                            .unwrap_or_default(),
-                        ..Default::default()
-                    },
-                )
-                .await
-                .map_err(|error| error.to_string())?;
+        let token_update = if ctx.config.account.update_account_on_sign_in() {
+            let token_bundle = encrypt_token_set(
+                ctx,
+                tokens.access_token.clone(),
+                tokens.refresh_token.clone(),
+                tokens.id_token.clone(),
+            )?;
+            let mut fresh_tokens = better_auth_core::FieldMap::from([
+                ("providerId".into(), provider_name.into()),
+                (
+                    "idToken".into(),
+                    token_bundle.id_token.map(Into::into).unwrap_or_default(),
+                ),
+                (
+                    "accessToken".into(),
+                    token_bundle
+                        .access_token
+                        .map(Into::into)
+                        .unwrap_or_default(),
+                ),
+                (
+                    "refreshToken".into(),
+                    token_bundle
+                        .refresh_token
+                        .map(Into::into)
+                        .unwrap_or_default(),
+                ),
+                (
+                    "accessTokenExpiresAt".into(),
+                    tokens
+                        .access_token_expires_at
+                        .clone()
+                        .map(Into::into)
+                        .unwrap_or_default(),
+                ),
+                (
+                    "refreshTokenExpiresAt".into(),
+                    tokens
+                        .refresh_token_expires_at
+                        .clone()
+                        .map(Into::into)
+                        .unwrap_or_default(),
+                ),
+            ]);
+            fresh_tokens.retain(|_, value| !value.is_undefined());
+            Some(UpdateAccount {
+                additional_fields: fresh_tokens,
+                ..Default::default()
+            })
+        } else {
+            None
+        };
+        if ctx.config.account.store_account_cookie() {
+            let mut cookie_fields = existing_account.internal_fields()?;
+            if let Some(update) = &token_update {
+                cookie_fields.extend(update.fields()?);
+            }
+            options.set_account_cookie(
+                Some(&AccountCookiePayload::from_adapter_fields(cookie_fields)),
+                ctx,
+            )?;
+        }
+        if let Some(update) = token_update {
+            ctx.database
+                .update_account_by_id_value(&existing_account.id.field_value(), update)
+                .await?
+                .ok_or_else(|| OAuthSignInError::Generic("unable to update account".to_owned()))?;
         }
 
         let mut owner_user = owner.user;
@@ -400,42 +424,9 @@ pub(super) async fn process_oauth_sign_in(
                 .await
                 .map_err(OAuthSignInError::from)?
                 .ok_or_else(|| OAuthSignInError::Generic("unable to create session".into()))?;
-        let account_cookie = ctx.config.account.store_account_cookie().then(|| {
-            if !ctx.config.account.update_account_on_sign_in() {
-                return existing_account.clone();
-            }
-            AccountCookiePayload {
-                provider_id: provider_name.to_owned().into(),
-                access_token: token_bundle
-                    .access_token
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_else(|| existing_account.access_token.clone()),
-                refresh_token: token_bundle
-                    .refresh_token
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_else(|| existing_account.refresh_token.clone()),
-                id_token: token_bundle
-                    .id_token
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_else(|| existing_account.id_token.clone()),
-                access_token_expires_at: tokens
-                    .access_token_expires_at
-                    .clone()
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_else(|| existing_account.access_token_expires_at.clone()),
-                refresh_token_expires_at: tokens
-                    .refresh_token_expires_at
-                    .clone()
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_else(|| existing_account.refresh_token_expires_at.clone()),
-                ..existing_account.clone()
-            }
-        });
-
         return Ok(ProcessOAuthUserResult {
             issued,
             is_register: false,
-            account_cookie,
         });
     }
 
@@ -457,98 +448,97 @@ pub(super) async fn process_oauth_sign_in(
             return Err(OAuthSignInError::Generic("account not linked".to_string()));
         }
 
-        validate_provider_user(
-            user_info,
-            existing_user.id().field_value(),
-            provider_name,
-            options.profile,
-            crate::plugins::user_admission::UserValidationAction::LinkAccount,
-            &endpoint,
-        )
-        .await?;
-        let mut linked_user = existing_user;
-        let created_account = ctx
-            .database
-            .create_account_optional(CreateAccount {
-                user_id: linked_user.id().into_owned(),
-                account_id: (user_info.id.clone()).into(),
-                provider_id: (provider_name.to_string()).into(),
-                access_token: (token_bundle.access_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                refresh_token: (token_bundle.refresh_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                id_token: (token_bundle.id_token)
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                access_token_expires_at: tokens
-                    .access_token_expires_at
-                    .clone()
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                refresh_token_expires_at: tokens
-                    .refresh_token_expires_at
-                    .clone()
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                scope: ((!tokens.scopes.is_empty()).then(|| tokens.scopes.join(",")))
-                    .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                    .unwrap_or_default(),
-                password: Default::default(),
-                ..Default::default()
-            })
-            .await
-            .map_err(|error| {
-                api_error_or(error, |error| {
-                    ctx.config.logger.error(
-                        "Unable to link account",
-                        &[better_auth_core::observability::LogArgument::Error(&error)],
-                    );
-                    OAuthSignInError::Generic("unable to link account".to_owned())
+        async {
+            validate_provider_user(
+                user_info,
+                existing_user.id().field_value(),
+                provider_name,
+                options.profile,
+                crate::plugins::user_admission::UserValidationAction::LinkAccount,
+                &endpoint,
+            )
+            .await?;
+            let account = oauth_account_input(ctx, provider_name, user_info, tokens)?;
+            let created_account = ctx
+                .database
+                .create_account_optional(CreateAccount {
+                    field_order: [
+                        "providerId",
+                        "accountId",
+                        "userId",
+                        "accessToken",
+                        "refreshToken",
+                        "idToken",
+                        "accessTokenExpiresAt",
+                        "refreshTokenExpiresAt",
+                        "scope",
+                    ]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+                    user_id: existing_user.id().into_owned(),
+                    ..account
                 })
-            })?
-            .ok_or_else(|| "unable to link account".to_string())?;
+                .await?;
+            if let Some(account) = &created_account {
+                options.set_account_cookie(Some(account), ctx)?;
+            }
+            Ok::<_, AuthError>(created_account)
+        }
+        .await
+        .map_err(|error| {
+            api_error_or(error, |error| {
+                ctx.config.logger.error(
+                    "Unable to link account",
+                    &[better_auth_core::observability::LogArgument::Error(&error)],
+                );
+                OAuthSignInError::Generic("unable to link account".to_owned())
+            })
+        })?
+        .ok_or_else(|| OAuthSignInError::Generic("unable to link account".to_owned()))?;
 
         if email_verified
-            && !linked_user.email_verified().is_truthy()?
-            && linked_user
+            && !existing_user.email_verified().is_truthy()?
+            && existing_user
                 .email()
                 .field_value()
                 .strict_equals(&provider_email.to_lowercase().into())
         {
             let _ = ctx
                 .database
-                .update_user(
-                    linked_user
-                        .id()
-                        .typed()
-                        .map_err(|error| OAuthSignInError::Generic(error.to_string()))?,
+                .update_user_by_id_value(
+                    &existing_user.id().field_value(),
                     UpdateUser {
                         email_verified: Some(true),
                         ..Default::default()
                     },
                 )
-                .await
-                .map_err(|error| error.to_string())?;
+                .await?;
         }
 
+        let mut linked_user = super::handlers::apply_link_user_info(
+            &existing_user.id().field_value(),
+            user_info,
+            ctx,
+        )
+        .await
+        .unwrap_or_else(|| existing_user.clone());
         if options.override_user_info {
             let updated = ctx
                 .database
                 .update_user_by_id_value(
-                    &linked_user.id().field_value(),
+                    &existing_user.id().field_value(),
                     provider_profile_update(
                         ctx,
                         user_info,
                         provider_email,
-                        if linked_user
+                        if existing_user
                             .email()
                             .field_value()
                             .strict_equals(&provider_email.to_lowercase().into())
-                            && linked_user.email_verified().is_truthy()?
+                            && existing_user.email_verified().is_truthy()?
                         {
-                            linked_user.email_verified().field_value()
+                            existing_user.email_verified().field_value()
                         } else {
                             email_verified.into()
                         },
@@ -577,104 +567,75 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .map_err(OAuthSignInError::from)?
         .ok_or_else(|| OAuthSignInError::Generic("unable to create session".into()))?;
-        let account_cookie = ctx
-            .config
-            .account
-            .store_account_cookie()
-            .then(|| created_account.clone());
-
         Ok(ProcessOAuthUserResult {
             issued,
             is_register: false,
-            account_cookie,
         })
     } else {
         if options.disable_sign_up {
             return Err(OAuthSignInError::Generic("signup disabled".to_string()));
         }
 
-        let mut create_user = CreateUser::new()
-            .with_email(provider_email.to_lowercase())
-            .with_name(user_info.name()?.unwrap_or_default())
-            .with_email_verified(email_verified);
-        create_user.image = user_info.image.clone().map(Into::into).unwrap_or_default();
-        create_user.additional_fields = ctx
-            .config
-            .user
-            .parse_provider_input(&user_info.additional_fields, true)
-            .map_err(|error| error.to_string())?;
+        let created_user = async {
+            let mut fields = provider_profile_fields(ctx, user_info, true)?;
+            fields.extend([
+                ("email".into(), provider_email.to_lowercase().into()),
+                ("emailVerified".into(), email_verified.into()),
+            ]);
+            let create_user = CreateUser {
+                additional_fields: fields,
+                ..Default::default()
+            };
+            let account = oauth_account_input(ctx, provider_name, user_info, tokens)?;
 
-        let context = ctx.clone();
-        let request = options.request.clone();
-        let admission_body = options.body.clone();
-        let admission_session = endpoint.session;
-        let source = crate::plugins::user_admission::UserValidationSource::oauth(
-            provider_name,
-            options.profile,
-            crate::plugins::user_admission::UserValidationAction::CreateUser,
-        );
-        let account = CreateAccount {
-            user_id: (String::new()).into(),
-            account_id: (user_info.id.clone()).into(),
-            provider_id: (provider_name.to_owned()).into(),
-            access_token: (token_bundle.access_token)
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            refresh_token: (token_bundle.refresh_token)
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            id_token: (token_bundle.id_token)
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            access_token_expires_at: tokens
-                .access_token_expires_at
-                .clone()
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            refresh_token_expires_at: tokens
-                .refresh_token_expires_at
-                .clone()
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            scope: ((!tokens.scopes.is_empty()).then(|| tokens.scopes.join(",")))
-                .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
-                .unwrap_or_default(),
-            password: Default::default(),
-            ..Default::default()
-        };
-        let outcome = better_auth_core::store::transaction(ctx.database.as_ref(), move |tx| {
-            Box::pin(async move {
-                let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
-                    Some(&request),
-                    better_auth_core::FieldValue::from_json(admission_body)?,
-                    &context,
-                );
-                endpoint.path = Some(callback_path(&request));
-                endpoint.session = admission_session;
-                endpoint.transaction = Some(tx);
-                let mut create_user = create_user.into_user_fields()?;
-                if let Err(error) =
-                    crate::plugins::user_admission::validate_create(&create_user, source, &endpoint)
+            let context = ctx.clone();
+            let request = options.request.clone();
+            let admission_body = options.body.clone();
+            let admission_session = endpoint.session;
+            let source = crate::plugins::user_admission::UserValidationSource::oauth(
+                provider_name,
+                options.profile,
+                crate::plugins::user_admission::UserValidationAction::CreateUser,
+            );
+            let (created_user, created_account) =
+                better_auth_core::store::transaction(ctx.database.as_ref(), move |tx| {
+                    Box::pin(async move {
+                        let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
+                            Some(&request),
+                            better_auth_core::FieldValue::from_json(admission_body)?,
+                            &context,
+                        );
+                        endpoint.path = Some(callback_path(&request));
+                        endpoint.session = admission_session;
+                        endpoint.transaction = Some(tx);
+                        let mut create_user = create_user.into_user_fields()?;
+                        if let Err(error) = crate::plugins::user_admission::validate_create(
+                            &create_user,
+                            source,
+                            &endpoint,
+                        )
                         .await
-                {
-                    return Err(error.into_auth_error());
-                }
-                apply_default_role(&context, &mut create_user);
-                let user = tx
-                    .create_user_fields_optional(create_user)
-                    .await?
-                    .ok_or_else(|| {
-                        AuthError::internal("Cannot read properties of null (reading 'id')")
-                    })?;
-                let account = tx
-                    .create_account_optional(CreateAccount {
-                        user_id: user.id().into_owned(),
-                        ..account
+                        {
+                            return Err(error.into_auth_error());
+                        }
+                        apply_default_role(&context, &mut create_user);
+                        let user = tx
+                            .create_user_fields_optional(create_user)
+                            .await?
+                            .ok_or_else(|| {
+                                AuthError::internal("Cannot read properties of null (reading 'id')")
+                            })?;
+                        let mut account = account;
+                        account.field_order.push("userId".into());
+                        account.user_id = user.id().into_owned();
+                        let created_account = tx.create_account_optional(account).await?;
+                        Ok((user, created_account))
                     })
-                    .await?;
-                Ok((user, account))
-            })
-        })
+                })
+                .await?;
+            options.set_account_cookie(created_account.as_ref(), ctx)?;
+            Ok::<_, AuthError>(created_user)
+        }
         .await
         .map_err(|error| {
             api_error_or(error, |error| {
@@ -685,14 +646,6 @@ pub(super) async fn process_oauth_sign_in(
                 OAuthSignInError::Generic("unable to create user".to_owned())
             })
         })?;
-        let (created_user, created_account) = outcome;
-
-        if created_account.is_none() && ctx.config.account.store_account_cookie() {
-            return Err(OAuthSignInError::Generic(
-                "unable to create user".to_owned(),
-            ));
-        }
-
         options
             .check_email_verification(provider, Some(&created_user), true, ctx)
             .await?;
@@ -705,19 +658,69 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .map_err(OAuthSignInError::from)?
         .ok_or_else(|| OAuthSignInError::Generic("unable to create session".into()))?;
-        let account_cookie = ctx
-            .config
-            .account
-            .store_account_cookie()
-            .then_some(created_account)
-            .flatten();
-
         Ok(ProcessOAuthUserResult {
             issued,
             is_register: true,
-            account_cookie,
         })
     }
+}
+
+fn oauth_account_input(
+    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+    provider_name: &str,
+    user_info: &OAuthUserInfo,
+    tokens: &OAuthTokenSet,
+) -> AuthResult<CreateAccount> {
+    let tokens_to_store = encrypt_token_set(
+        ctx,
+        tokens.access_token.clone(),
+        tokens.refresh_token.clone(),
+        tokens.id_token.clone(),
+    )?;
+    Ok(CreateAccount {
+        field_order: [
+            "accessToken",
+            "refreshToken",
+            "idToken",
+            "accessTokenExpiresAt",
+            "refreshTokenExpiresAt",
+            "scope",
+            "providerId",
+            "accountId",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect(),
+        account_id: user_info.id.clone().into(),
+        provider_id: provider_name.to_owned().into(),
+        access_token: tokens_to_store
+            .access_token
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        refresh_token: tokens_to_store
+            .refresh_token
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        id_token: tokens_to_store
+            .id_token
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        access_token_expires_at: tokens
+            .access_token_expires_at
+            .clone()
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        refresh_token_expires_at: tokens
+            .refresh_token_expires_at
+            .clone()
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        scope: (!tokens.scopes.is_empty())
+            .then(|| tokens.scopes.join(","))
+            .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
+            .unwrap_or_default(),
+        ..Default::default()
+    })
 }
 
 fn provider_profile_update<S: better_auth_core::AuthSchema>(
@@ -726,28 +729,39 @@ fn provider_profile_update<S: better_auth_core::AuthSchema>(
     provider_email: &str,
     email_verified: better_auth_core::FieldValue,
 ) -> AuthResult<UpdateUser> {
-    let mut fields = ctx
-        .config
-        .user
-        .parse_provider_input(&user_info.additional_fields, false)?;
-    let email_verified = match email_verified {
-        better_auth_core::FieldValue::Bool(value) => Some(value),
-        value => {
-            let _ = fields.insert("emailVerified".into(), value);
-            None
-        }
-    };
+    let mut fields = provider_profile_fields(ctx, user_info, false)?;
+    fields.extend([
+        ("email".into(), provider_email.to_lowercase().into()),
+        ("emailVerified".into(), email_verified),
+    ]);
     Ok(UpdateUser {
         additional_fields: fields,
-        email_verified,
-        name: user_info
-            .name()?
-            .map(|value| Some(value.to_owned()).into())
-            .unwrap_or_default(),
-        image: user_info.image.clone().map(Into::into).unwrap_or_default(),
-        email: Some(provider_email.to_lowercase()),
         ..Default::default()
     })
+}
+
+pub(super) fn provider_profile_fields(
+    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+    user_info: &OAuthUserInfo,
+    create: bool,
+) -> AuthResult<better_auth_core::FieldMap> {
+    let additional = ctx
+        .config
+        .user
+        .parse_provider_input(&user_info.additional_fields, create)?;
+    let mut fields = better_auth_core::FieldMap::from([
+        ("name".into(), user_info.name.field_value()),
+        (
+            "image".into(),
+            user_info
+                .image
+                .clone()
+                .map(|image| image.map_or(better_auth_core::FieldValue::Null, Into::into))
+                .unwrap_or_default(),
+        ),
+    ]);
+    fields.extend(additional);
+    Ok(fields)
 }
 
 pub(crate) async fn sign_in_verified_profile(
@@ -794,7 +808,6 @@ pub(crate) async fn sign_in_verified_profile(
         }
         OAuthSignInError::Generic(message) => AuthError::authentication_failed(message),
         OAuthSignInError::Banned(message) => AuthError::banned_user(message),
-        OAuthSignInError::Admission(error) => error.into_auth_error(),
     })?;
     ctx.session_manager()
         .set_native_session_cookie(req, outcome.issued.clone(), None)
@@ -816,7 +829,7 @@ pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
     profile: Option<&serde_json::Value>,
     action: crate::plugins::user_admission::UserValidationAction,
     endpoint: &crate::plugins::endpoint_context::EndpointContext<'_, S>,
-) -> Result<(), OAuthSignInError> {
+) -> AuthResult<()> {
     let mut fields = user.additional_fields.clone();
     let _ = fields.insert("id".into(), user_id);
     if let Some(email) = user.email()? {
@@ -854,7 +867,7 @@ pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
         endpoint,
     )
     .await
-    .map_err(OAuthSignInError::Admission)
+    .map_err(crate::plugins::user_admission::UserValidationRejection::into_auth_error)
 }
 
 pub(super) fn callback_path(request: &AuthRequest) -> &str {
@@ -874,3 +887,7 @@ mod override_tests;
 #[cfg(test)]
 #[path = "signin_error_tests.rs"]
 mod error_tests;
+
+#[cfg(test)]
+#[path = "signin_flow_tests.rs"]
+mod flow_tests;

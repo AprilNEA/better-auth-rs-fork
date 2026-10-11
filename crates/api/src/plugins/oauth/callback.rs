@@ -5,8 +5,8 @@ use better_auth_core::{AuthContext, AuthError, AuthRequest, AuthResponse, AuthRe
 
 use super::handlers::{
     FlowStartRequest, attach_cookie_state_payload, attach_state_cookie, auth_base_url,
-    complete_link_social, create_account_cookie_headers, fetch_user_info_for_code,
-    initiate_oauth_flow_core, parse_callback_user_payload, redirect_response,
+    complete_link_social, fetch_user_info_for_code, initiate_oauth_flow_core,
+    parse_callback_user_payload, redirect_response,
 };
 use super::provider_tokens::validate_authorization_code_via_provider;
 use super::providers::OAuthUserInfoRequest;
@@ -117,6 +117,13 @@ pub(super) async fn handle_callback(
                 )?));
             }
         };
+    let expire_state_cookie = || {
+        let cookie = better_auth_core::utils::cookie_utils::create_clear_cookie(
+            &state_cookie_name(&ctx.config),
+            &ctx.config,
+        )?;
+        req.append_response_header("Set-Cookie", cookie)
+    };
     let payload = match ctx.config.account.store_state_strategy() {
         better_auth_core::OAuthStateStrategy::Database => {
             let verification = match ctx
@@ -162,6 +169,7 @@ pub(super) async fn handle_callback(
                     "error=state_mismatch",
                 )?));
             }
+            expire_state_cookie()?;
             ctx.database
                 .delete_verification_by_identifier(&state_param)
                 .await?;
@@ -186,6 +194,7 @@ pub(super) async fn handle_callback(
                             "error=state_mismatch",
                         )?));
                     }
+                    expire_state_cookie()?;
                     payload
                 }
                 Err(_) => {
@@ -198,10 +207,6 @@ pub(super) async fn handle_callback(
         }
     };
 
-    let clear_state_cookie = better_auth_core::utils::cookie_utils::create_clear_cookie(
-        &state_cookie_name(&ctx.config),
-        &ctx.config,
-    )?;
     let error_url = payload
         .error_url
         .clone()
@@ -215,10 +220,10 @@ pub(super) async fn handle_callback(
             if let Some(description) = description {
                 let _ = params.append_pair("error_description", description);
             }
-            Ok(
-                redirect_response(&append_query_params(&error_url, &params.finish())?)
-                    .with_appended_header("Set-Cookie", clear_state_cookie.clone()),
-            )
+            Ok(redirect_response(&append_query_params(
+                &error_url,
+                &params.finish(),
+            )?))
         };
 
     if payload.is_expired() {
@@ -324,8 +329,7 @@ pub(super) async fn handle_callback(
             return redirect_on_error(&code, description.as_deref());
         }
 
-        return Ok(redirect_response(&payload.callback_url)
-            .with_appended_header("Set-Cookie", clear_state_cookie));
+        return Ok(redirect_response(&payload.callback_url));
     }
 
     let disable_sign_up = provider.config.disable_implicit_sign_up()
@@ -366,12 +370,6 @@ pub(super) async fn handle_callback(
     } else {
         payload.callback_url.clone()
     };
-    req.append_response_header("Set-Cookie", clear_state_cookie)?;
-    if let Some(account_cookie) = outcome.account_cookie.as_ref() {
-        for cookie in create_account_cookie_headers(req, &ctx.config, account_cookie)? {
-            req.append_response_header("Set-Cookie", cookie)?;
-        }
-    }
     ctx.session_manager()
         .set_native_session_cookie(req, outcome.issued, None)
         .await?;

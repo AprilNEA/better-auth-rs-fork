@@ -36,7 +36,7 @@ pub struct AccountView {
     pub refresh_token_expires_at: SchemaValue<Option<crate::FieldDate>>,
     #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub scope: SchemaValue<Option<String>>,
-    // Account cookies serialize this view. Keep the password out of every implicit serialization.
+    // Public serialization omits passwords; encrypted account cookies use the full adapter projection.
     #[serde(default, skip_serializing)]
     pub password: SchemaValue<Option<String>>,
     #[serde(
@@ -62,7 +62,7 @@ impl serde::Serialize for AccountView {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         use serde::ser::Error;
         let mut fields = self.field_values().map_err(S::Error::custom)?;
-        // Account cookies must exclude passwords, including explicit additional-field overrides.
+        // Public responses omit passwords, including explicit additional-field overrides.
         let _ = fields.shift_remove("password");
         crate::field_value::serde::map::serialize(&fields, serializer)
     }
@@ -70,7 +70,7 @@ impl serde::Serialize for AccountView {
 
 impl AccountView {
     /// Read a complete trusted adapter projection, including the password when present.
-    /// Do not use this method to construct account cookies or public account-list responses.
+    /// Use this projection for encrypted account cookies, never public account-list responses.
     pub fn internal_fields(&self) -> AuthResult<crate::FieldMap> {
         self.field_values()
     }

@@ -244,6 +244,14 @@ jobs:
           path: ${{ runner.temp }}/telemetry-host-observations/
           if-no-files-found: error
           retention-days: 14
+      - name: Preserve OAuth sign-in order observations
+        if: always() && contains(fromJSON('["all", "account-user-auth", "alignment"]'), env.CHECK_STAGE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: oauth-signin-order-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oauth-signin-order/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Save Rust cache
         if: ${{ !cancelled() && steps.rust-cache.outcome == 'success' && steps.rust-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6.1.0

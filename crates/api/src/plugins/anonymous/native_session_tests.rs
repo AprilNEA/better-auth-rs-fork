@@ -16,6 +16,80 @@ use super::AnonymousPlugin;
 use crate::plugins::test_helpers::{create_test_config, initialize_test_context};
 
 #[tokio::test]
+async fn anonymous_signin_uses_the_injected_native_session_before_database_state() -> AuthResult<()>
+{
+    use crate::plugins::test_helpers::native_session::{NativeSessionHook, dispatch_plugin};
+    use better_auth_core::{
+        AuthPlugin,
+        store::{StatelessSchema, schema::EntityRole},
+    };
+
+    let plugin = AnonymousPlugin::new();
+    let config = Arc::new(create_test_config());
+    let store = Arc::new(EphemeralStore::new(config.clone()));
+    let mut context = initialize_test_context(config, store.clone(), &[&plugin]).await?;
+    let hook =
+        NativeSessionHook::install(&mut context, AuthPlugin::<StatelessSchema>::routes(&plugin));
+    let user = context
+        .database
+        .create_user(CreateUser {
+            id: Some("existing-owner".into()),
+            email: Some("existing@anonymous.test".into()),
+            is_anonymous: Some(false),
+            ..Default::default()
+        })
+        .await?;
+    let session = context
+        .database
+        .create_session(CreateSession {
+            user_id: user.id.clone(),
+            expires_at: (Utc::now() + Duration::hours(1)).into(),
+            inherited_fields: Default::default(),
+            additional_fields: Default::default(),
+            ip_address: None,
+            user_agent: None,
+            impersonated_by: None,
+            active_organization_id: None,
+        })
+        .await?;
+    let mut native = FieldMap::from(user);
+    let _ = native.insert("isAnonymous".into(), "anonymous native value".into());
+    let native: FieldValue = native.into();
+    let request = hook.request(
+        &context,
+        &session,
+        native.clone(),
+        HttpMethod::Post,
+        "/sign-in/anonymous",
+        serde_json::json!({}),
+    )?;
+    let error = dispatch_plugin(&request, &context, &plugin)
+        .await
+        .err()
+        .ok_or_else(|| AuthError::internal("Anonymous sign-in ignored its native session"))?;
+    assert_eq!(error.status_code()?, 400);
+    assert_eq!(
+        error.body_value()?.model_property("code")?,
+        "ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY".into()
+    );
+    let snapshot = request
+        .native_session_snapshot()?
+        .ok_or_else(|| AuthError::internal("Anonymous sign-in discarded its native session"))?;
+    assert!(snapshot.user.strict_equals(&native));
+    assert_eq!(snapshot.session, session);
+    assert!(request.new_session()?.is_none());
+    let users = store.storage_rows(EntityRole::User)?;
+    assert_eq!(users.len(), 1);
+    assert_eq!(
+        users.first().and_then(|user| user.get("isAnonymous")),
+        Some(&false.into())
+    );
+    assert_eq!(store.storage_rows(EntityRole::Session)?.len(), 1);
+    assert!(!request.take_response_headers()?.contains_key("set-cookie"));
+    Ok(())
+}
+
+#[tokio::test]
 async fn anonymous_link_uses_native_truthiness_and_normalizes_the_callback_identity()
 -> AuthResult<()> {
     let cases = [
