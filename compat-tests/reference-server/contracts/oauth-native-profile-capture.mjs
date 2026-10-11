@@ -88,7 +88,12 @@ function assertExecution(scenario, state, sample, outcome, events, value) {
   if (scenario.shape === "dynamic-email") {
     assert.equal(subjects.length, 1);
     assert.equal(outcome.returned, false);
-    assert.equal(outcome.error.name, "TypeError");
+    // The email lookup catch converts the type error into an error-page redirect.
+    assert.equal(outcome.error.name, "APIError");
+    assert.equal(outcome.error.message, "");
+    assert.equal(outcome.error.properties.status, "FOUND");
+    assert.equal(outcome.error.properties.statusCode, 302);
+    assert.equal(outcome.originalError, false);
     assert.equal(state.admissions.length, 0);
     for (const model of ["user", "account", "session"]) assert.deepEqual(sample.memory[model], []);
   }
