@@ -344,6 +344,10 @@ pub trait AuthApiKey:
 pub trait AuthPasskey:
     AuthRecordFields + Clone + Send + Sync + Serialize + std::fmt::Debug + 'static
 {
+    /// Return source property order when the entity contains an adapter projection.
+    fn field_order(&self) -> Option<&[String]> {
+        None
+    }
     /// Return application fields when the entity already contains an adapter projection.
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         None

@@ -52,8 +52,9 @@ where
                     O::TeamMember::column(&relation.from)?,
                     O::Team::column(&relation.to)?,
                 ),
-                O::Team::column("id")?,
-            );
+                &team_fields,
+                O::Team::column,
+            )?;
             let rows = super::joins::grouped_raw_rows(
                 super::joins::joined_raw_rows(self.connection(), &query).await?,
                 O::TeamMember::column("id")?,

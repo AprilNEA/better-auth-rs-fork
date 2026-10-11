@@ -155,7 +155,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
     pub(super) async fn project_plugin_rows<M: SeaOrmPluginModel, T: FromFieldMap>(
         &self,
         role: EntityRole,
-        rows: Vec<QueryResult>,
+        rows: &[QueryResult],
     ) -> AuthResult<Vec<T>> {
         let backend = self.connection().get_database_backend();
         let fields = self.model_fields.plugin_fields(role);

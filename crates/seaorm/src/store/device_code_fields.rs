@@ -30,7 +30,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             .map(|row| self.device_code_storage_bindings(row))
             .collect::<AuthResult<Vec<_>>>()?;
         Ok(self
-            .project_plugin_rows::<P::DeviceCode, DeviceCode>(EntityRole::DeviceCode, rows)
+            .project_plugin_rows::<P::DeviceCode, DeviceCode>(EntityRole::DeviceCode, &rows)
             .await?
             .into_iter()
             .zip(bindings)

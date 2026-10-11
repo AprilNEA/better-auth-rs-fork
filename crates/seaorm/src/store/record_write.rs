@@ -9,6 +9,10 @@ use sea_orm::{
 
 use super::{create_readback::CreateReadback, map_db_err, record_bindings::Binding};
 
+#[cfg(test)]
+#[path = "record_write_tests.rs"]
+mod tests;
+
 pub(super) struct RecordWrite<E: EntityTrait> {
     fields: Vec<(E::Column, Binding)>,
 }
@@ -52,11 +56,23 @@ impl<E: EntityTrait> RecordWrite<E> {
     }
 
     pub(super) fn from_initialized_fields<M: ActiveModelTrait<Entity = E>>(
+        schema: &better_auth_core::user_fields::UserConfig,
         fields: better_auth_core::FieldMap,
         column: impl Fn(&str) -> AuthResult<E::Column>,
         extra_columns: Vec<E::Column>,
         initialize: impl FnOnce(&better_auth_core::FieldMap) -> AuthResult<M>,
     ) -> AuthResult<Self> {
+        let extra_columns = extra_columns
+            .into_iter()
+            .filter_map(|extra| {
+                schema
+                    .owns_adapter_column(&extra.to_string(), |name| {
+                        column(name).map(|column| column.to_string())
+                    })
+                    .map(|owned| (!owned).then_some(extra))
+                    .transpose()
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
         let initial = if extra_columns.is_empty() {
             None
         } else {

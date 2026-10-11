@@ -528,46 +528,58 @@ impl PartialEq for InvitationView {
 }
 
 /// Public passkey response shape.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct PasskeyView {
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     /// Declared application fields after adapter output projection.
-    #[serde(with = "crate::field_value::serde::map", flatten, default)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub name: SchemaValue<Option<String>>,
-    #[serde(rename = "credentialID")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub credential_id: SchemaValue<String>,
-    #[serde(rename = "userId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub user_id: SchemaValue<String>,
-    #[serde(rename = "publicKey")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub public_key: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub counter: SchemaValue<u64>,
-    #[serde(rename = "deviceType")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub device_type: SchemaValue<String>,
-    #[serde(rename = "backedUp")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub backed_up: SchemaValue<bool>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub transports: SchemaValue<Option<String>>,
-    #[serde(rename = "createdAt")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
     pub created_at: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub aaguid: SchemaValue<Option<String>>,
+}
+
+impl PartialEq for PasskeyView {
+    fn eq(&self, other: &Self) -> bool {
+        self.additional_fields == other.additional_fields
+            && self.id == other.id
+            && self.name == other.name
+            && self.credential_id == other.credential_id
+            && self.user_id == other.user_id
+            && self.public_key == other.public_key
+            && self.counter == other.counter
+            && self.device_type == other.device_type
+            && self.backed_up == other.backed_up
+            && self.transports == other.transports
+            && self.created_at == other.created_at
+            && self.aaguid == other.aaguid
+    }
 }
 
 impl<T: AuthPasskey> From<&T> for PasskeyView {
     fn from(pk: &T) -> Self {
+        let mut additional_fields = pk.additional_fields().cloned().unwrap_or_default();
+        if let Some(order) = pk.field_order() {
+            for (name, value) in [
+                ("credential", pk.credential().field_value()),
+                ("updatedAt", pk.updated_at().field_value()),
+            ] {
+                if order.iter().any(|field| field == name) {
+                    let _ = additional_fields.insert(name.into(), value);
+                }
+            }
+        }
         Self {
-            additional_fields: pk.additional_fields().cloned().unwrap_or_default(),
+            field_order: pk.field_order().unwrap_or_default().to_vec(),
+            additional_fields,
             id: pk.id().into_owned(),
             name: pk.name().clone(),
             credential_id: pk.credential_id().clone(),

@@ -88,6 +88,7 @@ fn merge_preserves_private_changes_and_concurrent_rows_without_resurrecting_dele
 #[test]
 fn merge_keeps_private_passkey_credential_updates() {
     let key = Passkey {
+        field_order: Default::default(),
         additional_fields: Default::default(),
         id: "key".into(),
         name: None.into(),

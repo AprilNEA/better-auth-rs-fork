@@ -432,6 +432,7 @@ where
             )
             .await?;
         let active = super::record_write::RecordWrite::from_initialized_fields(
+            &fields,
             input,
             S::Account::field_column,
             S::Account::extra_insert_columns(),
@@ -546,8 +547,9 @@ where
                     S::Account::field_column(&relation.from)?,
                     S::User::field_column(&relation.to)?,
                 ),
-                S::User::id_column(),
-            );
+                &self.user_field_schema().adapter_fields(&[]),
+                S::User::field_column,
+            )?;
             let rows = database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
                 self.config(),
                 "findMany",

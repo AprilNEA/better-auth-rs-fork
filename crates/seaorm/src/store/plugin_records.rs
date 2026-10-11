@@ -34,7 +34,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         })
         .await?;
         Ok(self
-            .project_plugin_rows::<M, FieldMap>(role, row.into_iter().collect())
+            .project_plugin_rows::<M, FieldMap>(role, row.as_slice())
             .await?
             .pop())
     }
@@ -58,7 +58,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         })
         .await?;
         Ok(self
-            .project_plugin_rows::<M, FieldMap>(role, row.into_iter().collect())
+            .project_plugin_rows::<M, FieldMap>(role, row.as_slice())
             .await?
             .pop())
     }
@@ -88,7 +88,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         })
         .await?;
         Ok(self
-            .project_plugin_rows::<M, FieldMap>(role, row.into_iter().collect())
+            .project_plugin_rows::<M, FieldMap>(role, row.as_slice())
             .await?
             .pop())
     }
@@ -130,6 +130,6 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
                 .map_err(map_db_err)
         })
         .await?;
-        self.project_plugin_rows::<M, FieldMap>(role, rows).await
+        self.project_plugin_rows::<M, FieldMap>(role, &rows).await
     }
 }

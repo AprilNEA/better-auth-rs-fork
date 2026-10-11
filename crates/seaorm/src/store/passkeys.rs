@@ -4,7 +4,7 @@ use crate::SeaOrmPluginModel;
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FromFieldMap, SchemaField};
 use chrono::Utc;
-use sea_orm::{ConnectionTrait, QueryFilter, QuerySelect, QueryTrait};
+use sea_orm::{ConnectionTrait, IdenStatic, QueryFilter, QuerySelect, QueryTrait};
 
 use better_auth_core::store::{PasskeyStore, schema::EntityRole};
 use better_auth_core::{PasskeyCredentialState, PasskeyStorage, UpdatePasskey};
@@ -67,10 +67,7 @@ where
         let filter = self.resolve_plugin_equals::<P::Passkey>(EntityRole::Passkey, selector)?;
         let row = self.update_passkey_patch(filter, patch).await?;
         Ok(self
-            .project_plugin_rows::<P::Passkey, FieldMap>(
-                EntityRole::Passkey,
-                row.into_iter().collect(),
-            )
+            .project_plugin_rows::<P::Passkey, FieldMap>(EntityRole::Passkey, row.as_slice())
             .await?
             .pop())
     }
@@ -308,39 +305,34 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         &self,
         rows: Vec<sea_orm::QueryResult>,
     ) -> AuthResult<Vec<Passkey>> {
-        let fields = self
-            .model_fields
-            .plugin_fields(EntityRole::Passkey)
-            .adapter_fields(&[]);
-        let internal = rows
-            .iter()
-            .map(|row| super::plugin_rows::undeclared_fields::<P::Passkey>(row, &fields))
-            .collect::<AuthResult<Vec<_>>>()?;
-        self.project_plugin_rows::<P::Passkey, FieldMap>(EntityRole::Passkey, rows)
-            .await?
+        let projected = self
+            .project_plugin_rows::<P::Passkey, FieldMap>(EntityRole::Passkey, &rows)
+            .await?;
+        let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
+        projected
             .into_iter()
-            .zip(internal)
-            .map(|(mut fields, internal)| {
-                fields.extend(internal);
-                self.typed_passkey(fields)
+            .zip(rows)
+            .map(|(mut fields, row)| {
+                let order = fields.keys().cloned().collect();
+                if P::Passkey::passkey_storage() == PasskeyStorage::Legacy {
+                    for name in ["credential", "updatedAt"] {
+                        if !schema.fields().contains_key(name) {
+                            let column = P::Passkey::column(name)?;
+                            let mut value = super::plugin_rows::value(&row, column.as_str())?;
+                            if name == "updatedAt"
+                                && matches!(value, better_auth_core::FieldValue::String(_))
+                            {
+                                value = better_auth_core::query::field_date(&value)?.into();
+                            }
+                            let _ = fields.insert(name.into(), value);
+                        }
+                    }
+                }
+                let mut passkey = Passkey::from_field_values(fields)?;
+                passkey.field_order = order;
+                Ok(passkey)
             })
             .collect()
-    }
-
-    fn typed_passkey(&self, mut fields: FieldMap) -> AuthResult<Passkey> {
-        if P::Passkey::passkey_storage() == PasskeyStorage::Legacy
-            && !self
-                .model_fields
-                .fields(EntityRole::Passkey)
-                .fields()
-                .contains_key("updatedAt")
-            && let Some(value @ better_auth_core::FieldValue::String(_)) =
-                fields.get_mut("updatedAt")
-        {
-            // Legacy Rust models retain their typed timestamp without adding an upstream field policy.
-            *value = better_auth_core::query::field_date(value)?.into();
-        }
-        Passkey::from_field_values(fields)
     }
 
     async fn prepare_passkey_fields(
@@ -354,12 +346,16 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let mut active = self
             .prepare_plugin_fields::<P::Passkey>(EntityRole::Passkey, "passkey", extras, create)
             .await?;
-        native.retain(|name, _| !fields.fields().contains_key(name));
-        super::plugin_models::apply::<P::Passkey>(
-            &mut active,
-            native,
-            self.config().advanced.database.generate_id(),
-        )?;
+        if P::Passkey::passkey_storage() == PasskeyStorage::Legacy {
+            for name in ["credential", "updatedAt"] {
+                if let Some(value) = native.remove(name)
+                    && let Some(column) =
+                        super::plugin_rows::private_column::<P::Passkey>(&fields, name)?
+                {
+                    active.native_field(column, value);
+                }
+            }
+        }
         Ok(active)
     }
 

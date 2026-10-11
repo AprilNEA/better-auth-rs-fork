@@ -232,6 +232,7 @@ where
             )
             .await?;
         super::record_write::RecordWrite::from_initialized_fields(
+            &fields,
             input,
             S::Verification::field_column,
             S::Verification::extra_insert_columns(),

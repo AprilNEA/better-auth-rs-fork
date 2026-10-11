@@ -1,6 +1,6 @@
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IdenStatic, Iterable, QueryTrait, Select,
-    sea_query::{Expr, ExprTrait, JoinType, Query, SelectStatement},
+    ConnectionTrait, EntityName, EntityTrait, IdenStatic, QueryTrait, Select,
+    sea_query::{Asterisk, Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 
 use crate::error::AuthResult;
@@ -14,9 +14,35 @@ use std::sync::Arc;
 
 const PARENT: &str = "_auth_parent";
 const CHILD: &str = "_auth_child";
-const CHILD_PRESENT: &str = "_auth_child_present";
-
 use super::plugin_rows::SqlRow;
+
+pub(super) struct ChildSelection {
+    prefix: String,
+    columns: Vec<String>,
+}
+
+impl ChildSelection {
+    pub(super) fn aliases(&self) -> impl Iterator<Item = String> + '_ {
+        self.columns
+            .iter()
+            .map(|column| format!("{}{column}", self.prefix))
+    }
+
+    pub(super) fn read(&self, row: &SqlRow) -> AuthResult<Option<SqlRow>> {
+        let child = row.prefixed(&self.prefix);
+        for column in &self.columns {
+            if !child.is_nullish(column)? {
+                return Ok(Some(child));
+            }
+        }
+        Ok(None)
+    }
+}
+
+pub(super) struct NativeJoinQuery {
+    query: SelectStatement,
+    child: ChildSelection,
+}
 
 pub(super) fn relation_value<T>(many: bool, mut rows: Vec<T>) -> JoinValue<T> {
     if many {
@@ -71,7 +97,7 @@ pub(super) fn selected_raw_children(
             break;
         }
         let key = row.value(id.as_str())?;
-        if !ids.contains(&key) {
+        if !key.is_truthy() || !ids.contains(&key) {
             ids.push(key);
             selected.push(row);
         }
@@ -215,54 +241,59 @@ pub(super) fn raw_relation_value<C: IdenStatic>(
 pub(super) fn joined_query<P: EntityTrait, C: EntityTrait>(
     parent: Select<P>,
     on: (P::Column, C::Column),
-    child_id: C::Column,
-) -> SelectStatement {
-    let mut parent = parent.into_query();
-    // Keep the parent page intact. Apply model-specific select casts only in the outer query.
-    let _ = parent.clear_selects();
-    for column in P::Column::iter() {
-        let _ = parent.expr(Expr::col(column.as_column_ref()));
-    }
+    child_fields: &UserConfig,
+    column: impl Fn(&str) -> AuthResult<C::Column>,
+) -> AuthResult<NativeJoinQuery> {
     let mut query = Query::select();
-    let _ = query.from_subquery(parent, PARENT).join_as(
+    let _ = query.from_subquery(parent.into_query(), PARENT).join_as(
         JoinType::LeftJoin,
         C::default().table_ref(),
         CHILD,
         Expr::col((PARENT, on.0)).equals((CHILD, on.1)),
     );
-    select_model::<P>(&mut query, PARENT, "A_");
-    select_model::<C>(&mut query, CHILD, "B_");
-    let _ = query.expr_as(Expr::col((CHILD, child_id)).is_not_null(), CHILD_PRESENT);
-    query
+    let _ = query.expr(Expr::col((PARENT, Asterisk)));
+    let child = select_child_fields(
+        &mut query,
+        CHILD,
+        C::default().table_name(),
+        child_fields,
+        column,
+    )?;
+    Ok(NativeJoinQuery { query, child })
 }
 
-pub(super) fn select_model<E: EntityTrait>(
+pub(super) fn select_child_fields<C: IdenStatic>(
     query: &mut SelectStatement,
     table: &'static str,
-    prefix: &str,
-) {
-    for column in E::Column::iter() {
-        let _ = query.expr_as(
-            column.select_as(Expr::col((table, column))),
-            format!("{prefix}{}", column.as_str()),
-        );
+    model: &str,
+    fields: &UserConfig,
+    column: impl Fn(&str) -> AuthResult<C>,
+) -> AuthResult<ChildSelection> {
+    let model = model.rsplit('.').next().unwrap_or(model);
+    let prefix = format!("_joined_{model}_");
+    let mut columns = Vec::new();
+    for (name, field) in fields.fields() {
+        let column = column(resolve_field_name(field.field_name.as_deref(), name))?;
+        let alias = format!("{prefix}{}", column.as_str());
+        let _ = query.expr_as(Expr::col((table, column)), alias);
+        columns.push(column.as_str().to_owned());
     }
+    Ok(ChildSelection { prefix, columns })
 }
 
 pub(super) async fn joined_raw_rows(
     db: &impl ConnectionTrait,
-    query: &SelectStatement,
+    query: &NativeJoinQuery,
 ) -> AuthResult<Vec<(SqlRow, Option<SqlRow>)>> {
-    db.query_all(query)
+    db.query_all(&query.query)
         .await
         .map_err(super::map_db_err)?
         .into_iter()
         .map(|row| {
             let row = SqlRow::from(row);
-            Ok((
-                row.prefixed("A_"),
-                row.optional_prefixed("B_", CHILD_PRESENT)?,
-            ))
+            let child = query.child.read(&row)?;
+            // Kysely assigns join aliases to child objects and removes those keys from the parent.
+            Ok((row.without_columns(query.child.aliases()), child))
         })
         .collect()
 }
@@ -357,13 +388,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn optional_child_distinguishes_absence_from_decode_failure() -> AuthResult<()> {
+    async fn child_presence_uses_every_selected_column() -> AuthResult<()> {
         let db = Database::connect("sqlite::memory:")
             .await
             .map_err(super::super::map_db_err)?;
+        let selection = ChildSelection {
+            prefix: "_joined_child_".into(),
+            columns: vec!["id".into(), "name".into()],
+        };
         for present in [false, true] {
             let mut query = Query::select();
-            let _ = query.expr_as(Expr::val(present), CHILD_PRESENT);
+            let _ = query
+                .expr_as(Expr::val(Option::<String>::None), "_joined_child_id")
+                .expr_as(Expr::val(present.then_some(0)), "_joined_child_name");
             let row = db
                 .query_one(&query)
                 .await
@@ -371,16 +408,45 @@ mod tests {
                 .ok_or_else(|| {
                     crate::error::AuthError::internal("Presence query returned no row")
                 })?;
-            let result = SqlRow::from(row)
-                .optional_prefixed("B_", CHILD_PRESENT)?
-                .map(|row| row.value("missing"))
-                .transpose();
+            let child = selection.read(&SqlRow::from(row))?;
             if present {
-                assert!(result.is_err_and(|error| { error.to_string().contains("B_missing") }));
+                assert_eq!(
+                    child.map(|row| row.value("name")).transpose()?,
+                    Some(0.into())
+                );
             } else {
-                assert!(matches!(result, Ok(None)));
+                assert!(child.is_none());
             }
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn child_presence_does_not_decode_values_before_selection() -> AuthResult<()> {
+        let db = Database::connect("sqlite::memory:")
+            .await
+            .map_err(super::super::map_db_err)?;
+        let mut query = Query::select();
+        let _ = query
+            .expr_as(Expr::val(Option::<String>::None), "_joined_child_id")
+            .expr_as(Expr::cust("X'01'"), "_joined_child_name");
+        let row = db
+            .query_one(&query)
+            .await
+            .map_err(super::super::map_db_err)?
+            .ok_or_else(|| crate::error::AuthError::internal("Presence query returned no row"))?;
+        let selection = ChildSelection {
+            prefix: "_joined_child_".into(),
+            columns: vec!["id".into(), "name".into()],
+        };
+        let child = selection
+            .read(&SqlRow::from(row))?
+            .ok_or_else(|| crate::error::AuthError::internal("A non-null BLOB must be present"))?;
+        assert!(child.value("name").is_err_and(|error| {
+            error
+                .to_string()
+                .contains("unsupported SQLite storage type BLOB")
+        }));
         Ok(())
     }
 }

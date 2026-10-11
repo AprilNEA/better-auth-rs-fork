@@ -6,17 +6,15 @@ use crate::{
 };
 use better_auth_core::{AuthResult, store::schema::EntityRole, user_fields::AdapterRecord};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityName, EntityTrait, Iterable, QueryTrait, Select,
-    sea_query::{Expr, ExprTrait, JoinType, Query, SelectStatement},
+    ConnectionTrait, EntityName, EntityTrait, QueryTrait, Select,
+    sea_query::{Asterisk, Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 
 fn add_join<P: SeaOrmOrganizationModel, C: SeaOrmOrganizationModel>(
     query: &mut SelectStatement,
     relation: &DetailRelation,
     table: &'static str,
-    prefix: &str,
-    presence: &'static str,
-) -> AuthResult<()> {
+) -> AuthResult<joins::ChildSelection> {
     let _ = query.join_as(
         JoinType::LeftJoin,
         Entity::<C>::default().table_ref(),
@@ -24,9 +22,13 @@ fn add_join<P: SeaOrmOrganizationModel, C: SeaOrmOrganizationModel>(
         Expr::col(("organization", P::column(&relation.join.from)?))
             .equals((table, C::column(&relation.join.to)?)),
     );
-    joins::select_model::<Entity<C>>(query, table, prefix);
-    let _ = query.expr_as(Expr::col((table, C::column("id")?)).is_not_null(), presence);
-    Ok(())
+    joins::select_child_fields(
+        query,
+        table,
+        Entity::<C>::default().table_name(),
+        &relation.fields,
+        C::column,
+    )
 }
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
@@ -76,34 +78,27 @@ where
         parent: Select<Entity<O::Organization>>,
         relations: &DetailRelations,
     ) -> AuthResult<Option<(SqlRow, DetailChildren)>> {
-        let mut parent = parent.into_query();
-        let _ = parent.clear_selects();
-        for column in <Entity<O::Organization> as EntityTrait>::Column::iter() {
-            let _ = parent.expr(Expr::col(column.as_column_ref()));
-        }
         let mut query = Query::select();
-        let _ = query.from_subquery(parent, "organization");
-        joins::select_model::<Entity<O::Organization>>(&mut query, "organization", "O_");
+        let _ = query
+            .from_subquery(parent.into_query(), "organization")
+            .expr(Expr::col(("organization", Asterisk)));
         self.model_fields.canonicalize_id(EntityRole::Invitation)?;
-        add_join::<O::Organization, O::Invitation>(
+        let invitation_selection = add_join::<O::Organization, O::Invitation>(
             &mut query,
             &relations.invitations,
             "invitation",
-            "I_",
-            "invitation_present",
         )?;
         self.model_fields.canonicalize_id(EntityRole::Member)?;
-        add_join::<O::Organization, O::Member>(
-            &mut query,
-            &relations.members,
-            "member",
-            "M_",
-            "member_present",
-        )?;
-        if let Some(teams) = &relations.teams {
+        let member_selection =
+            add_join::<O::Organization, O::Member>(&mut query, &relations.members, "member")?;
+        let team_selection = if let Some(teams) = &relations.teams {
             self.model_fields.canonicalize_id(EntityRole::Team)?;
-            add_join::<O::Organization, O::Team>(&mut query, teams, "team", "T_", "team_present")?;
-        }
+            Some(add_join::<O::Organization, O::Team>(
+                &mut query, teams, "team",
+            )?)
+        } else {
+            None
+        };
         let rows =
             database_operation::<Entity<O::Organization>, _>(self.config(), "findOne", async {
                 self.connection()
@@ -118,15 +113,24 @@ where
         let Some(first) = rows.first() else {
             return Ok(None);
         };
-        let organization = first.prefixed("O_");
+        let organization = first.without_columns(
+            invitation_selection
+                .aliases()
+                .chain(member_selection.aliases())
+                .chain(
+                    team_selection
+                        .iter()
+                        .flat_map(joins::ChildSelection::aliases),
+                ),
+        );
         let mut invitations = Vec::new();
         let mut members = Vec::new();
         let mut teams = Vec::new();
         for row in rows {
-            invitations.extend(row.optional_prefixed("I_", "invitation_present")?);
-            members.extend(row.optional_prefixed("M_", "member_present")?);
-            if relations.teams.is_some() {
-                teams.extend(row.optional_prefixed("T_", "team_present")?);
+            invitations.extend(invitation_selection.read(&row)?);
+            members.extend(member_selection.read(&row)?);
+            if let Some(selection) = &team_selection {
+                teams.extend(selection.read(&row)?);
             }
         }
         let invitations = joins::selected_raw_children(

@@ -78,11 +78,13 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             // Legacy timestamps must not make an empty declared SET valid.
             validate_increment_one_update(false, !active.is_empty())?;
         }
-        super::plugin_models::apply::<P::TwoFactor>(
-            &mut active,
-            legacy,
-            self.config().advanced.database.generate_id(),
-        )?;
+        for (name, value) in legacy {
+            if let Some(column) =
+                super::plugin_rows::private_column::<P::TwoFactor>(&schema, &name)?
+            {
+                active.native_field(column, value);
+            }
+        }
         Ok(active)
     }
 
@@ -90,16 +92,19 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         &self,
         rows: Vec<QueryResult>,
     ) -> AuthResult<Vec<TwoFactor>> {
+        let projected = self
+            .project_plugin_rows::<P::TwoFactor, FieldMap>(EntityRole::TwoFactor, &rows)
+            .await?;
         let schema = self.model_fields.plugin_fields(EntityRole::TwoFactor);
-        let legacy = rows
-            .iter()
-            .map(|row| {
-                let mut fields = FieldMap::new();
+        projected
+            .into_iter()
+            .zip(rows)
+            .map(|(mut fields, row)| {
                 if P::TwoFactor::two_factor_storage() == TwoFactorStorage::Legacy {
                     for name in ["createdAt", "updatedAt"] {
                         if !schema.fields().contains_key(name) {
                             let column = P::TwoFactor::column(name)?;
-                            let value = super::plugin_rows::value(row, column.as_str())?;
+                            let value = super::plugin_rows::value(&row, column.as_str())?;
                             let _ = fields.insert(
                                 name.into(),
                                 better_auth_core::query::field_date(&value)?.into(),
@@ -107,15 +112,6 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                         }
                     }
                 }
-                Ok(fields)
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        self.project_plugin_rows::<P::TwoFactor, FieldMap>(EntityRole::TwoFactor, rows)
-            .await?
-            .into_iter()
-            .zip(legacy)
-            .map(|(mut fields, legacy)| {
-                fields.extend(legacy);
                 TwoFactor::from_field_values(fields)
             })
             .collect()
@@ -187,10 +183,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
     async fn create_two_factor_record(&self, input: FieldMap) -> AuthResult<Option<FieldMap>> {
         let row = self.insert_two_factor(input).await?;
         Ok(self
-            .project_plugin_rows::<P::TwoFactor, FieldMap>(
-                EntityRole::TwoFactor,
-                row.into_iter().collect(),
-            )
+            .project_plugin_rows::<P::TwoFactor, FieldMap>(EntityRole::TwoFactor, row.as_slice())
             .await?
             .pop())
     }
@@ -211,10 +204,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let filter = self.bind_plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
         let row = self.update_two_factor_row(filter, input).await?;
         Ok(self
-            .project_plugin_rows::<P::TwoFactor, FieldMap>(
-                EntityRole::TwoFactor,
-                row.into_iter().collect(),
-            )
+            .project_plugin_rows::<P::TwoFactor, FieldMap>(EntityRole::TwoFactor, row.as_slice())
             .await?
             .pop())
     }

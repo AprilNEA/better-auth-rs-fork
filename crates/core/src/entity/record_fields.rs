@@ -5,12 +5,13 @@ fn field<T: SchemaField>(value: &T) -> crate::FieldValue {
 }
 
 macro_rules! record {
-    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($record:tt)*) => {
-        record!(serialize $type, [$($field => $name),*], $($record)*);
+    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])?) => {
+        record!(serialize $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; serde_omit: [$($private),*])?);
 
         impl<'de> serde::Deserialize<'de> for $type {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 let mut fields = crate::field_value::serde::map::deserialize(deserializer)?;
+                $($(let _ = fields.remove($private);)*)?
                 fields.sort_property_order();
                 $($(record!(@json_field fields, $name, $json);)?)*
                 Self::from_field_values(fields).map_err(serde::de::Error::custom)
@@ -22,13 +23,19 @@ macro_rules! record {
             crate::field_value::serde::revive_schema_date(value);
         }
     };
-    (serialize $type:ty, $($record:tt)*) => {
-        record!($type, $($record)*);
+    (serialize $type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])?) => {
+        record!($type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])?);
 
         impl serde::Serialize for $type {
             fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                let fields = self.field_values().map_err(serde::ser::Error::custom)?;
+                $(let fields = {
+                    let mut fields = fields;
+                    $(let _ = fields.remove($private);)*
+                    fields
+                };)?
                 crate::field_value::serde::map::serialize(
-                    &self.field_values().map_err(serde::ser::Error::custom)?,
+                    &fields,
                     serializer,
                 )
             }
@@ -157,7 +164,7 @@ record!(crate::types::TwoFactor, [
     updated_at => "updatedAt",
 ], additional_fields);
 
-record!(crate::types::Passkey, [
+record!(serde crate::types::Passkey, [
     id => "id",
     name => "name",
     public_key => "publicKey",
@@ -167,13 +174,13 @@ record!(crate::types::Passkey, [
     device_type => "deviceType",
     backed_up => "backedUp",
     transports => "transports",
-    created_at => "createdAt",
-    updated_at => "updatedAt",
+    created_at => "createdAt" [date],
+    updated_at => "updatedAt" [date],
     aaguid => "aaguid",
     credential => "credential",
-], additional_fields);
+], additional_fields; order: field_order; serde_omit: ["credential"]);
 
-record!(crate::wire::PasskeyView, [
+record!(serde crate::wire::PasskeyView, [
     id => "id",
     name => "name",
     credential_id => "credentialID",
@@ -183,9 +190,9 @@ record!(crate::wire::PasskeyView, [
     device_type => "deviceType",
     backed_up => "backedUp",
     transports => "transports",
-    created_at => "createdAt",
+    created_at => "createdAt" [date],
     aaguid => "aaguid",
-], additional_fields);
+], additional_fields; order: field_order);
 
 record!(crate::types::ApiKey, [
     id => "id",
@@ -284,6 +291,65 @@ record!(crate::wire::VerificationView, [
 mod tests {
     use super::*;
     use crate::{FieldDate, FieldValue, SchemaValue};
+
+    #[test]
+    fn passkey_projection_preserves_presence_and_order_without_exposing_credentials()
+    -> AuthResult<()> {
+        let input = FieldMap::from([
+            ("counter".into(), "dynamic-count".into()),
+            ("name".into(), 7.0.into()),
+            ("publicKey".into(), FieldValue::Undefined),
+            ("id".into(), "passkey".into()),
+        ]);
+        let mut passkey = crate::Passkey::from_field_values(input.clone())?;
+        assert_eq!(passkey.field_values()?, input);
+        assert_eq!(
+            passkey.field_order,
+            input.keys().cloned().collect::<Vec<_>>()
+        );
+        passkey.credential = "private-envelope".into();
+        passkey.updated_at = FieldDate::from_milliseconds(0.0).into();
+        let view = crate::wire::PasskeyView::from(&passkey);
+        let expected = FieldMap::from([
+            ("counter".into(), "dynamic-count".into()),
+            ("name".into(), 7.0.into()),
+            ("publicKey".into(), FieldValue::Undefined),
+            ("id".into(), "passkey".into()),
+        ]);
+        assert_eq!(view.field_values()?, expected);
+        assert_eq!(
+            view.field_values()?.keys().collect::<Vec<_>>(),
+            expected.keys().collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            serde_json::to_string(&view)?,
+            r#"{"counter":"dynamic-count","name":7,"id":"passkey"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&passkey)?,
+            r#"{"counter":"dynamic-count","name":7,"id":"passkey","updatedAt":"1970-01-01T00:00:00.000Z"}"#
+        );
+        let restored: crate::Passkey =
+            serde_json::from_str(r#"{"name":"restored","credential":"untrusted","counter":null}"#)?;
+        let declared = crate::Passkey::from_field_values(FieldMap::from([
+            ("updatedAt".into(), "declared-update".into()),
+            ("credential".into(), "declared-value".into()),
+        ]))?;
+        assert_eq!(
+            crate::wire::PasskeyView::from(&declared).field_values()?,
+            declared.field_values()?,
+        );
+        assert!(restored.credential.is_undefined());
+        assert_eq!(
+            restored
+                .field_values()?
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["name", "counter"]
+        );
+        Ok(())
+    }
 
     #[test]
     fn account_field_roundtrip_retains_handles_and_private_password() -> AuthResult<()> {

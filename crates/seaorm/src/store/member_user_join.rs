@@ -47,8 +47,9 @@ where
                     O::Member::column(&relation.from)?,
                     S::User::field_column(&relation.to)?,
                 ),
-                S::User::id_column(),
-            );
+                &self.user_field_schema().adapter_fields(&[]),
+                S::User::field_column,
+            )?;
             let rows = database_operation::<Entity<O::Member>, _>(
                 self.config(),
                 "findOne",

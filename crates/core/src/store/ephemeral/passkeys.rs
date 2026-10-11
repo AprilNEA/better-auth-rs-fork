@@ -11,36 +11,41 @@ use crate::{
 impl EphemeralStore {
     async fn project_passkey_refs(&self, rows: Vec<RowRef<FieldMap>>) -> AuthResult<Vec<Passkey>> {
         let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
-        let internal = rows
-            .iter()
-            .map(|source| {
-                source.read(|row| {
-                    let mut fields = FieldMap::new();
-                    for definition in crate::store::schema::core_fields(EntityRole::Passkey) {
-                        let name = better_auth_schema_registry::canonical_field_name(
-                            EntityRole::Passkey,
-                            definition.name,
-                        );
-                        if name != "id"
-                            && !schema.fields().contains_key(&name)
-                            && let Some(value) = row.get(&name)
-                        {
-                            let _ = fields.insert(name, value.clone());
-                        }
-                    }
-                    Ok(fields)
-                })
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        self.project_plugin_refs(EntityRole::Passkey, rows)
+        self.project_plugin_refs(EntityRole::Passkey, rows.clone())
             .await?
             .into_iter()
-            .zip(internal)
-            .map(|(mut fields, internal)| {
-                fields.extend(internal);
-                Passkey::from_field_values(fields)
+            .zip(rows)
+            .map(|(mut fields, source)| {
+                let order = fields.keys().cloned().collect();
+                source.read(|row| {
+                    for name in ["credential", "updatedAt"] {
+                        if !schema.fields().contains_key(name)
+                            && let Some(value) = row.get(name)
+                        {
+                            let _ = fields.insert(name.into(), value.clone());
+                        }
+                    }
+                    Ok(())
+                })?;
+                let mut passkey = Passkey::from_field_values(fields)?;
+                passkey.field_order = order;
+                Ok(passkey)
             })
             .collect()
+    }
+
+    fn passkey_private_fields(&self, input: &FieldMap) -> AuthResult<FieldMap> {
+        let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
+        let mut private = FieldMap::new();
+        for name in ["credential", "updatedAt"] {
+            if !schema.fields().contains_key(name)
+                && !schema.owns_adapter_column(&name.to_owned(), |key| Ok(key.to_owned()))?
+                && let Some(value) = input.get(name)
+            {
+                let _ = private.insert(name.into(), value.clone());
+            }
+        }
+        Ok(private)
     }
 
     async fn find_passkey(
@@ -86,28 +91,16 @@ impl PasskeyStore for EphemeralStore {
             .ok_or_else(|| AuthError::internal("Passkey creation returned no record"))
     }
 
-    async fn create_passkey_optional(
-        &self,
-        mut input: CreatePasskey,
-    ) -> AuthResult<Option<Passkey>> {
-        let extras = std::mem::take(&mut input.additional_fields);
-        let mut native = input.into_adapter_fields()?;
+    async fn create_passkey_optional(&self, input: CreatePasskey) -> AuthResult<Option<Passkey>> {
+        let mut fields = input.into_adapter_fields()?;
         let now: crate::FieldDate = Utc::now().into();
-        let _ = native.insert("createdAt".into(), now.clone().into());
-        let _ = native.insert("updatedAt".into(), now.into());
-        let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
-        let internal: FieldMap = native
-            .iter()
-            .filter(|(name, _)| !schema.fields().contains_key(*name))
-            .map(|(name, value)| (name.clone(), value.clone()))
-            .collect();
-        let mut fields = extras;
-        fields.extend(native);
-        let mut projected = self
-            .create_plugin_record(EntityRole::Passkey, fields, internal.clone())
+        let _ = fields.insert("createdAt".into(), now.clone().into());
+        let _ = fields.insert("updatedAt".into(), now.into());
+        let private = self.passkey_private_fields(&fields)?;
+        let source = self
+            .create_plugin_ref(EntityRole::Passkey, fields, private)
             .await?;
-        projected.extend(internal);
-        Passkey::from_field_values(projected).map(Some)
+        Ok(self.project_passkey_refs(vec![source]).await?.pop())
     }
 
     async fn get_passkey_by_id(&self, id: &str) -> AuthResult<Option<Passkey>> {
@@ -158,7 +151,6 @@ impl PasskeyStore for EphemeralStore {
         update: UpdatePasskeyAuthentication,
     ) -> AuthResult<Passkey> {
         let mut fields = FieldMap::new();
-        let mut internal = FieldMap::new();
         match update {
             UpdatePasskeyAuthentication::Native { counter } => {
                 let _ = fields.insert("counter".into(), FieldValue::from(counter));
@@ -174,24 +166,15 @@ impl PasskeyStore for EphemeralStore {
                     ("backedUp".into(), backed_up.into()),
                     ("deviceType".into(), device_type.into()),
                 ]);
-                internal.extend([
+                fields.extend([
                     ("credential".into(), credential.into()),
                     ("updatedAt".into(), Utc::now().into()),
                 ]);
             }
         }
-        let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
-        let declared: FieldMap = internal
-            .iter()
-            .filter(|(name, _)| schema.fields().contains_key(*name))
-            .map(|(name, value)| (name.clone(), value.clone()))
-            .collect();
-        for name in declared.keys() {
-            let _ = internal.shift_remove(name);
-        }
-        fields.extend(declared);
+        let private = self.passkey_private_fields(&fields)?;
         let selected = self
-            .update_plugin_ref(EntityRole::Passkey, id, fields, internal)
+            .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;
         self.project_passkey_refs(selected.into_iter().collect())
             .await?
@@ -205,20 +188,10 @@ impl PasskeyStore for EphemeralStore {
         update: UpdatePasskey,
     ) -> AuthResult<Passkey> {
         let mut fields = update.into_adapter_fields()?;
-        let updated_at: FieldValue = Utc::now().into();
-        let internal = if self
-            .model_fields
-            .plugin_fields(EntityRole::Passkey)
-            .fields()
-            .contains_key("updatedAt")
-        {
-            let _ = fields.insert("updatedAt".into(), updated_at);
-            FieldMap::new()
-        } else {
-            FieldMap::from([("updatedAt".into(), updated_at)])
-        };
+        let _ = fields.insert("updatedAt".into(), Utc::now().into());
+        let private = self.passkey_private_fields(&fields)?;
         let selected = self
-            .update_plugin_ref(EntityRole::Passkey, id, fields, internal)
+            .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;
         self.project_passkey_refs(selected.into_iter().collect())
             .await?

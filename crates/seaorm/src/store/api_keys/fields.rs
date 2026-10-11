@@ -11,7 +11,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         &self,
         rows: Vec<sea_orm::QueryResult>,
     ) -> AuthResult<Vec<ApiKey>> {
-        self.project_plugin_rows::<P::ApiKey, ApiKey>(EntityRole::ApiKey, rows)
+        self.project_plugin_rows::<P::ApiKey, ApiKey>(EntityRole::ApiKey, &rows)
             .await
     }
 }

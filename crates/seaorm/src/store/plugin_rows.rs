@@ -6,22 +6,28 @@ use better_auth_core::{
 };
 use sea_orm::sqlx::{Row, TypeInfo, ValueRef};
 use sea_orm::{
-    ConnectionTrait, DbBackend, EntityTrait, IdenStatic, Iterable, QueryResult, QuerySelect,
-    QueryTrait, Select,
+    ConnectionTrait, DbBackend, EntityTrait, IdenStatic, QueryResult, QuerySelect, QueryTrait,
+    Select,
     sea_query::{Asterisk, Expr},
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use crate::SeaOrmPluginModel;
 
 mod drivers;
+#[cfg(test)]
+mod legacy_private_tests;
 #[cfg(test)]
 mod native_snapshot_tests;
 
 #[derive(Debug, Clone)]
 pub(super) struct SqlRow {
     row: Arc<QueryResult>,
-    prefix: &'static str,
+    prefix: Arc<str>,
+    omitted: Arc<HashSet<String>>,
     native_object: Arc<Mutex<Option<FieldObject>>>,
 }
 
@@ -29,34 +35,65 @@ impl From<QueryResult> for SqlRow {
     fn from(row: QueryResult) -> Self {
         Self {
             row: Arc::new(row),
-            prefix: "",
+            prefix: Arc::from(""),
+            omitted: Default::default(),
             native_object: Default::default(),
         }
     }
 }
 
 impl SqlRow {
-    pub(super) fn prefixed(&self, prefix: &'static str) -> Self {
+    pub(super) fn prefixed(&self, prefix: &str) -> Self {
         Self {
             row: self.row.clone(),
-            prefix,
+            prefix: Arc::from(prefix),
+            omitted: Default::default(),
             native_object: Default::default(),
         }
     }
 
     pub(super) fn value(&self, column: &str) -> AuthResult<FieldValue> {
+        if self.omitted.contains(column) {
+            return Ok(FieldValue::Undefined);
+        }
         value(&self.row, &format!("{}{column}", self.prefix))
     }
 
-    pub(super) fn optional_prefixed(
-        &self,
-        prefix: &'static str,
-        presence_column: &str,
-    ) -> AuthResult<Option<Self>> {
-        self.row
-            .try_get::<bool>("", presence_column)
-            .map(|present| present.then(|| self.prefixed(prefix)))
-            .map_err(super::map_db_err)
+    pub(super) fn is_nullish(&self, column: &str) -> AuthResult<bool> {
+        if self.omitted.contains(column) {
+            return Ok(true);
+        }
+        let column = format!("{}{column}", self.prefix);
+        if let Some(row) = self.row.try_as_sqlite_row() {
+            return row
+                .try_get_raw(column.as_str())
+                .map(|raw| raw.is_null())
+                .map_err(|cause| error(&column, cause));
+        }
+        if let Some(row) = self.row.try_as_pg_row() {
+            return row
+                .try_get_raw(column.as_str())
+                .map(|raw| raw.is_null())
+                .map_err(|cause| error(&column, cause));
+        }
+        if let Some(row) = self.row.try_as_mysql_row() {
+            let raw = row
+                .try_get_raw(column.as_str())
+                .map_err(|cause| error(&column, cause))?;
+            // SQLx's is_null also classifies zero dates as null; raw bytes distinguish SQL NULL.
+            return drivers::mysql_bytes(raw, &column).map(|bytes| bytes.is_none());
+        }
+        Err(error(
+            &column,
+            "the query result has no supported SQL driver",
+        ))
+    }
+
+    pub(super) fn without_columns(&self, columns: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            omitted: Arc::new(columns.into_iter().collect()),
+            ..self.clone()
+        }
     }
 
     pub(super) fn record<E: EntityTrait>(
@@ -186,17 +223,18 @@ fn record_from_reader<E: EntityTrait>(
     Ok(record)
 }
 
-pub(super) fn undeclared_fields<M: SeaOrmPluginModel>(
-    row: &QueryResult,
+pub(super) fn private_column<M: SeaOrmPluginModel>(
     fields: &UserConfig,
-) -> AuthResult<FieldMap> {
-    M::Column::iter()
-        .filter_map(|column| {
-            M::core_field_name(&column)
-                .filter(|name| !fields.fields().contains_key(*name))
-                .map(|name| value(row, column.as_str()).map(|value| (name.to_owned(), value)))
-        })
-        .collect()
+    name: &str,
+) -> AuthResult<Option<M::Column>> {
+    if fields.fields().contains_key(name) {
+        return Ok(None);
+    }
+    let column = M::column(name)?;
+    Ok(
+        (!fields.owns_adapter_column(&column.as_str(), |name| Ok(M::column(name)?.as_str()))?)
+            .then_some(column),
+    )
 }
 
 fn error(column: &str, error: impl std::fmt::Display) -> AuthError {

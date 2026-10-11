@@ -209,8 +209,9 @@ where
                 S::Session::field_column(&relation.from)?,
                 S::User::field_column(&relation.to)?,
             ),
-            S::User::id_column(),
-        );
+            &self.user_field_schema().adapter_fields(&[]),
+            S::User::field_column,
+        )?;
         let rows = database_operation::<<S::Session as SeaOrmSessionModel>::Entity, _>(
             self.config(),
             "findOne",
@@ -284,8 +285,9 @@ where
                         S::Session::field_column(&relation.from)?,
                         S::User::field_column(&relation.to)?,
                     ),
-                    S::User::id_column(),
-                );
+                    &self.user_field_schema().adapter_fields(&[]),
+                    S::User::field_column,
+                )?;
                 let rows = super::joins::joined_raw_rows(self.connection(), &query).await?;
                 let (rows, users): (Vec<_>, Vec<_>) =
                     super::joins::grouped_raw_rows(rows, S::Session::id_column())?

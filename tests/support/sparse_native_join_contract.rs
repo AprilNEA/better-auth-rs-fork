@@ -1,0 +1,288 @@
+use super::TestResult;
+use async_trait::async_trait;
+use better_auth::{AuthConfig, BetterAuth};
+use better_auth_core::{
+    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
+    AuthResponse, AuthResult, AuthRoute, AuthSchema, FieldValue, SchemaValue,
+    organization_fields::OrganizationFields,
+    store::{OrganizationDetailsQuery, OrganizationKey, schema::EntityRole},
+    user_fields::{
+        FieldTransforms, UserConfig, UserFieldConfig, UserFieldReference, UserFieldTransform,
+    },
+};
+use better_auth_seaorm::{
+    SeaOrmStore,
+    sea_orm::{ConnectionTrait, Database, DatabaseConnection, DbBackend, Statement},
+    store::__private_test_support::bundled_schema::BundledSchema,
+};
+use serde_json::{Value, json};
+use std::sync::{Arc, Mutex};
+
+type Events = Arc<Mutex<Vec<Value>>>;
+
+struct Declarations(Vec<(EntityRole, UserConfig)>);
+
+#[async_trait]
+impl<S: AuthSchema> AuthPlugin<S> for Declarations {
+    fn name(&self) -> &'static str {
+        "sparse-native-fields"
+    }
+    fn routes(&self) -> Vec<AuthRoute> {
+        Vec::new()
+    }
+    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+        for (role, fields) in &self.0 {
+            context.register_model_fields(*role, fields.clone())?;
+        }
+        Ok(())
+    }
+    async fn on_request(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<AuthResponse>> {
+        Ok(None)
+    }
+}
+
+fn field(label: String, value: &Value, reject: Option<&str>, events: &Events) -> UserFieldConfig {
+    let events = events.clone();
+    let reject = reject == Some(label.as_str());
+    UserFieldConfig {
+        field_name: value["fieldName"].as_str().map(str::to_owned),
+        references: value["references"]
+            .as_str()
+            .map(|model| UserFieldReference {
+                model: model.into(),
+                field: "id".into(),
+                ..Default::default()
+            }),
+        transform: Some(FieldTransforms {
+            output: Some(UserFieldTransform::new(move |value| {
+                events.lock().unwrap().push(json!([label, value.json()?]));
+                if reject {
+                    return Err(AuthError::internal("sparse-native-output-rejected"));
+                }
+                if label.ends_with(".name") {
+                    assert!(matches!(value, FieldValue::Number(_)));
+                    Ok(format!(
+                        "visible:{}",
+                        SchemaValue::<String>::from_field(value).display_string()?
+                    )
+                    .into())
+                } else {
+                    Ok(value)
+                }
+            })),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
+pub(super) struct Fixture {
+    pub(super) database: DatabaseConnection,
+    pub(super) events: Events,
+    auth: BetterAuth<BundledSchema>,
+    tables: Vec<String>,
+}
+
+impl Fixture {
+    pub(super) async fn new(
+        cases: &Value,
+        case: &Value,
+        joins: bool,
+        reject: bool,
+    ) -> TestResult<Self> {
+        let database = Database::connect("sqlite::memory:").await?;
+        let mut tables = Vec::new();
+        for table in cases["tables"].as_array().unwrap() {
+            let name = table["table"].as_str().unwrap();
+            tables.push(name.to_owned());
+            let columns = table["columns"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(column, kind)| format!("\"{column}\" {}", kind.as_str().unwrap()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = database
+                .execute_unprepared(&format!("CREATE TABLE \"{name}\" ({columns})"))
+                .await?;
+            for row in table["rows"].as_array().unwrap() {
+                let row = row.as_object().unwrap();
+                let columns = row
+                    .keys()
+                    .map(|name| format!("\"{name}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let markers = row.keys().map(|_| "?").collect::<Vec<_>>().join(", ");
+                let values = row
+                    .values()
+                    .map(|value| {
+                        Ok(match value {
+                            Value::Null => Option::<String>::None.into(),
+                            Value::Number(value) => value.as_i64().unwrap().into(),
+                            Value::String(value) => value.clone().into(),
+                            _ => return Err("The SQL seed contains a non-scalar field".into()),
+                        })
+                    })
+                    .collect::<TestResult<Vec<better_auth_seaorm::sea_orm::Value>>>()?;
+                let _ = database
+                    .execute_raw(Statement::from_sql_and_values(
+                        DbBackend::Sqlite,
+                        format!("INSERT INTO \"{name}\" ({columns}) VALUES ({markers})"),
+                        values,
+                    ))
+                    .await?;
+            }
+        }
+        let events = Events::default();
+        let reject = reject.then(|| case["rejectAt"].as_str().unwrap());
+        let mut config =
+            AuthConfig::new("sparse-native-join-contract-at-least-thirty-two-characters")
+                .base_url("http://sparse-native.test");
+        config.logger.disabled = Some(true);
+        config.telemetry.enabled = false;
+        config.advanced.database.joins = Some(joins);
+        let _ = config.user.fields_mut().insert(
+            "name".into(),
+            field("user.name".into(), &Value::Null, reject, &events),
+        );
+        let mut declarations = Vec::new();
+        for (model, role) in [
+            ("organization", EntityRole::Organization),
+            ("team", EntityRole::Team),
+            ("teamMember", EntityRole::TeamMember),
+            ("member", EntityRole::Member),
+            ("invitation", EntityRole::Invitation),
+        ] {
+            let fields = cases["declarations"][model]
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(name, value)| {
+                    (
+                        name.clone(),
+                        field(format!("{model}.{name}"), value, reject, &events),
+                    )
+                })
+                .collect();
+            declarations.push((
+                role,
+                UserConfig {
+                    additional_fields: Some(fields),
+                },
+            ));
+        }
+        let auth = BetterAuth::new(config.clone())
+            .store(SeaOrmStore::<BundledSchema>::new(config, database.clone()))
+            .plugin(Declarations(declarations))
+            .build()
+            .await?;
+        Ok(Self {
+            database,
+            events,
+            auth,
+            tables,
+        })
+    }
+
+    pub(super) async fn snapshot(&self) -> TestResult<Value> {
+        let mut result = serde_json::Map::new();
+        for table in &self.tables {
+            let columns = self
+                .database
+                .query_all_raw(Statement::from_string(
+                    DbBackend::Sqlite,
+                    format!("PRAGMA table_info(\"{table}\")"),
+                ))
+                .await?
+                .iter()
+                .map(|row| row.try_get::<String>("", "name"))
+                .collect::<Result<Vec<_>, _>>()?;
+            let entries = columns
+                .iter()
+                .map(|name| format!("'{name}', \"{name}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let rows = self
+                .database
+                .query_all_raw(Statement::from_string(
+                    DbBackend::Sqlite,
+                    format!("SELECT json_object({entries}) AS record FROM \"{table}\" ORDER BY id"),
+                ))
+                .await?
+                .iter()
+                .map(|row| {
+                    Ok(serde_json::from_str::<Value>(
+                        &row.try_get::<String>("", "record")?,
+                    )?)
+                })
+                .collect::<TestResult<Vec<_>>>()?;
+            let _ = result.insert(table.clone(), json!({"columns": columns, "rows": rows}));
+        }
+        Ok(Value::Object(result))
+    }
+
+    pub(super) async fn read(&self, path: &str) -> AuthResult<FieldValue> {
+        let store = self.auth.store();
+        match path {
+            "team" => {
+                let details = store
+                    .get_team_details_value(&"team".into(), None, true)
+                    .await?
+                    .unwrap();
+                let (team, members) = details.into_public_parts(&UserConfig::default())?;
+                let mut output = team.field_values()?;
+                let members = members
+                    .unwrap()
+                    .into_iter()
+                    .map(|row| row.field_values().map(FieldValue::from))
+                    .collect::<AuthResult<Vec<_>>>()?;
+                let _ = output.insert("members".into(), members.into());
+                Ok(output.into())
+            }
+            "member" => {
+                let member = store.get_member_by_id_with_user("member").await?.unwrap();
+                let mut output = member.member.field_values()?;
+                let _ = output.insert("user".into(), member.user.field_values()?.into());
+                Ok(output.into())
+            }
+            "full" => store
+                .get_organization_details(OrganizationDetailsQuery {
+                    organization: OrganizationKey::Id("organization"),
+                    members_limit: None,
+                    users_limit: 100.0,
+                    include_teams: true,
+                })
+                .await?
+                .unwrap()
+                .into_public_value(&OrganizationFields::default()),
+            _ => Err(AuthError::internal("Unknown sparse join operation")),
+        }
+    }
+}
+
+pub(super) fn assert_value(actual: &FieldValue, expected: &Value) -> AuthResult<()> {
+    assert_eq!(actual, &FieldValue::from_json(expected.clone())?);
+    match expected {
+        Value::Object(expected) => {
+            let actual = actual.enumerable_fields()?;
+            assert_eq!(
+                actual.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>()
+            );
+            for (key, value) in expected {
+                assert_value(&actual[key], value)?;
+            }
+        }
+        Value::Array(expected) => {
+            for (actual, expected) in actual.as_array().unwrap().iter().zip(expected) {
+                assert_value(actual, expected)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}

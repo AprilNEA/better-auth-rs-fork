@@ -110,46 +110,44 @@ impl From<&str> for PasskeyCredentialState {
 }
 
 /// Passkey response shape.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Passkey {
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     /// Declared application fields after adapter output projection.
-    #[serde(with = "crate::field_value::serde::map", flatten, default)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub name: SchemaValue<Option<String>>,
-    #[serde(rename = "publicKey")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub public_key: SchemaValue<String>,
-    #[serde(rename = "userId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub user_id: SchemaValue<String>,
-    #[serde(rename = "credentialID")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub credential_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub counter: SchemaValue<u64>,
-    #[serde(rename = "deviceType")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub device_type: SchemaValue<String>,
-    #[serde(rename = "backedUp")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub backed_up: SchemaValue<bool>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub transports: SchemaValue<Option<String>>,
-    #[serde(rename = "createdAt")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
     pub created_at: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(rename = "updatedAt")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
     pub updated_at: SchemaValue<crate::FieldDate>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub aaguid: SchemaValue<Option<String>>,
-    #[serde(skip_serializing, skip_deserializing, default)]
     pub credential: SchemaValue<String>,
+}
+
+impl PartialEq for Passkey {
+    fn eq(&self, other: &Self) -> bool {
+        self.additional_fields == other.additional_fields
+            && self.id == other.id
+            && self.name == other.name
+            && self.public_key == other.public_key
+            && self.user_id == other.user_id
+            && self.credential_id == other.credential_id
+            && self.counter == other.counter
+            && self.device_type == other.device_type
+            && self.backed_up == other.backed_up
+            && self.transports == other.transports
+            && self.created_at == other.created_at
+            && self.updated_at == other.updated_at
+            && self.aaguid == other.aaguid
+            && self.credential == other.credential
+    }
 }
 
 /// Input for creating a new passkey.
@@ -620,6 +618,9 @@ impl<T: AuthApiKey> From<&T> for ApiKey {
 }
 
 impl AuthPasskey for Passkey {
+    fn field_order(&self) -> Option<&[String]> {
+        Some(&self.field_order)
+    }
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         Some(&self.additional_fields)
     }
@@ -667,6 +668,7 @@ impl AuthPasskey for Passkey {
 impl<T: AuthPasskey> From<&T> for Passkey {
     fn from(passkey: &T) -> Self {
         Self {
+            field_order: passkey.field_order().unwrap_or_default().to_vec(),
             additional_fields: passkey.additional_fields().cloned().unwrap_or_default(),
             id: passkey.id().into_owned(),
             name: passkey.name().clone(),

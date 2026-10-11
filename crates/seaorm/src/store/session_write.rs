@@ -200,6 +200,7 @@ where
         let mut initialized_columns = S::Session::extra_insert_columns();
         initialized_columns.extend(S::Session::active_column());
         let record = super::record_write::RecordWrite::from_initialized_fields(
+            &schema,
             fields,
             S::Session::field_column,
             initialized_columns,

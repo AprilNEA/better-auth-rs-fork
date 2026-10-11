@@ -15,6 +15,8 @@ mod display_mapping_conflicts;
 mod fixture;
 #[path = "passkey_additional_fields_tests/shared_display.rs"]
 mod shared_display;
+#[path = "passkey_additional_fields_tests/typed_declarations.rs"]
+mod typed_declarations;
 
 use better_auth::{
     __private_core::{

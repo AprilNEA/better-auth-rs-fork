@@ -157,7 +157,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         Ok(self
             .project_plugin_rows::<P::WalletAddress, WalletAddress>(
                 EntityRole::WalletAddress,
-                row.into_iter().collect(),
+                row.as_slice(),
             )
             .await?
             .pop())

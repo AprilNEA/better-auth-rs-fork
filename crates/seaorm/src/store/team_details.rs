@@ -82,8 +82,9 @@ where
                     O::Team::column(&relation.from)?,
                     O::TeamMember::column(&relation.to)?,
                 ),
-                O::TeamMember::column("id")?,
-            );
+                &member_fields,
+                O::TeamMember::column,
+            )?;
             super::joins::grouped_raw_rows(
                 super::joins::joined_raw_rows(conn, &query).await?,
                 O::Team::column("id")?,

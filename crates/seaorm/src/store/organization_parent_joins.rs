@@ -93,8 +93,9 @@ where
                     M::column(&relation.from)?,
                     O::Organization::column(&relation.to)?,
                 ),
-                O::Organization::column("id")?,
-            );
+                &organization_fields,
+                O::Organization::column,
+            )?;
             let rows = super::joins::grouped_raw_rows(
                 super::joins::joined_raw_rows(self.connection(), &query).await?,
                 M::column("id")?,

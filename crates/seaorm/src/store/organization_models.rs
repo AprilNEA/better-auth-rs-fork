@@ -18,13 +18,10 @@ pub(super) fn extra_updated_at_column<M: SeaOrmOrganizationModel>(
     if fields.fields().contains_key(logical) {
         return Ok(None);
     }
-    for (name, field) in fields.adapter_fields(&[]).fields() {
-        let storage = resolve_field_name(field.field_name.as_deref(), name);
-        if M::column(storage)?.as_str() == column.as_str() {
-            return Ok(None);
-        }
-    }
-    Ok(Some(column))
+    Ok(
+        (!fields.owns_adapter_column(&column.as_str(), |name| Ok(M::column(name)?.as_str()))?)
+            .then_some(column),
+    )
 }
 
 pub(super) fn raw_record<M: SeaOrmOrganizationModel>(

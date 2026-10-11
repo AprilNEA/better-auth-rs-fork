@@ -97,11 +97,20 @@ pub(super) fn postgres_date(raw: PgValueRef<'_>, column: &str) -> AuthResult<Fie
     local_date(midnight.naive_utc(), column)
 }
 
+pub(super) fn mysql_bytes<'a>(
+    raw: MySqlValueRef<'a>,
+    column: &str,
+) -> AuthResult<Option<&'a [u8]>> {
+    match <&[u8] as Decode<MySql>>::decode(raw) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(cause) if cause.is::<UnexpectedNullError>() => Ok(None),
+        Err(cause) => Err(error(column, cause)),
+    }
+}
+
 pub(super) fn mysql_date(raw: MySqlValueRef<'_>, column: &str) -> AuthResult<FieldValue> {
-    let bytes = match <&[u8] as Decode<MySql>>::decode(raw) {
-        Ok(bytes) => bytes,
-        Err(cause) if cause.is::<UnexpectedNullError>() => return Ok(FieldValue::Null),
-        Err(cause) => return Err(error(column, cause)),
+    let Some(bytes) = mysql_bytes(raw, column)? else {
+        return Ok(FieldValue::Null);
     };
     let (year, month, day) = match bytes {
         [0] => (0, 0, 0),

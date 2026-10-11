@@ -580,8 +580,9 @@ where
                     S::User::field_column(&relation.from)?,
                     S::Account::field_column(&relation.to)?,
                 ),
-                S::Account::id_column(),
-            );
+                &self.config().account.field_schema().adapter_fields(&[]),
+                S::Account::field_column,
+            )?;
             let rows = database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
                 self.config(),
                 "findOne",

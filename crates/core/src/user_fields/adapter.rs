@@ -28,6 +28,21 @@ impl FieldOutputCapabilities {
 }
 
 impl UserConfig {
+    /// Check declared physical ownership independently of prepared write values.
+    #[doc(hidden)]
+    pub fn owns_adapter_column<T: PartialEq>(
+        &self,
+        column: &T,
+        resolve: impl Fn(&str) -> AuthResult<T>,
+    ) -> AuthResult<bool> {
+        for (name, field) in self.adapter_fields(&[]).fields() {
+            if resolve(resolve_field_name(field.field_name.as_deref(), name))? == *column {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     /// Resolve schema order and replace the adapter-owned ID policy in its existing slot.
     #[doc(hidden)]
     pub fn adapter_fields(&self, native: &[&str]) -> Self {

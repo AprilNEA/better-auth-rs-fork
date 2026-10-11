@@ -693,9 +693,15 @@ run_stage() {
         --test openapi_rate_limit_model_tests --test openapi_verification_model_tests
         --test openapi_jwks_tests --test device_request_schema_tests
         --test user_account_raw_column_tests --test mysql_create_readback_tests
+        --test sparse_native_join_tests --test passkey_additional_fields_tests
+        --test plugin_model_fields_tests --test two_factor_additional_fields_tests
+        --test legacy_schema_integration_tests
       )
       bun --no-install test \
         ./compat-tests/reference-server/contracts/schema-join-reference.test.ts \
+        ./compat-tests/reference-server/contracts/sparse-native-joins.test.ts \
+        ./compat-tests/reference-server/contracts/passkey-shared-display.test.ts \
+        ./compat-tests/reference-server/contracts/two-factor-fields.test.ts \
         ./compat-tests/reference-server/contracts/model-alias-order.test.ts \
         ./compat-tests/reference-server/contracts/effective-organization-declarations.test.ts \
         ./compat-tests/reference-server/contracts/custom-model-join-reference.test.ts \
@@ -727,8 +733,8 @@ run_stage() {
       cargo fmt --all -- --check || schema_join_status=1
       cargo clippy --locked --keep-going -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || schema_join_status=1
       cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test schema_preflight_tests --test effective_organization_declarations_tests --test model_alias_order_tests --test custom_model_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests --test organization_list_relations_tests "${declaration_targets[@]}" -- -D warnings || schema_join_status=1
-      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- openapi::tests:: field_value:: schema_value:: user_fields::record:: store::joins:: store::plugin_rows::native_snapshot_tests:: store::ephemeral::rows::object_tests:: store::ephemeral::user_serial_tests:: serial_organization_lifecycle_binds_numbers_and_projects_public_ids memory_organization_deletion_preserves_teams_and_roles store::ephemeral::organization_joins::detail_dependencies_tests:: plugin_runtime::fields:: organization_fields:: reference_id::tests:: store::schema_preflight::roster_tests:: store::plugin_records::tests:: store::api_keys:: store::updates:: store::two_factor::record_tests:: store::passkeys::record_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils:: || schema_join_status=1
-      cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin:: || schema_join_status=1
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- entity::record_fields::tests:: store::record_write::tests:: openapi::tests:: field_value:: schema_value:: user_fields::record:: store::joins:: store::plugin_rows::native_snapshot_tests:: store::plugin_rows::legacy_private_tests:: store::ephemeral::rows::object_tests:: store::ephemeral::user_serial_tests:: serial_organization_lifecycle_binds_numbers_and_projects_public_ids memory_organization_deletion_preserves_teams_and_roles store::ephemeral::organization_joins::detail_dependencies_tests:: plugin_runtime::fields:: organization_fields:: reference_id::tests:: store::schema_preflight::roster_tests:: store::plugin_records::tests:: store::api_keys:: store::updates:: store::two_factor::record_tests:: store::passkeys::record_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils:: || schema_join_status=1
+      cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::passkey:: plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin:: || schema_join_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test schema_join_reference_tests --test join_binding_tests \
         --test model_alias_order_tests --test custom_model_join_reference_tests \
