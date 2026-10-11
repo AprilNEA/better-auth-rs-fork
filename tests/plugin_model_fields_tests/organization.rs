@@ -23,6 +23,8 @@ mod organization_id_predicates;
 mod organization_live_business;
 #[path = "organization/organization_live_sources.rs"]
 mod organization_live_sources;
+#[path = "organization/team_delete_context.rs"]
+mod team_delete_context;
 
 fn policy(field: &'static str, events: &Arc<Mutex<Vec<Value>>>) -> UserFieldConfig {
     let input_events = events.clone();

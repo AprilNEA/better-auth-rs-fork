@@ -773,6 +773,15 @@ impl<S: AuthSchema> TeamStore for SecondaryStore<S> {
     async fn delete_team_value(&self, id: &crate::FieldValue) -> AuthResult<()> {
         self.inner.delete_team_value(id).await
     }
+    async fn delete_team_for_organization_value(
+        &self,
+        id: &crate::FieldValue,
+        organization_id: &crate::FieldValue,
+    ) -> AuthResult<()> {
+        self.inner
+            .delete_team_for_organization_value(id, organization_id)
+            .await
+    }
     async fn delete_team(&self, id: &str) -> AuthResult<()> {
         self.inner.delete_team(id).await
     }

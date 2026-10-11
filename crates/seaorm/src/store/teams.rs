@@ -14,6 +14,8 @@ use sea_orm::{
     EntityTrait, PaginatorTrait, QueryFilter, QuerySelect, TransactionTrait, sea_query::Expr,
 };
 
+mod deletion;
+
 #[async_trait]
 impl<
     S: better_auth_core::AuthSchema,
@@ -123,69 +125,16 @@ where
     }
 
     async fn delete_team_value(&self, id: &FieldValue) -> AuthResult<()> {
-        let tx = self.connection().begin().await.map_err(map_db_err)?;
-        let team = self
-            .find_organization_model::<O::Team>(
-                &tx,
-                better_auth_core::store::schema::EntityRole::Team,
-                id,
-            )
-            .await?
-            .ok_or_else(|| AuthError::not_found("Team not found"))?;
-        let team = models::record::<O::Team>(
-            &team,
-            &better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(EntityRole::Team),
-            self.connection().get_database_backend(),
-            (&self.model_fields, EntityRole::Team),
-        )
-        .await?;
-        let public_id = team.id.field_value();
-        let _ = Entity::<O::TeamMember>::delete_many()
-            .filter(self.organization_field_equals::<O::TeamMember>(
-                better_auth_core::store::schema::EntityRole::TeamMember,
-                "teamId",
-                id,
-            )?)
-            .exec(&tx)
+        self.delete_team_with_context(id, None).await
+    }
+
+    async fn delete_team_for_organization_value(
+        &self,
+        id: &FieldValue,
+        organization_id: &FieldValue,
+    ) -> AuthResult<()> {
+        self.delete_team_with_context(id, Some(organization_id))
             .await
-            .map_err(map_db_err)?;
-        let _ = Entity::<O::Team>::delete_many()
-            .filter(self.organization_field_equals::<O::Team>(
-                better_auth_core::store::schema::EntityRole::Team,
-                "id",
-                id,
-            )?)
-            .exec(&tx)
-            .await
-            .map_err(map_db_err)?;
-        let config = self.organization_fields()?.invitation;
-        let pending = self
-            .pending_invitation_rows(&tx, &team.organization_id.field_value(), None)
-            .await?;
-        for row in pending {
-            if let Some(ids) = row.team_id.typed()? {
-                let retained: Vec<_> = ids
-                    .split(',')
-                    .filter(|team_id| Some(*team_id) != public_id.as_str())
-                    .collect();
-                if retained.len() != ids.split(',').count() {
-                    let _ = self
-                        .update_organization_model::<O::Invitation>(
-                            &tx,
-                            better_auth_core::store::schema::EntityRole::Invitation,
-                            &row.id.field_value(),
-                            values([(
-                                "team_id",
-                                ((!retained.is_empty()).then(|| retained.join(","))).into_field(),
-                            )]),
-                            Default::default(),
-                            &config,
-                        )
-                        .await?;
-                }
-            }
-        }
-        tx.commit().await.map_err(map_db_err)
     }
     async fn list_organization_teams(&self, organization_id: &str) -> AuthResult<Vec<Team>> {
         self.list_organization_teams_value(&organization_id.into())

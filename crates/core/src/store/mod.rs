@@ -2127,6 +2127,17 @@ pub trait TeamStore: Send + Sync {
         let id = crate::SchemaValue::<String>::from_field(id.clone());
         self.delete_team(id.typed()?).await
     }
+    /// Delete a resolved team and clean pending invitations in the original organization.
+    /// Lifecycle hooks may have changed the team's stored organization after the caller resolved the team.
+    async fn delete_team_for_organization_value(
+        &self,
+        _id: &crate::FieldValue,
+        _organization_id: &crate::FieldValue,
+    ) -> AuthResult<()> {
+        Err(AuthError::config(
+            "This store does not support team deletion with an organization context",
+        ))
+    }
     async fn list_organization_teams(&self, organization_id: &str) -> AuthResult<Vec<crate::Team>>;
     async fn list_organization_teams_value(
         &self,

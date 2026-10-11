@@ -187,7 +187,7 @@ pub(super) async fn remove(
         hooks.before_delete_team(event).await?;
     }
     ctx.database
-        .delete_team_value(&team.id.field_value())
+        .delete_team_for_organization_value(&team.id.field_value(), &org)
         .await?;
     if let Some(hooks) = &config.hooks {
         hooks.after_delete_team(event).await?;

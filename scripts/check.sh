@@ -77,6 +77,25 @@ run_stage() {
         --test cookie_expires_tests --test cookie_cleanup_tests \
         --test cookie_lifetime_tests --test cookie_session_precision_tests
       ;;
+    organization-team-delete)
+      cargo fmt --all -- --check
+      local team_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/organization-team-delete-context.test.ts \
+        ./tests/fixtures/organization-native-teams-upstream.test.ts || team_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || team_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests --test organization_native_team_tests \
+        --test organization_list_relations_tests -- -D warnings || team_status=1
+      cargo test --locked -p better-auth-core --lib store::ephemeral::teams::tests:: || team_status=1
+      cargo test --locked -p better-auth-api --lib plugins::organization:: || team_status=1
+      cargo test --locked -p better-auth-seaorm --lib organization_schema::tests:: || team_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- organization::team_delete_context:: || team_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test organization_native_team_tests || team_status=1
+      return "$team_status"
+      ;;
     organization-transactions)
       cargo fmt --all -- --check
       local organization_status=0
