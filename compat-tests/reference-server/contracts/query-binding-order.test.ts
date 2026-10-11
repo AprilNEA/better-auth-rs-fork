@@ -1,3 +1,4 @@
+import "./update-binding-phases.mjs";
 import "./session-predicate-binding.mjs";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";

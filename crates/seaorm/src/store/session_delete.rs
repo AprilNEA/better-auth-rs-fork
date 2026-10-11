@@ -52,7 +52,14 @@ where
         predicates: impl IntoIterator<Item = (BoundQueryField, WhereOperator)>,
         backend: DbBackend,
     ) -> AuthResult<Condition> {
-        let predicates = predicates
+        value_filter::all(self.session_query_predicates(predicates)?, backend)
+    }
+
+    fn session_query_predicates(
+        &self,
+        predicates: impl IntoIterator<Item = (BoundQueryField, WhereOperator)>,
+    ) -> AuthResult<Vec<QueryPredicate<<S::Session as SeaOrmSessionModel>::Column>>> {
+        predicates
             .into_iter()
             .map(|(bound, operator)| {
                 let (column, value) = self.resolve_session_query_field(bound)?;
@@ -61,8 +68,7 @@ where
                         .with_save_as(),
                 )
             })
-            .collect::<AuthResult<Vec<_>>>()?;
-        value_filter::all(predicates, backend)
+            .collect()
     }
 
     pub(super) fn session_query_field(
@@ -179,14 +185,18 @@ where
         let condition = bind_condition()?;
         let count = if let Some(update) = update {
             let (active, _) = self.prepare_session_update(db, update).await?;
-            let condition = resolve_condition(condition)?;
             database_operation::<<S::Session as SeaOrmSessionModel>::Entity, _>(
                 self.config(),
                 "updateMany",
                 async {
+                    let (bound, live) = condition;
+                    let predicates = self.session_query_predicates(
+                        std::iter::once((bound, operator))
+                            .chain(live.map(|live| (live, WhereOperator::Gt))),
+                    )?;
                     active
-                        .update(backend)?
-                        .filter(condition)
+                        .update_where(backend, predicates)?
+                        .query
                         .exec(db)
                         .await
                         .map_err(map_db_err)

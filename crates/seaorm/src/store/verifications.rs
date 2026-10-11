@@ -517,20 +517,18 @@ where
         let active = super::record_write::RecordWrite::<
             <S::Verification as SeaOrmVerificationModel>::Entity,
         >::from_fields(input, S::Verification::field_column)?;
-        let (column, value) = selector.resolve(EntityRole::Verification, &fields)?;
-        let filter =
-            super::value_filter::equals(S::Verification::field_column(&column)?, &value, backend)?;
         let row =
             match database_operation::<<S::Verification as SeaOrmVerificationModel>::Entity, _>(
                 self.config(),
                 "update",
                 async {
-                    super::updates::execute_update_returning_raw(
-                        db,
-                        active.update_returning(backend)?.filter(filter.clone()),
-                        filter,
-                    )
-                    .await
+                    let (column, value) = selector.resolve(EntityRole::Verification, &fields)?;
+                    let filter = super::value_filter::QueryPredicate::equals(
+                        S::Verification::field_column(&column)?,
+                        value,
+                    );
+                    let (query, filter) = active.update_where_returning(backend, [filter])?;
+                    super::updates::execute_update_returning_raw(db, query, filter).await
                 },
             )
             .await?

@@ -75,14 +75,13 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
         let active = self
             .prepare_plugin_fields::<M>(role, model, input, false)
             .await?;
-        let filter = self.resolve_plugin_equals::<M>(role, selector)?;
         let row = database_operation::<Entity<M>, _>(self.config(), "update", async {
+            let (column, value) = self.resolve_plugin_query_field::<M>(role, selector)?;
+            let predicate = super::value_filter::QueryPredicate::equals(column, value);
+            let (query, reselect) =
+                active.update_where_returning(connection.get_database_backend(), [predicate])?;
             super::updates::execute_update_returning_raw::<Entity<M>, _>(
-                connection,
-                active
-                    .update_returning(connection.get_database_backend())?
-                    .filter(filter.clone()),
-                filter,
+                connection, query, reselect,
             )
             .await
         })

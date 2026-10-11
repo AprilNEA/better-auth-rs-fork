@@ -3,10 +3,15 @@
 use better_auth_core::{AuthResult, FieldValue};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, Iden, QueryFilter, QueryResult,
-    sea_query::{Query, Value},
+    sea_query::{Condition, Query, SimpleExpr, Value},
 };
 
-use super::{create_readback::CreateReadback, map_db_err, record_bindings::Binding};
+use super::{
+    create_readback::CreateReadback,
+    map_db_err,
+    record_bindings::{Binding, ParsedBinding},
+    value_filter::QueryPredicate,
+};
 
 #[cfg(test)]
 #[path = "record_write_tests.rs"]
@@ -19,6 +24,32 @@ pub(super) struct RecordWrite<E: EntityTrait> {
 pub(super) struct RecordUpdate<E: EntityTrait> {
     pub(super) query: sea_orm::UpdateMany<E>,
     null_columns: Vec<E::Column>,
+}
+
+struct ParsedRecordWrite<E: EntityTrait> {
+    fields: Vec<(E::Column, ParsedBinding)>,
+    null_columns: Vec<E::Column>,
+}
+
+impl<E: EntityTrait> ParsedRecordWrite<E> {
+    fn encode(
+        self,
+        mut query: sea_orm::UpdateMany<E>,
+        backend: sea_orm::DbBackend,
+    ) -> AuthResult<RecordUpdate<E>> {
+        let (columns, bindings): (Vec<_>, Vec<_>) = self.fields.into_iter().unzip();
+        let values = bindings
+            .into_iter()
+            .map(|binding| binding.encode(backend))
+            .collect::<AuthResult<Vec<_>>>()?;
+        for (column, value) in columns.into_iter().zip(values) {
+            query = query.col_expr(column, column.save_as(value));
+        }
+        Ok(RecordUpdate {
+            query,
+            null_columns: self.null_columns,
+        })
+    }
 }
 
 impl<E: EntityTrait> RecordUpdate<E> {
@@ -149,15 +180,10 @@ impl<E: EntityTrait> RecordWrite<E> {
 
     pub(super) fn apply_to(
         self,
-        mut query: sea_orm::UpdateMany<E>,
+        query: sea_orm::UpdateMany<E>,
         backend: sea_orm::DbBackend,
     ) -> AuthResult<sea_orm::UpdateMany<E>> {
-        let (columns, bindings): (Vec<_>, Vec<_>) = self.fields.into_iter().unzip();
-        let values = super::record_bindings::bind(backend, bindings)?;
-        for (column, value) in columns.into_iter().zip(values) {
-            query = query.col_expr(column, column.save_as(value));
-        }
-        Ok(query)
+        Ok(self.parse_update()?.encode(query, backend)?.query)
     }
 
     pub(super) fn update(self, backend: sea_orm::DbBackend) -> AuthResult<sea_orm::UpdateMany<E>> {
@@ -168,15 +194,68 @@ impl<E: EntityTrait> RecordWrite<E> {
         self,
         backend: sea_orm::DbBackend,
     ) -> AuthResult<RecordUpdate<E>> {
+        self.parse_update()?.encode(E::update_many(), backend)
+    }
+
+    fn parse_update(self) -> AuthResult<ParsedRecordWrite<E>> {
         let null_columns = self
             .fields
             .iter()
             .filter_map(|(column, value)| value.is_null().then_some(*column))
             .collect();
-        Ok(RecordUpdate {
-            query: self.update(backend)?,
+        let fields = self
+            .fields
+            .into_iter()
+            .map(|(column, binding)| Ok((column, binding.parse_expression()?)))
+            .collect::<AuthResult<Vec<_>>>()?;
+        Ok(ParsedRecordWrite {
+            fields,
             null_columns,
         })
+    }
+
+    fn compile_where(
+        self,
+        backend: sea_orm::DbBackend,
+        predicates: impl IntoIterator<Item = QueryPredicate<E::Column>>,
+    ) -> AuthResult<(RecordUpdate<E>, Option<SimpleExpr>)> {
+        let write = self.parse_update()?;
+        let predicates = predicates
+            .into_iter()
+            .map(QueryPredicate::parse)
+            .collect::<AuthResult<Vec<_>>>()?;
+        let mut update = write.encode(E::update_many(), backend)?;
+        let selectors = predicates
+            .into_iter()
+            .map(|predicate| predicate.encode(backend))
+            .collect::<AuthResult<Vec<_>>>()?;
+        let reselect = selectors.first().cloned();
+        let condition = selectors.into_iter().fold(Condition::all(), Condition::add);
+        update.query = update.query.filter(condition);
+        Ok((update, reselect))
+    }
+
+    /// Resolve every WHERE field before calling this method. SET and WHERE expressions parse before parameter encoding.
+    pub(super) fn update_where(
+        self,
+        backend: sea_orm::DbBackend,
+        predicates: impl IntoIterator<Item = QueryPredicate<E::Column>>,
+    ) -> AuthResult<RecordUpdate<E>> {
+        self.compile_where(backend, predicates)
+            .map(|(update, _)| update)
+    }
+
+    /// Keep every WHERE condition and return the first encoded selector for MySQL readback without evaluating the selector again.
+    pub(super) fn update_where_returning(
+        self,
+        backend: sea_orm::DbBackend,
+        predicates: impl IntoIterator<Item = QueryPredicate<E::Column>>,
+    ) -> AuthResult<(RecordUpdate<E>, SimpleExpr)> {
+        let (update, selector) = self.compile_where(backend, predicates)?;
+        let selector = selector.ok_or_else(|| {
+            better_auth_core::AuthError::internal("Returning update requires a selector")
+        })?;
+        Ok((update, selector))
     }
 
     pub(super) async fn insert_raw(

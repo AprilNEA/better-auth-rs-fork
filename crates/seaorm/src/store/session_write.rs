@@ -381,17 +381,20 @@ where
         let backend = db.get_database_backend();
         let selector = self.bind_session_query_field("token", token, backend)?;
         let (active, schema) = self.prepare_session_update(db, update).await?;
-        let (column, value) = selector.resolve(EntityRole::Session, &schema)?;
-        let filter =
-            super::value_filter::equals(S::Session::field_column(&column)?, &value, backend)?;
         let session = database_operation::<<S::Session as SeaOrmSessionModel>::Entity, _>(
             self.config(),
             "update",
-            super::updates::execute_update_returning_raw(
-                db,
-                active.update_returning(backend)?.filter(filter.clone()),
-                filter,
-            ),
+            async {
+                let (column, value) = selector.resolve(EntityRole::Session, &schema)?;
+                let (query, filter) = active.update_where_returning(
+                    backend,
+                    [super::value_filter::QueryPredicate::equals(
+                        S::Session::field_column(&column)?,
+                        value,
+                    )],
+                )?;
+                super::updates::execute_update_returning_raw(db, query, filter).await
+            },
         )
         .await?;
         match session {

@@ -1,3 +1,4 @@
+use super::instrumentation::database_operation;
 use super::value_filter::{self, QueryPredicate};
 use super::{
     SeaOrmStore, map_db_err,
@@ -18,7 +19,12 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
 {
     fn organization_role_filter(&self, selectors: &FieldMap) -> AuthResult<Condition> {
-        self.resolve_organization_role_filter(self.bind_organization_role_filter(selectors)?)
+        value_filter::all(
+            self.resolve_organization_role_predicates(
+                self.bind_organization_role_filter(selectors)?,
+            )?,
+            self.connection().get_database_backend(),
+        )
     }
 
     fn bind_organization_role_filter(
@@ -35,13 +41,13 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
             .collect()
     }
 
-    fn resolve_organization_role_filter(
+    fn resolve_organization_role_predicates(
         &self,
         selectors: Vec<super::value_filter::BoundQueryField>,
-    ) -> AuthResult<Condition> {
+    ) -> AuthResult<Vec<QueryPredicate<<O::OrganizationRole as SeaOrmOrganizationModel>::Column>>>
+    {
         let fields = self.organization_query_schema(EntityRole::OrganizationRole)?;
-        let backend = self.connection().get_database_backend();
-        let predicates = selectors
+        selectors
             .into_iter()
             .map(|selector| {
                 let (column, value) = selector.resolve(EntityRole::OrganizationRole, &fields)?;
@@ -50,8 +56,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
                     value,
                 ))
             })
-            .collect::<AuthResult<Vec<_>>>()?;
-        value_filter::all(predicates, backend)
+            .collect()
     }
 
     async fn organization_role_write(
@@ -333,16 +338,25 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         let selector =
             self.bind_query_field(EntityRole::OrganizationRole, &schema, "id", id, backend)?;
         let active = self.organization_role_write(input).await?;
-        let (column, value) = selector.resolve(EntityRole::OrganizationRole, &schema)?;
-        let selector =
-            super::value_filter::equals(O::OrganizationRole::column(&column)?, &value, backend)?;
-        let row = super::updates::execute_update_returning_raw::<Entity<O::OrganizationRole>, _>(
-            self.connection(),
-            active.update_returning(backend)?.filter(selector.clone()),
-            selector,
-        )
-        .await?
-        .ok_or_else(|| better_auth_core::AuthError::not_found("Role not found"))?;
+        let row =
+            database_operation::<Entity<O::OrganizationRole>, _>(self.config(), "update", async {
+                let (column, value) = selector.resolve(EntityRole::OrganizationRole, &schema)?;
+                let (query, selector) = active.update_where_returning(
+                    backend,
+                    [QueryPredicate::equals(
+                        O::OrganizationRole::column(&column)?,
+                        value,
+                    )],
+                )?;
+                super::updates::execute_update_returning_raw::<Entity<O::OrganizationRole>, _>(
+                    self.connection(),
+                    query,
+                    selector,
+                )
+                .await
+            })
+            .await?
+            .ok_or_else(|| better_auth_core::AuthError::not_found("Role not found"))?;
         models::record::<O::OrganizationRole>(
             &row.into(),
             &config,
@@ -358,14 +372,17 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
     ) -> AuthResult<u64> {
         let selectors = self.bind_organization_role_filter(selectors)?;
         let active = self.organization_role_write(input).await?;
-        let selectors = self.resolve_organization_role_filter(selectors)?;
-        active
-            .update(self.connection().get_database_backend())?
-            .filter(selectors)
-            .exec(self.connection())
-            .await
-            .map(|result| std::cmp::min(result.rows_affected, 9_007_199_254_740_991))
-            .map_err(map_db_err)
+        database_operation::<Entity<O::OrganizationRole>, _>(self.config(), "updateMany", async {
+            let selectors = self.resolve_organization_role_predicates(selectors)?;
+            active
+                .update_where(self.connection().get_database_backend(), selectors)?
+                .query
+                .exec(self.connection())
+                .await
+                .map(|result| std::cmp::min(result.rows_affected, 9_007_199_254_740_991))
+                .map_err(map_db_err)
+        })
+        .await
     }
     async fn delete_organization_role(&self, id: &str) -> AuthResult<()> {
         self.delete_organization_role_by_fields(&[("id".into(), id.into())].into())

@@ -1,5 +1,6 @@
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
+use super::value_filter::{BoundQueryField, QueryPredicate};
 use crate::SeaOrmPluginModel;
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FromFieldMap, SchemaField};
@@ -64,8 +65,7 @@ where
         let patch = self
             .prepare_plugin_fields::<P::Passkey>(EntityRole::Passkey, "passkey", input, false)
             .await?;
-        let filter = self.resolve_plugin_equals::<P::Passkey>(EntityRole::Passkey, selector)?;
-        let row = self.update_passkey_patch(filter, patch).await?;
+        let row = self.update_passkey_patch(selector, patch).await?;
         Ok(self
             .project_plugin_rows::<P::Passkey, FieldMap>(EntityRole::Passkey, row.as_slice())
             .await?
@@ -180,31 +180,10 @@ where
         let patch = self
             .prepare_passkey_fields(fields, FieldMap::new(), false)
             .await?;
-        let filter = self.resolve_plugin_equals::<P::Passkey>(EntityRole::Passkey, selector)?;
-        let model = database_operation::<Entity<P::Passkey>, _>(self.config(), "update", async {
-            let Some(_model) = self
-                .connection()
-                .query_one_raw(
-                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
-                        .filter(filter.clone())
-                        .build(self.connection().get_database_backend()),
-                )
-                .await
-                .map_err(map_db_err)?
-            else {
-                return Ok(None);
-            };
-            super::updates::execute_update_returning_raw(
-                self.connection(),
-                patch
-                    .update_returning(self.connection().get_database_backend())?
-                    .filter(filter.clone()),
-                filter,
-            )
-            .await
-        })
-        .await?
-        .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
+        let model = self
+            .update_passkey_patch(selector, patch)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
         Ok(self.project_passkey_models(vec![model]).await?.remove(0))
     }
     async fn update_passkey(
@@ -222,9 +201,8 @@ where
             );
         }
         let patch = self.prepare_passkey_fields(fields, extras, false).await?;
-        let filter = self.resolve_plugin_equals::<P::Passkey>(EntityRole::Passkey, selector)?;
         let row = self
-            .update_passkey_patch(filter, patch)
+            .update_passkey_patch(selector, patch)
             .await?
             .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
         self.project_passkey_models(vec![row])
@@ -265,30 +243,16 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
 
     async fn update_passkey_patch(
         &self,
-        filter: sea_orm::sea_query::SimpleExpr,
+        selector: BoundQueryField,
         patch: super::plugin_models::Write<P::Passkey>,
     ) -> AuthResult<Option<sea_orm::QueryResult>> {
         database_operation::<Entity<P::Passkey>, _>(self.config(), "update", async {
-            let Some(_model) = self
-                .connection()
-                .query_one_raw(
-                    super::plugin_rows::select_all::<Entity<P::Passkey>>()
-                        .filter(filter.clone())
-                        .build(self.connection().get_database_backend()),
-                )
-                .await
-                .map_err(map_db_err)?
-            else {
-                return Ok(None);
-            };
-            super::updates::execute_update_returning_raw(
-                self.connection(),
-                patch
-                    .update_returning(self.connection().get_database_backend())?
-                    .filter(filter.clone()),
-                filter,
-            )
-            .await
+            let (column, value) =
+                self.resolve_plugin_query_field::<P::Passkey>(EntityRole::Passkey, selector)?;
+            let predicate = QueryPredicate::equals(column, value);
+            let (query, reselect) = patch
+                .update_where_returning(self.connection().get_database_backend(), [predicate])?;
+            super::updates::execute_update_returning_raw(self.connection(), query, reselect).await
         })
         .await
     }

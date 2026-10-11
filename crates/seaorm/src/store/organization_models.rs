@@ -183,14 +183,18 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
             (&self.model_fields, role),
         )
         .await?;
-        let (column, value) = self.resolve_organization_query_field::<M>(role, selector)?;
-        let filter = super::value_filter::equals(column, &value, conn.get_database_backend())?;
-        let row = super::updates::execute_update_returning_raw::<Entity<M>, _>(
-            conn,
-            active
-                .update_returning(conn.get_database_backend())?
-                .filter(filter.clone()),
-            filter,
+        let row = super::instrumentation::database_operation::<Entity<M>, _>(
+            self.config(),
+            "update",
+            async {
+                let (column, value) = self.resolve_organization_query_field::<M>(role, selector)?;
+                let (query, filter) = active.update_where_returning(
+                    conn.get_database_backend(),
+                    [QueryPredicate::equals(column, value)],
+                )?;
+                super::updates::execute_update_returning_raw::<Entity<M>, _>(conn, query, filter)
+                    .await
+            },
         )
         .await?;
         let Some(row) = row else {

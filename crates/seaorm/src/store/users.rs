@@ -395,17 +395,21 @@ where
                 fields,
                 S::User::field_column,
             )?;
-        let (physical, value) = selector.resolve(EntityRole::User, &self.user_field_schema())?;
-        let filter =
-            super::value_filter::equals(S::User::field_column(&physical)?, &value, backend)?;
         database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
             self.config(),
             "update",
-            super::updates::execute_update_returning_raw(
-                db,
-                active.update_returning(backend)?.filter(filter.clone()),
-                filter,
-            ),
+            async {
+                let (physical, value) =
+                    selector.resolve(EntityRole::User, &self.user_field_schema())?;
+                let (query, filter) = active.update_where_returning(
+                    backend,
+                    [super::value_filter::QueryPredicate::equals(
+                        S::User::field_column(&physical)?,
+                        value,
+                    )],
+                )?;
+                super::updates::execute_update_returning_raw(db, query, filter).await
+            },
         )
         .await
         .map(|row| row.map(SqlRow::from))

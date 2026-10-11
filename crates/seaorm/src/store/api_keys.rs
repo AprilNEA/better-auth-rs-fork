@@ -194,10 +194,16 @@ where
         id: &better_auth_core::SchemaValue<String>,
         write: ApiKeyUsageWrite,
     ) -> AuthResult<Option<ApiKey>> {
-        // Upstream does not run update policies for an increment without a set patch.
         let set = write.set_fields();
+        if write.operation() == "update" {
+            return self
+                .update_api_key_record(id, set)
+                .await?
+                .map(ApiKey::from_field_values)
+                .transpose();
+        }
+        // Upstream does not run update policies for an increment without a set patch.
         let has_set = !matches!(&write, ApiKeyUsageWrite::Decrement);
-        let operation = write.operation();
         let backend = self.connection().get_database_backend();
         let by_id = self.bind_plugin_query_field(EntityRole::ApiKey, "id", id.field_value())?;
         let mut comparisons = Vec::new();
@@ -276,9 +282,7 @@ where
         } else {
             Default::default()
         };
-        if operation == "incrementOne" {
-            validate_increment_one_update(increment.is_some(), !fields.is_empty())?;
-        }
+        validate_increment_one_update(increment.is_some(), !fields.is_empty())?;
         let (column, id) =
             self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, by_id)?;
         let by_id = QueryPredicate::equals(column, id);
@@ -318,8 +322,8 @@ where
             query.query = query.query.col_expr(column, expression);
         }
         let query = query.filter(guard.clone());
-        let model = database_operation::<Entity<P::ApiKey>, _>(self.config(), operation, async {
-            if operation == "incrementOne" {
+        let model =
+            database_operation::<Entity<P::ApiKey>, _>(self.config(), "incrementOne", async {
                 super::updates::increment_returning_raw::<Entity<P::ApiKey>>(
                     self.connection(),
                     query.query,
@@ -327,16 +331,8 @@ where
                     reselect,
                 )
                 .await
-            } else {
-                super::updates::execute_update_returning_raw::<Entity<P::ApiKey>, _>(
-                    self.connection(),
-                    query,
-                    reselect,
-                )
-                .await
-            }
-        })
-        .await?;
+            })
+            .await?;
         Ok(self
             .project_api_key_models(model.into_iter().collect())
             .await?

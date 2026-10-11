@@ -630,6 +630,9 @@ run_stage() {
         --test user_sort_field_tests --test user_null_query_tests --test device_where_tests
         --test query_binding_order_tests --test native_core_join_tests --test sparse_native_join_tests
         --test two_factor_additional_fields_tests --test wallet_additional_fields_tests
+        --test passkey_additional_fields_tests --test schema_preflight_tests
+        --test api_key_additional_fields_tests --test device_additional_fields_tests
+        --test observability_tests
         --test organization_builtin_policy_tests --test rate_limit_database_tests
       )
       cargo clippy --locked --features axum,seaorm2,redis-cache \
@@ -644,7 +647,7 @@ run_stage() {
         store::ephemeral::id_slot_tests::sessions:: request_runtime::concurrent:: || account_status=1
       cargo test --locked -p better-auth-seaorm --lib -- \
         store::record_bindings::function_tests store::value_filter::predicate::tests:: \
-        store::device_code_consume::tests:: \
+        store::device_code_consume::tests:: store::record_write::tests:: store::updates::tests:: \
         async_capacity_output_failure_rolls_back_the_seat_and_membership \
         team_capacity_deduplication_and_scoped_cleanup || account_status=1
       bun --no-install test \
@@ -658,6 +661,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/user-scalar-column-query.test.ts \
         ./compat-tests/reference-server/contracts/sparse-native-joins.test.ts \
         ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-date-usage.test.ts \
         ./compat-tests/reference-server/contracts/paypal.test.ts \
         ./compat-tests/reference-server/contracts/wechat.test.ts \
         ./compat-tests/reference-server/contracts/social-http-providers.test.ts \

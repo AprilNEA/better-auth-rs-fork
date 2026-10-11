@@ -106,22 +106,21 @@ where
             .account_storage_fields(&fields, prepared.into_fields(), false, backend)
             .await?;
         let write = super::record_write::RecordWrite::<<S::Account as SeaOrmAccountModel>::Entity>::from_fields(input, S::Account::field_column)?;
-        let query = write.update(backend)?;
-        let selectors = selectors
-            .into_iter()
-            .map(|selector| {
-                let (column, value) = selector.resolve(EntityRole::Account, &fields)?;
-                Ok(QueryPredicate::equals(
-                    S::Account::field_column(&column)?,
-                    value,
-                ))
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        let query = query.filter(value_filter::all(selectors, backend)?);
         let count = database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
             self.config(),
             "updateMany",
             async {
+                let selectors = selectors
+                    .into_iter()
+                    .map(|selector| {
+                        let (column, value) = selector.resolve(EntityRole::Account, &fields)?;
+                        Ok(QueryPredicate::equals(
+                            S::Account::field_column(&column)?,
+                            value,
+                        ))
+                    })
+                    .collect::<AuthResult<Vec<_>>>()?;
+                let query = write.update_where(backend, selectors)?.query;
                 query
                     .exec(db)
                     .await
@@ -737,21 +736,17 @@ where
             .account_storage_fields(&fields, prepared.into_fields(), false, backend)
             .await?;
         let active = super::record_write::RecordWrite::<<S::Account as SeaOrmAccountModel>::Entity>::from_fields(input, S::Account::field_column)?;
-        let (column, value) = account_id.resolve(EntityRole::Account, &fields)?;
-        let account_id =
-            super::value_filter::equals(S::Account::field_column(&column)?, &value, backend)?;
         let account = match database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
             self.config(),
             "update",
             async {
+                let (column, value) = account_id.resolve(EntityRole::Account, &fields)?;
+                let account_id = QueryPredicate::equals(S::Account::field_column(&column)?, value);
+                let (query, account_id) = active.update_where_returning(backend, [account_id])?;
                 super::updates::execute_update_returning_raw::<
                     <S::Account as SeaOrmAccountModel>::Entity,
                     _,
-                >(
-                    self.connection(),
-                    active.update_returning(backend)?.filter(account_id.clone()),
-                    account_id,
-                )
+                >(self.connection(), query, account_id)
                 .await
                 .map(|row| row.map(SqlRow::from))
             },

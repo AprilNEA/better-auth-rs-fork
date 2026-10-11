@@ -1852,3 +1852,6 @@ mod native_endpoints;
 
 #[path = "observability/two_factor_clock.rs"]
 mod two_factor_clock;
+
+#[path = "observability/update_phases.rs"]
+mod update_phases;

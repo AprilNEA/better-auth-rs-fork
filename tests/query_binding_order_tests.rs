@@ -30,6 +30,8 @@ mod multiple_conditions;
 mod plugin_selectors;
 #[path = "query_binding_order_tests/session_predicates.rs"]
 mod session_predicates;
+#[path = "query_binding_order_tests/update_phases.rs"]
+mod update_phases;
 
 fn date() -> FieldDate {
     FieldDate::from_milliseconds(1_893_456_001_000.0)

@@ -195,10 +195,13 @@ mod tests {
                 }
                 fields.field(api_key::Column::Id, value);
             }
-            let filter = api_key::Column::Id.eq("before");
-            let query = fields
-                .update_returning(DbBackend::MySql)?
-                .filter(filter.clone());
+            let (query, filter) = fields.update_where_returning(
+                DbBackend::MySql,
+                [crate::store::value_filter::QueryPredicate::equals(
+                    api_key::Column::Id,
+                    "before".into(),
+                )],
+            )?;
             let statement = Query::select()
                 .column(api_key::Column::Id)
                 .from(api_key::Entity)
@@ -249,14 +252,18 @@ mod tests {
             if let Some(id) = id {
                 fields.field(api_key::Column::Id, id);
             }
-            let filter = if by_id {
-                api_key::Column::Id.eq("before")
+            let column = if by_id {
+                api_key::Column::Id
             } else {
-                api_key::Column::Name.eq("before")
+                api_key::Column::Name
             };
-            let query = fields
-                .update_returning(DbBackend::MySql)?
-                .filter(filter.clone());
+            let (query, filter) = fields.update_where_returning(
+                DbBackend::MySql,
+                [crate::store::value_filter::QueryPredicate::equals(
+                    column,
+                    "before".into(),
+                )],
+            )?;
             let statement = Query::select()
                 .column(api_key::Column::Id)
                 .from(api_key::Entity)
@@ -288,10 +295,13 @@ mod tests {
                 } else {
                     fields.field(api_key::Column::Name, value);
                 }
-                let filter = api_key::Column::Name.eq("before");
-                let query = fields
-                    .update_returning(DbBackend::MySql)?
-                    .filter(filter.clone());
+                let (query, filter) = fields.update_where_returning(
+                    DbBackend::MySql,
+                    [crate::store::value_filter::QueryPredicate::equals(
+                        api_key::Column::Name,
+                        "before".into(),
+                    )],
+                )?;
                 let statement = Query::select()
                     .column(api_key::Column::Id)
                     .from(api_key::Entity)

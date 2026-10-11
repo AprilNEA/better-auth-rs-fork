@@ -5,11 +5,13 @@ async fn database() -> DatabaseConnection {
     let database = Database::connect("sqlite::memory:").await.unwrap();
     migrator::run_migrations(&database).await.unwrap();
     rewrite_empty_table(&database, "team", |sql| {
-        ["name", "organization_id", "created_at"]
+        let sql = ["name", "organization_id", "created_at"]
             .into_iter()
             .try_fold(sql.to_owned(), |sql, column| {
                 column_constraint(&sql, column, "")
-            })
+            })?;
+        // The upstream fixture gives the undeclared capacity column a database default.
+        column_constraint(&sql, "member_count", " NOT NULL DEFAULT 0")
     })
     .await
     .unwrap();
