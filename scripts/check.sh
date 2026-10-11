@@ -648,13 +648,18 @@ run_stage() {
         ./compat-tests/reference-server/contracts/async-field-transforms.test.ts \
         ./compat-tests/reference-server/contracts/account-owner-batch.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts \
+        ./compat-tests/reference-server/contracts/organization-list-relations.test.ts \
+        ./tests/fixtures/fallback-continuation-upstream.test.ts \
+        ./tests/fixtures/organization-native-joins-upstream.test.ts \
         ./tests/fixtures/organization-join-continuation-upstream.test.ts || projection_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || projection_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
         --test async_field_transform_tests --test account_owner_batch_tests \
         --test session_user_join_reference_tests --test organization_join_continuation_tests \
-        --test relation_object_mutation_tests -- -D warnings || projection_status=1
+        --test fallback_continuation_tests --test organization_native_join_tests \
+        --test organization_list_relations_tests --test relation_object_mutation_tests \
+        -- -D warnings || projection_status=1
       cargo test --locked -p better-auth-core --lib -- \
         request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: \
         store::ephemeral::sessions::live_output_tests:: store::ephemeral::sessions::native_owner_tests:: \

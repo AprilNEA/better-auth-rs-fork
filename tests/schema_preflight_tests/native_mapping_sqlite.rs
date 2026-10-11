@@ -1,4 +1,5 @@
 use super::*;
+use crate::sqlite_fixture_schema::{column_constraint, rewrite_empty_table};
 
 async fn rows(database: &DatabaseConnection, sql: String) -> Vec<Value> {
     database
@@ -47,18 +48,6 @@ pub(super) async fn snapshot(database: &DatabaseConnection) -> Snapshot {
     snapshot
 }
 
-fn column_constraint(sql: &str, column: &str, constraint: &str) -> String {
-    let marker = format!("\"{column}\" ");
-    let (prefix, tail) = sql.split_once(&marker).unwrap();
-    let (declaration, suffix) = tail.split_once(',').unwrap();
-    assert!(
-        !declaration.contains("DEFAULT"),
-        "Fixture source column must have no default: {declaration}"
-    );
-    let declaration = declaration.replace(" NOT NULL", "");
-    format!("{prefix}{marker}{declaration}{constraint},{suffix}")
-}
-
 pub(super) async fn prepare(database: &DatabaseConnection, model: Model, old: OldColumn) {
     let before = snapshot(database).await;
     let (table, _, _, column) = model.mapping();
@@ -77,26 +66,23 @@ pub(super) async fn prepare(database: &DatabaseConnection, model: Model, old: Ol
         entry.get("sql").unwrap().as_str().unwrap(),
         column,
         constraint,
-    );
+    )
+    .unwrap();
     if matches!(model, Model::Passkey) {
         // The native record API omits the bundled Rust credential and update timestamp.
-        sql = column_constraint(&sql, "credential", " NOT NULL DEFAULT 'legacy-credential'");
+        sql =
+            column_constraint(&sql, "credential", " NOT NULL DEFAULT 'legacy-credential'").unwrap();
         sql = column_constraint(
             &sql,
             "updated_at",
             " NOT NULL DEFAULT '2030-01-01T00:00:00.000Z'",
-        );
+        )
+        .unwrap();
     }
     *entry.get_mut("sql").unwrap() = json!(sql);
-    execute(database, &format!("DROP TABLE \"{table}\"")).await;
-    execute(database, &sql).await;
-    for entry in expected_catalog.iter().filter(|entry| {
-        entry.get("table").unwrap() == table && entry.get("type").unwrap() != "table"
-    }) {
-        if let Some(sql) = entry.get("sql").unwrap().as_str() {
-            execute(database, sql).await;
-        }
-    }
+    rewrite_empty_table(database, table, |_| Ok(sql))
+        .await
+        .unwrap();
     assert_eq!(catalog(database).await, expected_catalog);
     assert_eq!(snapshot(database).await, before);
 }

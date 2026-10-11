@@ -69,6 +69,10 @@ enum OldColumn {
 }
 
 impl OldColumn {
+    #[expect(
+        clippy::panic,
+        reason = "Required legacy columns must fail preflight before a stored row can exist"
+    )]
     fn value(self) -> Value {
         match self {
             Self::Defaulted => json!("legacy-default"),
@@ -76,6 +80,13 @@ impl OldColumn {
             Self::Required => panic!("Required old columns must fail before CRUD"),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stage {
+    Create,
+    Read,
+    Update,
 }
 
 struct Fields(EntityRole, UserConfig);
@@ -152,9 +163,7 @@ fn settings() -> AuthConfig {
 
 fn assert_mismatch(error: &SchemaCheckError, finding: SchemaFinding, message: String) {
     assert_eq!(findings(error), std::slice::from_ref(&finding));
-    let SchemaCheckError::Mismatch(inner) = error else {
-        panic!("Expected schema mismatch")
-    };
+    let inner = mismatch_details(error);
     assert_eq!(
         serde_json::to_value(inner).unwrap(),
         json!({
@@ -223,26 +232,26 @@ async fn run(model: Model, old: OldColumn) {
         sqlite::seed(&database, model).await;
         let seeded = sqlite::snapshot(&database).await;
         for (stage, input) in [
-            ("create", "source"),
-            ("read", "source"),
-            ("update", "next"),
-            ("read", "next"),
+            (Stage::Create, "source"),
+            (Stage::Read, "source"),
+            (Stage::Update, "next"),
+            (Stage::Read, "next"),
         ] {
             let actual = records::run(model, stage, input, auth.store().as_ref()).await;
             assert_eq!(
                 Value::Object(actual.json().unwrap()),
                 records::expected(model, input),
-                "{model:?} {old:?} {stage}"
+                "{model:?} {old:?} {stage:?}"
             );
             let mut expected_events = Vec::new();
-            if stage != "read" {
+            if stage != Stage::Read {
                 expected_events.push(json!(["input", source, input]));
             }
             expected_events.push(json!(["output", source, format!("stored:{input}")]));
             assert_eq!(
                 *events.lock().unwrap(),
                 expected_events,
-                "{model:?} {old:?} {stage}"
+                "{model:?} {old:?} {stage:?}"
             );
             events.lock().unwrap().clear();
             let mut expected_storage = seeded.clone();
@@ -253,7 +262,7 @@ async fn run(model: Model, old: OldColumn) {
             assert_eq!(
                 sqlite::snapshot(&database).await,
                 expected_storage,
-                "{model:?} {old:?} {stage} complete storage"
+                "{model:?} {old:?} {stage:?} complete storage"
             );
         }
         records::delete(model, auth.store().as_ref()).await;

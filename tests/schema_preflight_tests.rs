@@ -33,6 +33,9 @@ mod native_mappings;
 #[path = "schema_preflight_tests/projection_transaction.rs"]
 mod projection_transaction;
 
+#[path = "support/sqlite_fixture_schema.rs"]
+mod sqlite_fixture_schema;
+
 #[derive(Clone)]
 struct Observe(Arc<AtomicUsize>);
 
@@ -86,6 +89,10 @@ async fn build(
         .unwrap()
 }
 
+#[expect(
+    clippy::panic,
+    reason = "The contract requires the typed schema error, including its shared identity"
+)]
 fn mismatch(error: AuthError) -> Arc<SchemaCheckError> {
     let AuthError::SchemaCheck(error) = error else {
         panic!("expected typed schema mismatch: {error}")
@@ -94,10 +101,19 @@ fn mismatch(error: AuthError) -> Arc<SchemaCheckError> {
     error
 }
 
-fn findings(error: &SchemaCheckError) -> &[SchemaFinding] {
+#[expect(
+    clippy::panic,
+    reason = "The contract must reject a store error before inspecting mismatch details"
+)]
+fn mismatch_details(error: &SchemaCheckError) -> &better_auth_core::store::schema::SchemaMismatch {
     let SchemaCheckError::Mismatch(error) = error else {
         panic!("expected mismatch")
     };
+    error
+}
+
+fn findings(error: &SchemaCheckError) -> &[SchemaFinding] {
+    let error = mismatch_details(error);
     assert_eq!(error.code, "SCHEMA_MISMATCH");
     assert_eq!(error.source, "database");
     &error.findings

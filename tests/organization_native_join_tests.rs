@@ -194,6 +194,7 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
 ) {
     let path = fixture["path"].as_str().unwrap();
     let mode = fixture["mode"].as_str().unwrap();
+    let is_list = matches!(path, "organizations" | "invitations" | "teams");
     let (start, mut started) = mpsc::unbounded_channel();
     let (finish, mut finished) = mpsc::unbounded_channel();
     let (release, gate) = oneshot::channel();
@@ -229,7 +230,6 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
     let controller = async {
         if matches!(mode, "parent-wait" | "child-wait") {
             started.recv().await.unwrap();
-            let is_list = matches!(path, "organizations" | "invitations" | "teams");
             if is_list {
                 finished.recv().await.unwrap();
             }
@@ -245,6 +245,9 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
         }
     };
     let (result, ()) = tokio::join!(query::<S>(&*store, fixture, &fields), controller);
+    if is_list && matches!(mode, "parent-error" | "child-error") {
+        finished.recv().await.unwrap();
+    }
     match result {
         Ok(result) => {
             assert_eq!(result, fixture["result"], "{fixture}");

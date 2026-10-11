@@ -12,6 +12,7 @@ use crate::{AuthConfig, AuthContext, AuthRequest, FieldMap, FieldValue, HttpMeth
 use futures_util::future::BoxFuture;
 use std::sync::Arc;
 use tokio::sync::{Notify, mpsc};
+use tracing::{Dispatch, instrument::WithSubscriber, subscriber::NoSubscriber};
 
 type Work = BoxFuture<'static, AuthResult<usize>>;
 
@@ -57,15 +58,18 @@ fn work(
     events: mpsc::UnboundedSender<(usize, &'static str)>,
     context: Arc<AuthContext<StatelessSchema>>,
     marker: FieldValue,
+    dispatcher: Dispatch,
     error: Option<String>,
 ) -> Work {
     Box::pin(async move {
         check_context(&context, &marker)?;
+        assert!(uses_dispatcher(&dispatcher));
         events
             .send((index, "start"))
             .map_err(|_| AuthError::internal("Contract receiver closed"))?;
         gate.notified().await;
         check_context(&context, &marker)?;
+        assert!(uses_dispatcher(&dispatcher));
         events
             .send((index, "complete"))
             .map_err(|_| AuthError::internal("Contract receiver closed"))?;
@@ -83,6 +87,17 @@ async fn event(
         .await
         .expect("Concurrent peer must advance after its gate opens")
         .expect("Concurrent peer must report its context-preserving progress")
+}
+
+fn uses_dispatcher(expected: &Dispatch) -> bool {
+    let subscriber = expected
+        .downcast_ref::<NoSubscriber>()
+        .expect("Contract dispatcher owns its subscriber");
+    tracing::dispatcher::get_default(|current| {
+        current
+            .downcast_ref::<NoSubscriber>()
+            .is_some_and(|current| std::ptr::eq(current, subscriber))
+    })
 }
 
 #[tokio::test]
@@ -110,6 +125,7 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
                     .headers
                     .insert("x-contract".into(), "retained-peer".into());
                 request.body = marker.clone();
+                let dispatcher = Dispatch::new(NoSubscriber::default());
                 let gates = [Arc::new(Notify::new()), Arc::new(Notify::new())];
                 let (events, mut receiver) = mpsc::unbounded_channel();
                 let original = format!("original-{first}");
@@ -132,6 +148,7 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
                         events.clone(),
                         context.clone(),
                         marker.clone(),
+                        dispatcher.clone(),
                         error,
                     )
                 });
@@ -143,7 +160,7 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
                     context.clone(),
                     with_request_hook_context_value(request, combine(kind, peers)),
                 );
-                let task = tokio::spawn(scoped);
+                let task = tokio::spawn(scoped.with_subscriber(dispatcher.clone()));
                 assert_eq!(event(&mut receiver).await, (0, "start"), "{kind:?}");
                 assert_eq!(event(&mut receiver).await, (1, "start"), "{kind:?}");
                 gates[first].notify_one();
@@ -161,8 +178,10 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
                 }
                 assert!(context.current_request_context().is_none());
                 assert!(current_request_hook_context().is_none());
+                assert!(!uses_dispatcher(&dispatcher));
                 gates[1 - first].notify_one();
                 assert_eq!(event(&mut receiver).await, (1 - first, "complete"));
+                assert!(!uses_dispatcher(&dispatcher));
             }
         }
     }

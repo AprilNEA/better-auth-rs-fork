@@ -73,12 +73,26 @@ async function setup(backend: Backend, parent: Parent, scenario: Scenario, joins
   const models = ["user", "session", "account", "verification", "organization", "member", "invitation", "team", "teamMember"];
   const memory: Record<string, Fields[]> = Object.fromEntries(models.map(model => [model, []]));
   const database = backend === "sqlite" ? new Database(":memory:") : undefined;
+  const organizationPlugin = organization({ teams: { enabled: true } });
   const options: BetterAuthOptions = {
     database: database ?? memoryAdapter(memory), baseURL: "http://list-relations.test",
     secret: "organization-list-relations-secret-at-least-thirty-two-characters",
-    logger: { disabled: true }, telemetry: { enabled: false }, advanced: { database: { joins } }, plugins: [organization({ teams: { enabled: true } })],
+    logger: { disabled: true }, telemetry: { enabled: false }, advanced: { database: { joins } }, plugins: [organizationPlugin],
   };
-  if (database) await (await getMigrations(options)).runMigrations();
+  if (database) {
+    // The read contract uses a compatible legacy column; required legacy columns have separate preflight negative coverage.
+    const migrationOptions: BetterAuthOptions = reverse(scenario) ? options : {
+      ...options,
+      plugins: [organizationPlugin, { id: "organization-list-compatible-schema", schema: {
+        [parent]: { fields: { organizationId: {
+          ...organizationPlugin.schema[parent].fields.organizationId, required: false,
+        } } },
+      } }],
+    };
+    await (await getMigrations(migrationOptions)).runMigrations();
+    const legacyColumn = database.query<{ notnull: number }, []>(`SELECT "notnull" FROM pragma_table_info('${parent}') WHERE name = 'organizationId'`).get();
+    expect(legacyColumn).toStrictEqual({ notnull: reverse(scenario) ? 1 : 0 });
+  }
   const writer = (await betterAuth(options).$context).adapter;
   const create = (model: string, data: Fields) => writer.create({ model, data, forceAllowId: true });
   await create("user", { id: "user", name: "Owner", email: "owner@list-relations.test", emailVerified: true, image: null, createdAt: date(), updatedAt: date() });
@@ -150,7 +164,9 @@ for (const backend of ["memory", "sqlite"] as const) for (const joins of [false,
       const events: unknown[][] = [];
       const name = () => { events.push(["function-called", undefined]); return "called"; };
       const orgOptions = publicOptions(scenario);
-      const context = await betterAuth({ ...fixture.options, plugins: [organization(orgOptions), { id: "organization-list-relation-fields", schema: policies(parent, scenario, events, name) }] }).$context;
+      const auth = betterAuth({ ...fixture.options, plugins: [organization(orgOptions), { id: "organization-list-relation-fields", schema: policies(parent, scenario, events, name) }] });
+      expect(await auth.api.ok()).toStrictEqual({ ok: true });
+      const context = await auth.$context;
       const adapter = getOrgAdapter(context, orgOptions);
       for (const publicOutput of [false, true]) {
         const operation = async () => {

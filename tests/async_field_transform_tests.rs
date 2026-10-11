@@ -230,8 +230,8 @@ async fn check_writes<S: AuthSchema>(store: &impl AuthStore<S>, gate: &Gate) -> 
     )
     .await?;
     assert_eq!(
-        session.additional_fields.get("userAgent"),
-        Some(&FieldValue::from_json(json!({"resolved":"stored"}))?)
+        session.user_agent.json()?,
+        Some(json!({"resolved":"stored"}))
     );
     let verification = drive(
         gate,
@@ -464,6 +464,8 @@ async fn synchronous_input_rejects_async_callbacks_while_organization_adapters_a
             .await?,
         input
     );
+    let mut output = input.clone();
+    let _ = output.insert("id".into(), FieldValue::Undefined);
     assert_eq!(
         config
             .organization_output_records(
@@ -474,7 +476,7 @@ async fn synchronous_input_rejects_async_callbacks_while_organization_adapters_a
                 true
             )
             .await?,
-        vec![input.clone()]
+        vec![output]
     );
     config
         .fields_mut()

@@ -154,7 +154,7 @@ async fn update_name<S: AuthSchema>(
                 .update_organization(
                     id,
                     UpdateOrganization {
-                        name: Some(name.to_owned().into()),
+                        name: Some(name.to_owned()),
                         ..Default::default()
                     },
                 )

@@ -273,15 +273,14 @@ pub(super) async fn read(
 
 pub(super) async fn run(
     model: Model,
-    stage: &str,
+    stage: Stage,
     input: &str,
     store: &dyn AuthStore<BundledSchema>,
 ) -> FieldMap {
     match stage {
-        "create" => create(model, store).await,
-        "update" => update(model, store).await,
-        "read" => read(model, input, store).await.unwrap(),
-        _ => panic!("Unknown CRUD stage"),
+        Stage::Create => create(model, store).await,
+        Stage::Update => update(model, store).await,
+        Stage::Read => read(model, input, store).await.unwrap(),
     }
 }
 

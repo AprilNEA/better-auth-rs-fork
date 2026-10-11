@@ -34,6 +34,8 @@ use std::{
 mod expectations;
 #[path = "organization_list_relations_tests/policies.rs"]
 mod policies;
+#[path = "support/sqlite_fixture_schema.rs"]
+mod sqlite_fixture_schema;
 #[path = "organization_list_relations_tests/storage.rs"]
 mod storage;
 
@@ -323,6 +325,13 @@ async fn sqlite_organization_list_relations_match_upstream() -> AuthResult<()> {
                 migrator::run_migrations(&database)
                     .await
                     .map_err(|error| AuthError::internal(error.to_string()))?;
+                if !case.reverse() {
+                    // Mapped reads require a schema that can also pass HTTP write-column preflight.
+                    sqlite_fixture_schema::rewrite_empty_table(&database, parent.model(), |sql| {
+                        sqlite_fixture_schema::column_constraint(sql, "organization_id", "")
+                    })
+                    .await?;
+                }
                 let raw: Arc<dyn AuthStore<BundledSchema>> = Arc::new(
                     SeaOrmStore::<BundledSchema>::new(config(native), database.clone()),
                 );

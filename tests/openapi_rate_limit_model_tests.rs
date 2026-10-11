@@ -67,12 +67,10 @@ impl<S: AuthSchema> AuthPlugin<S> for RateLimitModel {
                 .into(),
             ),
         };
-        Ok(
-            OpenApiPluginMetadata::from_routes("ordinary-rate-limit-model", Vec::new())?
-                .model("beforeRateLimit", &ordinary)?
-                .model("rateLimit", &declared)?
-                .model("afterRateLimit", &ordinary)?,
-        )
+        OpenApiPluginMetadata::from_routes("ordinary-rate-limit-model", Vec::new())?
+            .model("beforeRateLimit", &ordinary)?
+            .model("rateLimit", &declared)?
+            .model("afterRateLimit", &ordinary)
     }
 
     async fn on_request(

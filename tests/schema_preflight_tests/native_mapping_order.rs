@@ -25,9 +25,7 @@ fn assert_ordered_mismatch(
         )
         .collect();
     assert_eq!(findings(error), expected);
-    let SchemaCheckError::Mismatch(inner) = error else {
-        panic!("Expected schema mismatch")
-    };
+    let inner = mismatch_details(error);
     assert_eq!(
         serde_json::to_value(inner).unwrap(),
         json!({

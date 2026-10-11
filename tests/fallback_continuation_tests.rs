@@ -360,6 +360,9 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + Clone + 'static>(
         }
     };
     let (result, ()) = tokio::join!(rows(&store, kind, &tokens), controller);
+    if mode == "parent-error" || mode == "output-error" {
+        finished.recv().await.unwrap();
+    }
     let result = match result {
         Ok(rows) => json!({"rows":rows.into_iter().map(|(_, row)|row).collect::<Vec<_>>()}),
         Err(error) => {

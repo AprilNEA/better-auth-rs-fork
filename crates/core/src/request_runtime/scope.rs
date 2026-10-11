@@ -3,7 +3,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use crate::{AuthContext, AuthSchema};
-use tracing::Instrument;
+use tracing::{Instrument, instrument::WithSubscriber};
 
 /// Identity belongs to an auth instance, including all request-derived clones.
 #[derive(Clone, Default)]
@@ -71,7 +71,8 @@ pub(crate) fn spawn<T: Send + 'static>(
                 }
             },
         ))
-        .in_current_span(),
+        .in_current_span()
+        .with_current_subscriber(),
     )
 }
 

@@ -102,6 +102,10 @@ impl SchemaInspector for RequiredCheck {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic,
+    reason = "The failure path must preserve the original Config variant and String allocation"
+)]
 async fn retained_projection_peer_loses_schema_exemption_when_transaction_returns_error() {
     tokio::time::timeout(Duration::from_secs(5), async {
         let checks = Arc::new(AtomicUsize::new(0));
