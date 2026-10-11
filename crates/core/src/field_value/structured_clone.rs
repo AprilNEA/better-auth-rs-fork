@@ -184,7 +184,9 @@ impl StructuredCloneContext {
 
     /// Copy record fields using the same alias map as other records in this context.
     pub fn clone_map(&mut self, fields: &FieldMap) -> AuthResult<FieldMap> {
-        self.clone_with(fields, &[], |fields, _| Ok(fields))
+        let (fields, _, (_, copies, publish)) = self.prepare_fields(fields, &[])?;
+        self.complete(copies, publish);
+        Ok(fields)
     }
 
     /// Clone enumerable fields in property order, then hidden state through the same object graph.
@@ -195,6 +197,15 @@ impl StructuredCloneContext {
         state: &[FieldValue],
         restore: impl FnOnce(FieldMap, Vec<FieldValue>) -> AuthResult<T>,
     ) -> AuthResult<T> {
+        let (fields, state, prepared) = self.prepare_fields(fields, state)?;
+        self.restore(prepared, |_| restore(fields, state))
+    }
+
+    fn prepare_fields(
+        &self,
+        fields: &FieldMap,
+        state: &[FieldValue],
+    ) -> AuthResult<(FieldMap, Vec<FieldValue>, PreparedGraph)> {
         let mut ordered = fields.clone();
         ordered.sort_property_order();
         let mut graph = Graph::new(self);
@@ -207,14 +218,13 @@ impl StructuredCloneContext {
             .map(|value| graph.visit(value))
             .collect::<AuthResult<Vec<_>>>()?;
         let prepared = graph.materialize()?;
-        self.restore(prepared, |values| {
-            let fields = edges
-                .into_iter()
-                .map(|(name, edge)| (name, edge.resolve(values)))
-                .collect();
-            let state = state.iter().map(|edge| edge.resolve(values)).collect();
-            restore(fields, state)
-        })
+        let values = &prepared.0;
+        let fields = edges
+            .into_iter()
+            .map(|(name, edge)| (name, edge.resolve(values)))
+            .collect();
+        let state = state.iter().map(|edge| edge.resolve(values)).collect();
+        Ok((fields, state, prepared))
     }
 
     /// Clone one native schema field using the same object graph as its containing record.

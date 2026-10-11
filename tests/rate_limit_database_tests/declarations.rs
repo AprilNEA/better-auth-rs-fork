@@ -6,7 +6,11 @@ use better_auth_core::{
     AuthResult, AuthRoute, AuthSchema, AuthStore, FieldMap, FieldValue,
     id::{IdGeneration, IdGenerator},
     middleware::{EndpointRateLimit, RateLimitConfig, RateLimitStorageKind},
-    store::{EphemeralStore, schema::EntityRole},
+    plugin_runtime::ModelFields,
+    store::{
+        EphemeralStore,
+        schema::{EntityRole, SchemaConfiguration},
+    },
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
 };
 use better_auth_seaorm::{
@@ -378,7 +382,21 @@ async fn memory_counter_consumption_ignores_replaced_plugin_declarations() -> Te
     for mapping in Mapping::ALL {
         let calls = Arc::new(Calls::default());
         let config = config(&calls);
-        let raw = EphemeralStore::new(Arc::new(config.clone()));
+        let (table, names) = mapping.memory();
+        let mut fields = ModelFields::default();
+        // The upstream fixture preinitializes the physical counter table. Root key inventory is outside this contract.
+        if matches!(mapping, Mapping::Mapped) {
+            fields.register_custom_model(table, None, UserConfig::default())?;
+        }
+        let shared_config = Arc::new(config.clone());
+        fields.set_schema_configuration(&SchemaConfiguration {
+            config: shared_config.clone(),
+            plugins: Vec::new(),
+            metadata: Default::default(),
+            secondary_storage: false,
+            rate_limit: mapping.config(),
+        });
+        let raw = EphemeralStore::from_schema(shared_config, &fields);
         let auth = BetterAuth::new(config)
             .store(raw.clone())
             .plugin(Declaration {
@@ -392,7 +410,6 @@ async fn memory_counter_consumption_ignores_replaced_plugin_declarations() -> Te
             .rate_limit(mapping.config())
             .build()
             .await?;
-        let (table, names) = mapping.memory();
         exercise(
             auth.context().database.as_ref(),
             Storage::Memory(Box::new(raw)),
