@@ -143,6 +143,77 @@ async fn unrelated_device_query_errors_preserve_every_row_and_skip_output() -> A
     Ok(())
 }
 
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions verify array identity, guarded consumption, complete storage, and output callbacks"
+)]
+async fn insensitive_device_equality_preserves_shared_and_distinct_array_identity() -> AuthResult<()>
+{
+    for values in [Vec::<FieldValue>::new(), vec![FieldValue::from("Alpha")]] {
+        for (operator, shared, consumes) in [
+            (WhereOperator::Eq, true, true),
+            (WhereOperator::Eq, false, false),
+            (WhereOperator::Ne, true, false),
+            (WhereOperator::Ne, false, true),
+        ] {
+            let outputs = Arc::new(AtomicUsize::new(0));
+            let observed = outputs.clone();
+            let (auth, raw) = configured(
+                "scope",
+                Some("stored_scope"),
+                UserFieldTransform::new(move |value| {
+                    let _ = observed.fetch_add(1, Ordering::SeqCst);
+                    Ok(value)
+                }),
+            )
+            .await?;
+            let original: FieldValue = values.clone().into();
+            let operand = if shared {
+                original.clone()
+            } else {
+                FieldValue::from(values.clone())
+            };
+            let target = auth
+                .store()
+                .create_device_code(input("target", original.clone()))
+                .await?;
+            let _ = auth
+                .store()
+                .create_device_code(input("decoy", "unchanged".into()))
+                .await?;
+            let before = raw.plugin_storage_rows(EntityRole::DeviceCode)?;
+            assert!(target.scope.field_value().strict_equals(&original));
+            assert_eq!(original.strict_equals(&operand), shared);
+            outputs.store(0, Ordering::SeqCst);
+            let result = auth
+                .store()
+                .consume_device_code(
+                    &target,
+                    &DeviceCodeOwnership::Where(DeviceCodeWhere {
+                        field: "scope".into(),
+                        operator,
+                        value: operand,
+                        mode: WhereMode::Insensitive,
+                    }),
+                )
+                .await?;
+            assert_eq!(result.is_some(), consumes, "{operator:?}, shared={shared}");
+            if let Some(result) = result {
+                assert_eq!(result.field_values()?, target.field_values()?);
+                assert!(result.scope.field_value().strict_equals(&original));
+            }
+            let expected = before
+                .into_iter()
+                .filter(|row| !consumes || row.get("id") != Some(&target.id.field_value()))
+                .collect::<Vec<_>>();
+            assert_eq!(raw.plugin_storage_rows(EntityRole::DeviceCode)?, expected);
+            assert_eq!(outputs.load(Ordering::SeqCst), usize::from(consumes));
+        }
+    }
+    Ok(())
+}
+
 fn object() -> FieldValue {
     FieldMap::from([("value".into(), "projected-binding".into())]).into()
 }

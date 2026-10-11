@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { memoryAdapter } from "better-auth/adapters/memory";
 import { deviceAuthorization, organization } from "better-auth/plugins";
 import { walletPlugin } from "./wallet-additional-fields";
 
@@ -238,3 +239,164 @@ test("SQLite OrganizationRole names convert as one array and keep the organizati
     database.close();
   }
 });
+
+type MemoryWhereModel = "user" | "member";
+
+function memoryWhereRows(model: MemoryWhereModel, populated: boolean) {
+  const memory: Record<string, Record<string, unknown>[]> = {
+    user: [], session: [], account: [], verification: [], organization: [], member: [],
+    invitation: [], team: [], teamMember: [], organizationRole: [],
+  };
+  if (populated) memory[model].push(model === "user" ? {
+    id: "seed", name: "Middle", email: "seed@memory-where.test", emailVerified: false,
+    createdAt: date(1).toISOString(), updatedAt: date(1).toISOString(),
+  } : {
+    id: "seed", organizationId: "other-org", userId: "owner", role: "Middle",
+    createdAt: date(1).toISOString(),
+  });
+  return memory;
+}
+
+async function memoryWhereAdapter(
+  memory: ReturnType<typeof memoryWhereRows>, model: MemoryWhereModel, json: boolean, events: string[],
+) {
+  const field = {
+    type: json ? "json" as const : "string" as const,
+    transform: {
+      input(value: unknown) { events.push("input"); return value; },
+      output(value: unknown) { events.push("output"); return value; },
+    },
+  };
+  const options: BetterAuthOptions = {
+    ...base, database: memoryAdapter(memory),
+    user: model === "user" ? { additionalFields: { name: field } } : undefined,
+    plugins: model === "member" ? [organization(), {
+      id: "member-memory-where", schema: { member: { fields: { role: field } } },
+    }] : [],
+  };
+  return (await betterAuth(options).$context).adapter;
+}
+
+for (const model of ["user", "member"] as const) {
+  for (const populated of [false, true]) {
+    for (const [json, operator] of [[false, "in"], [false, "not_in"], [true, "in"], [true, "not_in"]] as const) {
+      test(`Memory ${model} ${populated ? "excluded row" : "empty table"} checks ${json ? "JSON array" : "raw scalar"} ${operator} at the upstream boundary`, async () => {
+        const memory = memoryWhereRows(model, populated);
+        const before = structuredClone(memory);
+        const events: string[] = [];
+        const adapter = await memoryWhereAdapter(memory, model, json, events);
+        const where = [
+          model === "user" ? { field: "email", value: "absent" } : { field: "organizationId", value: "target-org" },
+          { field: model === "user" ? "name" : "role", operator, value: json ? ["Middle"] : "Middle" },
+        ];
+        let actual: unknown;
+        let caught: unknown;
+        try {
+          const rows = await Reflect.apply(adapter.findMany, adapter, [{ model, where }]);
+          const total = await Reflect.apply(adapter.count, adapter, [{ model, where }]);
+          actual = { rows, total };
+        } catch (error) { caught = error; }
+        if (!json && operator === "in" || populated) {
+          if (!(caught instanceof Error)) throw new Error("The membership operand must fail");
+          expect({ name: caught.name, message: caught.message }).toStrictEqual({
+            name: !json && operator === "in" ? "BetterAuthError" : "Error",
+            message: "Value must be an array",
+          });
+          expect(actual).toBeUndefined();
+        } else {
+          expect(caught).toBeUndefined();
+          expect(actual).toStrictEqual({ rows: [], total: 0 });
+        }
+        expect(events).toStrictEqual([]);
+        expect(memory).toStrictEqual(before);
+      });
+    }
+  }
+  test(`Memory ${model} raw scalar in fails before unknown field lookup`, async () => {
+    const memory = memoryWhereRows(model, false);
+    const before = structuredClone(memory);
+    const events: string[] = [];
+    const adapter = await memoryWhereAdapter(memory, model, false, events);
+    const where = [
+      model === "user" ? { field: "email", value: "absent" } : { field: "organizationId", value: "target-org" },
+      { field: "unknown", operator: "in", value: "Middle" },
+    ];
+    let caught: unknown;
+    try { await Reflect.apply(adapter.findMany, adapter, [{ model, where }]); } catch (error) { caught = error; }
+    if (!(caught instanceof Error)) throw new Error("The raw in operand must fail before field lookup");
+    expect({ name: caught.name, message: caught.message }).toStrictEqual({ name: "BetterAuthError", message: "Value must be an array" });
+    expect(events).toStrictEqual([]);
+    expect(memory).toStrictEqual(before);
+  });
+}
+
+for (const rejectSecond of [false, true]) {
+  // Rust does not yet invoke callable coercion methods. Preserve the upstream observations separately.
+  test(`Upstream-only Memory User callable first clause ${rejectSecond ? "preserves its second error" : "uses both comparisons before output and count"}`, async () => {
+    const memory = memoryWhereRows("user", true);
+    const before = structuredClone(memory);
+    const events: string[] = [];
+    const adapter = await memoryWhereAdapter(memory, "user", false, events);
+    let calls = 0;
+    const failure = new Error("second-comparison-original");
+    const operand = { toString() {
+      events.push("toString");
+      const call = calls++;
+      if (rejectSecond && call === 1) throw failure;
+      return call === 0 ? "A" : "Z";
+    } };
+    const where = [{ field: "name", operator: "gt", value: operand }];
+    let actual: unknown;
+    let caught: unknown;
+    try {
+      const rows = await Reflect.apply(adapter.findMany, adapter, [{ model: "user", where }]);
+      const total = await Reflect.apply(adapter.count, adapter, [{ model: "user", where }]);
+      actual = { rows, total };
+    } catch (error) { caught = error; }
+    if (rejectSecond) {
+      expect(caught).toBe(failure);
+      expect(actual).toBeUndefined();
+      expect(events).toStrictEqual(["toString", "toString"]);
+    } else {
+      expect(caught).toBeUndefined();
+      expect(actual).toStrictEqual({ rows: [], total: 0 });
+      expect(events).toStrictEqual(["toString", "toString", "toString", "toString"]);
+    }
+    expect(memory).toStrictEqual(before);
+  });
+}
+
+for (const rejectSecond of [false, true]) {
+  test(`Memory User first-clause property reads ${rejectSecond ? "preserve the second original error" : "repeat before output and count"}`, async () => {
+    const memory = memoryWhereRows("user", true);
+    const before = structuredClone(memory);
+    const events: string[] = [];
+    const adapter = await memoryWhereAdapter(memory, "user", false, events);
+    let reads = 0;
+    const failure = new Error("second-property-read-original");
+    const operand = { get toString() {
+      events.push("get toString");
+      const read = reads++;
+      if (rejectSecond && read === 1) throw failure;
+      return Object.prototype.toString;
+    } };
+    const where = [{ field: "name", operator: "gt", value: operand }];
+    let actual: unknown;
+    let caught: unknown;
+    try {
+      const rows = await Reflect.apply(adapter.findMany, adapter, [{ model: "user", where }]);
+      const total = await Reflect.apply(adapter.count, adapter, [{ model: "user", where }]);
+      actual = { rows, total };
+    } catch (error) { caught = error; }
+    if (rejectSecond) {
+      expect(caught).toBe(failure);
+      expect(actual).toBeUndefined();
+      expect(events).toStrictEqual(["get toString", "get toString"]);
+    } else {
+      expect(caught).toBeUndefined();
+      expect(actual).toStrictEqual({ rows: [], total: 0 });
+      expect(events).toStrictEqual(["get toString", "get toString", "get toString", "get toString"]);
+    }
+    expect(memory).toStrictEqual(before);
+  });
+}

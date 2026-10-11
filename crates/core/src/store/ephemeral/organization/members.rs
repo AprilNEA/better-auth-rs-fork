@@ -255,32 +255,40 @@ impl MemberStore for EphemeralStore {
         };
         let filter =
             if let (Some(field), Some(expected)) = (&params.filter_field, &params.filter_value) {
-                let operator = params.filter_operator.as_deref().unwrap_or("eq");
-                if matches!(operator, "in" | "not_in") && !expected.is_array() {
-                    return Err(AuthError::internal("Value must be an array"));
-                }
+                let operator =
+                    crate::query::where_operator(params.filter_operator.as_deref().unwrap_or("eq"));
+                crate::query::validate_where_operand(operator, expected)?;
+                let field = if matches!(field.as_str(), "id" | "_id") {
+                    "id"
+                } else {
+                    crate::user_query::declared_field(field, &schema)
+                        .map(|(logical, _)| logical)
+                        .ok_or_else(|| {
+                            AuthError::config(format!("Field {field} not found in model member"))
+                        })?
+                };
+                self.model_fields.begin_id_query(EntityRole::Member)?;
                 let expected = if field == "id" {
                     self.memory_primary_id_query(expected)?
                 } else {
                     self.memory_field_query(&schema, field, expected.clone())?
                 };
-                Some((field, operator, expected))
+                Some((schema.record_storage_key(field), operator, expected))
             } else {
                 None
             };
+        let organization_column = schema.record_storage_key("organizationId");
+        let organization_id = organization_id.field_value();
         let (sources, total) = crate::observability::database::with_database_operation(
             &self.config,
             "member",
             "findMany",
             async {
-                let mut members = {
+                let members = {
                     let state = self.lock()?;
                     state
                         .members
-                        .select_refs(|member| {
-                            organization_value(member, &schema, "organizationId")
-                                .strict_equals(&organization_id.field_value())
-                        })?
+                        .select_refs(|_| true)?
                         .into_iter()
                         .map(|source| {
                             let snapshot = source.read(|row| Ok(row.clone()))?;
@@ -288,83 +296,30 @@ impl MemberStore for EphemeralStore {
                         })
                         .collect::<AuthResult<Vec<_>>>()?
                 };
-                if let Some((field, operator, expected)) = filter {
-                    let matches_member = |member: &FieldMap| -> AuthResult<bool> {
-                        let Some(actual) = value(member, field) else {
-                            return Ok(true);
-                        };
-                        if matches!(operator, "in" | "not_in") {
-                            let values = expected
-                                .as_array()
-                                .ok_or_else(|| AuthError::internal("Value must be an array"))?;
-                            let contains = values
-                                .iter()
-                                .any(|expected| actual.same_value_zero(expected));
-                            return Ok(if operator == "in" {
-                                contains
-                            } else {
-                                !contains
-                            });
-                        }
-                        if actual.is_null() {
-                            return Ok(false);
-                        }
-                        let expected = if field == "createdAt"
-                            && expected.is_string()
-                            && !schema
-                                .fields()
-                                .get(field)
-                                .is_some_and(|field| field.references_id())
-                        {
-                            match expected
-                                .as_str()
-                                .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-                            {
-                                Some(date) => Value::from(date.with_timezone(&Utc)),
-                                None => return Ok(false),
-                            }
-                        } else {
-                            expected.clone()
-                        };
-                        Ok(match operator {
-                            "eq" => actual.strict_equals(&expected),
-                            "ne" => !actual.strict_equals(&expected),
-                            "contains" | "starts_with" | "ends_with" => {
-                                let actual = actual.display_utf16()?;
-                                let expected = expected.display_utf16()?;
-                                let (actual, expected) = (actual.as_utf16(), expected.as_utf16());
-                                match operator {
-                                    "starts_with" => actual.starts_with(expected),
-                                    "ends_with" => actual.ends_with(expected),
-                                    _ => {
-                                        expected.is_empty()
-                                            || actual
-                                                .windows(expected.len())
-                                                .any(|part| part == expected)
-                                    }
-                                }
-                            }
-                            "gt" | "gte" | "lt" | "lte" => {
-                                use std::cmp::Ordering::{Equal, Greater, Less};
-                                let ordering = crate::query::field_compare(&actual, &expected)?;
-                                matches!(
-                                    (operator, ordering),
-                                    ("gt" | "gte", Some(Greater))
-                                        | ("lt" | "lte", Some(Less))
-                                        | ("gte" | "lte", Some(Equal))
-                                )
-                            }
-                            _ => true,
-                        })
-                    };
-                    let mut selected = Vec::with_capacity(members.len());
-                    for member in members {
-                        if matches_member(&member.0)? {
-                            selected.push(member);
-                        }
+                let mut selected = Vec::with_capacity(members.len());
+                for member in members {
+                    let clauses = std::iter::once((
+                        organization_column,
+                        crate::WhereOperator::Eq,
+                        &organization_id,
+                    ))
+                    .chain(
+                        filter
+                            .as_ref()
+                            .map(|(field, operator, expected)| (*field, *operator, expected)),
+                    );
+                    if crate::memory_query::matches_all(clauses, |(field, operator, expected)| {
+                        crate::memory_query::matches(
+                            member.0.get(field),
+                            expected,
+                            operator,
+                            crate::WhereMode::Sensitive,
+                        )
+                    })? {
+                        selected.push(member);
                     }
-                    members = selected;
                 }
+                let mut members = selected;
                 let field = params.sort_by.as_deref().unwrap_or("createdAt");
                 let descending = params.sort_direction.as_deref() == Some("desc");
                 crate::memory_sort::sort(&mut members, descending, |(member, _)| {

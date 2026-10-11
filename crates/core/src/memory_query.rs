@@ -1,42 +1,59 @@
-use crate::{
-    AuthError, AuthResult, DeviceCodeWhere, FieldMap, FieldValue as Value, WhereMode, WhereOperator,
-};
+use crate::{AuthError, AuthResult, FieldValue as Value, WhereMode, WhereOperator};
 use std::cmp::Ordering;
 
-pub(super) fn matches(row: &FieldMap, query: &DeviceCodeWhere) -> AuthResult<bool> {
-    let actual = row.get(&query.field);
-    let insensitive = query.mode == WhereMode::Insensitive
-        && (query.value.is_string()
-            || query
-                .value
+pub(crate) fn matches_all<T: Copy>(
+    clauses: impl IntoIterator<Item = T>,
+    mut evaluate: impl FnMut(T) -> AuthResult<bool>,
+) -> AuthResult<bool> {
+    let mut clauses = clauses.into_iter();
+    let Some(first) = clauses.next() else {
+        return Ok(true);
+    };
+    let mut matched = evaluate(first)?;
+    // The Memory adapter evaluates the first clause twice and never short-circuits later clauses.
+    for clause in std::iter::once(first).chain(clauses) {
+        let clause_matches = evaluate(clause)?;
+        matched &= clause_matches;
+    }
+    Ok(matched)
+}
+
+pub(crate) fn matches(
+    actual: Option<&Value>,
+    expected: &Value,
+    operator: WhereOperator,
+    mode: WhereMode,
+) -> AuthResult<bool> {
+    let insensitive = mode == WhereMode::Insensitive
+        && (expected.is_string()
+            || expected
                 .as_array()
                 .is_some_and(|values| values.iter().all(Value::is_string)));
-    match query.operator {
-        WhereOperator::Eq if query.value.is_null() => {
+    match operator {
+        WhereOperator::Eq if expected.is_null() => {
             Ok(actual.is_none_or(|value| value.is_null() || value.is_undefined()))
         }
-        WhereOperator::Eq => Ok(strict_equals(actual, &query.value, insensitive)),
-        WhereOperator::Ne => Ok(!strict_equals(actual, &query.value, insensitive)),
+        WhereOperator::Eq => Ok(strict_equals(actual, expected, insensitive)),
+        WhereOperator::Ne => Ok(!strict_equals(actual, expected, insensitive)),
         WhereOperator::In | WhereOperator::NotIn => {
-            let values = query
-                .value
+            let values = expected
                 .as_array()
                 .ok_or_else(|| AuthError::internal("Value must be an array"))?;
             let present = values
                 .iter()
                 .any(|value| includes(actual, value, insensitive));
-            Ok(if query.operator == WhereOperator::In {
+            Ok(if operator == WhereOperator::In {
                 present
             } else {
                 !present
             })
         }
         WhereOperator::Lt | WhereOperator::Lte | WhereOperator::Gt | WhereOperator::Gte => {
-            if query.value.is_null() {
+            if expected.is_null() || expected.is_undefined() {
                 return Ok(false);
             }
-            let ordering = compare(actual, &query.value)?;
-            Ok(match query.operator {
+            let ordering = compare(actual, expected)?;
+            Ok(match operator {
                 WhereOperator::Lt => ordering == Some(Ordering::Less),
                 WhereOperator::Lte => matches!(ordering, Some(Ordering::Less | Ordering::Equal)),
                 WhereOperator::Gt => ordering == Some(Ordering::Greater),
@@ -44,17 +61,18 @@ pub(super) fn matches(row: &FieldMap, query: &DeviceCodeWhere) -> AuthResult<boo
             })
         }
         WhereOperator::Contains | WhereOperator::StartsWith | WhereOperator::EndsWith => {
-            pattern(actual, &query.value, query.operator, insensitive)
+            pattern(actual, expected, operator, insensitive)
         }
     }
 }
 
 fn strict_equals(actual: Option<&Value>, expected: &Value, insensitive: bool) -> bool {
-    if insensitive {
-        return actual
+    if insensitive
+        && let Some((actual, expected)) = actual
             .and_then(crate::query::field_string_units)
             .zip(crate::query::field_string_units(expected))
-            .is_some_and(|(actual, expected)| lowercase(&actual) == lowercase(&expected));
+    {
+        return lowercase(&actual) == lowercase(&expected);
     }
     actual.unwrap_or(&Value::Undefined).strict_equals(expected)
 }
@@ -70,10 +88,7 @@ fn includes(actual: Option<&Value>, expected: &Value, insensitive: bool) -> bool
 }
 
 fn compare(actual: Option<&Value>, expected: &Value) -> AuthResult<Option<Ordering>> {
-    let Some(actual) = actual else {
-        return Ok(None);
-    };
-    crate::query::field_compare(actual, expected)
+    crate::query::field_compare(actual.unwrap_or(&Value::Undefined), expected)
 }
 
 fn pattern(

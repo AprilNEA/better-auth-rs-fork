@@ -198,9 +198,9 @@ async fn member_queries_use_typed_storage_before_output_transforms() -> AuthResu
     params.filter_operator = Some("contains".into());
     for filter in ["0xa", "1e1"] {
         params.filter_value = Some(filter.into());
-        let (members, total) = store.query_organization_members(&params).await?;
-        assert_eq!(total, 1);
-        assert_eq!(members[0].user_id, "second");
+        let error = store.query_organization_members(&params).await.unwrap_err();
+        assert!(matches!(error, AuthError::Internal(message)
+            if message == "record[field].includes is not a function"));
     }
     params.filter_field = Some("enabled".into());
     params.filter_value = Some("false".into());
@@ -210,9 +210,9 @@ async fn member_queries_use_typed_storage_before_output_transforms() -> AuthResu
     assert_eq!(members[0].user_id, "first");
     params.filter_operator = Some("contains".into());
     params.filter_value = Some("not-true".into());
-    let (members, total) = store.query_organization_members(&params).await?;
-    assert_eq!(total, 1);
-    assert_eq!(members[0].user_id, "first");
+    let error = store.query_organization_members(&params).await.unwrap_err();
+    assert!(matches!(error, AuthError::Internal(message)
+        if message == "record[field].includes is not a function"));
     params.filter_field = Some("role".into());
     params.filter_value = Some(Value::from_json(json!({"toString": null}))?);
     params.filter_operator = Some("eq".into());

@@ -226,6 +226,10 @@ fn additional_filter<'a>(
     let Some(value) = params.filter_value.as_ref() else {
         return Ok(None);
     };
+    crate::query::validate_where_operand(
+        crate::query::where_operator(params.filter_operator.as_deref().unwrap_or("eq")),
+        value,
+    )?;
     let name = params
         .filter_field
         .as_deref()
@@ -275,65 +279,12 @@ fn matches_value(actual: Option<&Value>, expected: &Value, operator: &str) -> bo
 }
 
 fn matches_memory_value(actual: &Value, expected: &Value, operator: &str) -> AuthResult<bool> {
-    match operator {
-        "eq" => Ok(crate::query::field_matches_equality(actual, expected)),
-        "ne" => Ok(!actual.strict_equals(expected)),
-        "in" | "not_in" => {
-            let values = expected
-                .as_array()
-                .ok_or_else(|| crate::AuthError::internal("Value must be an array"))?;
-            let present = values
-                .iter()
-                .any(|expected| actual.same_value_zero(expected));
-            Ok(if operator == "in" { present } else { !present })
-        }
-        "lt" | "lte" | "gt" | "gte" => {
-            if expected.is_null() {
-                return Ok(false);
-            }
-            let order = crate::query::field_compare(actual, expected)?;
-            Ok(match operator {
-                "lt" => order == Some(Ordering::Less),
-                "lte" => matches!(order, Some(Ordering::Less | Ordering::Equal)),
-                "gt" => order == Some(Ordering::Greater),
-                _ => matches!(order, Some(Ordering::Greater | Ordering::Equal)),
-            })
-        }
-        "contains" | "starts_with" | "ends_with" => {
-            if operator == "contains" {
-                match actual {
-                    Value::Undefined | Value::Null => return Ok(false),
-                    Value::Array(values) => {
-                        return Ok(values.iter().any(|value| value.same_value_zero(expected)));
-                    }
-                    _ => {}
-                }
-            }
-            if matches!(actual, Value::String(_) | Value::Utf16String(_)) {
-                return Ok(compare_string(
-                    actual,
-                    &Value::from(expected.display_utf16()?),
-                    operator,
-                ));
-            }
-            let method = match operator {
-                "contains" => "includes",
-                "starts_with" => "startsWith",
-                _ => "endsWith",
-            };
-            let message = match actual {
-                Value::Undefined => {
-                    format!("undefined is not an object (evaluating 'record[field].{method}')")
-                }
-                Value::Null => {
-                    format!("null is not an object (evaluating 'record[field].{method}')")
-                }
-                _ => format!("record[field].{method} is not a function"),
-            };
-            Err(crate::AuthError::internal(message))
-        }
-        _ => Ok(false),
-    }
+    crate::memory_query::matches(
+        Some(actual),
+        expected,
+        crate::query::where_operator(operator),
+        crate::WhereMode::Sensitive,
+    )
 }
 
 fn matches_record(
@@ -467,11 +418,17 @@ impl<'a> PreparedUserQuery<'a> {
         fields: &'a UserConfig,
         mut on_field: impl FnMut() -> AuthResult<()>,
     ) -> AuthResult<Self> {
-        if params
+        if let Some(value) = params
             .search_value
             .as_deref()
-            .is_some_and(|value| !value.is_empty())
+            .filter(|value| !value.is_empty())
         {
+            crate::query::validate_where_operand(
+                crate::query::where_operator(
+                    params.search_operator.as_deref().unwrap_or("contains"),
+                ),
+                &Value::from(value),
+            )?;
             let name = params
                 .search_field
                 .as_deref()
@@ -547,46 +504,46 @@ impl<'a> PreparedUserQuery<'a> {
     }
 
     fn matches_memory(&self, record: (&UserView, &FieldMap)) -> AuthResult<bool> {
-        if let Some(expected) = self
+        let search_value = self
             .params
             .search_value
             .as_deref()
             .filter(|value| !value.is_empty())
-        {
+            .map(Value::from);
+        let search = search_value.as_ref().map(|expected| {
             let field = self
                 .params
                 .search_field
                 .as_deref()
                 .filter(|name| !name.is_empty())
                 .unwrap_or("email");
-            if !matches_memory_value(
-                &self.memory_value(record, field)?,
-                self.memory_search
-                    .as_ref()
-                    .unwrap_or(&Value::from(expected)),
+            (
+                field,
+                self.memory_search.as_ref().unwrap_or(expected),
                 self.params.search_operator.as_deref().unwrap_or("contains"),
-            )? {
-                return Ok(false);
-            }
-        }
-        let Some(expected) = self
+            )
+        });
+        let filter = self
             .memory_filter
             .as_ref()
             .or_else(|| self.filter.as_ref().map(|(_, _, value)| value))
             .or(self.params.filter_value.as_ref())
-        else {
-            return Ok(true);
-        };
-        let field = self
-            .params
-            .filter_field
-            .as_deref()
-            .filter(|name| !name.is_empty())
-            .unwrap_or("email");
-        matches_memory_value(
-            &self.memory_value(record, field)?,
-            expected,
-            self.params.filter_operator.as_deref().unwrap_or("eq"),
+            .map(|expected| {
+                (
+                    self.params
+                        .filter_field
+                        .as_deref()
+                        .filter(|name| !name.is_empty())
+                        .unwrap_or("email"),
+                    expected,
+                    self.params.filter_operator.as_deref().unwrap_or("eq"),
+                )
+            });
+        crate::memory_query::matches_all(
+            search.into_iter().chain(filter),
+            |(field, expected, operator)| {
+                matches_memory_value(&self.memory_value(record, field)?, expected, operator)
+            },
         )
     }
 

@@ -5,8 +5,6 @@ use crate::store::schema::{EntityRole, resolve_field_name};
 #[cfg(test)]
 #[path = "device_claim_tests.rs"]
 mod claim_tests;
-#[path = "device_query.rs"]
-mod query;
 
 #[derive(Clone)]
 struct DeviceCodeOrigin {
@@ -319,7 +317,12 @@ impl DeviceCodeStore for EphemeralStore {
                 // Evaluate ownership for every row before deletion; another row can still fail the operation.
                 for source in state.device_codes.select_refs(|_| true)? {
                     let matches = source.read(|row| {
-                        let owns = query::matches(row, &query)?;
+                        let owns = crate::memory_query::matches(
+                            row.get(&query.field),
+                            &query.value,
+                            query.operator,
+                            query.mode,
+                        )?;
                         Ok(unchanged
                             && owns
                             && names.iter().zip(&columns).all(|(name, column)| {

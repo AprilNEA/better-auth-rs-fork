@@ -541,7 +541,7 @@ pub(crate) async fn run<S: AuthSchema>(
                 assert_eq!(message, expected.message);
                 None
             }
-            (Some(expected), Err(AuthError::Internal(message)))
+            (Some(expected), Err(AuthError::Config(message)))
                 if case.condition.get(1).is_some_and(|query| {
                     query.get("operator").and_then(Value::as_str) == Some("in")
                         && query.get("value").is_some_and(|value| !value.is_array())

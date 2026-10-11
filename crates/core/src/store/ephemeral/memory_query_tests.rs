@@ -1,0 +1,163 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "The paired contract asserts property-read order, original errors, complete results, and unchanged storage"
+)]
+
+use crate::{
+    AuthConfig, AuthError, AuthResult, CreateUser, FieldDate, FieldMap, FieldObject, FieldValue,
+    ListUsersParams,
+    field_value::FieldObjectSource,
+    store::{EphemeralStore, RuntimeStore, UserStore, schema::EntityRole},
+    user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform},
+};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
+
+type Trace = Arc<Mutex<Vec<&'static str>>>;
+
+fn record(trace: &Trace, event: &'static str) -> AuthResult<()> {
+    trace
+        .lock()
+        .map_err(|_| AuthError::internal("Memory query trace lock poisoned"))?
+        .push(event);
+    Ok(())
+}
+
+fn snapshot(store: &EphemeralStore) -> AuthResult<Vec<Vec<FieldMap>>> {
+    [
+        EntityRole::User,
+        EntityRole::Session,
+        EntityRole::Account,
+        EntityRole::Verification,
+        EntityRole::Organization,
+        EntityRole::Member,
+        EntityRole::Invitation,
+        EntityRole::Team,
+        EntityRole::TeamMember,
+        EntityRole::OrganizationRole,
+    ]
+    .into_iter()
+    .map(|role| store.storage_rows(role))
+    .collect()
+}
+
+struct ObservedOperand {
+    trace: Trace,
+    reads: AtomicUsize,
+    reject_second: bool,
+}
+
+impl FieldObjectSource for ObservedOperand {
+    fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        if name == "toString" {
+            record(&self.trace, "get toString")?;
+            let read = self.reads.fetch_add(1, Ordering::SeqCst);
+            if self.reject_second && read == 1 {
+                return Err(AuthError::internal("second-property-read-original"));
+            }
+        }
+        // Absence selects the built-in object string conversion without calling an application method.
+        Ok(None)
+    }
+
+    fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal("The query must not write its operand"))
+    }
+
+    fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal(
+            "The query must not delete operand properties",
+        ))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        Err(AuthError::internal(
+            "The query must not snapshot its operand",
+        ))
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self) as usize
+    }
+}
+
+#[tokio::test]
+async fn memory_user_repeats_first_clause_property_reads_before_projection_and_count()
+-> AuthResult<()> {
+    for reject_second in [false, true] {
+        let writer = EphemeralStore::new(Arc::new(AuthConfig::default()));
+        let _ = writer
+            .create_user(CreateUser {
+                id: Some("seed".into()),
+                created_at: Some(FieldDate::from_milliseconds(1_893_456_001_000.0)),
+                updated_at: Some(FieldDate::from_milliseconds(1_893_456_001_000.0)),
+                ..CreateUser::new()
+                    .with_name("Middle")
+                    .with_email("seed@memory-where.test")
+            })
+            .await?;
+        let before = snapshot(&writer)?;
+        let trace = Trace::default();
+        let input = trace.clone();
+        let output = trace.clone();
+        let mut config = AuthConfig::default();
+        let _ = config.user.fields_mut().insert(
+            "name".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new(move |value| {
+                        record(&input, "input")?;
+                        Ok(value)
+                    })),
+                    output: Some(UserFieldTransform::new(move |value| {
+                        record(&output, "output")?;
+                        Ok(value)
+                    })),
+                }),
+                ..Default::default()
+            },
+        );
+        let store = writer.with_runtime(Arc::new(config), Vec::new(), Default::default())?;
+        let source = Arc::new(ObservedOperand {
+            trace: trace.clone(),
+            reads: AtomicUsize::new(0),
+            reject_second,
+        });
+        let operand = FieldValue::Object(FieldObject::from_source(source));
+        let result = store
+            .list_users(ListUsersParams {
+                filter_field: Some("name".into()),
+                filter_operator: Some("gt".into()),
+                filter_value: Some(operand),
+                ..Default::default()
+            })
+            .await;
+        let events = std::mem::take(
+            &mut *trace
+                .lock()
+                .map_err(|_| AuthError::internal("Memory query trace lock poisoned"))?,
+        );
+        if reject_second {
+            assert!(
+                matches!(&result, Err(AuthError::Internal(message)) if message == "second-property-read-original"),
+                "{result:?}"
+            );
+            assert_eq!(events, ["get toString", "get toString"]);
+        } else {
+            assert_eq!(result?, (Vec::new(), 0));
+            assert_eq!(
+                events,
+                [
+                    "get toString",
+                    "get toString",
+                    "get toString",
+                    "get toString"
+                ]
+            );
+        }
+        assert_eq!(snapshot(&writer)?, before);
+    }
+    Ok(())
+}

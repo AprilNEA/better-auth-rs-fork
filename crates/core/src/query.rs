@@ -7,6 +7,33 @@ use serde_json::{Map, Value, json};
 
 use crate::{AuthResponse, AuthResult, FieldValue};
 
+pub(crate) fn where_operator(operator: &str) -> crate::WhereOperator {
+    use crate::WhereOperator;
+    match operator {
+        "ne" => WhereOperator::Ne,
+        "lt" => WhereOperator::Lt,
+        "lte" => WhereOperator::Lte,
+        "gt" => WhereOperator::Gt,
+        "gte" => WhereOperator::Gte,
+        "in" => WhereOperator::In,
+        "not_in" => WhereOperator::NotIn,
+        "contains" => WhereOperator::Contains,
+        "starts_with" => WhereOperator::StartsWith,
+        "ends_with" => WhereOperator::EndsWith,
+        _ => WhereOperator::Eq,
+    }
+}
+
+pub(crate) fn validate_where_operand(
+    operator: crate::WhereOperator,
+    value: &FieldValue,
+) -> AuthResult<()> {
+    if operator == crate::WhereOperator::In && !value.is_array() {
+        return Err(crate::AuthError::config("Value must be an array"));
+    }
+    Ok(())
+}
+
 /// Decode HTTP query pairs without discarding repeated values or literal bracketed names.
 pub fn parse_url_query(query: &str) -> Value {
     let mut result = Map::new();

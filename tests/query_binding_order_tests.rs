@@ -20,6 +20,8 @@ type Trace = Arc<Mutex<Vec<&'static str>>>;
 
 #[path = "query_binding_order_tests/empty_in.rs"]
 mod empty_in;
+#[path = "query_binding_order_tests/memory_where.rs"]
+mod memory_where;
 #[path = "query_binding_order_tests/multiple_conditions.rs"]
 mod multiple_conditions;
 
