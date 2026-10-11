@@ -7,7 +7,7 @@ use josekit::jwe::{self, Dir, JweHeader};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::{AuthError, AuthResult, config::SecretKey};
+use crate::{AuthError, AuthResult, FieldMap, StructuredCloneContext, config::SecretKey};
 
 fn encryption_key(secret: &str, salt: &str) -> AuthResult<[u8; 64]> {
     let mut key = [0; 64];
@@ -24,30 +24,43 @@ fn key_id(key: &[u8]) -> String {
 
 /// Encrypt a JWT with the current secret and the specified cookie purpose.
 pub fn encode<'a>(
-    mut payload: Map<String, Value>,
+    payload: Map<String, Value>,
+    secret: impl Into<SecretKey<'a>>,
+    salt: &str,
+    expires_in: f64,
+) -> AuthResult<String> {
+    encode_fields(FieldMap::from_json(payload)?, secret, salt, expires_in)
+}
+
+/// Clone native claims at the JOSE builder boundary, then encrypt with the current secret.
+pub fn encode_fields<'a>(
+    payload: FieldMap,
     secret: impl Into<SecretKey<'a>>,
     salt: &str,
     expires_in: f64,
 ) -> AuthResult<String> {
     let key = encryption_key(secret.into().current()?, salt)?;
+    let key_id = key_id(&key);
+    let mut payload = StructuredCloneContext::new().clone_map(&payload)?;
     let now = Utc::now().timestamp();
     let _ = payload.insert("iat".into(), now.into());
     let _ = payload.insert(
         "exp".into(),
-        crate::wire::serialize_optional_number(
-            &Some(now as f64 + expires_in),
-            serde_json::value::Serializer,
+        super::jwt::numeric_date(
+            &(Utc::now().timestamp() as f64 + expires_in).into(),
+            "setExpirationTime",
         )?,
     );
     let _ = payload.insert("jti".into(), uuid::Uuid::new_v4().to_string().into());
     let mut header = JweHeader::new();
     header.set_algorithm("dir");
     header.set_content_encryption("A256CBC-HS512");
-    header.set_key_id(key_id(&key));
+    header.set_key_id(key_id);
+    let payload = super::jwt::serialize_claims(payload)?;
     let encrypter = Dir
         .encrypter_from_bytes(key)
         .map_err(|error| AuthError::internal(format!("Create cookie encrypter: {error}")))?;
-    jwe::serialize_compact(&serde_json::to_vec(&payload)?, &header, &encrypter)
+    jwe::serialize_compact(payload.as_bytes(), &header, &encrypter)
         .map_err(|error| AuthError::internal(format!("Encrypt cookie: {error}")))
 }
 

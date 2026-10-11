@@ -66,6 +66,8 @@ mod passkey_update_ids;
 mod presence;
 #[path = "plugin_model_fields_tests/presence_cache.rs"]
 mod presence_cache;
+#[path = "plugin_model_fields_tests/response_to_json.rs"]
+mod response_to_json;
 
 #[derive(Clone)]
 struct Fields(Vec<(EntityRole, UserConfig)>);

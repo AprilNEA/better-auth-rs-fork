@@ -394,14 +394,27 @@ async fn contract<S: AuthSchema>(
         ),
         expected["cookies"]
     );
-    assert_eq!(
-        response_body,
-        serde_json::from_str::<Value>(
-            expected["body"]
-                .as_str()
-                .ok_or("Missing captured response body")?
-        )?
-    );
+    let expected_body = serde_json::from_str::<Value>(
+        expected["body"]
+            .as_str()
+            .ok_or("Missing captured response body")?,
+    )?;
+    assert_eq!(response_body, expected_body);
+    if response.status == 200 {
+        assert_eq!(
+            response_body
+                .as_object()
+                .ok_or("Expected token refresh object")?
+                .keys()
+                .collect::<Vec<_>>(),
+            expected_body
+                .as_object()
+                .ok_or("Missing captured token refresh object")?
+                .keys()
+                .collect::<Vec<_>>(),
+            "Refresh response properties must retain the upstream order",
+        );
+    }
     assert_eq!(
         comparable_events(observed_events),
         comparable_events(expected_events)

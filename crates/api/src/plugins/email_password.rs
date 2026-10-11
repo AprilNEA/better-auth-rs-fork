@@ -5,6 +5,7 @@ use std::sync::Arc;
 use better_auth_core::entity::{AuthSession, AuthUser};
 use better_auth_core::{AuthContext, AuthPlugin, AuthRoute};
 use better_auth_core::{AuthError, AuthResult};
+use better_auth_core::{AuthRecordFields, FieldMap, FieldValue};
 use better_auth_core::{AuthRequest, AuthResponse, HttpMethod, RequestMeta};
 
 use super::email_verification::EmailVerificationPlugin;
@@ -125,6 +126,16 @@ pub(crate) struct SignUpResponse {
     user: better_auth_core::FieldMap,
 }
 
+impl SignUpResponse {
+    fn into_field_value(self) -> FieldValue {
+        FieldMap::from([
+            ("token".into(), self.token),
+            ("user".into(), self.user.into()),
+        ])
+        .into()
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct SignInResponse<U: Serialize> {
     redirect: bool,
@@ -133,6 +144,21 @@ pub(crate) struct SignInResponse<U: Serialize> {
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<String>,
     user: U,
+}
+
+impl SignInResponse<UserView> {
+    pub(crate) fn into_field_value(self) -> AuthResult<FieldValue> {
+        Ok(FieldMap::from([
+            ("redirect".into(), self.redirect.into()),
+            ("token".into(), self.token.into_field_value()),
+            (
+                "url".into(),
+                self.url.map(FieldValue::from).unwrap_or_default(),
+            ),
+            ("user".into(), self.user.field_values()?.into()),
+        ])
+        .into())
+    }
 }
 
 pub(crate) struct SignInCoreResult<U: Serialize> {
@@ -228,7 +254,7 @@ impl EmailPasswordPlugin {
 
         let response = sign_up_core(&signup_req, endpoint_body, &self.config, req, ctx).await?;
 
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_sign_in(
@@ -252,7 +278,10 @@ impl EmailPasswordPlugin {
             ctx,
         )
         .await?;
-        AuthResponse::json(None, &result.response)
+        Ok(AuthResponse::native(
+            None,
+            result.response.into_field_value()?,
+        ))
     }
 
     async fn handle_sign_in_username(

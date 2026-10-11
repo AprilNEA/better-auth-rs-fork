@@ -23,7 +23,7 @@ impl InputValue {
     fn json(&self) -> AuthResult<Option<Value>> {
         match self {
             Self::Json(value) => Ok(value.clone()),
-            Self::Native(value) => value.json(),
+            Self::Native(value) => crate::field_value::project_input_json(value),
         }
     }
 
@@ -146,7 +146,8 @@ impl AuthRequest {
         }
     }
 
-    /// Return endpoint input without changing the original Request bytes.
+    /// Project JSON-only endpoint input without invoking `toJSON` or changing Request bytes.
+    /// Use `input_field_value` to retain native values and handles.
     pub fn input_body(&self) -> AuthResult<Option<Value>> {
         if let Some(body) = self
             .endpoint_body

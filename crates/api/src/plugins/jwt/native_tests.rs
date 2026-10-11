@@ -342,9 +342,9 @@ async fn cookie_verification_uses_header_algorithm_only_when_configuration_and_r
         .unwrap();
     let token = signer
         .sign(
-            serde_json::from_value(
+            FieldMap::from_json(serde_json::from_value(
                 json!({"user":{"id":"owner"},"session":{"token":"session-token"}}),
-            )?,
+            )?)?,
             60.0,
             SessionCookieContext {
                 request: &request,
@@ -380,3 +380,6 @@ async fn cookie_verification_uses_header_algorithm_only_when_configuration_and_r
     }
     Ok(())
 }
+
+#[path = "native_json_tests.rs"]
+mod json_tests;

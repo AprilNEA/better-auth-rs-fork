@@ -111,6 +111,15 @@ mod tests {
             ("date".into(), better_auth_core::FieldDate::invalid().into()),
             ("number".into(), FieldValue::Number(f64::INFINITY)),
             ("missing".into(), FieldValue::Undefined),
+            (
+                "toJSON".into(),
+                better_auth_core::FieldFunction::contextual(|_, _| {
+                    Err(better_auth_core::AuthError::internal(
+                        "Input projection must not call toJSON",
+                    ))
+                })
+                .into(),
+            ),
         ])
         .into();
         let fields = FieldMap::from([
@@ -129,6 +138,23 @@ mod tests {
         assert!(fields["date"].as_date().unwrap().milliseconds().is_nan());
         assert_eq!(fields["number"].as_f64(), Some(f64::INFINITY));
         assert!(fields.contains_key("missing"));
+        let mut request = better_auth_core::AuthRequest::new(
+            better_auth_core::HttpMethod::Post,
+            "/organization/create",
+        );
+        request.set_endpoint_body(body);
+        let projection = request.input_field_value()?;
+        let projection = projection.as_object().unwrap();
+        assert!(projection.get("metadata")?.unwrap().strict_equals(&shared));
+        assert!(projection.get("custom")?.unwrap().strict_equals(&shared));
+        assert_eq!(
+            request.input_body()?,
+            Some(serde_json::json!({
+                "name": "example", "slug": "example",
+                "metadata": {"date": null, "number": null},
+                "custom": {"date": null, "number": null}
+            }))
+        );
         Ok(())
     }
 }

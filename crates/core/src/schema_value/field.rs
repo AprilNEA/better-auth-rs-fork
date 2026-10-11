@@ -1,5 +1,5 @@
 use crate::{AuthError, AuthResult, FieldDate, FieldValue, types::InvitationStatus};
-use std::borrow::Cow;
+use std::{borrow::Cow, collections::HashSet};
 
 /// Convert a schema's default Rust type without crossing a JSON boundary.
 pub trait SchemaField: Clone {
@@ -202,13 +202,7 @@ impl<T: SchemaField> SchemaField for &T {
 
 impl SchemaField for serde_json::Value {
     fn from_field(value: FieldValue) -> Result<Self, FieldValue> {
-        if value.contains_live_object() {
-            return Err(value);
-        }
-        match value.json() {
-            Ok(Some(json)) if FieldValue::from(json.clone()) == value => Ok(json),
-            _ => Err(value),
-        }
+        json_structure(&value, &mut HashSet::new()).ok_or(value)
     }
 
     fn into_field(self) -> FieldValue {
@@ -216,9 +210,59 @@ impl SchemaField for serde_json::Value {
     }
 }
 
+// Typed probing reads only owned storage and does not evaluate getters or JSON conversion methods.
+fn json_structure(
+    value: &FieldValue,
+    active: &mut HashSet<crate::field_value::ContainerIdentity>,
+) -> Option<serde_json::Value> {
+    use crate::field_value::ContainerIdentity;
+    use serde_json::Value;
+
+    Some(match value {
+        FieldValue::Null => Value::Null,
+        FieldValue::Bool(value) => Value::Bool(*value),
+        FieldValue::Number(value) if value.is_finite() => {
+            serde_json::from_str(&super::number_string(*value)).ok()?
+        }
+        FieldValue::String(value) => Value::String(value.clone()),
+        FieldValue::Array(values) => {
+            let identity = ContainerIdentity::Array(values.identity());
+            if !active.insert(identity) {
+                return None;
+            }
+            let values = values
+                .owned_values()?
+                .iter()
+                .map(|value| json_structure(value, active))
+                .collect::<Option<_>>()?;
+            let _ = active.remove(&identity);
+            Value::Array(values)
+        }
+        FieldValue::Object(object) if !object.is_live() => {
+            let identity = ContainerIdentity::Object(object.identity());
+            if !active.insert(identity) {
+                return None;
+            }
+            let fields = object
+                .snapshot_fields()
+                .ok()?
+                .into_iter()
+                .map(|(name, value)| Some((name, json_structure(&value, active)?)))
+                .collect::<Option<_>>()?;
+            let _ = active.remove(&identity);
+            Value::Object(fields)
+        }
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod json_tests {
     use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
 
     #[test]
     fn json_import_preserves_negative_zero_extremes_and_nested_fields() -> crate::AuthResult<()> {
@@ -247,6 +291,48 @@ mod json_tests {
         ] {
             assert!(<serde_json::Value as SchemaField>::from_field(native).is_err());
         }
+        Ok(())
+    }
+
+    #[test]
+    fn json_probe_inspects_owned_structure_without_running_methods() -> AuthResult<()> {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let value: FieldValue = crate::FieldMap::from([
+            (
+                "toJSON".into(),
+                crate::FieldFunction::contextual({
+                    let calls = calls.clone();
+                    move |_, _| {
+                        let _ = calls.fetch_add(1, Ordering::SeqCst);
+                        Ok("converted".into())
+                    }
+                })
+                .into(),
+            ),
+            ("value".into(), 1.into()),
+        ])
+        .into();
+        let result = <serde_json::Value as SchemaField>::from_field(value.clone());
+        assert!(matches!(result, Err(original) if original.strict_equals(&value)));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(value.json()?, Some(serde_json::json!("converted")));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let value: FieldValue = crate::FieldMap::from([
+            ("toJSON".into(), "ordinary property".into()),
+            ("value".into(), vec![FieldValue::Null, true.into()].into()),
+        ])
+        .into();
+        assert_eq!(
+            <serde_json::Value as SchemaField>::from_field(value),
+            Ok(serde_json::json!({"toJSON": "ordinary property", "value": [null, true]})),
+        );
+        let object = crate::FieldObject::from(crate::FieldMap::new());
+        let _ = object.set("self", FieldValue::Object(object.clone()))?;
+        let value = FieldValue::Object(object.clone());
+        let result = <serde_json::Value as SchemaField>::from_field(value.clone());
+        let _ = object.delete("self")?;
+        assert!(matches!(result, Err(original) if original.strict_equals(&value)));
         Ok(())
     }
 }

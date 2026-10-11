@@ -21,6 +21,8 @@ pub(crate) use object::{FieldObjectSource, ObjectIdentity};
 mod structured_clone;
 pub use structured_clone::StructuredCloneContext;
 pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, prepare_clone};
+mod json;
+pub(crate) use json::project_input_json;
 mod primitive;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
@@ -138,17 +140,9 @@ impl FieldMap {
             .collect()
     }
 
-    /// Project object fields at a JSON boundary and omit undefined properties.
+    /// Prepare each child field at a JSON boundary without invoking a root `toJSON` method.
     pub fn json(&self) -> AuthResult<::serde_json::Map<String, JsonValue>> {
-        let mut ordered = self.clone();
-        ordered.sort_property_order();
-        let mut fields = ::serde_json::Map::new();
-        for (name, value) in ordered {
-            if let Some(value) = value.json()? {
-                let _ = fields.insert(name, value);
-            }
-        }
-        Ok(fields)
+        json::project_map(self)
     }
 }
 
@@ -256,7 +250,7 @@ impl FieldValue {
         matches!(self, Self::Undefined)
     }
 
-    /// Return whether JSON serialization omits this value at an object boundary.
+    /// Test for raw undefined or function values without invoking conversion hooks.
     pub fn is_json_omitted(&self) -> bool {
         matches!(self, Self::Undefined | Self::Function(_))
     }
@@ -389,104 +383,10 @@ impl FieldValue {
         Ok(value.into())
     }
 
-    /// Project at a JSON boundary. Top-level undefined and functions have no JSON value.
-    /// Object properties omit these values; array elements encode these values as null.
+    /// Prepare each property once, including its `toJSON` method, then project JSON values.
+    /// Prepared undefined and functions are absent at the root, omitted in objects, and null in arrays.
     pub fn json(&self) -> AuthResult<Option<JsonValue>> {
-        self.json_with_active(&mut HashSet::new())
-    }
-
-    fn json_with_active(
-        &self,
-        active: &mut HashSet<ContainerIdentity>,
-    ) -> AuthResult<Option<JsonValue>> {
-        Ok(Some(match self {
-            Self::Undefined | Self::Function(_) => return Ok(None),
-            Self::Null => JsonValue::Null,
-            Self::Bool(value) => JsonValue::Bool(*value),
-            Self::Number(_) => serde_json::to_value(serde::Json(self))?,
-            Self::String(value) => JsonValue::String(value.clone()),
-            Self::Utf16String(value) => JsonValue::String(value.to_utf8().map_err(|error| {
-                AuthError::internal(format!(
-                    "JSON value cannot represent unpaired UTF-16 surrogates: {error}"
-                ))
-            })?),
-            Self::Date(value) => value
-                .iso_string()?
-                .map_or(JsonValue::Null, JsonValue::String),
-            Self::Array(values) => {
-                let identity = ContainerIdentity::Array(values.identity());
-                if !active.insert(identity) {
-                    return Err(AuthError::type_error(
-                        "Converting circular structure to JSON",
-                    ));
-                }
-                let output = values
-                    .iter()?
-                    .map(|value| {
-                        value?
-                            .json_with_active(active)
-                            .map(|value| value.unwrap_or(JsonValue::Null))
-                    })
-                    .collect::<AuthResult<_>>()?;
-                let _ = active.remove(&identity);
-                JsonValue::Array(output)
-            }
-            Self::Object(values) => {
-                let identity = ContainerIdentity::Object(values.identity());
-                if !active.insert(identity) {
-                    return Err(AuthError::type_error(
-                        "Converting circular structure to JSON",
-                    ));
-                }
-                let mut output = serde_json::Map::new();
-                for name in values.own_keys()? {
-                    if let Some(value) = values.get(&name)?
-                        && let Some(value) = value.json_with_active(active)?
-                    {
-                        let _ = output.insert(name, value);
-                    }
-                }
-                let _ = active.remove(&identity);
-                JsonValue::Object(output)
-            }
-        }))
-    }
-
-    pub(crate) fn contains_live_object(&self) -> bool {
-        self.contains_live_object_with_seen(&mut HashSet::new())
-    }
-
-    fn contains_live_object_with_seen(&self, seen: &mut HashSet<ContainerIdentity>) -> bool {
-        match self {
-            Self::Object(object) => {
-                if object.is_live() {
-                    return true;
-                }
-                if !seen.insert(ContainerIdentity::Object(object.identity())) {
-                    return false;
-                }
-                // An inaccessible owned map cannot be decoded as an ordinary JSON value.
-                object.snapshot_fields().map_or(true, |fields| {
-                    fields
-                        .values()
-                        .any(|value| value.contains_live_object_with_seen(seen))
-                })
-            }
-            Self::Array(values) => {
-                if values.is_live() {
-                    return true;
-                }
-                if !seen.insert(ContainerIdentity::Array(values.identity())) {
-                    return false;
-                }
-                values.owned_values().is_none_or(|values| {
-                    values
-                        .iter()
-                        .any(|value| value.contains_live_object_with_seen(seen))
-                })
-            }
-            _ => false,
-        }
+        json::to_value(self)
     }
 
     /// Parse JSON without discarding lone UTF-16 surrogates or nested field ordering.
@@ -494,13 +394,9 @@ impl FieldValue {
         crate::utils::json::parse_field_json(text)
     }
 
-    /// Serialize with JavaScript property ordering, numeric formatting, and JSON value conversion.
+    /// Serialize with JavaScript property ordering, numeric formatting, and `toJSON` conversion.
     pub fn stringify(&self) -> AuthResult<Option<String>> {
-        if self.is_json_omitted() {
-            Ok(None)
-        } else {
-            serde::stringify(self).map(Some)
-        }
+        json::stringify(self)
     }
 }
 

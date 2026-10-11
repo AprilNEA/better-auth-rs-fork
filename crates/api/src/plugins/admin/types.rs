@@ -117,6 +117,13 @@ pub struct UserResponse<U: Serialize> {
     pub user: U,
 }
 
+impl UserResponse<AdminUserView> {
+    pub(crate) fn into_field_value(self) -> better_auth_core::FieldValue {
+        use better_auth_core::FieldMap;
+        FieldMap::from([("user".into(), FieldMap::from(self.user).into())]).into()
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub(crate) struct SessionUserResponse<S: Serialize, U: Serialize> {
     pub session: S,
@@ -131,6 +138,30 @@ pub(crate) struct ListUsersResponse<U: Serialize> {
     pub limit: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offset: Option<f64>,
+}
+
+impl ListUsersResponse<AdminUserView> {
+    pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
+        use better_auth_core::{FieldMap, FieldValue};
+        let users: Vec<FieldValue> = self
+            .users
+            .into_iter()
+            .map(|user| FieldMap::from(user).into())
+            .collect();
+        FieldMap::from([
+            ("users".into(), users.into()),
+            ("total".into(), self.total.into()),
+            (
+                "limit".into(),
+                self.limit.map(FieldValue::from).unwrap_or_default(),
+            ),
+            (
+                "offset".into(),
+                self.offset.map(FieldValue::from).unwrap_or_default(),
+            ),
+        ])
+        .into()
+    }
 }
 
 #[derive(Debug, Serialize)]

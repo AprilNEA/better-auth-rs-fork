@@ -199,7 +199,7 @@ async fn capture(
         let signer = cache::CookieSigner { plugin, runtime };
         signer
             .sign(
-                FieldMap::from(session.ok_or("Cookie capture requires Session data")?).json()?,
+                FieldMap::from(session.ok_or("Cookie capture requires Session data")?),
                 60.0,
                 SessionCookieContext {
                     request: &request,
@@ -449,8 +449,7 @@ async fn token_header_and_cookie_keys_observe_native_relationship_snapshots() ->
         .sign(
             FieldMap::from(data(
                 FieldMap::from([("id".into(), "owner".into())]).into(),
-            )?)
-            .json()?,
+            )?),
             60.0,
             cookie_context(),
         )

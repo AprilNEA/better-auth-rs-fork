@@ -249,7 +249,17 @@ impl PasswordManagementPlugin {
         let meta = RequestMeta::from_request_with_config(req, &ctx.config.advanced.ip_address);
 
         let response = change_password_core(&body, &user, &self.config, req, &meta, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(
+            None,
+            better_auth_core::FieldMap::from([
+                ("token".into(), response.token),
+                (
+                    "user".into(),
+                    better_auth_core::FieldMap::from(response.user).into(),
+                ),
+            ])
+            .into(),
+        ))
     }
 
     async fn handle_verify_password(

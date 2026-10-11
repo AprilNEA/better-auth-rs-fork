@@ -185,6 +185,17 @@ async fn google_client_ids_sign_in_and_one_tap_match_pinned_successes() -> TestR
                 .await?
                 .ok_or("missing code callback")?
         };
+        if mode == "direct" {
+            let fields = response.body.field_value()?.enumerable_fields()?;
+            assert_eq!(
+                fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                ["redirect", "token", "url", "user"]
+            );
+            assert!(matches!(
+                fields.get("url"),
+                Some(better_auth_core::FieldValue::Undefined)
+            ));
+        }
         let user = ctx
             .database
             .get_user_by_email(string(&metadata["profile"], "email")?)

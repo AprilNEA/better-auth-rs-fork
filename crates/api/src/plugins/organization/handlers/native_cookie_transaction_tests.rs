@@ -109,7 +109,7 @@ struct Signer {
 impl SessionCookieSigner<StatelessSchema> for Signer {
     async fn sign(
         &self,
-        _: serde_json::Map<String, serde_json::Value>,
+        _: FieldMap,
         _: f64,
         context: SessionCookieContext<'_, StatelessSchema>,
     ) -> AuthResult<String> {

@@ -10,10 +10,11 @@ use jsonwebtoken::errors::{Error as JwtError, ErrorKind};
 use sha2::Sha256;
 
 pub(super) fn sign(
-    payload: &Map<String, Value>,
+    payload: FieldMap,
     header: FieldMap,
     signer: &dyn JwsSigner,
 ) -> AuthResult<String> {
+    let payload = better_auth_core::utils::jwt::serialize_claims(payload)?;
     let serialized = FieldValue::from(header)
         .stringify()?
         .ok_or_else(|| AuthError::internal("JOSE Header is not valid JSON"))?;
@@ -22,7 +23,7 @@ pub(super) fn sign(
     let input = format!(
         "{}.{}",
         URL_SAFE_NO_PAD.encode(serialized),
-        URL_SAFE_NO_PAD.encode(serde_json::to_vec(payload)?)
+        URL_SAFE_NO_PAD.encode(payload)
     );
     let signature = signer.sign(input.as_bytes()).map_err(jose_error)?;
     Ok(format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature)))

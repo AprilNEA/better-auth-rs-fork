@@ -192,7 +192,7 @@ impl AdminPlugin {
         self.authorize(&session, "user", "set-role", MESSAGE_CHANGE_ROLE)?;
         let body: SetRoleRequest = request::read(req)?;
         let response = set_role_core(&body, &self.config, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_get_user(
@@ -209,7 +209,10 @@ impl AdminPlugin {
                 .unwrap_or_default(),
         };
         let response = get_user_core(&query, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(
+            None,
+            better_auth_core::FieldMap::from(response).into(),
+        ))
     }
 
     async fn handle_create_user(
@@ -223,14 +226,7 @@ impl AdminPlugin {
             self.authorize(session, "user", "create", MESSAGE_CREATE_USERS)?;
         }
         let response = create_user_core(&body, Some(req), session, &self.config, ctx).await?;
-        Ok(AuthResponse::native(
-            None,
-            better_auth_core::FieldMap::from([(
-                "user".into(),
-                better_auth_core::FieldMap::from(response.user).into(),
-            )])
-            .into(),
-        ))
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_update_user(
@@ -242,7 +238,12 @@ impl AdminPlugin {
         self.authorize(&session, "user", "update", MESSAGE_UPDATE_USERS)?;
         let body: AdminUpdateUserRequest = request::read(req)?;
         let response = update_user_core(&body, &session, &self.config, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(
+            None,
+            response
+                .map(|user| better_auth_core::FieldMap::from(user).into())
+                .unwrap_or(better_auth_core::FieldValue::Null),
+        ))
     }
 
     async fn handle_list_users(
@@ -256,13 +257,18 @@ impl AdminPlugin {
         // The upstream admin endpoint catches list/count/projection failures.
         let response = list_users_core(&query, ctx)
             .await
-            .unwrap_or_else(|_| ListUsersResponse {
-                users: Vec::new(),
-                total: 0,
-                limit: None,
-                offset: None,
+            .map(ListUsersResponse::into_field_value)
+            .unwrap_or_else(|_| {
+                better_auth_core::FieldMap::from([
+                    (
+                        "users".into(),
+                        Vec::<better_auth_core::FieldValue>::new().into(),
+                    ),
+                    ("total".into(), 0.into()),
+                ])
+                .into()
             });
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response))
     }
 
     async fn handle_list_user_sessions(
@@ -274,7 +280,15 @@ impl AdminPlugin {
         self.authorize(&session, "session", "list", MESSAGE_LIST_USER_SESSIONS)?;
         let body: UserIdRequest = request::read(req)?;
         let response = list_user_sessions_core(&body, ctx).await?;
-        AuthResponse::json(None, &response)
+        let sessions: Vec<better_auth_core::FieldValue> = response
+            .sessions
+            .into_iter()
+            .map(|session| better_auth_core::FieldMap::from(session).into())
+            .collect();
+        Ok(AuthResponse::native(
+            None,
+            better_auth_core::FieldMap::from([("sessions".into(), sessions.into())]).into(),
+        ))
     }
 
     async fn handle_ban_user(
@@ -287,7 +301,7 @@ impl AdminPlugin {
         let body: BanUserRequest = request::read(req)?;
         let response =
             ban_user_core(&body, &session.user_property("id")?, &self.config, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_unban_user(
@@ -299,7 +313,7 @@ impl AdminPlugin {
         self.authorize(&session, "user", "ban", MESSAGE_BAN_USERS)?;
         let body: UserIdRequest = request::read(req)?;
         let response = unban_user_core(&body, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_impersonate_user(
@@ -352,8 +366,20 @@ impl AdminPlugin {
             session: ctx.session_view(&response.session).await?,
             user: ctx.user_view(&response.user).await?,
         };
-        let auth_response = AuthResponse::json(None, &response)?;
-        Ok(auth_response)
+        Ok(AuthResponse::native(
+            None,
+            better_auth_core::FieldMap::from([
+                (
+                    "session".into(),
+                    better_auth_core::FieldMap::from(response.session).into(),
+                ),
+                (
+                    "user".into(),
+                    better_auth_core::FieldMap::from(response.user).into(),
+                ),
+            ])
+            .into(),
+        ))
     }
 
     async fn handle_stop_impersonating(

@@ -204,21 +204,162 @@ async fn payload_preserves_public_active_extension_and_omits_private_active() ->
         let session = payload
             .get("session")
             .ok_or_else(|| AuthError::internal("Missing cache Session"))?;
-        let mut expected = serde_json::Map::from_iter([
-            ("id".into(), Value::from("session")),
+        let mut expected = FieldMap::from([
+            ("id".into(), FieldValue::from("session")),
             ("token".into(), "token".into()),
             ("userId".into(), "owner".into()),
-            ("payload".into(), Value::Null),
+            ("payload".into(), FieldValue::Null),
         ]);
         if visible.is_some() {
             let _ = expected.insert("active".into(), "public-active".into());
         }
-        assert_eq!(session, &Value::Object(expected));
+        assert_eq!(
+            session
+                .as_object()
+                .ok_or_else(|| AuthError::internal("Cache Session is not an object"))?
+                .snapshot_fields()?,
+            expected
+        );
         assert!(data.session.active);
         assert_eq!(
             data.session.additional_fields.get("active"),
             visible.as_ref()
         );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn compact_serializes_live_session_children_twice_after_version() -> AuthResult<()> {
+    let events = Events::default();
+    let child = FieldObject::from(FieldMap::from([("serial".into(), 0.0.into())]));
+    let _ = child.set(
+        "toJSON",
+        crate::FieldFunction::contextual({
+            let events = events.clone();
+            move |receiver, arguments| {
+                assert_eq!(arguments, &[FieldValue::from("payload")]);
+                let serial = receiver
+                    .model_property("serial")?
+                    .as_f64()
+                    .ok_or_else(|| AuthError::internal("Missing live serial"))?
+                    + 1.0;
+                let _ = receiver
+                    .as_object()
+                    .ok_or_else(|| AuthError::internal("Missing toJSON receiver"))?
+                    .set("serial", serial.into())?;
+                record(&events, format!("payload:{serial}"))?;
+                Ok(FieldMap::from([("serial".into(), serial.into())]).into())
+            }
+        })
+        .into(),
+    )?;
+    let data = data(FieldValue::Object(child.clone()), "Owner".into())?;
+    let config = AuthConfig::new("cookie-live-contract-secret-at-least-thirty-two-characters");
+    let cache = CookieCacheConfig {
+        strategy: Some(CookieCacheStrategy::Compact),
+        version: CookieCacheVersion::dynamic({
+            let events = events.clone();
+            move |_| {
+                let events = events.clone();
+                async move {
+                    record(&events, "version")?;
+                    Ok("live".into())
+                }
+            }
+        }),
+        ..Default::default()
+    };
+    let encoded = encode(&data, &config, &cache, false).await?;
+    assert_eq!(child.get("serial")?, Some(2.0.into()));
+    assert_eq!(
+        *events
+            .lock()
+            .map_err(|_| AuthError::internal("Cache trace poisoned"))?,
+        ["version", "payload:1", "payload:2"]
+    );
+    let envelope: Value = serde_json::from_slice(
+        &URL_SAFE_NO_PAD
+            .decode(encoded)
+            .map_err(|error| AuthError::internal(error.to_string()))?,
+    )?;
+    assert_eq!(envelope["session"]["session"]["payload"]["serial"], 2);
+    let mut signed = envelope["session"]
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Missing signed payload"))?
+        .clone();
+    signed["session"]["payload"]["serial"] = 1.into();
+    let _ = signed.insert("expiresAt".into(), envelope["expiresAt"].clone());
+    let mut mac = Hmac::<Sha256>::new_from_slice(config.signing_secret().as_bytes())
+        .map_err(|error| AuthError::internal(error.to_string()))?;
+    mac.update(&serde_json::to_vec(&signed)?);
+    assert_eq!(
+        envelope["signature"],
+        URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_boundaries_reject_functions_before_to_json_and_preserve_absent_session_config()
+-> AuthResult<()> {
+    for strategy in [
+        CookieCacheStrategy::Compact,
+        CookieCacheStrategy::Jwt,
+        CookieCacheStrategy::Jwe,
+    ] {
+        for declared in [false, true] {
+            let events = Events::default();
+            let value = FieldMap::from([(
+                "toJSON".into(),
+                crate::FieldFunction::contextual({
+                    let events = events.clone();
+                    move |_, _| {
+                        record(&events, "toJSON")?;
+                        Ok("encoded".into())
+                    }
+                })
+                .into(),
+            )]);
+            let data = data(value.into(), "Owner".into())?;
+            let mut config =
+                AuthConfig::new("cookie-clone-contract-secret-at-least-thirty-two-characters");
+            if declared {
+                config.session.additional_fields = Some(Default::default());
+            }
+            let cache = CookieCacheConfig {
+                strategy: Some(strategy),
+                version: CookieCacheVersion::dynamic({
+                    let events = events.clone();
+                    move |_| {
+                        let events = events.clone();
+                        async move {
+                            record(&events, "version")?;
+                            Ok("native".into())
+                        }
+                    }
+                }),
+                ..Default::default()
+            };
+            let result = encode(&data, &config, &cache, false).await;
+            let expected: &[&str] = if declared {
+                assert!(matches!(result, Err(AuthError::DataClone)));
+                &[]
+            } else if matches!(strategy, CookieCacheStrategy::Compact) {
+                assert!(result.is_ok());
+                &["version", "toJSON", "toJSON"]
+            } else {
+                assert!(matches!(result, Err(AuthError::DataClone)));
+                &["version"]
+            };
+            assert_eq!(
+                *events
+                    .lock()
+                    .map_err(|_| AuthError::internal("Cache trace poisoned"))?,
+                expected,
+                "{strategy:?}/{declared}"
+            );
+        }
     }
     Ok(())
 }

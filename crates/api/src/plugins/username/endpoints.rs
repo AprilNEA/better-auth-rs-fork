@@ -82,7 +82,7 @@ impl UsernamePlugin {
         .await;
         match result {
             Ok(result) => {
-                let mut response = AuthResponse::json(None, &result.response)?;
+                let mut response = AuthResponse::native(None, result.response.into_field_value()?);
                 if let Some(callback) = body.callback_url.filter(|value| !value.is_empty()) {
                     let _ = response.headers.insert("Location", callback);
                 }

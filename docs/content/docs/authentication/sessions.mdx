@@ -126,6 +126,8 @@ Session creation publishes its cache snapshot immediately by default. Explicitly
 
 ## Cookie Cache
 
+Cache payloads retain native field values until each strategy consumes them. Compact caches stringify the signing payload and the outer envelope separately, so a `toJSON` callback can run twice and retain side effects between calls. JWT and JWE caches clone the payload before setting claims; enumerable functions fail during cloning without calling `toJSON`. Session filtering skips the clone when `SessionConfig.additional_fields` is absent and clones when the field configuration is explicitly empty. User filtering always clones. `utils::jwe::encode_fields` accepts native `FieldMap` payloads; `utils::jwe::encode` remains available for JSON maps.
+
 Enable a signed or encrypted session cache to avoid a database read on each request:
 
 ```rust

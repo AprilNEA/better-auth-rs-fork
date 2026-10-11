@@ -436,12 +436,12 @@ async fn valid_access_token(
     .map_err(|_: AuthError| AuthError::bad_request("Failed to get a valid access token"))
 }
 
-fn token_response(value: &impl serde::Serialize, cookies: Vec<String>) -> AuthResult<AuthResponse> {
-    let mut response = AuthResponse::json(None, value)?;
+fn token_response(value: FieldValue, cookies: Vec<String>) -> AuthResponse {
+    let mut response = AuthResponse::native(None, value);
     for cookie in cookies {
         response = response.with_appended_header("Set-Cookie", cookie);
     }
-    Ok(response)
+    response
 }
 
 pub(super) async fn handle_get_access_token(
@@ -457,7 +457,7 @@ pub(super) async fn handle_get_access_token(
     let account = selection.resolve(req, &user_id, ctx).await?;
     let (response, cookies) =
         valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
-    token_response(&response, cookies)
+    Ok(token_response(response.into_field_value(), cookies))
 }
 
 pub(super) async fn handle_refresh_token(
@@ -526,7 +526,7 @@ pub(super) async fn handle_refresh_token(
         } else {
             Vec::new()
         };
-        token_response(&response, cookies)
+        Ok(token_response(response.into_field_value(), cookies))
     }
     .await
     .map_err(|_: AuthError| AuthError::bad_request("Failed to refresh access token"))
@@ -613,5 +613,5 @@ pub(super) async fn handle_account_info(
             account_id: account.account_id.clone(),
         },
     };
-    token_response(&response, cookies)
+    Ok(token_response(response.into_field_value(), cookies))
 }

@@ -13,7 +13,7 @@ pub(super) struct CookieSigner<S: AuthSchema> {
 impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
     async fn sign(
         &self,
-        mut payload: Map<String, Value>,
+        payload: FieldMap,
         expires_in: f64,
         context: SessionCookieContext<'_, S>,
     ) -> AuthResult<String> {
@@ -35,32 +35,30 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
             .await?;
         let sid = payload
             .get("session")
-            .and_then(|session| session.get("token"))
-            .cloned()
-            .ok_or_else(|| AuthError::internal("Session cache requires a session token"))?;
-        payload.extend([
-            ("sid".into(), sid),
+            .unwrap_or(&FieldValue::Undefined)
+            .model_property("token")?;
+        let mut fields = payload.clone();
+        let _ = fields.insert("sid".into(), sid);
+        let mut fields = better_auth_core::StructuredCloneContext::new().clone_map(&fields)?;
+        fields.extend([
             ("iat".into(), Utc::now().timestamp().into()),
             (
                 "exp".into(),
-                better_auth_core::wire::serialize_optional_number(
-                    &Some(Utc::now().timestamp() as f64 + expires_in),
-                    serde_json::value::Serializer,
+                better_auth_core::utils::jwt::numeric_date(
+                    &(Utc::now().timestamp() as f64 + expires_in).into(),
+                    "setExpirationTime",
                 )?,
             ),
-            ("aud".into(), AUDIENCE.into()),
             ("iss".into(), issuer(&runtime).into()),
+            ("aud".into(), AUDIENCE.into()),
         ]);
-        let _ = payload.remove("sub");
-        claims::prepare_local_claims(&mut payload, &FieldValue::Undefined)?;
         let subject = payload
             .get("user")
-            .and_then(|user| user.get("id"))
-            .and_then(Value::as_str)
-            .ok_or_else(|| AuthError::internal("\"sub\" claim must be a string"))?
-            .to_owned();
-        let _ = payload.insert("sub".into(), subject.into());
-        key.sign(payload, &options)
+            .unwrap_or(&FieldValue::Undefined)
+            .model_property("id")?;
+        claims::require_string("sub", &subject)?;
+        let _ = fields.insert("sub".into(), subject);
+        key.sign(fields, &options)
     }
 
     async fn verify(

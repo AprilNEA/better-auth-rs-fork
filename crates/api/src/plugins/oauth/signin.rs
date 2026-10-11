@@ -55,7 +55,7 @@ impl OAuthSignInOptions<'_> {
 pub(super) struct ProcessOAuthUserResult {
     pub(super) issued: better_auth_core::session::NativeSessionData,
     pub(super) session: SessionView,
-    pub(super) user: serde_json::Value,
+    pub(super) user: better_auth_core::FieldValue,
     pub(super) is_register: bool,
     pub(super) account_cookie: Option<AccountCookiePayload>,
 }
@@ -746,10 +746,7 @@ async fn finish_oauth_user(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> Result<ProcessOAuthUserResult, OAuthSignInError> {
     Ok(ProcessOAuthUserResult {
-        user: issued
-            .public_user(&ctx.config.user)?
-            .json()?
-            .ok_or_else(|| AuthError::internal("User output must be an object"))?,
+        user: issued.public_user(&ctx.config.user)?,
         session: ctx.session_view(&issued.session).await?,
         issued,
         is_register,
@@ -811,10 +808,7 @@ pub(crate) async fn sign_in_verified_profile(
         None,
         better_auth_core::FieldMap::from([
             ("token".into(), outcome.session.token().field_value()),
-            (
-                "user".into(),
-                better_auth_core::FieldValue::from_json(outcome.user)?,
-            ),
+            ("user".into(), outcome.user),
         ])
         .into(),
     ))

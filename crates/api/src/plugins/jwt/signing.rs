@@ -9,13 +9,13 @@ pub(super) struct ResolvedSigningKey {
 impl ResolvedSigningKey {
     pub(super) fn sign(
         &self,
-        payload: Map<String, Value>,
+        payload: FieldMap,
         options: &JwtSigningOptions,
     ) -> AuthResult<String> {
         let mut header = FieldMap::from_json(options.header.clone())?;
         let _ = header.insert("alg".into(), self.algorithm.clone().into());
         let _ = header.insert("kid".into(), self.key_id.clone());
-        jose::sign(&payload, header, self.signer.as_ref())
+        jose::sign(payload, header, self.signer.as_ref())
     }
 }
 
@@ -114,15 +114,23 @@ impl JwtPlugin {
         options: &JwtSigningOptions,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<String> {
-        let subject = fields.get("sub").cloned().unwrap_or_default();
-        let mut payload = fields.json()?;
         let config = &endpoint.auth.config;
-        self.default_claims(&mut payload, config)?;
+        let defaults = self.default_claims(&fields, config)?;
         if let Some(callback) = &self.config.custom_sign {
-            return callback(payload, options.clone()).await;
+            let mut payload = fields.clone();
+            for name in ["iat", "exp", "nbf", "iss", "aud"] {
+                let value = defaults
+                    .get(name)
+                    .or_else(|| fields.get(name))
+                    .cloned()
+                    .unwrap_or_default();
+                let _ = payload.insert(name.into(), value);
+            }
+            return callback(payload.json()?, options.clone()).await;
         }
         let key = self.resolve_local_signing_key(options, endpoint).await?;
-        claims::prepare_local_claims(&mut payload, &subject)?;
+        let mut payload = better_auth_core::StructuredCloneContext::new().clone_map(&fields)?;
+        claims::prepare_local_claims(&mut payload, &fields, &defaults)?;
         key.sign(payload, options)
     }
 
@@ -230,11 +238,12 @@ impl JwtPlugin {
 
     fn default_claims(
         &self,
-        payload: &mut Map<String, Value>,
+        payload: &FieldMap,
         config: &better_auth_core::AuthConfig,
-    ) -> AuthResult<()> {
+    ) -> AuthResult<FieldMap> {
         let expiration =
             claims::default_expiration(&self.config.expiration_time, payload.get("iat"))?;
+        let mut defaults = FieldMap::new();
         for (claim, default) in [
             ("exp", expiration),
             (
@@ -248,15 +257,18 @@ impl JwtPlugin {
             (
                 "aud",
                 match &self.config.audience {
-                    Some(audience) => serde_json::to_value(audience)?,
+                    Some(audience) => FieldValue::from_json(serde_json::to_value(audience)?)?,
                     None => config.base_url.as_static().unwrap_or("").into(),
                 },
             ),
         ] {
-            if payload.get(claim).is_none_or(Value::is_null) {
-                let _ = payload.insert(claim.to_owned(), default);
-            }
+            let value = payload
+                .get(claim)
+                .filter(|value| !value.is_null() && !value.is_undefined())
+                .cloned()
+                .unwrap_or(default);
+            let _ = defaults.insert(claim.to_owned(), value);
         }
-        Ok(())
+        Ok(defaults)
     }
 }

@@ -160,9 +160,21 @@ pub(super) fn assert_response(actual: Response, expected: &Response, dates: &Dat
         if expected.status == 400 { "400" } else { "" }
     );
     let body: Value = serde_json::from_str(&actual.body)?;
-    assert_eq!(
-        dates.normalize(&body)?,
-        serde_json::from_str::<Value>(&expected.body)?
-    );
+    let expected_body: Value = serde_json::from_str(&expected.body)?;
+    assert_eq!(dates.normalize(&body)?, expected_body);
+    if expected_body.get("key").is_some_and(Value::is_string) {
+        assert_eq!(
+            body.as_object()
+                .ok_or("Expected created API Key object")?
+                .keys()
+                .collect::<Vec<_>>(),
+            expected_body
+                .as_object()
+                .ok_or("Missing captured API Key object")?
+                .keys()
+                .collect::<Vec<_>>(),
+            "Creation must replace the key without changing its source property position",
+        );
+    }
     Ok(())
 }

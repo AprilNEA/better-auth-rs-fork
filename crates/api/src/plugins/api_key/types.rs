@@ -250,12 +250,59 @@ pub(crate) struct ListKeysResponse {
     pub offset: Option<u64>,
 }
 
+impl ListKeysResponse {
+    pub(super) fn into_field_value(
+        self,
+    ) -> better_auth_core::AuthResult<better_auth_core::FieldValue> {
+        use better_auth_core::{AuthRecordFields, FieldMap, FieldValue};
+        let keys = self
+            .api_keys
+            .into_iter()
+            .map(|key| key.field_values().map(FieldValue::from))
+            .collect::<better_auth_core::AuthResult<Vec<_>>>()?;
+        Ok(FieldMap::from([
+            ("apiKeys".into(), keys.into()),
+            ("total".into(), self.total.into()),
+            (
+                "limit".into(),
+                self.limit.map(FieldValue::from).unwrap_or_default(),
+            ),
+            (
+                "offset".into(),
+                self.offset.map(FieldValue::from).unwrap_or_default(),
+            ),
+        ])
+        .into())
+    }
+}
+
 /// Newly issued API key. The plaintext key is only returned during creation.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct CreateKeyResponse {
     /// Plaintext secret to deliver to the key holder.
     pub key: String,
     /// Stored public key attributes, without the secret hash.
-    #[serde(flatten)]
     pub api_key: ApiKeyView,
+}
+
+impl CreateKeyResponse {
+    fn field_values(&self) -> better_auth_core::AuthResult<better_auth_core::FieldMap> {
+        use better_auth_core::AuthRecordFields;
+        let mut fields = self.api_key.field_values()?;
+        let _ = fields.insert("key".into(), self.key.clone().into());
+        Ok(fields.in_field_order(&self.api_key.field_order))
+    }
+
+    pub(crate) fn into_field_value(
+        self,
+    ) -> better_auth_core::AuthResult<better_auth_core::FieldValue> {
+        self.field_values().map(Into::into)
+    }
+}
+
+impl Serialize for CreateKeyResponse {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let fields = self.field_values().map_err(serde::ser::Error::custom)?;
+        better_auth_core::field_value::serde::map::serialize(&fields, serializer)
+    }
 }

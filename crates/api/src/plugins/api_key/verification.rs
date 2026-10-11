@@ -135,12 +135,16 @@ impl ApiKeyVerificationError {
         let error = match self {
             Self::Endpoint(error) => return Ok(error.to_auth_response()),
             Self::Rejected(error) => {
-                let body: serde_json::Value =
-                    serde_json::from_slice(&error.to_auth_response().body.bytes()?)?;
-                return AuthResponse::json(
+                let body = error.to_auth_response().body.field_value()?;
+                return Ok(AuthResponse::native(
                     None,
-                    &serde_json::json!({"valid":false,"error":body,"key":null}),
-                );
+                    better_auth_core::FieldMap::from([
+                        ("valid".into(), false.into()),
+                        ("error".into(), body),
+                        ("key".into(), better_auth_core::FieldValue::Null),
+                    ])
+                    .into(),
+                ));
             }
             Self::Validation(error) => error,
             Self::Internal(_) => {

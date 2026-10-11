@@ -1,7 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use serde_json::Value;
 use sha2::Sha256;
 
@@ -61,19 +61,17 @@ pub(super) async fn payload(
     config: &AuthConfig,
     cache: &CookieCacheConfig,
     dont_remember: bool,
-) -> AuthResult<(serde_json::Map<String, Value>, f64)> {
-    let now = Utc::now();
+) -> AuthResult<(FieldMap, f64)> {
     let mut session = data.session.clone();
-    session.filter_returned_fields(&config.session)?;
+    if config.session.additional_fields.is_some() {
+        session.filter_returned_fields(&config.session)?;
+    }
     let user = data.public_user(&config.user)?;
     let version = cache.version.resolve(data).await?;
-    let mut payload = serde_json::Map::new();
-    let _ = payload.insert(
-        "session".into(),
-        crate::field_value::serde::to_value(&FieldMap::from(session).into())?,
-    );
-    let _ = payload.insert("user".into(), crate::field_value::serde::to_value(&user)?);
-    let _ = payload.insert("updatedAt".into(), now.timestamp_millis().into());
+    let mut payload = FieldMap::new();
+    let _ = payload.insert("session".into(), FieldMap::from(session).into());
+    let _ = payload.insert("user".into(), user);
+    let _ = payload.insert("updatedAt".into(), Utc::now().timestamp_millis().into());
     let _ = payload.insert("version".into(), version.into());
     let max_age = cache_cookie(config, cache, dont_remember)
         .attributes
@@ -89,12 +87,11 @@ pub(super) async fn encode(
     cache: &CookieCacheConfig,
     dont_remember: bool,
 ) -> AuthResult<String> {
-    let now = Utc::now();
     let (payload, max_age) = payload(data, config, cache, dont_remember).await?;
     match cache.strategy() {
         CookieCacheStrategy::Compact => {
             let expires_at = crate::utils::date::from_milliseconds(
-                now.timestamp_millis() as f64
+                Utc::now().timestamp_millis() as f64
                     + cache_cookie(config, cache, dont_remember)
                         .attributes
                         .max_age
@@ -108,33 +105,48 @@ pub(super) async fn encode(
             let _ = signed.insert("expiresAt".into(), expires_at.into());
             let mut mac = Hmac::<Sha256>::new_from_slice(config.signing_secret().as_bytes())
                 .map_err(|error| AuthError::internal(format!("Signing session cache: {error}")))?;
-            mac.update(&serde_json::to_vec(&signed)?);
-            Ok(
-                URL_SAFE_NO_PAD.encode(serde_json::to_vec(&serde_json::json!({
-                    "session": payload, "expiresAt": expires_at,
-                    "signature": URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
-                }))?),
-            )
+            let signed = FieldValue::from(signed)
+                .stringify()?
+                .ok_or_else(|| AuthError::internal("Session cache is not valid JSON"))?;
+            mac.update(signed.as_bytes());
+            let envelope = FieldMap::from([
+                ("session".into(), payload.into()),
+                ("expiresAt".into(), expires_at.into()),
+                (
+                    "signature".into(),
+                    URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes()).into(),
+                ),
+            ]);
+            let encoded = FieldValue::from(envelope)
+                .stringify()?
+                .ok_or_else(|| AuthError::internal("Session cache is not valid JSON"))?;
+            Ok(URL_SAFE_NO_PAD.encode(encoded))
         }
         CookieCacheStrategy::Jwt => {
-            let mut claims = payload;
-            let _ = claims.insert("iat".into(), now.timestamp().into());
+            let mut claims = crate::StructuredCloneContext::new().clone_map(&payload)?;
+            let _ = claims.insert("iat".into(), Utc::now().timestamp().into());
             let _ = claims.insert(
                 "exp".into(),
-                crate::wire::serialize_optional_number(
-                    &Some(now.timestamp() as f64 + max_age),
-                    serde_json::value::Serializer,
+                crate::utils::jwt::numeric_date(
+                    &(Utc::now().timestamp() as f64 + max_age).into(),
+                    "setExpirationTime",
                 )?,
             );
-            let mut header = Header::new(Algorithm::HS256);
-            header.typ = None;
-            Ok(jsonwebtoken::encode(
-                &header,
-                &claims,
-                &EncodingKey::from_secret(config.signing_secret().as_bytes()),
-            )?)
+            let payload = crate::utils::jwt::serialize_claims(claims)?;
+            let input = format!(
+                "{}.{}",
+                URL_SAFE_NO_PAD.encode(br#"{"alg":"HS256"}"#),
+                URL_SAFE_NO_PAD.encode(payload)
+            );
+            let mut mac = Hmac::<Sha256>::new_from_slice(config.signing_secret().as_bytes())
+                .map_err(|error| AuthError::internal(format!("Signing session cache: {error}")))?;
+            mac.update(input.as_bytes());
+            Ok(format!(
+                "{input}.{}",
+                URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes())
+            ))
         }
-        CookieCacheStrategy::Jwe => crate::utils::jwe::encode(
+        CookieCacheStrategy::Jwe => crate::utils::jwe::encode_fields(
             payload,
             config.encryption_secret(),
             "better-auth-session",

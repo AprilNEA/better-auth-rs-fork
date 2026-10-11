@@ -1,139 +1,16 @@
-//! Explicit JSON serializers for DTO and cache boundaries.
+//! Generic Serde adapters for field values and record projections.
+//!
+//! Serde value adapters cannot access an enclosing property key or omit a key already emitted by
+//! their parent. Use `FieldValue::json` or `FieldValue::stringify` for native JSON semantics.
+//! Generic Serde errors retain text; native JSON entry points retain the original `AuthError`.
 
 #[cfg(test)]
 #[path = "serde_tests.rs"]
 mod live_tests;
 
-use crate::{AuthError, AuthResult, FieldDate, FieldMap, FieldValue};
+pub(crate) use super::json::Json;
+use crate::{FieldDate, FieldMap, FieldValue};
 use ::serde::{Deserialize, Serialize, de::Error};
-use std::{cell::RefCell, collections::HashSet};
-
-pub(crate) struct Json<'a>(pub(crate) &'a FieldValue);
-
-impl Serialize for Json<'_> {
-    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        JsonNode(self.0, &JsonState::default()).serialize(serializer)
-    }
-}
-
-#[derive(Default)]
-struct JsonState {
-    active: RefCell<HashSet<super::ContainerIdentity>>,
-    source_error: RefCell<Option<AuthError>>,
-}
-
-impl JsonState {
-    fn error<E: ::serde::ser::Error>(&self, error: AuthError) -> E {
-        let serialized = E::custom(&error);
-        *self.source_error.borrow_mut() = Some(error);
-        serialized
-    }
-}
-
-pub(super) fn stringify(value: &FieldValue) -> AuthResult<String> {
-    let state = JsonState::default();
-    let result = ::serde_json::to_string(&JsonNode(value, &state));
-    result.map_err(|error| state.source_error.into_inner().unwrap_or(error.into()))
-}
-
-pub(crate) fn to_value(value: &FieldValue) -> AuthResult<::serde_json::Value> {
-    let state = JsonState::default();
-    let result = ::serde_json::to_value(JsonNode(value, &state));
-    result.map_err(|error| state.source_error.into_inner().unwrap_or(error.into()))
-}
-
-struct JsonNode<'a>(&'a FieldValue, &'a JsonState);
-
-impl Serialize for JsonNode<'_> {
-    fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self.0 {
-            FieldValue::Undefined | FieldValue::Null | FieldValue::Function(_) => {
-                serializer.serialize_unit()
-            }
-            FieldValue::Bool(value) => value.serialize(serializer),
-            FieldValue::String(value) => value.serialize(serializer),
-            FieldValue::Utf16String(value) => value.serialize(serializer),
-            FieldValue::Number(value) if !value.is_finite() => serializer.serialize_unit(),
-            FieldValue::Number(value) => ::serde_json::value::RawValue::from_string(
-                crate::schema_value::number_string(*value),
-            )
-            .map_err(::serde::ser::Error::custom)?
-            .serialize(serializer),
-            FieldValue::Date(_) => self
-                .0
-                .json()
-                .map_err(|error| self.1.error(error))?
-                .serialize(serializer),
-            FieldValue::Array(values) => {
-                use ::serde::ser::SerializeSeq;
-                let identity = super::ContainerIdentity::Array(values.identity());
-                if !self.1.active.borrow_mut().insert(identity) {
-                    return Err(self.1.error(AuthError::type_error(
-                        "Converting circular structure to JSON",
-                    )));
-                }
-                let result = (|| {
-                    let length = values.len().map_err(|error| self.1.error(error))?;
-                    let mut sequence = serializer.serialize_seq(Some(length))?;
-                    for index in 0..length {
-                        let value = values
-                            .get(index)
-                            .map_err(|error| self.1.error(error))?
-                            .unwrap_or_default();
-                        sequence.serialize_element(&JsonNode(&value, self.1))?;
-                    }
-                    sequence.end()
-                })();
-                let _ = self.1.active.borrow_mut().remove(&identity);
-                result
-            }
-            FieldValue::Object(object) => {
-                let identity = super::ContainerIdentity::Object(object.identity());
-                if !self.1.active.borrow_mut().insert(identity) {
-                    return Err(self.1.error(AuthError::type_error(
-                        "Converting circular structure to JSON",
-                    )));
-                }
-                let result = (|| {
-                    use ::serde::ser::SerializeMap;
-                    let keys = object.own_keys().map_err(|error| self.1.error(error))?;
-                    let mut output = serializer.serialize_map(None)?;
-                    for name in keys {
-                        if let Some(value) =
-                            object.get(&name).map_err(|error| self.1.error(error))?
-                            && !value.is_json_omitted()
-                        {
-                            output.serialize_entry(&name, &JsonNode(&value, self.1))?;
-                        }
-                    }
-                    output.end()
-                })();
-                let _ = self.1.active.borrow_mut().remove(&identity);
-                result
-            }
-        }
-    }
-}
-
-fn serialize_fields<S: ::serde::Serializer>(
-    fields: &FieldMap,
-    serializer: S,
-    state: &JsonState,
-) -> Result<S::Ok, S::Error> {
-    use ::serde::ser::SerializeMap;
-    let mut fields: Vec<_> = fields
-        .iter()
-        .filter(|(_, value)| !value.is_json_omitted())
-        .collect();
-    fields.sort_by_key(|(name, _)| {
-        crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))
-    });
-    let mut output = serializer.serialize_map(Some(fields.len()))?;
-    for (name, value) in fields {
-        output.serialize_entry(name, &JsonNode(value, state))?;
-    }
-    output.end()
-}
 
 pub mod map {
     use super::*;
@@ -142,7 +19,7 @@ pub mod map {
         fields: &FieldMap,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serialize_fields(fields, serializer, &JsonState::default())
+        super::super::json::serialize_fields(fields, serializer)
     }
 
     pub fn deserialize<'de, D: ::serde::Deserializer<'de>>(

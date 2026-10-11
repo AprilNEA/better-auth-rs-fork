@@ -1,5 +1,5 @@
 use better_auth_core::{
-    AuthContext, AuthResult, CreateApiKey, FieldValue, SchemaValue, UpdateApiKey,
+    AuthContext, AuthRecordFields, AuthResult, CreateApiKey, FieldValue, SchemaValue, UpdateApiKey,
 };
 
 use super::ApiKeyPlugin;
@@ -282,7 +282,18 @@ pub(super) async fn create_key_for_user(
                 "Cannot read properties of null (reading 'permissions')",
             )
         })?;
-    let mut api_key = ApiKeyView::try_from_api_key(&api_key)?;
+    let fields = api_key.field_values()?;
+    let mut response_order: Vec<_> = fields.keys().cloned().collect();
+    if !fields.contains_key("key") {
+        response_order.push("key".into());
+    }
+    let mut api_key = ApiKeyView::from_api_key_fields(fields)?;
+    for name in std::mem::take(&mut api_key.field_order) {
+        if !response_order.contains(&name) {
+            response_order.push(name);
+        }
+    }
+    api_key.field_order = response_order;
     // Upstream returns supplied falsy metadata at creation, but stores null.
     api_key.metadata = better_auth_core::FieldValue::from_json(
         body.metadata.clone().unwrap_or(serde_json::Value::Null),

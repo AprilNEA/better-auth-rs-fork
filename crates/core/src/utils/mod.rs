@@ -6,6 +6,7 @@ pub(crate) mod email;
 pub mod ip;
 pub mod json;
 pub mod jwe;
+pub mod jwt;
 pub mod password;
 pub mod path;
 pub mod symmetric;

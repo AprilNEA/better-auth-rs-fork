@@ -456,17 +456,16 @@ async fn sign_in_with_id_token_core(
         Err(error) => return error.into_auth_response(),
     };
 
-    let response = SocialSignInResponse {
-        url: None,
-        redirect: false,
-        status: None,
-        token: outcome.session.token().field_value(),
-        user: Some(outcome.user),
-    };
+    let response = better_auth_core::FieldMap::from([
+        ("redirect".into(), false.into()),
+        ("token".into(), outcome.session.token().field_value()),
+        ("url".into(), better_auth_core::FieldValue::Undefined),
+        ("user".into(), outcome.user),
+    ]);
     ctx.session_manager()
         .set_native_session_cookie(req, outcome.issued, None)
         .await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.into()))
 }
 
 async fn link_with_id_token_core(

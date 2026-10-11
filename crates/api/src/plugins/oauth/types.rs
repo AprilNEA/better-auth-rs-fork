@@ -89,17 +89,34 @@ pub(crate) struct AccessTokenResponse {
     pub id_token: better_auth_core::SchemaValue<Option<String>>,
 }
 
+impl AccessTokenResponse {
+    pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
+        use better_auth_core::{FieldMap, FieldValue};
+        let scopes: Vec<FieldValue> = self.scopes.into_iter().map(Into::into).collect();
+        FieldMap::from([
+            ("accessToken".into(), self.access_token.into_field_value()),
+            (
+                "accessTokenExpiresAt".into(),
+                self.access_token_expires_at.into_field_value(),
+            ),
+            ("scopes".into(), scopes.into()),
+            ("idToken".into(), self.id_token.into_field_value()),
+        ])
+        .into()
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RefreshTokenResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
+    pub refresh_token: String,
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "better_auth_core::field_value::serde::optional_date::serialize"
     )]
     pub access_token_expires_at: Option<better_auth_core::FieldDate>,
-    pub refresh_token: String,
     #[serde(
         skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted",
         serialize_with = "better_auth_core::schema_value::serialize_optional_date"
@@ -114,6 +131,34 @@ pub(crate) struct RefreshTokenResponse {
     pub provider_id: better_auth_core::SchemaValue<String>,
     #[serde(skip_serializing_if = "better_auth_core::SchemaValue::is_json_omitted")]
     pub account_id: better_auth_core::SchemaValue<String>,
+}
+
+impl RefreshTokenResponse {
+    pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
+        use better_auth_core::{FieldMap, FieldValue};
+        FieldMap::from([
+            (
+                "accessToken".into(),
+                self.access_token.map(FieldValue::from).unwrap_or_default(),
+            ),
+            ("refreshToken".into(), self.refresh_token.into()),
+            (
+                "accessTokenExpiresAt".into(),
+                self.access_token_expires_at
+                    .map(FieldValue::from)
+                    .unwrap_or_default(),
+            ),
+            (
+                "refreshTokenExpiresAt".into(),
+                self.refresh_token_expires_at.into_field_value(),
+            ),
+            ("scope".into(), self.scope.into_field_value()),
+            ("idToken".into(), self.id_token.into_field_value()),
+            ("providerId".into(), self.provider_id.into_field_value()),
+            ("accountId".into(), self.account_id.into_field_value()),
+        ])
+        .into()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -152,4 +197,46 @@ pub(crate) struct AccountInfoResponse {
     pub user: AccountInfoUser,
     pub data: serde_json::Value,
     pub account: AccountInfoAccount,
+}
+
+impl AccountInfoResponse {
+    pub(super) fn into_field_value(self) -> better_auth_core::FieldValue {
+        use better_auth_core::{FieldMap, FieldValue};
+        let mut user = FieldMap::new();
+        if let Some(id) = self.user.id {
+            let _ = user.insert("id".into(), id.into());
+        }
+        user.extend([
+            ("name".into(), self.user.name.into_field_value()),
+            ("email".into(), self.user.email.into_field_value()),
+        ]);
+        if let Some(image) = self.user.image {
+            let _ = user.insert(
+                "image".into(),
+                image.map(FieldValue::from).unwrap_or(FieldValue::Null),
+            );
+        }
+        let _ = user.insert(
+            "emailVerified".into(),
+            self.user.email_verified.into_field_value(),
+        );
+        user.extend(self.user.additional_fields);
+        let account = FieldMap::from([
+            ("id".into(), self.account.id.into_field_value()),
+            (
+                "providerId".into(),
+                self.account.provider_id.into_field_value(),
+            ),
+            (
+                "accountId".into(),
+                self.account.account_id.into_field_value(),
+            ),
+        ]);
+        FieldMap::from([
+            ("user".into(), user.into()),
+            ("data".into(), self.data.into()),
+            ("account".into(), account.into()),
+        ])
+        .into()
+    }
 }

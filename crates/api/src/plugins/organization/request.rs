@@ -27,9 +27,8 @@ pub(super) use from_fields;
 pub(super) fn typed<T: FromFieldMap + Send + Sync + 'static>(
     fields: FieldMap,
 ) -> AuthResult<ValidatedBody> {
-    let projection = Value::Object(fields.json()?);
-    Ok(ValidatedBody::new(
-        Some(projection),
+    Ok(ValidatedBody::native(
+        fields.clone().into(),
         T::from_field_values(fields)?,
     ))
 }
@@ -371,8 +370,8 @@ pub(super) fn validate(
         }
         "/organization/create-role" => typed::<roles::CreateRole>(output),
         "/organization/delete-role" => typed::<roles::RoleSelector>(output),
-        "/organization/update-role" => Ok(ValidatedBody::new(
-            Some(Value::Object(output.json()?)),
+        "/organization/update-role" => Ok(ValidatedBody::native(
+            output.clone().into(),
             roles::UpdateRole::validated(output, &schema.organization_role)?,
         )),
         "/organization/has-permission" => typed::<HasPermissionRequest>(output),

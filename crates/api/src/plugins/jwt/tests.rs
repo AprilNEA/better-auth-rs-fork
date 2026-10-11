@@ -251,7 +251,7 @@ async fn cookie_signer_resolves_keys_before_rejecting_missing_subject() -> AuthR
             )
             .await;
         assert!(
-            matches!(result, Err(AuthError::Internal(message)) if message == "\"sub\" claim must be a string")
+            matches!(result, Err(AuthError::TypeError(message)) if message == "\"sub\" claim must be a string")
         );
         events.lock().unwrap().push("reject");
         assert_eq!(*events.lock().unwrap(), ["get", "get", "create", "reject"]);

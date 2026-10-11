@@ -1,5 +1,5 @@
 use better_auth_core::{AuthContext, AuthError, AuthResult};
-use better_auth_core::{AuthRequest, AuthResponse};
+use better_auth_core::{AuthRecordFields, AuthRequest, AuthResponse, FieldMap, FieldValue};
 
 mod callbacks;
 mod credential;
@@ -155,7 +155,11 @@ impl PasskeyPlugin {
     ) -> AuthResult<AuthResponse> {
         let data = ctx.require_native_session(req).await?;
         let result = list_user_passkeys_core(&data.user_field("id")?, ctx).await?;
-        AuthResponse::json(None, &result)
+        let result = result
+            .into_iter()
+            .map(|passkey| passkey.field_values().map(FieldValue::from))
+            .collect::<AuthResult<Vec<_>>>()?;
+        Ok(AuthResponse::native(None, result.into()))
     }
 
     /// POST /passkey/delete-passkey
@@ -179,7 +183,10 @@ impl PasskeyPlugin {
         let data = ctx.require_native_session(req).await?;
         let body: UpdatePasskeyRequest = types::read(req, types::update_body)?;
         let result = update_passkey_core(&body, &data.user_field("id")?, ctx).await?;
-        AuthResponse::json(None, &result)
+        Ok(AuthResponse::native(
+            None,
+            FieldMap::from([("passkey".into(), result.passkey.field_values()?.into())]).into(),
+        ))
     }
 }
 

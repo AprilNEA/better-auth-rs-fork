@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 use better_auth_core::{AuthContext, AuthError, AuthResult, BeforeRequestAction};
-use better_auth_core::{AuthRequest, AuthResponse, FieldValue};
+use better_auth_core::{AuthRecordFields, AuthRequest, AuthResponse, FieldValue};
 
 pub(super) mod handlers;
 pub(crate) mod storage;
@@ -744,7 +744,7 @@ impl ApiKeyPlugin {
             client,
         )?;
         let response = create_key_for_user(&body, &actor, self, ctx, original).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()?))
     }
 
     async fn handle_get(
@@ -758,7 +758,7 @@ impl ApiKeyPlugin {
             .ok_or_else(|| AuthError::bad_request("Query parameter 'id' is required"))?;
         let config_id = req.query_string("configId")?;
         let response = get_key_core(id, config_id, session.user_field("id")?, self, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.field_values()?.into()))
     }
 
     async fn handle_list(
@@ -769,7 +769,7 @@ impl ApiKeyPlugin {
         let session = ctx.require_native_session(req).await?;
         let query = ListKeysQuery::from_request(req)?;
         let response = list_keys_core(session.user_field("id")?, &query, self, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()?))
     }
 
     async fn handle_update(
@@ -811,7 +811,7 @@ impl ApiKeyPlugin {
         } else {
             update_key_for_user(&body, &actor, self, ctx).await?
         };
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.field_values()?.into()))
     }
 
     async fn handle_delete(

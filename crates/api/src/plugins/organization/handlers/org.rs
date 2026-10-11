@@ -775,7 +775,7 @@ pub async fn handle_delete_organization(
         })?;
     let body: DeleteOrganizationRequest = super::super::request::read(req, &config.schema)?;
     let response = delete_organization_core(&body, &session, Some(req), config, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 /// Handle list organizations request
@@ -833,10 +833,12 @@ pub async fn handle_get_organization(
             "User is not a member of the organization",
         ));
     }
-    AuthResponse::json(
+    Ok(AuthResponse::native(
         None,
-        &crate::plugins::organization::fields::organization(&organization, ctx)?,
-    )
+        crate::plugins::organization::fields::organization(&organization, ctx)?
+            .field_values()?
+            .into(),
+    ))
 }
 
 /// Handle get full organization request
@@ -873,7 +875,13 @@ pub async fn handle_set_active_organization(
     let session = require_native_session(req, ctx).await?;
     let body: SetActiveOrganizationRequest = super::super::request::read(req, &Default::default())?;
     let organization = set_active_organization_core(req, &body, &session, ctx).await?;
-    AuthResponse::json(None, &organization)
+    Ok(AuthResponse::native(
+        None,
+        organization
+            .map(|value| value.field_values().map(FieldValue::from))
+            .transpose()?
+            .unwrap_or(FieldValue::Null),
+    ))
 }
 
 /// Handle leave organization request

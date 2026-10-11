@@ -81,7 +81,10 @@ pub(super) async fn handle(
         .set_native_session_cookie(req, data.clone(), None)
         .await?;
     data.session.filter_returned_fields(&ctx.config.session)?;
-    AuthResponse::json(None, &serde_json::json!({ "session": data.session }))
+    Ok(AuthResponse::native(
+        None,
+        FieldMap::from([("session".into(), FieldMap::from(data.session).into())]).into(),
+    ))
 }
 
 fn field_not_allowed(name: &str) -> AuthResult<AuthResponse> {

@@ -103,6 +103,13 @@ mod tests {
         let _ = session
             .additional_fields
             .insert("active".into(), "extension".into());
+        let mut default_projection = session.clone();
+        default_projection.filter_returned_fields(&crate::config::SessionConfig::default())?;
+        let default_fields = FieldMap::from(default_projection);
+        assert!(default_fields["createdAt"].strict_equals(&default_fields["alias"]));
+        assert!(!default_fields["createdAt"].strict_equals(&date.clone().into()));
+        assert_eq!(default_fields.get("id"), Some(&"private-id".into()));
+        assert_eq!(default_fields.get("active"), Some(&"extension".into()));
         let mut config = crate::config::SessionConfig::default();
         let _ = config.fields_mut().insert(
             "id".into(),

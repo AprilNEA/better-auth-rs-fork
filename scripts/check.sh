@@ -500,6 +500,27 @@ run_stage() {
         plugins::api_key:: plugins::jwt:: || cache_status=1
       return "$cache_status"
       ;;
+    native-json)
+      cargo fmt --all -- --check
+      local json_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/native-json.test.ts || json_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests --test native_endpoint_tests --test server_api_tests \
+        --test api_key_number_name_tests --test oauth_token_duration_tests -- -D warnings || json_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: || json_status=1
+      cargo test --locked -p better-auth-api --lib -- \
+        plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::oauth:: \
+        plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- response_to_json:: || json_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test native_endpoint_tests --test server_api_tests \
+        --test api_key_number_name_tests --test oauth_token_duration_tests || json_status=1
+      return "$json_status"
+      ;;
     runtime-values)
       bun --no-install test \
         ./compat-tests/reference-server/contracts/plugin-display-presence.test.ts \
