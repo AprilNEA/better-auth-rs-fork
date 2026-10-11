@@ -12,6 +12,8 @@ use better_auth_core::store::database_hooks::{
 use better_auth_core::store::{AuthStore, RuntimeStore, schema::EntityRole};
 use better_auth_core::{AuthConfig, AuthResult, AuthSchema, CreateAccount, CreateVerification};
 
+type ModelValidator<T> = (EntityRole, fn(&T) -> AuthResult<()>);
+
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> RuntimeStore<S>
     for SeaOrmStore<S, O, P>
 where
@@ -53,7 +55,7 @@ where
         store.model_fields = model_fields.fresh_runtime();
         let active_models = store.model_fields.active_models();
         // Keep validation error order; a typed binding does not activate a runtime model.
-        let validators: [(EntityRole, fn(&Self) -> AuthResult<()>); 7] = [
+        let validators: [ModelValidator<Self>; 7] = [
             (EntityRole::ApiKey, Self::validate_api_key_fields),
             (EntityRole::Session, Self::validate_session_fields),
             (EntityRole::DeviceCode, Self::validate_device_code_fields),
