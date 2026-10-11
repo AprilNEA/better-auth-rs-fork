@@ -10,10 +10,14 @@ pub mod cache;
 mod capabilities;
 mod runtime;
 mod session_create;
+mod session_update;
 mod user_verification;
 pub use session_create::{
     PreparedSessionCreate, SessionCreateWriter, session_create_schema, session_field_schema,
     session_from_create_fields,
+};
+pub use session_update::{
+    SessionTransactionEffect, SessionUpdateWriter, SessionUpdateWriterFactory, SessionWriteEffects,
 };
 #[doc(hidden)]
 pub use user_verification::revoke_unproven_account_access;
@@ -57,19 +61,6 @@ pub type TransactionFuture<'a> =
 pub type TypedTransactionFuture<'a, T> = Pin<Box<dyn Future<Output = AuthResult<T>> + Send + 'a>>;
 pub type TransactionWork<S> =
     dyn for<'tx> FnOnce(&'tx dyn AuthTransaction<S>) -> TransactionFuture<'tx> + Send;
-
-/// A secondary write that runs after update-before hooks and before the database write.
-pub struct SessionUpdateWriter {
-    /// Run the database update after the secondary write succeeds.
-    pub write_database: bool,
-    /// Receive the complete hook patch, before adapter field transformations.
-    pub write: Box<
-        dyn FnOnce(
-                crate::FieldMap,
-            ) -> TypedTransactionFuture<'static, Option<crate::wire::SessionView>>
-            + Send,
-    >,
-}
 
 /// Write a projected verification to secondary storage before database after hooks are queued.
 /// The write is immediate inside a transaction; database rollback does not undo secondary storage.
@@ -252,6 +243,17 @@ pub trait AuthTransaction<S: AuthSchema>:
             ));
         }
         self.create_session_optional(input).await
+    }
+    /// Run one Session update lifecycle through this transaction and its secondary writer.
+    async fn update_session_with_writer_by_token_value(
+        &self,
+        _token: &crate::FieldValue,
+        _update: database_hooks::SessionUpdate,
+        _writer: Option<SessionUpdateWriter>,
+    ) -> AuthResult<Option<crate::wire::SessionView>> {
+        Err(AuthError::config(
+            "The store must support transactional Session updates",
+        ))
     }
     /// Run session before hooks without converting cancellation into an API error.
     async fn before_create_runtime_session_optional(
@@ -851,6 +853,31 @@ pub trait SessionStore<S: AuthSchema>: Send + Sync {
         self.accept_invitation_with_teams_by_token_value(
             invitation_id.typed()?,
             user_id.typed()?,
+            session_token,
+            teams_enabled,
+            maximum,
+        )
+        .await
+    }
+
+    /// Run Session writers in the acceptance transaction and await the single-team output effect.
+    async fn accept_invitation_with_session_effects_values(
+        &self,
+        invitation_id: &crate::FieldValue,
+        user_id: &crate::FieldValue,
+        session_token: Option<&crate::FieldValue>,
+        teams_enabled: bool,
+        maximum: TeamMemberLimits<'_>,
+        effects: SessionWriteEffects<S>,
+    ) -> AuthResult<(Member, Invitation, Option<crate::wire::SessionView>)> {
+        if effects.secondary.is_some() || effects.after_output.is_some() {
+            return Err(AuthError::config(
+                "The store must support transactional invitation Session effects",
+            ));
+        }
+        self.accept_invitation_with_teams_values(
+            invitation_id,
+            user_id,
             session_token,
             teams_enabled,
             maximum,

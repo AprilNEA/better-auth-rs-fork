@@ -1,7 +1,10 @@
 use super::{SecondaryStore, cache};
 use crate::entity::AuthSession;
 use crate::store::database_hooks::SessionUpdate;
-use crate::store::{SessionStore, SessionUpdateWriter, TeamMemberLimits};
+use crate::store::{
+    SessionStore, SessionUpdateWriter, SessionUpdateWriterFactory, SessionWriteEffects,
+    TeamMemberLimits,
+};
 use crate::types::{CreateSession, Invitation, Member};
 use crate::wire::{SessionView, UserView};
 use crate::{AuthError, AuthResult, AuthSchema, FieldMap, FieldValue};
@@ -392,22 +395,26 @@ impl<S: AuthSchema> SecondaryStore<S> {
         token: &FieldValue,
         update: SessionUpdate,
     ) -> AuthResult<Option<crate::wire::SessionView>> {
-        let runtime = self.clone();
-        let lookup = token.clone();
         self.inner
             .update_session_with_writer_by_token_value(
                 token,
                 update,
-                Some(SessionUpdateWriter {
-                    write_database: self.database_sessions(),
-                    write: Box::new(move |update| {
-                        Box::pin(
-                            async move { runtime.update_cached_session(&lookup, update).await },
-                        )
-                    }),
-                }),
+                self.session_update_writer_factory()
+                    .map(|writer| writer.bind(token.clone())),
             )
             .await
+    }
+
+    pub(super) fn session_update_writer_factory(&self) -> Option<SessionUpdateWriterFactory> {
+        self.storage.as_ref()?;
+        let runtime = self.clone();
+        Some(SessionUpdateWriterFactory {
+            write_database: self.database_sessions(),
+            write: std::sync::Arc::new(move |token, update| {
+                let runtime = runtime.clone();
+                Box::pin(async move { runtime.update_cached_session(&token, update).await })
+            }),
+        })
     }
 
     pub(super) async fn queue_cached_user_session_deletion(
@@ -963,50 +970,45 @@ impl<S: AuthSchema> SessionStore<S> for SecondaryStore<S> {
         teams_enabled: bool,
         maximum: TeamMemberLimits<'_>,
     ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
-        let database_token = session_token.filter(|_| self.database_sessions());
-        let (member, invitation, snapshot) = self
-            .inner
-            .accept_invitation_with_teams_values(
+        self.accept_invitation_with_session_effects_values(
+            invitation_id,
+            user_id,
+            session_token,
+            teams_enabled,
+            maximum,
+            Default::default(),
+        )
+        .await
+    }
+
+    async fn accept_invitation_with_session_effects_values(
+        &self,
+        invitation_id: &FieldValue,
+        user_id: &FieldValue,
+        session_token: Option<&FieldValue>,
+        teams_enabled: bool,
+        maximum: TeamMemberLimits<'_>,
+        mut effects: SessionWriteEffects<S>,
+    ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
+        effects.secondary = effects
+            .secondary
+            .or_else(|| self.session_update_writer_factory());
+        if let Some(effect) = effects.after_output.take() {
+            let runtime = self.clone();
+            effects.after_output = Some(Box::new(move |session, transaction| {
+                effect(session, runtime.wrap_transaction(transaction))
+            }));
+        }
+        self.inner
+            .accept_invitation_with_session_effects_values(
                 invitation_id,
                 user_id,
-                database_token,
+                session_token,
                 teams_enabled,
                 maximum,
+                effects,
             )
-            .await?;
-        let Some(token) = session_token else {
-            return Ok((member, invitation, snapshot));
-        };
-        if self.database_sessions() {
-            if let Some(session) = self.inner.get_session_by_token_value(token).await? {
-                self.mirror_session(&session).await?;
-            }
-            return Ok((member, invitation, snapshot));
-        }
-        let team_ids: Vec<_> = invitation
-            .team_id
-            .typed()?
-            .as_deref()
-            .filter(|_| teams_enabled)
-            .unwrap_or("")
-            .split(',')
-            .filter(|id| !id.is_empty())
-            .collect();
-        let snapshot = if let [team] = team_ids.as_slice() {
-            Some(
-                self.update_session_active_team_by_token_value(token, Some(&(*team).into()))
-                    .await?,
-            )
-        } else {
-            None
-        };
-        let _ = self
-            .update_session_active_organization_by_token_value(
-                token,
-                Some(&invitation.organization_id.field_value()),
-            )
-            .await?;
-        Ok((member, invitation, snapshot))
+            .await
     }
 }
 

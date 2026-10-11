@@ -499,7 +499,7 @@ mod tests {
         assert!(
             schema
                 .parse_organization_input(
-                    in&valid.as_object().unwrap().snapshot_fields().unwrap(),
+                    &invalid.as_object().unwrap().snapshot_fields().unwrap(),
                     "body.data",
                     true
                 )

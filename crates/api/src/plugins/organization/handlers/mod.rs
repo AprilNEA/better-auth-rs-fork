@@ -148,6 +148,8 @@ pub async fn handle_has_permission(
 }
 
 #[cfg(test)]
+mod native_cookie_transaction_tests;
+#[cfg(test)]
 mod native_mutation_tests;
 #[cfg(test)]
 mod native_tests;

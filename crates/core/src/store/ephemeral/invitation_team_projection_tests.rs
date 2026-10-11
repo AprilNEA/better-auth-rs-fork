@@ -603,7 +603,10 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
         context: &crate::store::database_hooks::DatabaseHookContext<'_, StatelessSchema>,
     ) -> AuthResult<()> {
         assert!(context.transaction.is_none());
-        assert_eq!(required(user)?.email, "hook@example.com");
+        assert_eq!(
+            required(user)?.email.field_value(),
+            "hook@example.com".into()
+        );
         assert_eq!(self.writer.lock()?.members.len(), 1);
         assert_eq!(self.writer.lock()?.users.len(), 1);
         event(&self.events, "after.user", "committed".into())

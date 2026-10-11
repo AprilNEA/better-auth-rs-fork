@@ -229,12 +229,33 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         teams_enabled: bool,
         maximum: crate::store::TeamMemberLimits<'_>,
     ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
+        self.accept_invitation_with_session_effects_values(
+            invitation_id,
+            user_id,
+            session_token,
+            teams_enabled,
+            maximum,
+            Default::default(),
+        )
+        .await
+    }
+
+    async fn accept_invitation_with_session_effects_values(
+        &self,
+        invitation_id: &crate::FieldValue,
+        user_id: &crate::FieldValue,
+        session_token: Option<&crate::FieldValue>,
+        teams_enabled: bool,
+        maximum: crate::store::TeamMemberLimits<'_>,
+        effects: crate::store::SessionWriteEffects<StatelessSchema>,
+    ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
         self.accept_invitation(
             invitation_id,
             user_id,
             session_token,
             teams_enabled,
             maximum,
+            effects,
         )
         .await
     }

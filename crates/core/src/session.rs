@@ -208,7 +208,19 @@ impl<S: AuthSchema> SessionManager<S> {
         dont_remember: Option<bool>,
         transaction: &dyn crate::store::AuthTransaction<S>,
     ) -> AuthResult<()> {
-        self.issue_session_cookie(req, data.into(), dont_remember, Some(transaction))
+        self.set_native_session_cookie_in_transaction(req, data.into(), dont_remember, transaction)
+            .await
+    }
+
+    /// Issue native credentials while keeping cache signing in the active transaction.
+    pub async fn set_native_session_cookie_in_transaction(
+        &self,
+        req: &AuthRequest,
+        data: NativeSessionData,
+        dont_remember: Option<bool>,
+        transaction: &dyn crate::store::AuthTransaction<S>,
+    ) -> AuthResult<()> {
+        self.issue_session_cookie(req, data, dont_remember, Some(transaction))
             .await
     }
 

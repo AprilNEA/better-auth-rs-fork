@@ -497,10 +497,8 @@ pub(crate) async fn accept_invitation_core(
     session: &NativeSessionData,
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<(
-    AcceptInvitationResponse<InvitationView, BasicMemberResponse>,
-    Option<better_auth_core::wire::SessionView>,
-)> {
+    request: &AuthRequest,
+) -> AuthResult<AcceptInvitationResponse<InvitationView, BasicMemberResponse>> {
     let invitation = ctx
         .database
         .get_invitation_by_id(&body.invitation_id)
@@ -566,14 +564,32 @@ pub(crate) async fn accept_invitation_core(
             session: &session.session,
         },
     };
-    let (member, accepted, snapshot) = ctx
+    let manager = ctx.session_manager();
+    let request = request.clone();
+    let user = session.user.clone();
+    let (member, accepted, _) = ctx
         .database
-        .accept_invitation_with_teams_values(
+        .accept_invitation_with_session_effects_values(
             &body.invitation_id.as_str().into(),
             &session.user_property("id")?,
             Some(&session.session.token.field_value()),
             config.teams.enabled,
             better_auth_core::store::TeamMemberLimits::Resolver(&resolver),
+            better_auth_core::store::SessionWriteEffects {
+                secondary: None,
+                after_output: Some(Box::new(move |session, transaction| {
+                    Box::pin(async move {
+                        manager
+                            .set_native_session_cookie_in_transaction(
+                                &request,
+                                NativeSessionData { session, user },
+                                None,
+                                transaction.as_ref(),
+                            )
+                            .await
+                    })
+                })),
+            },
         )
         .await?;
     if let Some(hooks) = &config.hooks {
@@ -587,13 +603,10 @@ pub(crate) async fn accept_invitation_core(
             )
             .await?;
     }
-    Ok((
-        AcceptInvitationResponse {
-            invitation: InvitationView::try_from_invitation(&accepted)?,
-            member: BasicMemberResponse::try_from_member(&member)?,
-        },
-        snapshot,
-    ))
+    Ok(AcceptInvitationResponse {
+        invitation: InvitationView::try_from_invitation(&accepted)?,
+        member: BasicMemberResponse::try_from_member(&member)?,
+    })
 }
 
 pub(crate) async fn reject_invitation_core(
@@ -828,23 +841,8 @@ pub async fn handle_accept_invitation(
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
     let body: AcceptInvitationRequest = super::super::request::read(req, &config.schema)?;
-    let (response, snapshot) = accept_invitation_core(&body, &session, config, ctx).await?;
-    let response = AuthResponse::native(None, response.field_values()?.into());
-    if let Some(snapshot) = snapshot {
-        let manager = ctx.session_manager();
-        // Upstream writes the team cookie before updating the active organization in the transaction.
-        manager
-            .set_native_session_cookie(
-                req,
-                NativeSessionData {
-                    session: snapshot,
-                    user: session.user,
-                },
-                None,
-            )
-            .await?;
-    }
-    Ok(response)
+    let response = accept_invitation_core(&body, &session, config, ctx, req).await?;
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 pub async fn handle_reject_invitation(

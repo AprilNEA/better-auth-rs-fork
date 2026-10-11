@@ -82,13 +82,19 @@ run_stage() {
       local organization_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/organization-invitation-session-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-invitation-cookie-transaction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-full-fallback.test.ts \
         ./compat-tests/reference-server/contracts/organization-plugin-fields.test.ts || organization_status=1
-      cargo clippy --locked -p better-auth-core -p better-auth-api -- -D warnings || organization_status=1
-      cargo test --locked -p better-auth-core --lib || organization_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || organization_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test sql_relation_property_tests -- -D warnings || organization_status=1
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib || organization_status=1
       cargo test --locked -p better-auth-api --lib plugins::organization:: || organization_status=1
-      cargo test --locked --features axum,seaorm2,redis-cache \
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test organization_native_fields_tests --test organization_invitation_fields_tests \
-        --test organization_native_team_tests || organization_status=1
+        --test organization_native_team_tests --test organization_native_join_tests \
+        --test sql_relation_property_tests || organization_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- organization:: || organization_status=1
       return "$organization_status"
       ;;
     organization-details)
@@ -96,9 +102,11 @@ run_stage() {
       local organization_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
+        ./compat-tests/reference-server/contracts/organization-full-fallback.test.ts \
         ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
         ./compat-tests/reference-server/contracts/organization-list-relations.test.ts || organization_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || organization_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test sql_relation_property_tests -- -D warnings || organization_status=1
       cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- \
         store::joins:: store::ephemeral::organization_joins:: \
         store::ephemeral::organization_parent_tests:: store::ephemeral::user_serial_tests:: \

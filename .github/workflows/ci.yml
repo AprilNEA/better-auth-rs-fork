@@ -148,22 +148,6 @@ jobs:
       - name: Install locked compatibility dependencies
         id: dependencies
         run: devenv shell -- ./scripts/check.sh dependencies
-      - name: Capture full organization adapter observations
-        if: env.CHECK_STAGE == 'organization-details'
-        run: |
-          mkdir -p "$RUNNER_TEMP/organization-observations"
-          devenv shell -- bun --no-install compat-tests/reference-server/contracts/organization-full-fallback-capture.mjs \
-            "$RUNNER_TEMP/organization-observations/full-fallback-1.7.6.json" \
-            >"$RUNNER_TEMP/organization-observations/full-fallback.stdout.log" \
-            2>"$RUNNER_TEMP/organization-observations/full-fallback.stderr.log"
-      - name: Preserve organization adapter observations
-        if: always() && env.CHECK_STAGE == 'organization-details'
-        uses: actions/upload-artifact@v4
-        with:
-          name: organization-observations-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/organization-observations/
-          if-no-files-found: error
-          retention-days: 14
       - name: Capture upstream telemetry environment
         if: ${{ !cancelled() && contains(fromJSON('["all", "telemetry"]'), env.CHECK_STAGE) && steps.dependencies.outcome == 'success' }}
         env:
@@ -207,10 +191,12 @@ jobs:
         if: ${{ !cancelled() && env.CHECK_STAGE == 'all' && steps.dependencies.outcome == 'success' }}
         run: devenv shell -- ./scripts/check.sh alignment
       - name: Run focused check
+        id: focused
         if: ${{ !cancelled() && env.CHECK_STAGE != 'all' && steps.dependencies.outcome == 'success' }}
         env:
           CHECK_COMPAT_PROFILE: ${{ inputs.profile }}
         run: |
+          set -o pipefail
           if [[ "$CHECK_STAGE" == "client-configuration" && -n "$CHECK_COMPAT_PROFILE" ]]; then
             export COMPAT_TEST_PROFILE="$CHECK_COMPAT_PROFILE"
           fi
@@ -234,7 +220,15 @@ jobs:
             consumer_sampler=$!
             trap 'consumer_status=$?; printf "Consumer command exit: %s\n" "$consumer_status"; kill "$consumer_sampler" 2>/dev/null || true; wait "$consumer_sampler" 2>/dev/null || true; exit "$consumer_status"' EXIT
           fi
-          devenv shell -- ./scripts/check.sh "$CHECK_STAGE"
+          devenv shell -- ./scripts/check.sh "$CHECK_STAGE" 2>&1 | tee "$RUNNER_TEMP/focused-check.log"
+      - name: Preserve focused check log before cache upload
+        if: always() && (steps.focused.outcome == 'success' || steps.focused.outcome == 'failure')
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-check-${{ inputs.stage }}-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/focused-check.log
+          if-no-files-found: error
+          retention-days: 14
       - name: Preserve telemetry host observations
         if: always() && contains(fromJSON('["all", "telemetry"]'), env.CHECK_STAGE)
         uses: actions/upload-artifact@v4

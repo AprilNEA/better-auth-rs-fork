@@ -15,7 +15,7 @@ fn add_join<P: SeaOrmOrganizationModel, C: SeaOrmOrganizationModel>(
     relation: &DetailRelation,
     table: &'static str,
     prefix: &str,
-    presence: &str,
+    presence: &'static str,
 ) -> AuthResult<()> {
     let _ = query.join_as(
         JoinType::LeftJoin,

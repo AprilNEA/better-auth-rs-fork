@@ -20,6 +20,8 @@ use std::sync::{Arc, Mutex};
 
 #[path = "sql_relation_property_tests/models.rs"]
 mod models;
+#[path = "sql_relation_property_tests/organization_details.rs"]
+mod organization_details;
 
 const DATE: &str = "2030-01-01T00:00:00.000Z";
 const CHANGED: &str = "2030-01-01T00:00:01.000Z";

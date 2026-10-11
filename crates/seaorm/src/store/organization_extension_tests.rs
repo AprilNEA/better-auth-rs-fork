@@ -15,7 +15,7 @@ use better_auth_core::{
 };
 use std::sync::Arc;
 
-async fn store() -> SeaOrmStore<BundledSchema> {
+pub(super) async fn store() -> SeaOrmStore<BundledSchema> {
     let db = sea_orm::Database::connect("sqlite::memory:").await.unwrap();
     run_migrations(&db).await.unwrap();
     let mut config = AuthConfig::new("test-secret-key-at-least-32-chars-long");

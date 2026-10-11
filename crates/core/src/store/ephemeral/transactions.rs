@@ -115,6 +115,17 @@ impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
     ) -> AuthResult<Option<crate::wire::UserView>> {
         self.store.create_user_fields_optional(input).await
     }
+    async fn update_session_with_writer_by_token_value(
+        &self,
+        token: &Value,
+        update: crate::store::database_hooks::SessionUpdate,
+        writer: Option<crate::store::SessionUpdateWriter>,
+    ) -> AuthResult<Option<SessionView>> {
+        self.store
+            .update_session_with_writer_by_token_value(token, update, writer)
+            .await
+    }
+
     async fn before_create_runtime_session_optional(
         &self,
         input: &mut crate::store::PreparedSessionCreate,

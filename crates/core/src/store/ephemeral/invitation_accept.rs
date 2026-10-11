@@ -2,8 +2,8 @@ use super::rows::{RecordSource, RowRef, Rows};
 use super::sessions::session_token_matches;
 use super::*;
 use crate::SchemaValue;
-use crate::store::TeamMemberLimits;
 use crate::store::database_hooks::SessionUpdate;
+use crate::store::{SessionWriteEffects, TeamMemberLimits};
 use better_auth_schema_registry::EntityRole;
 
 struct InvitationClaim {
@@ -63,6 +63,7 @@ impl EphemeralStore {
         session_token: Option<&crate::FieldValue>,
         teams_enabled: bool,
         maximum: TeamMemberLimits<'_>,
+        effects: SessionWriteEffects<StatelessSchema>,
     ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
         let bound_id =
             self.organization_query(EntityRole::Invitation, "id", invitation_id.clone())?;
@@ -100,12 +101,12 @@ impl EphemeralStore {
         let accepted = self.output_invitation(claim.fields.clone()).await?;
         match self
             .accept_invitation_members(
-                &claim,
-                &accepted,
+                (&claim, &accepted),
                 user_id,
                 session_token,
                 teams_enabled,
                 maximum,
+                effects,
             )
             .await
         {
@@ -161,16 +162,17 @@ impl EphemeralStore {
 
     async fn accept_invitation_members(
         &self,
-        claim: &InvitationClaim,
-        invitation: &Invitation,
+        (claim, invitation): (&InvitationClaim, &Invitation),
         user_id: &Value,
         session_token: Option<&crate::FieldValue>,
         teams_enabled: bool,
         maximum: TeamMemberLimits<'_>,
+        mut effects: SessionWriteEffects<StatelessSchema>,
     ) -> AuthResult<(Member, Option<SessionView>)> {
         let member_schema = self.field_config(EntityRole::Member)?;
         let team_schema = self.field_config(EntityRole::Team)?;
         let session_selector = session_token
+            .filter(|_| effects.write_database())
             .map(|token| self.memory_session_token_query(token.clone()))
             .transpose()?;
         let member_user = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
@@ -360,10 +362,13 @@ impl EphemeralStore {
         } else {
             None
         };
+        let transaction = EphemeralTransaction {
+            store: staged.clone(),
+        };
         let cookie_session = if let (Some(token), [team_id]) = (session_token, team_ids.as_slice())
         {
             Some(
-                staged
+                transaction
                     .update_session_with_writer_by_token_value(
                         token,
                         SessionUpdate {
@@ -371,7 +376,10 @@ impl EphemeralStore {
                                 .into(),
                             ..Default::default()
                         },
-                        None,
+                        effects
+                            .secondary
+                            .as_ref()
+                            .map(|writer| writer.bind(token.clone())),
                     )
                     .await?
                     .ok_or_else(|| {
@@ -381,6 +389,9 @@ impl EphemeralStore {
         } else {
             None
         };
+        if let (Some(session), Some(effect)) = (&cookie_session, effects.after_output.take()) {
+            effect(session.clone(), transaction.clone_handle()).await?;
+        }
         let member = Member {
             field_order: Default::default(),
             additional_fields: Default::default(),
@@ -405,7 +416,7 @@ impl EphemeralStore {
             .await?
             .remove(0);
         if let Some(token) = session_token {
-            let _ = staged
+            let _ = transaction
                 .update_session_with_writer_by_token_value(
                     token,
                     SessionUpdate {
@@ -416,7 +427,10 @@ impl EphemeralStore {
                         .into(),
                         ..Default::default()
                     },
-                    None,
+                    effects
+                        .secondary
+                        .as_ref()
+                        .map(|writer| writer.bind(token.clone())),
                 )
                 .await?;
         }

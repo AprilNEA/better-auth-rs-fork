@@ -489,6 +489,7 @@ async fn transactional_team_details_keep_parent_and_members_on_the_transaction()
             .create_user(CreateUser {
                 id: Some("transaction-member".into()),
                 email: Some("transaction-member@example.test".into()),
+                name: Some("Transaction member".into()).into(),
                 ..Default::default()
             })
             .await?;

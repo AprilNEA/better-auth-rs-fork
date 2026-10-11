@@ -351,6 +351,10 @@ pub(super) fn row_json(row: &impl AuthRecordFields) -> AuthResult<Option<String>
 }
 
 impl<T: Clone + AuthRecordFields + TransactionRow> Rows<T> {
+    #[expect(
+        clippy::mutable_key_type,
+        reason = "TransactionId hashes and compares mutable objects by stable identity, never by their mutable fields."
+    )]
     pub(super) fn merge(&mut self, base: &Self, working: Self) -> AuthResult<()> {
         // The pinned memory adapter reconciles by public ID, even when IDs are
         // missing or duplicated. Preserve that observable limitation and row order.

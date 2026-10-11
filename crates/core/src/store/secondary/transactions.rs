@@ -27,6 +27,18 @@ impl<S: AuthSchema> Transaction<S> {
     }
 }
 
+impl<S: AuthSchema> SecondaryStore<S> {
+    pub(super) fn wrap_transaction(
+        &self,
+        inner: Arc<dyn AuthTransaction<S>>,
+    ) -> Arc<dyn AuthTransaction<S>> {
+        Arc::new(Transaction {
+            inner,
+            runtime: self.clone(),
+        })
+    }
+}
+
 #[async_trait]
 impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
     async fn get_member_value(
@@ -123,6 +135,22 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
         writer: Option<crate::store::SessionCreateWriter>,
     ) -> AuthResult<Option<crate::wire::SessionView>> {
         self.inner.create_session_with_writer(input, writer).await
+    }
+
+    async fn update_session_with_writer_by_token_value(
+        &self,
+        token: &crate::FieldValue,
+        update: crate::store::database_hooks::SessionUpdate,
+        writer: Option<crate::store::SessionUpdateWriter>,
+    ) -> AuthResult<Option<crate::wire::SessionView>> {
+        let writer = writer.or_else(|| {
+            self.runtime
+                .session_update_writer_factory()
+                .map(|factory| factory.bind(token.clone()))
+        });
+        self.inner
+            .update_session_with_writer_by_token_value(token, update, writer)
+            .await
     }
 
     async fn before_create_runtime_session_optional(
@@ -383,11 +411,8 @@ impl<S: AuthSchema> TransactionStore<S> for SecondaryStore<S> {
                 Box::pin(async move {
                     let validation = runtime.schema_validation.clone();
                     let operation = async move {
-                        work(&Transaction {
-                            inner: inner.clone_handle(),
-                            runtime,
-                        })
-                        .await
+                        let transaction = runtime.wrap_transaction(inner.clone_handle());
+                        work(transaction.as_ref()).await
                     };
                     if let Some(validation) = validation {
                         validation.in_transaction(operation).await

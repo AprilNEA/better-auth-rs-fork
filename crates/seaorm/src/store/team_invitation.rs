@@ -1,9 +1,12 @@
 use super::{
-    SeaOrmStore, map_db_err,
+    SeaOrmStore, SeaOrmTransaction, map_db_err,
     organization_models::{self as models, Entity, values},
 };
 use crate::SeaOrmOrganizationModel;
 use crate::schema::{AuthSchema, SeaOrmSessionModel};
+use better_auth_core::store::{
+    AuthTransaction, SessionWriteEffects, database_hooks::SessionUpdate,
+};
 use better_auth_core::user_fields::UserConfig;
 use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema::EntityRole};
 use better_auth_core::{FieldValue, SchemaField};
@@ -12,6 +15,7 @@ use sea_orm::{
     EntityTrait, FromQueryResult, PaginatorTrait, QueryFilter, TransactionTrait,
     sea_query::{Expr, ExprTrait},
 };
+use std::sync::{Arc, Mutex};
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
@@ -28,6 +32,7 @@ where
         session_token: Option<&FieldValue>,
         teams_enabled: bool,
         maximum: better_auth_core::store::TeamMemberLimits<'_>,
+        effects: SessionWriteEffects<S>,
     ) -> AuthResult<(
         Member,
         better_auth_core::Invitation,
@@ -38,7 +43,14 @@ where
             .await?
             .ok_or_else(|| AuthError::bad_request("Invitation not found"))?;
         match self
-            .accept_claimed_invitation(&invitation, user_id, session_token, teams_enabled, maximum)
+            .accept_claimed_invitation(
+                &invitation,
+                user_id,
+                session_token,
+                teams_enabled,
+                maximum,
+                effects,
+            )
             .await
         {
             Ok((member, session)) => Ok((member, invitation, session)),
@@ -120,9 +132,13 @@ where
         session_token: Option<&FieldValue>,
         teams_enabled: bool,
         maximum: better_auth_core::store::TeamMemberLimits<'_>,
+        mut effects: SessionWriteEffects<S>,
     ) -> AuthResult<(Member, Option<better_auth_core::wire::SessionView>)> {
-        let config = self.organization_fields()?;
-        let tx = self.connection().begin().await.map_err(map_db_err)?;
+        let pending = Arc::new(Mutex::new(Vec::new()));
+        let transaction = SeaOrmTransaction::begin(self, &pending).await?;
+        let store = &transaction.store;
+        let tx = &transaction.tx;
+        let config = store.organization_fields()?;
         let result = async {
             let team_id = invitation.team_id.field_value();
             let team_ids: Vec<_> = if teams_enabled && team_id.is_truthy() {
@@ -138,7 +154,7 @@ where
             };
             for team_id in &team_ids {
                 let team_value = FieldValue::from(*team_id);
-                let condition = self.team_details_condition(
+                let condition = store.team_details_condition(
                     &team_value,
                     Some(&invitation.organization_id.field_value()),
                 )?;
@@ -148,14 +164,14 @@ where
                         Expr::col(O::Team::column("member_count")?),
                     )
                     .filter(condition.clone())
-                    .exec(&tx)
+                    .exec(tx)
                     .await
                     .map_err(map_db_err)?;
                 if locked.rows_affected == 0 {
                     return Err(AuthError::bad_request("Team not found"));
                 }
-                let details = self
-                    .read_team_details_with_condition(&tx, condition, false)
+                let details = store
+                    .read_team_details_with_condition(tx, condition, false)
                     .await?
                     .ok_or_else(|| AuthError::bad_request("Team not found"))?;
                 let _ = details.into_public_parts(
@@ -172,70 +188,81 @@ where
                         user_id,
                     )?
                     .into();
-                let existing = self
-                    .find_team_member_by_key_or_pair(&tx, &team_value, user_id, &membership_key)
+                let existing = store
+                    .find_team_member_by_key_or_pair(tx, &team_value, user_id, &membership_key)
                     .await?;
                 if existing.is_none() {
                     let count = Entity::<O::TeamMember>::find()
-                        .filter(self.organization_field_equals::<O::TeamMember>(
+                        .filter(store.organization_field_equals::<O::TeamMember>(
                             better_auth_core::store::schema::EntityRole::TeamMember,
                             "teamId",
                             &team_value,
                         )?)
-                        .count(&tx)
+                        .count(tx)
                         .await
                         .map_err(map_db_err)?;
                     super::team_capacity::sync::<O::Team, _>(
-                        &tx,
+                        tx,
                         &team_value,
                         count,
                         &config.team,
-                        self.config().advanced.database.generate_id(),
-                        (&self.model_fields, EntityRole::Team),
+                        store.config().advanced.database.generate_id(),
+                        (&store.model_fields, EntityRole::Team),
                     )
                     .await?;
                     if let Some(maximum) = maximum {
                         if !super::team_capacity::reserve::<O::Team, _>(
-                            &tx,
+                            tx,
                             &team_value,
                             maximum,
                             &config.team,
-                            self.config().advanced.database.generate_id(),
-                            (&self.model_fields, EntityRole::Team),
+                            store.config().advanced.database.generate_id(),
+                            (&store.model_fields, EntityRole::Team),
                         )
                         .await?
                         {
                             return Err(AuthError::forbidden("Team member limit reached"));
                         }
-                        let _ = self
-                            .create_reserved_team_member(&tx, &team_value, user_id, &membership_key)
+                        let _ = store
+                            .create_reserved_team_member(tx, &team_value, user_id, &membership_key)
                             .await?;
                     } else {
-                        let _ = self
-                            .create_unlimited_team_member(
-                                &tx,
-                                &team_value,
-                                user_id,
-                                &membership_key,
-                            )
+                        let _ = store
+                            .create_unlimited_team_member(tx, &team_value, user_id, &membership_key)
                             .await?;
                     }
                 }
             }
             let cookie_session = match (session_token, team_ids.as_slice()) {
-                (Some(session_token), [team_id]) => Some(
-                    self.write_session_update(
-                        &tx,
-                        session_token,
-                        [("activeTeamId".into(), (*team_id).into())].into(),
-                    )
-                    .await?
-                    .ok_or(AuthError::SessionNotFound)?,
-                ),
+                (Some(session_token), [team_id]) => {
+                    let session = transaction
+                        .update_session_with_writer_by_token_value(
+                            session_token,
+                            SessionUpdate {
+                                additional_fields: [("activeTeamId".into(), (*team_id).into())]
+                                    .into(),
+                                ..Default::default()
+                            },
+                            effects
+                                .secondary
+                                .as_ref()
+                                .map(|factory| factory.bind(session_token.clone())),
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            AuthError::type_error(
+                                "Cannot read properties of null (reading 'token')",
+                            )
+                        })?;
+                    if let Some(effect) = effects.after_output.take() {
+                        effect(session.clone(), transaction.clone_handle()).await?;
+                    }
+                    Some(session)
+                }
                 _ => None,
             };
             let member = models::insert::<O::Member, _>(
-                &tx,
+                tx,
                 super::create_readback::ReadbackScope::Transaction,
                 values([
                     ("organization_id", invitation.organization_id.field_value()),
@@ -245,9 +272,9 @@ where
                 ]),
                 Default::default(),
                 &config.member,
-                self.config().advanced.database.generate_id(),
+                store.config().advanced.database.generate_id(),
                 (
-                    &self.model_fields,
+                    &store.model_fields,
                     better_auth_core::store::schema::EntityRole::Member,
                     "member",
                 ),
@@ -256,24 +283,30 @@ where
             let Some(session_token) = session_token else {
                 return Ok((member, None));
             };
-            let _ = self
-                .write_session_update(
-                    &tx,
+            let _ = transaction
+                .update_session_with_writer_by_token_value(
                     session_token,
-                    [(
-                        "activeOrganizationId".into(),
-                        invitation.organization_id.field_value(),
-                    )]
-                    .into(),
+                    SessionUpdate {
+                        additional_fields: [(
+                            "activeOrganizationId".into(),
+                            invitation.organization_id.field_value(),
+                        )]
+                        .into(),
+                        ..Default::default()
+                    },
+                    effects
+                        .secondary
+                        .as_ref()
+                        .map(|factory| factory.bind(session_token.clone())),
                 )
-                .await?
-                .ok_or(AuthError::SessionNotFound)?;
+                .await?;
             Ok((member, cookie_session))
         }
         .await;
         match result {
             Ok(value) => {
                 tx.commit().await.map_err(map_db_err)?;
+                self.finish_queued_transaction_effects(&pending).await?;
                 Ok(value)
             }
             Err(error) => {

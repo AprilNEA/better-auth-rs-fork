@@ -447,6 +447,23 @@ where
             .await
     }
 
+    async fn update_session_with_writer_by_token_value(
+        &self,
+        token: &better_auth_core::FieldValue,
+        update: better_auth_core::store::database_hooks::SessionUpdate,
+        writer: Option<better_auth_core::store::SessionUpdateWriter>,
+    ) -> AuthResult<Option<better_auth_core::wire::SessionView>> {
+        self.store
+            .update_session_with_writer_and_connection(
+                &self.tx,
+                Some((&self.tx, self)),
+                token,
+                update,
+                writer,
+            )
+            .await
+    }
+
     async fn before_create_runtime_session_optional(
         &self,
         input: &mut better_auth_core::store::PreparedSessionCreate,
@@ -807,5 +824,7 @@ pub(crate) fn cancelled_by_hook(operation: &str) -> AuthError {
     AuthError::forbidden(format!("{operation} cancelled by database hook"))
 }
 
+#[cfg(test)]
+mod invitation_session_tests;
 #[cfg(test)]
 mod organization_extension_tests;

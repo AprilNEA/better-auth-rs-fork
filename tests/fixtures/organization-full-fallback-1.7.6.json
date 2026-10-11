@@ -1,0 +1,5243 @@
+{
+  "version": "1.7.6",
+  "backend": "sqlite",
+  "catalog": {
+    "linked_user": {
+      "id": "TEXT",
+      "name": "TEXT",
+      "email": "TEXT",
+      "emailVerified": "INTEGER",
+      "image": "TEXT",
+      "createdAt": "TEXT",
+      "updatedAt": "TEXT",
+      "linked_account": "TEXT"
+    },
+    "organization": {
+      "id": "TEXT",
+      "name": "TEXT",
+      "slug": "TEXT",
+      "logo": "TEXT",
+      "metadata": "TEXT",
+      "createdAt": "TEXT",
+      "invitation": "TEXT",
+      "member": "TEXT",
+      "stored_invitation": "TEXT",
+      "stored_member": "TEXT",
+      "lookup": "TEXT",
+      "stored_lookup": "TEXT"
+    },
+    "member": {
+      "id": "TEXT",
+      "organizationId": "TEXT",
+      "userId": "TEXT",
+      "role": "TEXT",
+      "createdAt": "TEXT",
+      "lookup": "TEXT",
+      "stored_lookup": "TEXT"
+    },
+    "invitation": {
+      "id": "TEXT",
+      "organizationId": "TEXT",
+      "email": "TEXT",
+      "role": "TEXT",
+      "teamId": "TEXT",
+      "status": "TEXT",
+      "inviterId": "TEXT",
+      "createdAt": "TEXT",
+      "expiresAt": "TEXT"
+    },
+    "team": {
+      "id": "TEXT",
+      "organizationId": "TEXT",
+      "name": "TEXT",
+      "memberCount": "INTEGER",
+      "createdAt": "TEXT",
+      "updatedAt": "TEXT"
+    }
+  },
+  "scenarios": [
+    {
+      "name": "ordinary"
+    },
+    {
+      "name": "preceding-relations",
+      "dependencies": true
+    },
+    {
+      "name": "mapped-preceding-relations",
+      "dependencies": true,
+      "mapped": true
+    },
+    {
+      "name": "preceding-relation-error",
+      "dependencies": true,
+      "failure": "invitation.role"
+    },
+    {
+      "name": "source-alias-chain",
+      "sourceAlias": true
+    },
+    {
+      "name": "target-alias-chain",
+      "targetAlias": true
+    },
+    {
+      "name": "projected-owner-redirect",
+      "owner": "redirect"
+    },
+    {
+      "name": "projected-owner-null",
+      "owner": "null"
+    },
+    {
+      "name": "projected-owner-number",
+      "owner": "number"
+    },
+    {
+      "name": "duplicate-user-id-last-wins",
+      "duplicateUsers": true
+    },
+    {
+      "name": "member-singular-present",
+      "singular": "member"
+    },
+    {
+      "name": "member-singular-empty",
+      "singular": "member",
+      "empty": "member"
+    },
+    {
+      "name": "invitation-singular-present",
+      "singular": "invitation"
+    },
+    {
+      "name": "invitation-singular-empty",
+      "singular": "invitation",
+      "empty": "invitation"
+    },
+    {
+      "name": "team-singular-present",
+      "singular": "team"
+    },
+    {
+      "name": "team-singular-empty",
+      "singular": "team",
+      "empty": "team"
+    },
+    {
+      "name": "member.role-error",
+      "failure": "member.role"
+    },
+    {
+      "name": "team.name-error",
+      "failure": "team.name"
+    },
+    {
+      "name": "user.name-error",
+      "failure": "user.name"
+    }
+  ],
+  "cases": [
+    {
+      "scenario": "ordinary",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        },
+        {
+          "path": [
+            "teams"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "teams",
+            "0"
+          ],
+          "keys": [
+            "name",
+            "memberCount",
+            "organizationId",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "preceding-relations",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": "stale-member-key",
+            "member": "stale-team-key",
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "output",
+          "organization.invitation",
+          "stale-member-key"
+        ],
+        [
+          "output",
+          "organization.member",
+          "stale-team-key"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "SQLiteError",
+        "message": "datatype mismatch",
+        "sameCallbackError": false,
+        "properties": {
+          "code": "SQLITE_MISMATCH",
+          "errno": 20,
+          "byteOffset": -1
+        },
+        "keys": [
+          "code",
+          "errno",
+          "byteOffset"
+        ]
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": "stale-member-key",
+            "member": "stale-team-key",
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "mapped-preceding-relations",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": "stale-member-key",
+            "stored_member": "stale-team-key",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "output",
+          "organization.invitation",
+          "stale-member-key"
+        ],
+        [
+          "output",
+          "organization.member",
+          "stale-team-key"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "SQLiteError",
+        "message": "datatype mismatch",
+        "sameCallbackError": false,
+        "properties": {
+          "code": "SQLITE_MISMATCH",
+          "errno": 20,
+          "byteOffset": -1
+        },
+        "keys": [
+          "code",
+          "errno",
+          "byteOffset"
+        ]
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": "stale-member-key",
+            "stored_member": "stale-team-key",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "preceding-relation-error",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": "stale-member-key",
+            "member": "stale-team-key",
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "output",
+          "organization.invitation",
+          "stale-member-key"
+        ],
+        [
+          "output",
+          "organization.member",
+          "stale-team-key"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "full-fallback-output-rejected:invitation.role",
+        "sameCallbackError": true,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": "stale-member-key",
+            "member": "stale-team-key",
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "stale-team-key",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "source-alias-chain",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": "stale-member-key",
+            "stored_lookup": "organization"
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "output",
+          "organization.ownerRef",
+          "stale-member-key"
+        ],
+        [
+          "output",
+          "organization.lookup",
+          "organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "ownerRef": "stale-member-key",
+        "lookup": "organization",
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "ownerRef": "stale-member-key",
+        "lookup": "organization",
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "ownerRef",
+            "lookup",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        },
+        {
+          "path": [
+            "teams"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "teams",
+            "0"
+          ],
+          "keys": [
+            "name",
+            "memberCount",
+            "organizationId",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": "stale-member-key",
+            "stored_lookup": "organization"
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "target-alias-chain",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": "stale-member-key",
+            "stored_lookup": "organization"
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "output",
+          "member.lookup",
+          "organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "lookup": "organization",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "stale-member-key",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": "organization",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "lookup",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        },
+        {
+          "path": [
+            "teams"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "teams",
+            "0"
+          ],
+          "keys": [
+            "name",
+            "memberCount",
+            "organizationId",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": "stale-member-key",
+            "stored_lookup": "organization"
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "projected-owner-redirect",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Redirect"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "redirect",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "redirect",
+              "name": "Redirect",
+              "email": "redirect@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "redirect",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "id": "member",
+            "user": {
+              "id": "redirect",
+              "name": "Redirect",
+              "email": "redirect@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        },
+        {
+          "path": [
+            "teams"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "teams",
+            "0"
+          ],
+          "keys": [
+            "name",
+            "memberCount",
+            "organizationId",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "projected-owner-null",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "BetterAuthError",
+        "message": "Unexpected error: User not found for member",
+        "sameCallbackError": false,
+        "properties": {
+          "name": "BetterAuthError"
+        },
+        "keys": [
+          "name"
+        ]
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "projected-owner-number",
+      "before": {
+        "linked_user": [
+          {
+            "id": "7",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "7",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "7",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "7"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "BetterAuthError",
+        "message": "Unexpected error: User not found for member",
+        "sameCallbackError": false,
+        "properties": {
+          "name": "BetterAuthError"
+        },
+        "keys": [
+          "name"
+        ]
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "7",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "7",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "7",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "duplicate-user-id-last-wins",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "owner",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ],
+        [
+          "output",
+          "user.name",
+          "Redirect"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Redirect",
+              "email": "redirect@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Redirect",
+              "email": "redirect@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": [
+          {
+            "name": "Team",
+            "memberCount": 0,
+            "organizationId": "organization",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null,
+            "id": "team"
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        },
+        {
+          "path": [
+            "teams"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "teams",
+            "0"
+          ],
+          "keys": [
+            "name",
+            "memberCount",
+            "organizationId",
+            "createdAt",
+            "updatedAt",
+            "id"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "owner",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "member-singular-present",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findOne",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "members.map is not a function. (In 'members.map((member) => member.userId)', 'members.map' is undefined)",
+        "sameCallbackError": false,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "member-singular-empty",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findOne",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "null is not an object (evaluating 'members.map')",
+        "sameCallbackError": false,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "invitation-singular-present",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findOne",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "invitations.map is not a function. (In 'invitations.map((inv) => filterOutputFields(inv, invitationAdditionalFields))', 'invitations.map' is undefined)",
+        "sameCallbackError": false,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "invitation-singular-empty",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findOne",
+          "invitation"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "null is not an object (evaluating 'invitations.map')",
+        "sameCallbackError": false,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "team-singular-present",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findOne",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "teams?.map is not a function. (In 'teams?.map((team) => filterOutputFields(team, teamAdditionalFields))', 'teams?.map' is undefined)",
+        "sameCallbackError": false,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "team-singular-empty",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": []
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findOne",
+          "team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": true,
+      "result": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": {
+          "type": "date",
+          "value": "2030-01-01T00:00:00.000Z"
+        },
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-01T00:00:00.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ],
+        "teams": {
+          "type": "undefined"
+        }
+      },
+      "json": {
+        "name": "Organization",
+        "slug": "organization",
+        "logo": null,
+        "createdAt": "2030-01-01T00:00:00.000Z",
+        "metadata": null,
+        "id": "organization",
+        "invitations": [
+          {
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "expiresAt": "2030-01-01T00:00:00.000Z",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "inviterId": "owner",
+            "id": "invitation"
+          }
+        ],
+        "members": [
+          {
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "id": "member",
+            "user": {
+              "id": "owner",
+              "name": "Owner",
+              "email": "owner@full-fallback.test",
+              "image": null
+            }
+          }
+        ]
+      },
+      "keyOrder": [
+        {
+          "path": [],
+          "keys": [
+            "name",
+            "slug",
+            "logo",
+            "createdAt",
+            "metadata",
+            "id",
+            "invitations",
+            "members",
+            "teams"
+          ]
+        },
+        {
+          "path": [
+            "invitations"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "invitations",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "email",
+            "role",
+            "teamId",
+            "status",
+            "expiresAt",
+            "createdAt",
+            "inviterId",
+            "id"
+          ]
+        },
+        {
+          "path": [
+            "members"
+          ],
+          "keys": [
+            "0"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0"
+          ],
+          "keys": [
+            "organizationId",
+            "userId",
+            "role",
+            "createdAt",
+            "id",
+            "user"
+          ]
+        },
+        {
+          "path": [
+            "members",
+            "0",
+            "user"
+          ],
+          "keys": [
+            "id",
+            "name",
+            "email",
+            "image"
+          ]
+        }
+      ],
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": []
+      }
+    },
+    {
+      "scenario": "member.role-error",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "full-fallback-output-rejected:member.role",
+        "sameCallbackError": true,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "team.name-error",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "full-fallback-output-rejected:team.name",
+        "sameCallbackError": true,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "user.name-error",
+      "before": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      },
+      "events": [
+        [
+          "query",
+          "findOne",
+          "organization"
+        ],
+        [
+          "output",
+          "organization.name",
+          "Organization"
+        ],
+        [
+          "query",
+          "findMany",
+          "invitation"
+        ],
+        [
+          "output",
+          "invitation.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "member"
+        ],
+        [
+          "output",
+          "member.userId",
+          "owner"
+        ],
+        [
+          "output",
+          "member.role",
+          "member"
+        ],
+        [
+          "query",
+          "findMany",
+          "team"
+        ],
+        [
+          "output",
+          "team.name",
+          "Team"
+        ],
+        [
+          "query",
+          "findMany",
+          "linked_user"
+        ],
+        [
+          "output",
+          "user.name",
+          "Owner"
+        ]
+      ],
+      "returned": false,
+      "error": {
+        "name": "TypeError",
+        "message": "full-fallback-output-rejected:user.name",
+        "sameCallbackError": true,
+        "properties": {},
+        "keys": []
+      },
+      "after": {
+        "linked_user": [
+          {
+            "id": "owner",
+            "name": "Owner",
+            "email": "owner@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          },
+          {
+            "id": "redirect",
+            "name": "Redirect",
+            "email": "redirect@full-fallback.test",
+            "emailVerified": 1,
+            "image": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": "2030-01-01T00:00:00.000Z",
+            "linked_account": null
+          }
+        ],
+        "organization": [
+          {
+            "id": "organization",
+            "name": "Organization",
+            "slug": "organization",
+            "logo": null,
+            "metadata": null,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "invitation": null,
+            "member": null,
+            "stored_invitation": null,
+            "stored_member": null,
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "member": [
+          {
+            "id": "member",
+            "organizationId": "organization",
+            "userId": "owner",
+            "role": "member",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "lookup": null,
+            "stored_lookup": null
+          }
+        ],
+        "invitation": [
+          {
+            "id": "invitation",
+            "organizationId": "organization",
+            "email": "recipient@full-fallback.test",
+            "role": "member",
+            "teamId": null,
+            "status": "pending",
+            "inviterId": "owner",
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "expiresAt": "2030-01-01T00:00:00.000Z"
+          }
+        ],
+        "team": [
+          {
+            "id": "team",
+            "organizationId": "organization",
+            "name": "Team",
+            "memberCount": 0,
+            "createdAt": "2030-01-01T00:00:00.000Z",
+            "updatedAt": null
+          }
+        ]
+      }
+    }
+  ]
+}
