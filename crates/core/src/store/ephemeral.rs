@@ -40,6 +40,8 @@ mod history_tests;
 mod hooks;
 #[cfg(test)]
 mod id_slot_tests;
+#[cfg(test)]
+mod initial_storage_tests;
 mod invitation_accept;
 #[cfg(test)]
 mod invitation_team_projection_tests;
@@ -184,6 +186,27 @@ impl EphemeralStore {
             hooks: Vec::new(),
             pending_hooks: None,
         }
+    }
+
+    /// Initialize owned physical tables without applying field policies or lifecycle hooks.
+    /// Rows retain field order, missing values, null, undefined, and nested native handles.
+    /// Table arrays are new allocations; this constructor does not retain external array identities.
+    pub fn from_storage(
+        config: Arc<AuthConfig>,
+        tables: impl IntoIterator<Item = (String, Vec<FieldMap>)>,
+    ) -> AuthResult<Self> {
+        let store = Self::empty(config);
+        store.operation(|operation| {
+            for (name, rows) in tables {
+                let table = table::TableRef::new(store.operations.clone());
+                for row in rows {
+                    let _ = table.push(row)?;
+                }
+                operation.replace_physical_table(name, Some(table))?;
+            }
+            Ok(())
+        })?;
+        Ok(store)
     }
 
     /// Construct the default no-database root from resolved logical schema keys.

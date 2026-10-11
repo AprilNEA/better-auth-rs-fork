@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::AuthRecordFields;
-use crate::field_value::FieldObjectSource;
+use crate::field_value::{FieldObjectSource, FieldPropertyDescriptor};
 use std::sync::Mutex;
 
 #[path = "structured_clone_tests/native_records.rs"]

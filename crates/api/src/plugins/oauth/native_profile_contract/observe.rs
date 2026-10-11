@@ -30,10 +30,11 @@ pub(super) fn native(value: &FieldValue) -> AuthResult<Value> {
 
 pub(super) fn error_value(error: &AuthError, state: &State) -> AuthResult<Value> {
     let observed = if let Some(value) = error.raw_value() {
+        let name = value.model_property("name")?.json()?.unwrap();
+        let message = value.model_property("message")?.json()?.unwrap();
         let keys = value.as_object().unwrap().enumerable_keys()?;
         let properties = native(value)?;
-        json!({"name": value.model_property("name")?.json()?.unwrap(),
-            "message": value.model_property("message")?.json()?.unwrap(),
+        json!({"name": name, "message": message,
             "keys": keys, "properties": properties})
     } else {
         let (name, message) = match error {

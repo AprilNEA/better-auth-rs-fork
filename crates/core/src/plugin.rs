@@ -228,6 +228,7 @@ pub use crate::endpoint_input::BodyValidator;
 pub struct AuthRoute {
     /// Native-only endpoints cannot match HTTP routing.
     pub server_only: bool,
+    /// HTTP matching template with `{parameter}` segments. Native dispatch uses `:parameter` segments.
     pub path: String,
     pub method: HttpMethod,
     /// Identifier used as the OpenAPI `operationId` for this route.
@@ -747,6 +748,7 @@ mod tests {
     mod response_headers;
     mod response_status;
     mod response_values;
+    mod route_paths;
 
     use super::*;
     use crate::entity::AuthUser;

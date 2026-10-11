@@ -84,6 +84,8 @@ pub trait AuthPlugin<S: AuthSchema>: Send + Sync + std::any::Any {
 
 `schema`, `on_init`, `on_http_request`, `on_http_response`, `before_request`, and `after_request` have default no-op implementations. Plugins must implement `name`, `routes`, and `on_request`.
 
+Declare route parameters with braces, such as `AuthRoute::get("/callback/{id}", "callback")`. HTTP handlers retain the matched request path, such as `/callback/google`. `RequestHookContext.path` and tracing use the upstream template `/callback/:id`. Native dispatch supplies that upstream template to the handler and hooks while preserving the original route declaration for HTTP matching and validation.
+
 ### Register adapter field policies
 
 The builder calls each plugin's synchronous `schema` once in registration order, before constructing the default Memory adapter. Declare fields through the supplied `ModelFields`. Keep runtime validation, extensions, callbacks, and side effects in `on_init`. Initialization callbacks run sequentially after the complete adapter field policies are installed; a callback error stops later callbacks and preserves completed writes. `WithCallbacks` forwards both phases.

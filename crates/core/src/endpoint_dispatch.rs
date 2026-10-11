@@ -1,6 +1,7 @@
 //! Shared endpoint hooks, validation, handler and response lifecycle.
 use crate::hooks::{
-    RequestHookContext, update_request_hook_context, with_request_hook_context_value,
+    RequestHookContext, update_request_hook_context, upstream_route_path,
+    with_request_hook_context_value,
 };
 use crate::observability::EndpointHooks;
 use crate::{
@@ -44,14 +45,19 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
         F: FnOnce(AuthRequest) -> Fut,
         Fut: Future<Output = AuthResult<AuthResponse>>,
     {
+        let route_path = if route.server_only {
+            "/:virtual".into()
+        } else {
+            upstream_route_path(&route.path)
+        };
         if route.server_only {
             request.path = "/".into();
             request.set_server_only();
         } else {
-            request.path = route.path.clone();
+            request.path = route_path.clone();
         }
         let mut scope = RequestHookContext::from_request(&request)?;
-        scope.path = (!route.server_only).then(|| route.path.clone());
+        scope.path = (!route.server_only).then(|| route_path.clone());
         scope.body = request.input_field_value()?;
         scope.operation_id = Some(route.operation_id.clone());
         scope.meta = crate::RequestMeta::from_request_with_config(
@@ -67,14 +73,8 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
             HttpMethod::Options => "OPTIONS",
             HttpMethod::Head => "HEAD",
         };
-        let route_path = if route.server_only {
-            "/:virtual"
-        } else {
-            &route.path
-        };
         let name = format!("{method} {route_path}");
         let operation_id = route.operation_id.clone();
-        let route_path = route_path.to_owned();
         with_request_hook_context_value(
             scope,
             crate::observability::with_span(

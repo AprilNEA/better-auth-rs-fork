@@ -68,29 +68,32 @@ pub fn current_request_hook_context() -> Option<RequestHookContext> {
         .ok()
 }
 
+fn route_parameter(segment: &str) -> Option<&str> {
+    segment.strip_prefix('{')?.strip_suffix('}')
+}
+
+pub(crate) fn upstream_route_path(path: &str) -> String {
+    path.split('/')
+        .map(|segment| match route_parameter(segment) {
+            Some(name) => format!(":{name}"),
+            None => segment.to_owned(),
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Record the matched endpoint without changing the request's actual path.
 pub fn set_request_hook_route(path: &str, route: Option<&crate::AuthRoute>) {
     let mut params = std::collections::HashMap::new();
     let path = route.map_or_else(
         || path.to_owned(),
         |route| {
-            route
-                .path
-                .split('/')
-                .zip(path.split('/'))
-                .map(|(segment, value)| {
-                    if let Some(name) = segment
-                        .strip_prefix('{')
-                        .and_then(|name| name.strip_suffix('}'))
-                    {
-                        let _ = params.insert(name.to_owned(), value.to_owned());
-                        format!(":{name}")
-                    } else {
-                        segment.to_owned()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("/")
+            for (segment, value) in route.path.split('/').zip(path.split('/')) {
+                if let Some(name) = route_parameter(segment) {
+                    let _ = params.insert(name.to_owned(), value.to_owned());
+                }
+            }
+            upstream_route_path(&route.path)
         },
     );
     let _ = REQUEST_HOOK_CONTEXT.try_with(|context| {
