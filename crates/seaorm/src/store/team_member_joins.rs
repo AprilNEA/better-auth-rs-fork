@@ -10,6 +10,7 @@ use better_auth_core::{
     user_fields::UserConfig,
 };
 use sea_orm::{DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect};
+use std::sync::Arc;
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -95,15 +96,18 @@ where
                 .collect::<AuthResult<Vec<_>>>()?;
         }
         let pages = if let Some(children) = children {
+            let continuation = Arc::new((children, team_fields));
+            let store = self.clone();
             membership_fields
-                .organization_output_records_batches_then(
+                .organization_output_records_owned_batches_then(
                     records,
                     backend == DbBackend::Postgres,
                     |_, output| Ok(output),
-                    |ready| {
-                        let children = &children;
-                        let team_fields = &team_fields;
+                    move |ready| {
+                        let continuation = continuation.clone();
+                        let store = store.clone();
                         async move {
+                            let (children, team_fields) = continuation.as_ref();
                             let pages = ready
                                 .iter()
                                 .map(|(index, _)| {
@@ -115,7 +119,7 @@ where
                                 })
                                 .collect::<AuthResult<Vec<_>>>()?;
                             let record_fields = team_fields.clone();
-                            let runtime = self.model_fields.clone();
+                            let runtime = store.model_fields.clone();
                             let output = super::joins::project_child_pages(
                                 team_fields,
                                 pages,
@@ -138,22 +142,30 @@ where
                 )
                 .await?
         } else {
+            let continuation = Arc::new((
+                relation.clone(),
+                membership_fields.clone(),
+                team_fields,
+                runtime,
+            ));
+            let store = self.clone();
             membership_fields
-                .organization_output_records_then(
+                .organization_output_records_owned_then(
                     records,
                     backend == DbBackend::Postgres,
-                    |_, output| {
-                        let relation = &relation;
-                        let membership_fields = &membership_fields;
-                        let team_fields = &team_fields;
-                        let runtime = &runtime;
+                    move |_, output| {
+                        let continuation = continuation.clone();
+                        let store = store.clone();
                         async move {
+                            let (relation, membership_fields, team_fields, runtime) =
+                                continuation.as_ref();
                             let field = relation.fallback_from(
                                 (EntityRole::TeamMember, "teamMember", membership_fields),
                                 runtime,
                             )?;
                             let value = output.get(&field).cloned().unwrap_or_default();
-                            self.selected_member_teams(relation, team_fields, value)
+                            store
+                                .selected_member_teams(relation, team_fields, value)
                                 .await
                         }
                     },

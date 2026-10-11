@@ -1,3 +1,4 @@
+use super::rows::RecordSource;
 use super::*;
 use crate::{
     CreateOrganizationRole, CreateTeam, OrganizationRole, Team, TeamMember, UpdateOrganizationRole,
@@ -202,21 +203,25 @@ impl TeamStore for EphemeralStore {
             Some(self.config.advanced.database.find_many_limit()),
             None,
         );
+        let continuation = Arc::new((join.clone(), schema, team_schema));
+        let store = self.clone();
         let projected = self
-            .output_record_refs_batches_then(
+            .project_record_sources_owned_batches_then(
                 EntityRole::TeamMember,
-                rows,
-                |ready: Vec<(usize, FieldMap)>| {
-                    let join = &join;
-                    let schema = &schema;
-                    let team_schema = &team_schema;
+                &self.field_config(EntityRole::TeamMember)?,
+                rows.into_iter().map(RecordSource::Live).collect(),
+                |_, fields| Ok(fields),
+                move |ready: Vec<(usize, FieldMap)>| {
+                    let continuation = continuation.clone();
+                    let store = store.clone();
                     async move {
+                        let (join, schema, team_schema) = continuation.as_ref();
                         let mut groups = Vec::new();
                         let mut teams = Vec::new();
                         for (index, member) in ready {
                             let from = join.fallback_from(
                                 (EntityRole::TeamMember, "teamMember", schema),
-                                &self.model_fields,
+                                &store.model_fields,
                             )?;
                             let owner = member.get(&from).cloned().unwrap_or_default();
                             let rows = if owner.is_null() || owner.is_undefined() {
@@ -224,14 +229,14 @@ impl TeamStore for EphemeralStore {
                             } else {
                                 let (logical, physical) = join.fallback_target(
                                     (EntityRole::Team, "team", team_schema),
-                                    &self.model_fields,
+                                    &store.model_fields,
                                 )?;
                                 let value = if logical == "id" {
-                                    self.memory_primary_id_query(&owner)?
+                                    store.memory_primary_id_query(&owner)?
                                 } else {
-                                    self.memory_field_query(team_schema, &logical, owner)?
+                                    store.memory_field_query(team_schema, &logical, owner)?
                                 };
-                                let rows = self.lock()?.teams.select_refs(|row| {
+                                let rows = store.lock()?.teams.select_refs(|row| {
                                     row.get(&physical)
                                         .unwrap_or(&Value::Undefined)
                                         .strict_equals(&value)
@@ -239,7 +244,7 @@ impl TeamStore for EphemeralStore {
                                 crate::query::paginate_memory(
                                     rows,
                                     Some(if join.many {
-                                        self.config.advanced.database.find_many_limit()
+                                        store.config.advanced.database.find_many_limit()
                                     } else {
                                         1.0
                                     }),
@@ -250,7 +255,7 @@ impl TeamStore for EphemeralStore {
                             teams.push(rows);
                         }
                         let pages = teams.iter().map(Vec::as_slice).collect();
-                        let output = self.output_record_pages(EntityRole::Team, pages).await?;
+                        let output = store.output_record_pages(EntityRole::Team, pages).await?;
                         Ok(groups.into_iter().zip(output).collect())
                     }
                 },

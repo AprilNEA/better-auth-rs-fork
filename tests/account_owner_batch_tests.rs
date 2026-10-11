@@ -6,6 +6,10 @@
     reason = "Contract fixtures fail immediately on invalid setup, unexpected channel events, or a changed two-row result shape."
 )]
 
+#[path = "support/adapter_storage_snapshot.rs"]
+mod adapter_storage_snapshot;
+#[path = "support/field_projection_gate.rs"]
+mod field_projection_gate;
 #[path = "account_owner_batch_tests/retained.rs"]
 mod retained;
 
@@ -23,12 +27,13 @@ use better_auth_seaorm::{
     sea_orm::Database,
     store::__private_test_support::{bundled_schema::BundledSchema, migrator},
 };
+use field_projection_gate::Call;
 use serde_json::{Value, json};
 use std::{
     future::Future,
     sync::{Arc, Mutex},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 type Events = Arc<Mutex<Vec<String>>>;
 
@@ -197,32 +202,13 @@ async fn synchronous_account_errors_preserve_successful_row_continuations() {
 }
 
 #[derive(Debug)]
-struct Call {
-    name: &'static str,
-    value: FieldValue,
-    reply: oneshot::Sender<AuthResult<FieldValue>>,
-}
-
-#[derive(Debug)]
 enum Event {
     Field(Call),
     Complete(usize, Value),
 }
 
 fn async_callback(sender: &mpsc::UnboundedSender<Event>, name: &'static str) -> UserFieldTransform {
-    let sender = sender.clone();
-    UserFieldTransform::new_async(move |value| {
-        let sender = sender.clone();
-        async move {
-            let (reply, result) = oneshot::channel();
-            sender
-                .send(Event::Field(Call { name, value, reply }))
-                .map_err(|_| AuthError::internal("Field controller closed"))?;
-            result
-                .await
-                .map_err(|_| AuthError::internal("Field answer missing"))?
-        }
-    })
+    field_projection_gate::callback(sender, name, Event::Field)
 }
 
 fn async_fields(sender: &mpsc::UnboundedSender<Event>) -> UserConfig {

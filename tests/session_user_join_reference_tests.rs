@@ -21,10 +21,16 @@ use std::sync::{
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::prelude::*;
 
+#[path = "support/adapter_storage_snapshot.rs"]
+mod adapter_storage_snapshot;
 #[path = "account_user_auth_boundary_reference_tests/models.rs"]
 mod core_models;
+#[path = "support/field_projection_gate.rs"]
+mod field_projection_gate;
 #[path = "session_user_join_reference_tests/recorder.rs"]
 mod recorder;
+#[path = "session_user_join_reference_tests/retained.rs"]
+mod retained;
 #[path = "session_user_join_reference_tests/storage.rs"]
 mod storage;
 #[path = "support/device_where_values.rs"]

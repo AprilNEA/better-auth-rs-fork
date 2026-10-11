@@ -4,7 +4,6 @@ use super::{EphemeralStore, rows::RecordSource};
 use crate::store::schema::{EntityRole, resolve_field_name};
 use crate::user_fields::{
     UserConfig, UserFieldConfig, project_adapter_value, project_owned_source_fields_batches_then,
-    project_source_fields_batches_then,
 };
 use crate::{AuthResult, FieldMap, FieldValue, SchemaValue, plugin_runtime::ModelFields};
 use futures_util::future::BoxFuture;
@@ -90,33 +89,6 @@ impl EphemeralStore {
             move |row, name, field| read_field(&runtime, role, row, name, field),
             apply_field,
             move |index, (output, _, _)| decode(index, std::mem::take(output)),
-            complete,
-        )
-        .await
-    }
-
-    pub(super) async fn project_record_sources_batches_then<V: Send, R: Send, F>(
-        &self,
-        role: EntityRole,
-        configured: &UserConfig,
-        sources: Vec<RecordSource>,
-        decode: impl Fn(usize, FieldMap) -> AuthResult<V> + Sync,
-        complete: impl Fn(Vec<(usize, V)>) -> F + Sync,
-    ) -> AuthResult<Vec<R>>
-    where
-        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
-    {
-        let schema = configured.adapter_fields(&[]);
-        let mut rows: Vec<_> = sources
-            .into_iter()
-            .map(|source| (FieldMap::new(), source, false))
-            .collect();
-        project_source_fields_batches_then(
-            &mut rows,
-            schema.fields(),
-            |row, name, field| read_field(&self.model_fields, role, row, name, field),
-            apply_field,
-            |index, (output, _, _)| decode(index, std::mem::take(output)),
             complete,
         )
         .await

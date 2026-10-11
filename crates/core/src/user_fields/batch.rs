@@ -118,24 +118,6 @@ where
     apply
 }
 
-/// Continue completed live rows without delaying their child reads behind suspended peers.
-pub(crate) async fn project_source_fields_batches_then<T: Send, I: Send, V: Send, R: Send, F>(
-    rows: &mut [T],
-    fields: &IndexMap<String, UserFieldConfig>,
-    read: impl Fn(&mut T, &str, &UserFieldConfig) -> AuthResult<I> + Sync,
-    apply: impl for<'a> Fn(&'a mut T, &'a str, &'a UserFieldConfig, I) -> BoxFuture<'a, AuthResult<()>>
-    + Sync,
-    extract: impl Fn(usize, &mut T) -> AuthResult<V> + Sync,
-    complete: impl Fn(Vec<(usize, V)>) -> F + Sync,
-) -> AuthResult<Vec<R>>
-where
-    F: Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
-{
-    let capacity = rows.len().max(1);
-    let pending = source_projection_results(rows, fields, &read, &apply, &extract);
-    continue_projection_batches(pending, capacity, None, complete).await
-}
-
 fn finish_projection<R>(
     first_error: Option<crate::AuthError>,
     completed: Vec<R>,

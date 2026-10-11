@@ -9,6 +9,7 @@ use better_auth_core::{
     wire::SessionView,
 };
 use sea_orm::{ConnectionTrait, DbBackend, EntityName, IdenStatic};
+use std::sync::Arc;
 
 use crate::error::{AuthError, AuthResult};
 use crate::schema::{AuthSchema, SeaOrmSessionModel, SeaOrmUserModel};
@@ -95,13 +96,21 @@ where
     ) -> AuthResult<Vec<SessionView>> {
         let backend = db.get_database_backend();
         let records = self.session_records(rows, schema, backend)?;
+        let rows = rows.to_vec();
+        let output_schema = schema.clone();
+        let store = self.clone();
         schema
-            .project_adapter_records_then(
+            .project_adapter_records_owned_then(
                 records,
                 backend == DbBackend::Postgres,
                 backend != DbBackend::Sqlite,
-                |index, output| {
-                    std::future::ready(self.session_from_output(rows, index, schema, output))
+                move |index, output| {
+                    std::future::ready(store.session_from_output(
+                        &rows,
+                        index,
+                        &output_schema,
+                        output,
+                    ))
                 },
             )
             .await
@@ -167,18 +176,23 @@ where
                 ))
             })
             .collect::<AuthResult<Vec<_>>>()?;
+        let continuation = Arc::new((rows.to_vec(), users.to_vec(), schema.clone()));
+        let store = self.clone();
         schema
-            .project_adapter_records_batches_then(
+            .project_adapter_records_owned_batches_then(
                 records,
                 backend == DbBackend::Postgres,
                 backend != DbBackend::Sqlite,
-                |ready| {
-                    let schema = &schema;
+                move |ready| {
+                    let continuation = continuation.clone();
+                    let store = store.clone();
                     async move {
+                        let (rows, users, schema) = continuation.as_ref();
                         let ready = ready
                             .into_iter()
                             .map(|(index, output)| {
-                                self.session_from_output(rows, index, schema, output)
+                                store
+                                    .session_from_output(rows, index, schema, output)
                                     .map(|session| (index, session))
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
@@ -192,7 +206,7 @@ where
                                 })
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
-                        let projected = self.output_native_user_pages(pages).await?;
+                        let projected = store.output_native_user_pages(pages).await?;
                         ready
                             .into_iter()
                             .zip(projected)
@@ -228,30 +242,34 @@ where
             &FieldMap::new(),
         );
         let records = self.session_records(rows, &schema, backend)?;
+        let continuation = Arc::new((rows.to_vec(), relation.clone(), schema.clone()));
+        let store = self.clone();
         schema
-            .project_adapter_records_then(
+            .project_adapter_records_owned_then(
                 records,
                 backend == DbBackend::Postgres,
                 backend != DbBackend::Sqlite,
-                |index, output| {
-                    let schema = &schema;
+                move |index, output| {
+                    let continuation = continuation.clone();
+                    let store = store.clone();
                     async move {
+                        let (rows, relation, schema) = continuation.as_ref();
                         let source = relation.fallback_from(
                             (EntityRole::Session, "session", schema),
-                            &self.model_fields,
+                            &store.model_fields,
                         )?;
                         let value = output.get(&source).cloned().unwrap_or_default();
-                        let session = self.session_from_output(rows, index, schema, output)?;
-                        let users = self
+                        let session = store.session_from_output(rows, index, schema, output)?;
+                        let users = store
                             .selected_join_users(
                                 relation,
                                 value,
-                                self.config().advanced.database.find_many_limit(),
+                                store.config().advanced.database.find_many_limit(),
                             )
                             .await?;
                         let mut projected = Vec::with_capacity(users.len());
                         for user in users {
-                            let user = self.output_user(&user, self.connection()).await?;
+                            let user = store.output_user(&user, store.connection()).await?;
                             projected.push(user);
                         }
                         let data = SessionData {

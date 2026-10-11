@@ -21,16 +21,16 @@ impl EphemeralStore {
             .await
     }
 
-    pub(super) async fn output_sessions_batches_then<R: Send, F>(
+    pub(super) async fn output_sessions_batches_then<R: Send + 'static, F>(
         &self,
         sessions: Vec<RecordSource>,
-        complete: impl Fn(Vec<(usize, SessionView)>) -> F + Sync,
+        complete: impl Fn(Vec<(usize, SessionView)>) -> F + Send + Sync + 'static,
     ) -> AuthResult<Vec<R>>
     where
-        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
+        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send + 'static,
     {
         let schema = crate::store::session_create_schema(&self.session_config, &FieldMap::new());
-        let mut rows: Vec<_> = sessions
+        let rows: Vec<_> = sessions
             .into_iter()
             .map(|source| {
                 let stored = source.read(|row| Ok(row.clone()))?;
@@ -61,12 +61,13 @@ impl EphemeralStore {
                 Ok((session, source, false))
             })
             .collect::<AuthResult<_>>()?;
-        crate::user_fields::project_source_fields_batches_then(
-            &mut rows,
-            schema.fields(),
-            |(_, source, started), name, field| {
+        let runtime = self.model_fields.clone();
+        crate::user_fields::project_owned_source_fields_batches_then(
+            rows,
+            schema.fields().clone(),
+            move |(_, source, started), name, field| {
                 if !*started {
-                    self.model_fields.begin_id_output(EntityRole::Session)?;
+                    runtime.begin_id_output(EntityRole::Session)?;
                     *started = true;
                 }
                 source.read(|row| {

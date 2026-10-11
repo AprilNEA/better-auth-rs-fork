@@ -1,70 +1,22 @@
+use super::adapter_storage_snapshot::Storage;
 use super::*;
 use better_auth_core::{
     AuthRequest, FieldDate, HttpMethod, UpdateUser,
     hooks::{RequestHookContext, current_request_hook_context, with_request_hook_context_value},
     store::{StatelessSchema, schema::EntityRole},
 };
-use better_auth_seaorm::sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 const PROVIDER: &str = "retained-provider";
 const SUBJECT: &str = "duplicate-subject";
 const DUPLICATE: &str = "Multiple accounts match the same accountId for provider \"retained-provider\". Resolve duplicate account identities before continuing.";
 
-enum Storage {
-    Memory(Box<EphemeralStore>),
-    Sqlite(DatabaseConnection),
-}
-
-impl Storage {
-    async fn snapshot(&self) -> AuthResult<BTreeMap<String, Vec<FieldMap>>> {
-        let mut snapshot = BTreeMap::new();
-        for (name, table, role) in [
-            ("user", "users", EntityRole::User),
-            ("account", "accounts", EntityRole::Account),
-            ("session", "sessions", EntityRole::Session),
-            ("verification", "verifications", EntityRole::Verification),
-        ] {
-            let mut rows = match self {
-                Self::Memory(store) => store.storage_rows(role)?,
-                Self::Sqlite(database) => {
-                    let columns = database
-                        .query_all_raw(Statement::from_string(
-                            DbBackend::Sqlite,
-                            format!("PRAGMA table_info(\"{table}\")"),
-                        ))
-                        .await
-                        .map_err(|error| AuthError::internal(error.to_string()))?;
-                    let columns = columns
-                        .iter()
-                        .map(|row| row.try_get::<String>("", "name"))
-                        .collect::<Result<Vec<_>, _>>()
-                        .map_err(|error| AuthError::internal(error.to_string()))?;
-                    let columns = columns
-                        .iter()
-                        .map(|name| format!("'{name}',\"{name}\""))
-                        .collect::<Vec<_>>()
-                        .join(",");
-                    database.query_all_raw(Statement::from_string(DbBackend::Sqlite,
-                        format!("SELECT json_object({columns}) AS value FROM \"{table}\" ORDER BY id"),
-                    )).await.map_err(|error| AuthError::internal(error.to_string()))?
-                        .into_iter().map(|row| {
-                            let json = row.try_get::<String>("", "value")
-                                .map_err(|error| AuthError::internal(error.to_string()))?;
-                            FieldMap::from_json(serde_json::from_str(&json)?)
-                        }).collect::<AuthResult<Vec<_>>>()?
-                }
-            };
-            rows.sort_by(|left, right| {
-                left.get("id")
-                    .and_then(FieldValue::as_str)
-                    .cmp(&right.get("id").and_then(FieldValue::as_str))
-            });
-            let _ = snapshot.insert(name.into(), rows);
-        }
-        Ok(snapshot)
-    }
-}
+const TABLES: &[(&str, &str, EntityRole)] = &[
+    ("user", "users", EntityRole::User),
+    ("account", "accounts", EntityRole::Account),
+    ("session", "sessions", EntityRole::Session),
+    ("verification", "verifications", EntityRole::Verification),
+];
 
 fn date() -> FieldDate {
     FieldDate::from_milliseconds(1_893_456_000_000.0)
@@ -195,7 +147,7 @@ async fn finished(
 
 async fn check<S: AuthSchema>(writer: Arc<dyn AuthStore<S>>, storage: Storage, joins: bool) {
     seed(writer.as_ref()).await.unwrap();
-    let before = storage.snapshot().await.unwrap();
+    let before = storage.snapshot(TABLES).await.unwrap();
     let (sender, mut calls) = mpsc::unbounded_channel();
     let (completed, mut completions) = mpsc::unbounded_channel();
     let marker: FieldValue =
@@ -259,7 +211,7 @@ async fn check<S: AuthSchema>(writer: Arc<dyn AuthStore<S>>, storage: Storage, j
     assert!(!peer.reply.is_closed());
     assert!(current_request_hook_context().is_none());
     finished(&mut completions, false, "accessToken", &rejected_label).await;
-    assert_eq!(storage.snapshot().await.unwrap(), before);
+    assert_eq!(storage.snapshot(TABLES).await.unwrap(), before);
     answer(peer);
     finished(&mut completions, true, "accessToken", &peer_label).await;
     answer(next_field(&mut calls, "refreshToken", &peer_label).await);
@@ -292,7 +244,7 @@ async fn check<S: AuthSchema>(writer: Arc<dyn AuthStore<S>>, storage: Storage, j
         .find(|row| row.get("id") == Some(&user_id))
         .unwrap();
     let _ = user.insert("image".into(), "after-release".into());
-    assert_eq!(storage.snapshot().await.unwrap(), expected);
+    assert_eq!(storage.snapshot(TABLES).await.unwrap(), expected);
     let mut control = AuthConfig::default();
     control.advanced.database.joins = Some(joins);
     control.advanced.database.default_find_many_limit = Some(1.0);
@@ -304,7 +256,7 @@ async fn check<S: AuthSchema>(writer: Arc<dyn AuthStore<S>>, storage: Storage, j
         panic!("Successful parents must still reject duplicate identities")
     };
     assert_eq!(message, DUPLICATE);
-    assert_eq!(storage.snapshot().await.unwrap(), expected);
+    assert_eq!(storage.snapshot(TABLES).await.unwrap(), expected);
 }
 
 async fn memory(joins: bool) {

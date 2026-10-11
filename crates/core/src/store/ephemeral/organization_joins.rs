@@ -132,14 +132,17 @@ impl EphemeralStore {
                 })
                 .unzip::<_, _, Vec<_>, Vec<_>>()
         };
+        let teams = Arc::new(teams);
+        let store = self.clone();
         let projected = self
-            .project_record_sources_batches_then(
+            .project_record_sources_owned_batches_then(
                 EntityRole::TeamMember,
                 &member_schema,
                 members,
                 |_, fields| Ok(fields),
-                |ready: Vec<(usize, FieldMap)>| {
-                    let teams = &teams;
+                move |ready: Vec<(usize, FieldMap)>| {
+                    let teams = teams.clone();
+                    let store = store.clone();
                     async move {
                         let pages = ready
                             .iter()
@@ -151,7 +154,7 @@ impl EphemeralStore {
                                 })
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
-                        let output = self.output_record_pages(EntityRole::Team, pages).await?;
+                        let output = store.output_record_pages(EntityRole::Team, pages).await?;
                         Ok(ready
                             .into_iter()
                             .zip(output)

@@ -450,26 +450,6 @@ impl EphemeralStore {
         })
     }
 
-    pub(super) async fn output_record_refs_batches_then<T: FromFieldMap + Send, R: Send, F>(
-        &self,
-        role: EntityRole,
-        values: Vec<super::rows::RowRef<FieldMap>>,
-        complete: impl Fn(Vec<(usize, T)>) -> F + Sync,
-    ) -> AuthResult<Vec<R>>
-    where
-        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
-    {
-        let schema = self.field_config(role)?;
-        self.project_record_sources_batches_then(
-            role,
-            &schema,
-            values.into_iter().map(RecordSource::Live).collect(),
-            |_, fields| T::from_field_values(fields),
-            complete,
-        )
-        .await
-    }
-
     pub(super) async fn output_records<T: FromFieldMap + Send>(
         &self,
         role: EntityRole,

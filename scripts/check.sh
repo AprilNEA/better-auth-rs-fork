@@ -644,23 +644,36 @@ run_stage() {
       bun --no-install test \
         ./compat-tests/reference-server/contracts/schema-preflight-native-mapping.test.ts \
         ./compat-tests/reference-server/contracts/projection-error-lifecycle.test.ts \
+        ./compat-tests/reference-server/contracts/team-projection-error-lifecycle.test.ts \
         ./compat-tests/reference-server/contracts/async-field-transforms.test.ts \
         ./compat-tests/reference-server/contracts/account-owner-batch.test.ts \
+        ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts \
         ./tests/fixtures/organization-join-continuation-upstream.test.ts || projection_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || projection_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
         --test async_field_transform_tests --test account_owner_batch_tests \
+        --test session_user_join_reference_tests --test organization_join_continuation_tests \
         --test relation_object_mutation_tests -- -D warnings || projection_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: || projection_status=1
+        request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: \
+        store::ephemeral::sessions::live_output_tests:: store::ephemeral::sessions::native_owner_tests:: \
+        store::ephemeral::organization_joins:: store::secondary:: || projection_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
         --test async_field_transform_tests \
         --test transform_batch_tests --test account_owner_batch_tests \
+        --test session_user_join_reference_tests --test native_memory_join_tests \
+        --test session_id_policy_tests --test session_create_payload_tests --test session_initial_defaults_tests \
+        --test secondary_storage_hooks_tests --test transaction_hook_context_tests \
+        --test transaction_effect_order_tests --test background_transaction_tests \
         --test fallback_continuation_tests --test organization_join_continuation_tests \
         --test organization_native_join_tests --test organization_list_relations_tests \
         --test relation_object_mutation_tests || projection_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --test plugin_model_fields_tests -- \
+        organization::team_member::joins:: organization::team_member::duplicate_ids:: \
+        organization::team_member::details:: \
+        organization::team_member::invitation_response::team_transaction:: || projection_status=1
       cargo test --locked --features axum,seaorm2,redis-cache --test schema_preflight_tests -- \
         --ignored --exact mysql::live_mysql_preflight_tracks_migrations_defaults_and_auto_increment \
         live_postgres_preflight_tracks_migrations_defaults_and_search_path || projection_status=1

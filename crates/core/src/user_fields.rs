@@ -15,7 +15,6 @@ pub(crate) use batch::await_boundary as await_adapter_boundary;
 mod batch;
 pub(crate) use batch::{
     project_fields_batches_then, project_fields_then, project_owned_source_fields_batches_then,
-    project_source_fields_batches_then,
 };
 pub use record::AdapterRecord;
 pub(crate) use record::project_adapter_value;

@@ -1,5 +1,11 @@
 #![cfg(feature = "seaorm2")]
 
+#[path = "support/adapter_storage_snapshot.rs"]
+mod adapter_storage_snapshot;
+#[path = "support/field_projection_gate.rs"]
+mod field_projection_gate;
+#[path = "async_field_transform_tests/team_temporal.rs"]
+mod team_temporal;
 #[path = "async_field_transform_tests/temporal.rs"]
 mod temporal;
 

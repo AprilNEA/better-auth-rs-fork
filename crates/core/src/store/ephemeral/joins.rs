@@ -162,11 +162,13 @@ impl EphemeralStore {
             .await?;
         let (sessions, users): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
         let fields = super::super::session_create_schema(&self.config.session, &FieldMap::new());
-        self.output_sessions_batches_then(sessions, |ready| {
-            let users = &users;
-            let fields = &fields;
-            let relation = &relation;
+        let continuation = Arc::new((users, fields, relation));
+        let store = self.clone();
+        self.output_sessions_batches_then(sessions, move |ready| {
+            let continuation = continuation.clone();
+            let store = store.clone();
             async move {
+                let (users, fields, relation) = continuation.as_ref();
                 let mut selected = Vec::with_capacity(ready.len());
                 for (index, session) in &ready {
                     let user = users.get(*index).ok_or_else(|| {
@@ -175,16 +177,17 @@ impl EphemeralStore {
                     selected.push(match user {
                         Some(user) => user.clone(),
                         None => {
-                            self.fallback_join_users(
-                                relation,
-                                (EntityRole::Session, "session", fields),
-                                &session.field_values()?,
-                            )
-                            .await?
+                            store
+                                .fallback_join_users(
+                                    relation,
+                                    (EntityRole::Session, "session", fields),
+                                    &session.field_values()?,
+                                )
+                                .await?
                         }
                     });
                 }
-                let projected = self.output_user_relations(selected).await?;
+                let projected = store.output_user_relations(selected).await?;
                 Ok(ready
                     .into_iter()
                     .zip(projected)
