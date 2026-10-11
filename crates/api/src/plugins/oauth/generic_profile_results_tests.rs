@@ -241,7 +241,7 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
             access_token: (Some("ordinary-profile-access".into())).into(),
             ..Default::default()
         };
-        let outcome = match fetch_user_info(&provider, &tokens, None, None).await {
+        let outcome = match fetch_user_info(&provider, &tokens, None).await {
             Ok(None) => json!({"kind":"absent"}),
             Ok(Some(response)) => {
                 let user = super::AccountInfoUser {

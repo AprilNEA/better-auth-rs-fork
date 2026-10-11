@@ -530,7 +530,7 @@ pub(super) async fn handle_account_info(
     }
     let request = OAuthUserInfoRequest::from_fields(tokens.into_field_value().enumerable_fields()?);
     let (user, data) = if let Some(generic) = &provider.generic {
-        let info = super::generic_profile::fetch_profile(generic, &request, None, None)
+        let info = super::generic_profile::fetch_profile(generic, &request, None)
             .await
             .map_err(super::generic_profile::GenericProfileError::into_auth_error)?
             .ok_or_else(super::social_profile::missing_profile)?;

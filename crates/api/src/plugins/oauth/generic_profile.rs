@@ -32,11 +32,9 @@ impl GenericProfileError {
 pub(super) async fn fetch_user_info(
     provider: &ResolvedGenericOAuth,
     tokens: &OAuthUserInfoRequest,
-    expected_nonce: Option<&str>,
     verified_claims: Option<Value>,
 ) -> Result<Option<OAuthUserInfoResponse>, GenericProfileError> {
-    let Some(response) = fetch_profile(provider, tokens, expected_nonce, verified_claims).await?
-    else {
+    let Some(response) = fetch_profile(provider, tokens, verified_claims).await? else {
         return Ok(None);
     };
     let subject = if let Some(resolver) = &provider.config.account_subject {
@@ -73,9 +71,11 @@ pub(super) async fn fetch_user_info(
 pub(super) async fn fetch_profile(
     provider: &ResolvedGenericOAuth,
     tokens: &OAuthUserInfoRequest,
-    expected_nonce: Option<&str>,
     verified_claims: Option<Value>,
 ) -> Result<Option<ProfileResponse>, GenericProfileError> {
+    let mut fields = tokens.fields();
+    let expected_nonce = fields.remove("expectedIdTokenNonce").unwrap_or_default();
+    let tokens = OAuthUserInfoRequest::from_fields(fields);
     let verified_claims = if verified_claims.is_some() {
         verified_claims
     } else if tokens.id_token.is_truthy()?
@@ -85,7 +85,7 @@ pub(super) async fn fetch_profile(
         let token = super::providers::jwt_string(&token).map_err(GenericProfileError::Identity)?;
         Some(
             verifier
-                .verify(&token, expected_nonce)
+                .verify_native_nonce(&token, &expected_nonce)
                 .await
                 .map_err(|error| {
                     GenericProfileError::Identity(AuthError::internal(format!(
@@ -100,16 +100,16 @@ pub(super) async fn fetch_profile(
     let raw = if let Some(handler) = &provider.config.get_user_info {
         handler
             .get_user_info_with_context(
-                tokens,
+                &tokens,
                 GenericOAuthProfileContext::new(
                     &provider.config,
-                    expected_nonce,
+                    expected_nonce.as_str(),
                     verified_claims.as_ref(),
                 ),
             )
             .await?
     } else {
-        default_profile(provider, tokens, verified_claims).await?
+        default_profile(provider, &tokens, verified_claims).await?
     };
     let Some(raw) = raw.filter(|profile| !profile.is_null()) else {
         return Ok(None);

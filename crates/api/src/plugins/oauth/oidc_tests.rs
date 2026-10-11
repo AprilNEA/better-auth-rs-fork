@@ -179,6 +179,165 @@ async fn verifies_real_signatures_and_oidc_claim_boundaries() {
     assert_eq!(server.requests.load(Ordering::Relaxed), 1);
 }
 
+struct NativeNonceProfile {
+    expected_nonce: Mutex<Option<String>>,
+    calls: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl super::super::generic::GenericOAuthUserInfoHandler for NativeNonceProfile {
+    async fn get_user_info(
+        &self,
+        tokens: &super::super::providers::OAuthUserInfoRequest,
+    ) -> better_auth_core::AuthResult<Option<Value>> {
+        assert!(!tokens.fields().contains_key("expectedIdTokenNonce"));
+        assert!(tokens.expected_id_token_nonce.is_undefined());
+        let _ = self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(Some(
+            json!({"sub":"subject", "email":"subject@example.com"}),
+        ))
+    }
+
+    async fn get_user_info_with_context(
+        &self,
+        tokens: &super::super::providers::OAuthUserInfoRequest,
+        context: super::super::generic::GenericOAuthProfileContext<'_>,
+    ) -> better_auth_core::AuthResult<Option<Value>> {
+        assert_eq!(
+            context.expected_nonce(),
+            self.expected_nonce.lock().unwrap().as_deref()
+        );
+        assert_eq!(context.verified_claims().unwrap().as_value(), &claims());
+        self.get_user_info(tokens).await
+    }
+}
+
+#[tokio::test]
+async fn generic_profile_uses_request_nonce_for_callback_proxy_and_native_extensions() {
+    use super::super::{
+        generic::GenericOAuthConfig,
+        handlers::callback_user_request,
+        providers::{OAuthProvider, OAuthTokenSet},
+        resolved::{ResolvedGenericOAuth, ResolvedProvider},
+        social_profile::fetch_user_info_for_code,
+    };
+    use better_auth_core::{FieldDate, FieldMap, Utf16String};
+
+    let fixtures: Vec<Value> = serde_json::from_str(include_str!("oidc_signatures.json")).unwrap();
+    let fixture = &fixtures[0];
+    let token = fixture["token"].as_str().unwrap();
+    let server = MockServer::start(json!({"keys":[fixture["key"]]})).await;
+    let verifier = Arc::new(server.verifier());
+    let handler = Arc::new(NativeNonceProfile {
+        expected_nonce: Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    });
+    let provider = ResolvedProvider {
+        config: OAuthProvider::custom("client", "", "", ""),
+        generic: Some(ResolvedGenericOAuth {
+            config: GenericOAuthConfig {
+                get_user_info: Some(handler.clone()),
+                ..Default::default()
+            },
+            issuer: Some("https://issuer.example".into()),
+            is_oidc: true,
+            verifier: Some(verifier.clone()),
+        }),
+    };
+    let mut accepted_count = 0;
+    for (index, (label, extension, state_nonce, accepted)) in [
+        (
+            "callback override",
+            Some("wrong".into()),
+            Some("expected"),
+            true,
+        ),
+        (
+            "callback mismatch",
+            Some("expected".into()),
+            Some("wrong"),
+            false,
+        ),
+        ("callback empty", Some("expected".into()), Some(""), true),
+        ("proxy extension", Some("expected".into()), None, true),
+        ("proxy absent", None, None, true),
+        ("own undefined", Some(FieldValue::Undefined), None, true),
+        ("null", Some(FieldValue::Null), None, true),
+        ("false", Some(false.into()), None, true),
+        ("zero", Some(0.0.into()), None, true),
+        ("negative zero", Some((-0.0).into()), None, true),
+        ("NaN", Some(f64::NAN.into()), None, true),
+        ("empty string", Some("".into()), None, true),
+        (
+            "empty UTF-16",
+            Some(FieldValue::Utf16String(Utf16String::from(""))),
+            None,
+            true,
+        ),
+        (
+            "UTF-16 match",
+            Some(FieldValue::Utf16String(Utf16String::from("expected"))),
+            None,
+            true,
+        ),
+        ("wrong string", Some("wrong".into()), None, false),
+        ("true", Some(true.into()), None, false),
+        ("number", Some(17.0.into()), None, false),
+        (
+            "array",
+            Some(vec![FieldValue::from("expected")].into()),
+            None,
+            false,
+        ),
+        ("object", Some(FieldMap::new().into()), None, false),
+        (
+            "date",
+            Some(FieldDate::from_milliseconds(0.0).into()),
+            None,
+            false,
+        ),
+        (
+            "lone surrogate",
+            Some(FieldValue::Utf16String(Utf16String::from_units(vec![
+                0xd800,
+            ]))),
+            None,
+            false,
+        ),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut fields = FieldMap::from([("idToken".into(), token.into())]);
+        if let Some(extension) = extension {
+            let _ = fields.insert("expectedIdTokenNonce".into(), extension);
+        }
+        let request =
+            callback_user_request(&OAuthTokenSet::from_fields(fields), None, state_nonce).unwrap();
+        *handler.expected_nonce.lock().unwrap() = request
+            .expected_id_token_nonce
+            .field_value()
+            .as_str()
+            .map(str::to_owned);
+        let response = fetch_user_info_for_code(&provider, request, Some("unused-flow-nonce"))
+            .await
+            .unwrap();
+        assert_eq!(response.is_some(), accepted, "{label}");
+        accepted_count += usize::from(accepted);
+        assert_eq!(
+            handler.calls.load(Ordering::SeqCst),
+            accepted_count,
+            "{label}"
+        );
+        assert_eq!(
+            verifier.verification_calls.load(Ordering::SeqCst),
+            index + 1,
+            "{label}"
+        );
+    }
+    assert_eq!(server.requests.load(Ordering::Relaxed), 1);
+}
+
 #[tokio::test]
 async fn caches_keys_and_reloads_only_after_rotation_cooldown_or_expiry() {
     let original = rsa_key("original");

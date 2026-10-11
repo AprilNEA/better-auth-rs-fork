@@ -57,7 +57,6 @@ impl Hooks {
                 accounts_one: false,
                 callback: scenario.callback,
                 branch: scenario.branch.clone(),
-                linking: true,
             },
             mode: scenario.mode.clone(),
         })

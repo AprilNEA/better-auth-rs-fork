@@ -304,7 +304,7 @@ async fn preset_requests_profiles_and_json_mapper_inputs_match_pinned_helpers() 
                 is_oidc: false,
                 verifier: None,
             };
-            let response = generic_profile::fetch_profile(&resolved, &tokens, None, None)
+            let response = generic_profile::fetch_profile(&resolved, &tokens, None)
                 .await
                 .unwrap()
                 .unwrap();

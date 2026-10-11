@@ -2,6 +2,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use better_auth_core::FieldValue;
 use jsonwebtoken::{Algorithm, DecodingKey};
 use reqwest::{Client, StatusCode, header::HeaderMap};
 use serde::Deserialize;
@@ -139,6 +140,15 @@ impl OidcVerifier {
         &self,
         token: &str,
         nonce: Option<&str>,
+    ) -> Result<Value, OidcError> {
+        self.verify_native_nonce(token, &nonce.map(FieldValue::from).unwrap_or_default())
+            .await
+    }
+
+    pub(super) async fn verify_native_nonce(
+        &self,
+        token: &str,
+        nonce: &FieldValue,
     ) -> Result<Value, OidcError> {
         #[cfg(test)]
         let _ = self
@@ -426,7 +436,7 @@ fn validate_claims(
     claims: &Map<String, Value>,
     issuer: &str,
     audiences: &[String],
-    nonce: Option<&str>,
+    nonce: &FieldValue,
     max_token_age: Option<Duration>,
 ) -> Result<(), OidcError> {
     if claims.get("iss").and_then(Value::as_str) != Some(issuer) {
@@ -470,9 +480,11 @@ fn validate_claims(
             }
         }
     }
-    if nonce
-        .filter(|nonce| !nonce.is_empty())
-        .is_some_and(|nonce| claims.get("nonce").and_then(Value::as_str) != Some(nonce))
+    if nonce.is_truthy()
+        && !claims
+            .get("nonce")
+            .and_then(Value::as_str)
+            .is_some_and(|claim| FieldValue::from(claim).strict_equals(nonce))
     {
         return Err(OidcError::Invalid("ID token nonce does not match"));
     }

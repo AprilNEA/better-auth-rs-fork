@@ -102,7 +102,9 @@ impl SchemaField for OAuthCallbackUserName {
 }
 
 /// Optional chaining checks nullish values before invoking Array.join.
-pub(super) fn joined_scopes(value: &SchemaValue<Vec<String>>) -> AuthResult<FieldValue> {
+pub(in crate::plugins::oauth) fn joined_scopes(
+    value: &SchemaValue<Vec<String>>,
+) -> AuthResult<FieldValue> {
     match value.field_value() {
         FieldValue::Null | FieldValue::Undefined => Ok(FieldValue::Undefined),
         value @ FieldValue::Array(_) => Ok(value.display_utf16()?.into()),
@@ -138,7 +140,7 @@ fn trimmed(units: &[u16]) -> Utf16String {
     Utf16String::from_units(units.get(start..end).unwrap_or_default().to_vec())
 }
 
-pub(super) fn split_scopes(value: &FieldValue) -> AuthResult<Vec<FieldValue>> {
+pub(in crate::plugins::oauth) fn split_scopes(value: &FieldValue) -> AuthResult<Vec<FieldValue>> {
     if !value.is_truthy() {
         return Ok(Vec::new());
     }
@@ -151,7 +153,7 @@ pub(super) fn split_scopes(value: &FieldValue) -> AuthResult<Vec<FieldValue>> {
         .collect())
 }
 
-pub(super) fn merge_scopes(
+pub(in crate::plugins::oauth) fn merge_scopes(
     stored: &FieldValue,
     incoming: &SchemaValue<Vec<String>>,
 ) -> AuthResult<FieldValue> {

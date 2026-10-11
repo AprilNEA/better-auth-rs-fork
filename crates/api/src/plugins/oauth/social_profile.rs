@@ -37,7 +37,7 @@ pub(super) async fn fetch_user_info_with_claims(
                 ));
             }
         };
-        return super::generic_profile::fetch_user_info(generic, &request, expected_nonce, claims)
+        return super::generic_profile::fetch_user_info(generic, &request, claims)
             .await
             .map_err(super::generic_profile::GenericProfileError::into_auth_error);
     }
@@ -217,14 +217,7 @@ pub(super) async fn fetch_user_info_for_code(
     expected_nonce: Option<&str>,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
     if let Some(generic) = &provider.generic {
-        return match super::generic_profile::fetch_user_info(
-            generic,
-            &request,
-            expected_nonce,
-            None,
-        )
-        .await
-        {
+        return match super::generic_profile::fetch_user_info(generic, &request, None).await {
             Ok(response) => Ok(response),
             Err(super::generic_profile::GenericProfileError::Identity(_)) => Ok(None),
             Err(super::generic_profile::GenericProfileError::Profile(error)) => Err(error),
