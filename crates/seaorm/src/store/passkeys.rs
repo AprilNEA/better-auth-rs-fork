@@ -163,10 +163,6 @@ where
                     ("backedUp".into(), (backed_up).into_field()),
                     ("deviceType".into(), (device_type).into_field()),
                     ("credential".into(), credential.to_owned().into_field()),
-                    (
-                        "updatedAt".into(),
-                        better_auth_core::FieldValue::Date((Utc::now()).into()),
-                    ),
                 ]),
             ),
             _ => {
@@ -177,9 +173,7 @@ where
         };
         let _ = fields.insert("counter".into(), counter.into_field());
         let selector = self.bind_plugin_query_field(EntityRole::Passkey, "id", id.field_value())?;
-        let patch = self
-            .prepare_passkey_fields(fields, FieldMap::new(), false)
-            .await?;
+        let patch = self.prepare_passkey_fields(fields, false).await?;
         let model = self
             .update_passkey_patch(selector, patch)
             .await?
@@ -189,18 +183,12 @@ where
     async fn update_passkey(
         &self,
         id: &better_auth_core::SchemaValue<String>,
-        mut update: UpdatePasskey,
+        update: UpdatePasskey,
     ) -> AuthResult<Passkey> {
         let selector = self.bind_plugin_query_field(EntityRole::Passkey, "id", id.field_value())?;
-        let extras = std::mem::take(&mut update.additional_fields);
-        let mut fields = update.into_adapter_fields()?;
-        if P::Passkey::passkey_storage() == PasskeyStorage::Legacy {
-            let _ = fields.insert(
-                "updatedAt".into(),
-                better_auth_core::FieldValue::Date((Utc::now()).into()),
-            );
-        }
-        let patch = self.prepare_passkey_fields(fields, extras, false).await?;
+        let patch = self
+            .prepare_passkey_fields(update.into_adapter_fields()?, false)
+            .await?;
         let row = self
             .update_passkey_patch(selector, patch)
             .await?
@@ -301,18 +289,18 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
 
     async fn prepare_passkey_fields(
         &self,
-        mut native: FieldMap,
-        mut extras: FieldMap,
+        input: FieldMap,
         create: bool,
     ) -> AuthResult<super::plugin_models::Write<P::Passkey>> {
         let fields = self.model_fields.plugin_fields(EntityRole::Passkey);
-        extras.extend(native.clone());
+        let private = ["credential", "updatedAt"].map(|name| (name, input.get(name).cloned()));
         let mut active = self
-            .prepare_plugin_fields::<P::Passkey>(EntityRole::Passkey, "passkey", extras, create)
+            .prepare_plugin_fields::<P::Passkey>(EntityRole::Passkey, "passkey", input, create)
             .await?;
         if P::Passkey::passkey_storage() == PasskeyStorage::Legacy {
-            for name in ["credential", "updatedAt"] {
-                if let Some(value) = native.remove(name)
+            for (name, value) in private {
+                let value = value.or_else(|| (name == "updatedAt").then(|| Utc::now().into()));
+                if let Some(value) = value
                     && let Some(column) =
                         super::plugin_rows::private_column::<P::Passkey>(&fields, name)?
                 {
@@ -327,31 +315,24 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         &self,
         connection: &impl sea_orm::ConnectionTrait,
         scope: super::create_readback::ReadbackScope<'_>,
-        mut input: CreatePasskey,
+        input: CreatePasskey,
     ) -> AuthResult<Option<Passkey>> {
-        let legacy = match (P::Passkey::passkey_storage(), &input.credential) {
-            (PasskeyStorage::Native, PasskeyCredentialState::Native) => false,
-            (PasskeyStorage::Legacy, PasskeyCredentialState::Legacy(_)) => true,
+        match (P::Passkey::passkey_storage(), &input.credential) {
+            (PasskeyStorage::Native, PasskeyCredentialState::Native)
+            | (PasskeyStorage::Legacy, PasskeyCredentialState::Legacy(_)) => {}
             _ => {
                 return Err(AuthError::config(
                     "Passkey creation does not match the model storage mode",
                 ));
             }
-        };
+        }
 
-        let extras = std::mem::take(&mut input.additional_fields);
         let mut fields = input.into_adapter_fields()?;
         let _ = fields.insert(
             "createdAt".into(),
             better_auth_core::FieldValue::Date((Utc::now()).into()),
         );
-        if legacy {
-            let _ = fields.insert(
-                "updatedAt".into(),
-                better_auth_core::FieldValue::Date((Utc::now()).into()),
-            );
-        }
-        let active = self.prepare_passkey_fields(fields, extras, true).await?;
+        let active = self.prepare_passkey_fields(fields, true).await?;
         let row = self.insert_passkey(connection, scope, active).await?;
         Ok(self
             .project_passkey_models(row.into_iter().collect())

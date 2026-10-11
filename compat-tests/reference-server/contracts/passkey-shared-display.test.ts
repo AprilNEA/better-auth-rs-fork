@@ -112,3 +112,103 @@ for (const backend of ["memory", "sqlite"] as const) {
     } finally { database?.close(); }
   });
 }
+
+for (const backend of ["memory", "sqlite"] as const) {
+  const layouts = backend === "memory"
+    ? [{ table: "passkeys", counter: "counter", timestamp: "updatedAt" }]
+    : [
+      { table: "passkeys", counter: "counter", timestamp: "updated_at" },
+      { table: "ordinary_passkey_fields", counter: "stored_counter", timestamp: "stored_short_date" },
+    ];
+  for (const layout of layouts) test(`${backend} Passkey timestamp declarations retain defaults, supplied values, and backend output phases at ${layout.timestamp}`, async () => {
+    const id = "typed-declaration-passkey";
+    const memory: Record<string, Record<string, unknown>[]> = { user: [], session: [], account: [], verification: [], [layout.table]: [] };
+    const database = backend === "sqlite" ? new Database(":memory:") : undefined;
+    const events: [string, string, unknown][] = [];
+    const errors = Object.fromEntries(["update", "input", "output"].map(phase => [phase, new Error(`timestamp-${phase}-stop`)]));
+    let failure = "";
+    const emit = (phase: string, value: unknown) => {
+      events.push([phase, "updatedAt", value]);
+      if (failure === phase) throw errors[phase];
+    };
+    const options: BetterAuthOptions = {
+      database: database ?? memoryAdapter(memory), baseURL: "http://typed-passkey-timestamps.test",
+      secret: "typed-passkey-timestamps-at-least-thirty-two-characters",
+      logger: { disabled: true }, telemetry: { enabled: false },
+      plugins: [{ id: "typed-passkey-timestamps", schema: { passkey: { modelName: layout.table, fields: {
+        name: { type: "string", required: false },
+        counter: { type: "number", required: false, fieldName: layout.counter },
+        updatedAt: { type: "date", required: false, fieldName: layout.timestamp,
+          defaultValue() { emit("default", undefined); return new Date(1000); },
+          onUpdate() { emit("update", undefined); return new Date(2000); },
+          transform: {
+            input(value) { emit("input", value); expect(value).toBeInstanceOf(Date); return new Date((value as Date).getTime() + 10); },
+            output(value) {
+              emit("output", value);
+              const milliseconds = value instanceof Date ? value.getTime() : new Date(value as string).getTime();
+              return new Date(milliseconds + 20).toISOString();
+            },
+          },
+        },
+      } } } }],
+    };
+    try {
+      database?.exec(`CREATE TABLE ${layout.table} (id TEXT PRIMARY KEY NOT NULL, name TEXT, ${layout.counter} INTEGER, ${layout.timestamp} TIMESTAMP)`);
+      const { adapter } = await betterAuth(options).$context;
+      const snapshot = (): Record<string, unknown>[] => database
+        ? database.query(`SELECT * FROM ${layout.table} ORDER BY id`).all() as Record<string, unknown>[]
+        : structuredClone(memory[layout.table]);
+      const storedDate = (milliseconds: number) => backend === "memory" ? new Date(milliseconds) : new Date(milliseconds).toISOString();
+      const projectedDate = (milliseconds: number) => backend === "memory" ? new Date(milliseconds).toISOString() : new Date(milliseconds);
+      const where = [{ field: "id", value: id }];
+      let name = "Desk";
+      let counter = 0;
+      let storedTime = 1010;
+      for (const stage of ["create", "name", "explicit", "auth", "factory-error", "input-error", "output-error"]) {
+        const before = snapshot();
+        failure = stage === "factory-error" ? "update" : stage === "input-error" ? "input" : stage === "output-error" ? "output" : "";
+        let result;
+        if (stage === "create") result = adapter.create({ model: "passkey", forceAllowId: true, data: { id, name, counter } });
+        else if (stage === "name") {
+          name = "Renamed";
+          result = adapter.update({ model: "passkey", where, update: { name } });
+        } else if (stage === "auth") {
+          counter = 1;
+          result = adapter.update({ model: "passkey", where, update: { counter } });
+        } else {
+          const update = stage === "explicit" ? { updatedAt: new Date(3000) }
+            : stage === "input-error" || stage === "output-error" ? { updatedAt: new Date(4000) } : {};
+          result = adapter.update({ model: "passkey", where, update });
+        }
+        const supplied = stage === "create" ? 1000 : stage === "explicit" ? 3000
+          : stage === "input-error" || stage === "output-error" ? 4000 : 2000;
+        const expectedEvents: [string, string, unknown][] = stage === "create" ? [["default", "updatedAt", undefined]]
+          : stage === "name" || stage === "auth" || stage === "factory-error" ? [["update", "updatedAt", undefined]] : [];
+        if (stage !== "factory-error") {
+          expectedEvents.push(["input", "updatedAt", new Date(supplied)]);
+          if (stage !== "input-error") {
+            expectedEvents.push(["output", "updatedAt", storedDate(supplied + 10)]);
+            storedTime = supplied + 10;
+          }
+        }
+        if (failure) await expect(result).rejects.toBe(errors[failure]);
+        else {
+          const actual: any = await result;
+          const expected = { name, counter, updatedAt: projectedDate(storedTime + 20), id };
+          expect(actual).toStrictEqual(expected);
+          expect(Object.keys(actual)).toStrictEqual(Object.keys(expected));
+          expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
+          if (backend === "memory") expect(typeof actual.updatedAt).toBe("string");
+          else expect(actual.updatedAt).toBeInstanceOf(Date);
+        }
+        expect(events.splice(0)).toStrictEqual(expectedEvents);
+        if (stage === "factory-error" || stage === "input-error") expect(snapshot()).toStrictEqual(before);
+        const expected = database
+          ? { id, name, [layout.counter]: counter, [layout.timestamp]: storedDate(storedTime) }
+          : { name, [layout.counter]: counter, [layout.timestamp]: storedDate(storedTime), id };
+        expect(snapshot()).toStrictEqual([expected]);
+        expect(Object.keys(snapshot()[0]!)).toStrictEqual(Object.keys(expected));
+      }
+    } finally { database?.close(); }
+  });
+}

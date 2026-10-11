@@ -16,6 +16,9 @@ use better_auth_seaorm::{
 use serde_json::Value;
 use std::sync::{Mutex, MutexGuard};
 
+#[path = "timestamps.rs"]
+mod timestamps;
+
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Event = (&'static str, &'static str, FieldValue);
 type Events = Arc<Mutex<Vec<Event>>>;

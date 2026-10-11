@@ -2,6 +2,9 @@ use super::*;
 use better_auth::plugins::api_key::ApiKeyPlugin;
 use better_auth_core::{CreateApiKey, UpdateApiKey, store::ApiKeyUsageWrite};
 
+#[path = "api_key_updates.rs"]
+mod updates;
+
 pub(super) fn policy(events: Arc<Mutex<Vec<String>>>) -> UserFieldConfig {
     let output = events.clone();
     UserFieldConfig {

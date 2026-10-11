@@ -16,7 +16,7 @@ function fieldPlugin(trace: string[], inputError = new Error("ordinary input err
   } } } } };
 }
 
-async function fixture(backend: "memory" | "sqlite", mode: "database" | "secondary" | "fallback", trace: string[], plugin = fieldPlugin(trace), fieldName?: string) {
+async function fixture(backend: "memory" | "sqlite", mode: "database" | "secondary" | "fallback", trace: string[], plugin: any = fieldPlugin(trace), fieldName?: string) {
   const memory: Record<string, any[]> = {user: [], session: [], account: [], verification: [], apikey: []};
   const database = backend === "sqlite" ? new Database(":memory:") : undefined;
   const cache = new Map<string, string>();
@@ -36,7 +36,8 @@ async function fixture(backend: "memory" | "sqlite", mode: "database" | "seconda
   const context = await auth.$context;
   const column = fieldName || "name";
   const raw = (id: string) => database ? database.query<any, [string]>(`SELECT "${column}" FROM apikey WHERE id=?`).get(id) : memory.apikey.find(row => row.id === id);
-  return { auth, adapter: context.adapter, raw, cache, close: () => database?.close() };
+  const snapshot = (id: string) => structuredClone(database ? database.query<any, [string]>("SELECT * FROM apikey WHERE id=?").get(id) : memory.apikey.find(row => row.id === id));
+  return { auth, adapter: context.adapter, raw, snapshot, cache, close: () => database?.close() };
 }
 
 test("ordinary API Key names preserve adapter write phases and legal counter expressions", async () => {
@@ -124,5 +125,123 @@ test("ordinary and mapped API Key cache-only and fallback hits bypass adapter na
       }
     }
     f.close();
+  }
+});
+
+const timestamps = {
+  old: "2000-01-02T03:04:05.000Z", generated: "2001-01-02T03:04:05.000Z",
+  stored: "2002-01-02T03:04:05.000Z", projected: "2003-01-02T03:04:05.000Z",
+  supplied: "2004-01-02T03:04:05.000Z", usage: "2005-01-02T03:04:05.000Z",
+};
+const timestampEvent = (phase: string, value: string) => `${phase}:${JSON.stringify(value)}`;
+const jsonRecord = (value: any) => JSON.parse(JSON.stringify(value));
+function publicRecord(row: any) {
+  const { key, ...view } = row;
+  return jsonRecord({ ...view, metadata: row.metadata ?? null, permissions: row.permissions ? JSON.parse(row.permissions) : null });
+}
+function timestampInput(key: string, metadata: any = null) {
+  return { name: "Desk", key, configId: "default", referenceId: "ordinary-owner", start: null, prefix: null,
+    enabled: true, remaining: 10, rateLimitEnabled: true, rateLimitTimeWindow: 60000, rateLimitMax: 3,
+    requestCount: 0, refillInterval: null, refillAmount: null, lastRefillAt: null, lastRequest: null,
+    expiresAt: null, createdAt: new Date(timestamps.old), updatedAt: new Date(timestamps.old), permissions: null, metadata };
+}
+function timestampFields(trace: string[], declaration: string) {
+  const state = { enabled: false, failure: "" };
+  const errors = Object.fromEntries(["onUpdate", "input", "output"].map(phase => [phase, new Error(`ordinary updatedAt ${phase} error`)]));
+  const emit = (phase: string, value?: any) => {
+    trace.push(phase === "onUpdate" ? phase : `${phase}:${JSON.stringify(value)}`);
+    if (state.failure === phase) throw errors[phase];
+  };
+  const updatedAt = { type: "date" as const, required: false,
+    ...(declaration === "on-update" ? { onUpdate() { emit("onUpdate"); return new Date(timestamps.generated); } } : {}),
+    transform: {
+      input(value: any) { if (!state.enabled) return value; emit("input", value); return new Date(timestamps.stored); },
+      output(value: any) { if (!state.enabled) return value; emit("output", value); return new Date(timestamps.projected); },
+    },
+  };
+  return { state, errors, plugin: { id: "ordinary-key-timestamps", schema: { apikey: { fields: declaration === "native" ? {} : { updatedAt } } } } };
+}
+
+test("API Key updates preserve omitted dates, supplied dates, and timestamp callback phases", async () => {
+  for (const backend of ["memory", "sqlite"] as const) for (const declaration of ["native", "replacement", "on-update"]) {
+    const trace: string[] = [];
+    const { state, errors, plugin } = timestampFields(trace, declaration);
+    const f = await fixture(backend, "database", trace, plugin);
+    try {
+      const key: any = await f.adapter.create({ model: "apikey", data: timestampInput(`timestamp-${declaration}`) });
+      let expectedStored = f.snapshot(key.id);
+      const where = [{ field: "id", value: key.id }];
+      const replacement = declaration !== "native";
+      const onUpdate = declaration === "on-update";
+      const physicalDate = (value: string) => backend === "memory" ? new Date(value) : value;
+      state.enabled = true;
+      const updated = await f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: key.id, name: "Mobile" } });
+      expect(jsonRecord(updated)).toStrictEqual({ ...publicRecord(key), name: "Mobile", updatedAt: replacement ? timestamps.projected : timestamps.old });
+      expectedStored = { ...expectedStored, name: "Mobile", updatedAt: physicalDate(onUpdate ? timestamps.stored : timestamps.old) };
+      expect(f.snapshot(key.id)).toStrictEqual(expectedStored);
+      expect(trace.splice(0)).toStrictEqual(onUpdate
+        ? [timestampEvent("output", timestamps.old), "onUpdate", timestampEvent("input", timestamps.generated), timestampEvent("output", timestamps.stored)]
+        : replacement ? [timestampEvent("output", timestamps.old), timestampEvent("output", timestamps.old)] : []);
+
+      const supplied: any = await f.adapter.update({ model: "apikey", where, update: { name: "Typed", updatedAt: new Date(timestamps.supplied) } });
+      expect(jsonRecord(supplied)).toStrictEqual({ ...jsonRecord(key), name: "Typed", updatedAt: replacement ? timestamps.projected : timestamps.supplied });
+      expectedStored = { ...expectedStored, name: "Typed", updatedAt: physicalDate(replacement ? timestamps.stored : timestamps.supplied) };
+      expect(f.snapshot(key.id)).toStrictEqual(expectedStored);
+      expect(trace.splice(0)).toStrictEqual(replacement ? [timestampEvent("input", timestamps.supplied), timestampEvent("output", timestamps.stored)] : []);
+
+      const usage: any = await f.adapter.update({ model: "apikey", where, update: { updatedAt: new Date(timestamps.usage) } });
+      expect(jsonRecord(usage)).toStrictEqual({ ...jsonRecord(key), name: "Typed", updatedAt: replacement ? timestamps.projected : timestamps.usage });
+      expectedStored = { ...expectedStored, updatedAt: physicalDate(replacement ? timestamps.stored : timestamps.usage) };
+      expect(f.snapshot(key.id)).toStrictEqual(expectedStored);
+      expect(trace.splice(0)).toStrictEqual(replacement ? [timestampEvent("input", timestamps.usage), timestampEvent("output", timestamps.stored)] : []);
+
+      if (onUpdate) for (const [index, phase] of ["onUpdate", "input", "output"].entries()) {
+        state.failure = phase;
+        await expect(f.adapter.update({ model: "apikey", where, update: { name: "Rejected" } })).rejects.toBe(errors[phase]);
+        if (phase === "output") expectedStored = { ...expectedStored, name: "Rejected" };
+        expect(f.snapshot(key.id)).toStrictEqual(expectedStored);
+        expect(trace.splice(0)).toStrictEqual(["onUpdate", timestampEvent("input", timestamps.generated), timestampEvent("output", timestamps.stored)].slice(0, index + 1));
+      }
+    } finally { f.close(); }
+  }
+});
+
+test("secondary-only API Key updates own the timestamp and bypass adapter policies", async () => {
+  for (const backend of ["memory", "sqlite"] as const) {
+    const trace: string[] = [];
+    const { state, plugin } = timestampFields(trace, "on-update");
+    const f = await fixture(backend, "secondary", trace, plugin);
+    try {
+      const key: any = await f.adapter.create({ model: "apikey", data: timestampInput("secondary-timestamp") });
+      const before = f.snapshot(key.id);
+      f.cache.set(`api-key:by-id:${key.id}`, JSON.stringify(key));
+      state.enabled = true;
+      state.failure = "onUpdate";
+      const earliest = Date.now();
+      const updated = await f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: key.id, name: "Cached" } });
+      const latest = Date.now();
+      expect(new Date(updated.updatedAt).getTime()).toBeGreaterThanOrEqual(earliest);
+      expect(new Date(updated.updatedAt).getTime()).toBeLessThanOrEqual(latest);
+      expect(new Date(updated.updatedAt).toISOString()).not.toBe(timestamps.old);
+      expect(jsonRecord(updated)).toStrictEqual({ ...publicRecord(key), name: "Cached", updatedAt: new Date(updated.updatedAt).toISOString() });
+      expect(JSON.parse(f.cache.get(`api-key:by-id:${key.id}`)!)).toStrictEqual({ ...jsonRecord(key), name: "Cached", updatedAt: new Date(updated.updatedAt).toISOString() });
+      expect(f.snapshot(key.id)).toStrictEqual(before);
+      expect(trace).toStrictEqual([]);
+    } finally { f.close(); }
+  }
+});
+
+test("API Key legacy metadata repair preserves the timestamp and the remaining record", async () => {
+  for (const backend of ["memory", "sqlite"] as const) {
+    const { plugin } = timestampFields([], "native");
+    const f = await fixture(backend, "database", [], plugin);
+    try {
+      const metadata = { legacy: "value" };
+      const key: any = await f.adapter.create({ model: "apikey", data: timestampInput("legacy-timestamp", JSON.stringify(metadata)) });
+      const before = f.snapshot(key.id);
+      const updated = await f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: key.id, name: "Mobile" } });
+      expect(jsonRecord(updated)).toStrictEqual({ ...publicRecord(key), name: "Mobile", metadata });
+      expect(f.snapshot(key.id)).toStrictEqual({ ...before, name: "Mobile", metadata: JSON.stringify(metadata) });
+    } finally { f.close(); }
   }
 });

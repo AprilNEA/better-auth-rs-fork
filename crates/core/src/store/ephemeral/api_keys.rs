@@ -161,9 +161,7 @@ impl ApiKeyStore for EphemeralStore {
         id: &crate::SchemaValue<String>,
         update: UpdateApiKey,
     ) -> AuthResult<Option<ApiKey>> {
-        let mut fields = update.into_adapter_fields()?;
-        let _ = fields.insert("updatedAt".into(), now().into());
-        self.update_api_key_record(id, fields)
+        self.update_api_key_record(id, update.into_adapter_fields()?)
             .await?
             .map(ApiKey::from_field_values)
             .transpose()

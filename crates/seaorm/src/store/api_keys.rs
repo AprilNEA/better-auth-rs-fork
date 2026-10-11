@@ -166,9 +166,7 @@ where
         id: &better_auth_core::SchemaValue<String>,
         update: UpdateApiKey,
     ) -> AuthResult<Option<ApiKey>> {
-        let mut fields = update.into_adapter_fields()?;
-        let _ = fields.insert("updatedAt".into(), Utc::now().into());
-        self.update_api_key_record(id, fields)
+        self.update_api_key_record(id, update.into_adapter_fields()?)
             .await?
             .map(ApiKey::from_field_values)
             .transpose()

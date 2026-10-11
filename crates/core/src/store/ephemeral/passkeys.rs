@@ -31,15 +31,27 @@ impl EphemeralStore {
             .collect()
     }
 
-    fn passkey_private_fields(&self, input: &FieldMap) -> AuthResult<FieldMap> {
+    fn passkey_private_fields(
+        &self,
+        input: &FieldMap,
+        updated_at: Option<crate::FieldDate>,
+    ) -> AuthResult<FieldMap> {
         let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
         let mut private = FieldMap::new();
         for name in ["credential", "updatedAt"] {
             if !schema.fields().contains_key(name)
                 && !schema.owns_adapter_column(&name.to_owned(), |key| Ok(key.to_owned()))?
-                && let Some(value) = input.get(name)
             {
-                let _ = private.insert(name.into(), value.clone());
+                let value = input.get(name).cloned().or_else(|| {
+                    if name == "updatedAt" {
+                        updated_at.clone().map(Into::into)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(value) = value {
+                    let _ = private.insert(name.into(), value);
+                }
             }
         }
         Ok(private)
@@ -96,8 +108,7 @@ impl PasskeyStore for EphemeralStore {
         let mut fields = input.into_adapter_fields()?;
         let now: crate::FieldDate = Utc::now().into();
         let _ = fields.insert("createdAt".into(), now.clone().into());
-        let _ = fields.insert("updatedAt".into(), now.into());
-        let private = self.passkey_private_fields(&fields)?;
+        let private = self.passkey_private_fields(&fields, Some(now))?;
         let source = self
             .create_plugin_ref(EntityRole::Passkey, fields, private)
             .await?;
@@ -152,9 +163,10 @@ impl PasskeyStore for EphemeralStore {
         update: UpdatePasskeyAuthentication,
     ) -> AuthResult<Passkey> {
         let mut fields = FieldMap::new();
-        match update {
+        let updated_at = match update {
             UpdatePasskeyAuthentication::Native { counter } => {
                 let _ = fields.insert("counter".into(), FieldValue::from(counter));
+                None
             }
             UpdatePasskeyAuthentication::Legacy {
                 credential,
@@ -167,13 +179,11 @@ impl PasskeyStore for EphemeralStore {
                     ("backedUp".into(), backed_up.into()),
                     ("deviceType".into(), device_type.into()),
                 ]);
-                fields.extend([
-                    ("credential".into(), credential.into()),
-                    ("updatedAt".into(), Utc::now().into()),
-                ]);
+                let _ = fields.insert("credential".into(), credential.into());
+                Some(Utc::now().into())
             }
-        }
-        let private = self.passkey_private_fields(&fields)?;
+        };
+        let private = self.passkey_private_fields(&fields, updated_at)?;
         let selected = self
             .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;
@@ -188,9 +198,8 @@ impl PasskeyStore for EphemeralStore {
         id: &SchemaValue<String>,
         update: UpdatePasskey,
     ) -> AuthResult<Passkey> {
-        let mut fields = update.into_adapter_fields()?;
-        let _ = fields.insert("updatedAt".into(), Utc::now().into());
-        let private = self.passkey_private_fields(&fields)?;
+        let fields = update.into_adapter_fields()?;
+        let private = self.passkey_private_fields(&fields, Some(Utc::now().into()))?;
         let selected = self
             .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;

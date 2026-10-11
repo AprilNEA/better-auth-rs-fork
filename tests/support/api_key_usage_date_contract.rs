@@ -111,6 +111,16 @@ pub(crate) async fn contract<S: AuthSchema>(
                     .update_api_key_optional(
                         &seed.id,
                         UpdateApiKey {
+                            additional_fields: [(
+                                "updatedAt".into(),
+                                FieldValue::Date(
+                                    "2030-01-02T04:04:05.123Z"
+                                        .parse::<DateTimeUtc>()
+                                        .expect("upstream ordinary update Date")
+                                        .into(),
+                                ),
+                            )]
+                            .into(),
                             last_refill_at: Some(Some(timestamp(&input, "lastRefillAt")?.into())),
                             last_request: Some(Some(timestamp(&input, "lastRequest")?.into())),
                             ..Default::default()
@@ -189,6 +199,13 @@ pub(crate) async fn contract<S: AuthSchema>(
             seed = Some(created);
         } else if name == "seed-dates" {
             let row = rows.first().expect("updated API Key");
+            assert_eq!(
+                row.updated_at.typed()?.milliseconds(),
+                "2030-01-02T04:04:05.123Z"
+                    .parse::<DateTimeUtc>()
+                    .expect("upstream ordinary update Date")
+                    .timestamp_millis() as f64
+            );
             assert!(
                 row.updated_at.typed()?.milliseconds() >= row.created_at.typed()?.milliseconds()
             );
