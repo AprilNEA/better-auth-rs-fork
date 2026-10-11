@@ -11,10 +11,7 @@ use better_auth_core::user_fields::UserConfig;
 use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema::EntityRole};
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
-use sea_orm::{
-    EntityTrait, QueryFilter,
-    sea_query::{Expr, ExprTrait},
-};
+use sea_orm::{EntityTrait, QueryFilter, sea_query::Expr};
 use std::sync::{Arc, Mutex};
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>

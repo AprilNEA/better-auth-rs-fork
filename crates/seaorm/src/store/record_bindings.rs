@@ -101,6 +101,7 @@ pub(super) fn bind(backend: DbBackend, values: Vec<Binding>) -> AuthResult<Vec<S
         .collect()
 }
 
+#[cfg(test)]
 pub(super) fn parameter(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleExpr> {
     Binding::Raw(value).bind(backend)
 }

@@ -51,12 +51,14 @@ async function check(backend, model, options, raw) {
   const before = await raw();
   assert.equal(before.length, 2);
   const events = [];
+  const statements = [];
   const database = backend === "mysql" ? {
     type: "mysql",
     db: new Kysely({
       dialect: new MysqlDialect({ pool: options.database.pool }),
       log(event) {
         const sql = event.query.sql.toLowerCase();
+        statements.push(sql);
         events.push(["begin", "commit", "rollback"].includes(sql) ? sql
           : sql.endsWith(" for update") ? "lock" : "unexpected-sql");
       },
@@ -77,6 +79,7 @@ async function check(backend, model, options, raw) {
       output(value) { events.push("set-output"); return value; },
     }) }).$context;
     events.length = 0;
+    statements.length = 0;
     const where = [{ field: "id", value: selector }, model === "apikey"
       ? { field: "lastRefillAt", value: scenario === "stale" ? at : null }
       : { field: "backupCodes", value: scenario === "stale" ? "stale" : "backup-before" }];
@@ -102,7 +105,7 @@ async function check(backend, model, options, raw) {
       expected.push(phase);
       if (backend === "mysql") expected.push("rollback");
     }
-    assert.deepEqual(events, expected, label);
+    assert.deepEqual(events, expected, JSON.stringify({ label, statements }));
     assert.deepEqual(await raw(), before, label);
   }
 }

@@ -4,8 +4,8 @@ use super::value_filter::{BoundQueryField, QueryPredicate, all};
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FieldValue, SchemaValue};
 use sea_orm::{
-    ConnectionTrait, EntityTrait, ExprTrait, QueryFilter, QueryResult, QueryTrait,
-    TransactionTrait, sea_query::SimpleExpr,
+    ConnectionTrait, EntityTrait, QueryFilter, QueryResult, QueryTrait, TransactionTrait,
+    sea_query::SimpleExpr,
 };
 
 use better_auth_core::store::{DeviceCodeStore, schema::EntityRole, validate_increment_one_update};

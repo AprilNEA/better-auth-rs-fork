@@ -105,7 +105,7 @@ fn callback(trace: &Trace, allocation: &Arc<AtomicUsize>) -> FieldValue {
 }
 
 #[tokio::test]
-async fn session_active_reads_resolve_every_name_before_query_callbacks() -> TestResult {
+async fn session_active_reads_keep_query_errors_through_declared_aliases() -> TestResult {
     for array in [false, true] {
         let database = database().await?;
         let before = session::Entity::find()
@@ -119,7 +119,7 @@ async fn session_active_reads_resolve_every_name_before_query_callbacks() -> Tes
             "expiresAt".into(),
             UserFieldConfig {
                 field_type: UserFieldType::Date,
-                field_name: Some("unknownExpiry".into()),
+                field_name: Some("updatedAt".into()),
                 ..Default::default()
             },
         );
@@ -131,11 +131,15 @@ async fn session_active_reads_resolve_every_name_before_query_callbacks() -> Tes
             callback
         };
         let result = store.get_user_session_snapshots_value(&value, true).await;
-        assert!(
-            matches!(result, Err(AuthError::Config(message)) if message == "Field unknownExpiry not found in model session")
-        );
-        assert_eq!(take_trace(&trace)?, Vec::<&str>::new());
-        assert_eq!(allocation.load(Ordering::SeqCst), 0);
+        let Err(AuthError::Internal(message)) = result else {
+            return Err(AuthError::internal(format!(
+                "Expected the original Session predicate error for array={array}: {result:?}"
+            ))
+            .into());
+        };
+        assert_eq!(message, "session-predicate-error");
+        assert_eq!(message.as_ptr() as usize, allocation.load(Ordering::SeqCst));
+        assert_eq!(take_trace(&trace)?, ["query"]);
         assert_eq!(
             session::Entity::find()
                 .order_by_asc(session::Column::Id)
@@ -179,7 +183,9 @@ async fn session_preservation_repeats_query_parsing_after_the_caught_snapshot() 
             };
             let Err(AuthError::Internal(message)) = result else {
                 return Err(
-                    AuthError::internal("Expected the original Session predicate error").into(),
+                    AuthError::internal(format!(
+                        "Expected the original Session predicate error for by_token={by_token}, array={array}: {result:?}"
+                    )).into(),
                 );
             };
             assert_eq!(message, "session-predicate-error");

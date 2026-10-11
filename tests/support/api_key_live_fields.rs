@@ -27,6 +27,7 @@ async fn observe<S: AuthSchema>(
     let failure = Arc::new(AtomicU8::new(0));
     let reader = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())
         .plugin(Fields(policies(None, failure.clone())))
         .build()
         .await?;
@@ -43,6 +44,7 @@ async fn observe<S: AuthSchema>(
         .on_update = Some(Arc::new(|| Ok("Live".into())));
     let writer = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())
         .plugin(Fields(writer_policies))
         .build()
         .await?;
@@ -110,6 +112,7 @@ async fn observe<S: AuthSchema>(
     }
     let projected = BetterAuth::new(config())
         .store_arc(raw)
+        .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())
         .plugin(Fields(projection))
         .build()
         .await?;

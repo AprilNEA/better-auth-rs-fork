@@ -230,6 +230,7 @@ async fn observations(serial: bool) -> AuthResult<Value> {
     let raw = Arc::new(EphemeralStore::new(Arc::new(config.clone())));
     let reader = BetterAuth::new(config.clone())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies(None)))
         .build()
         .await?;
@@ -248,6 +249,7 @@ async fn observations(serial: bool) -> AuthResult<Value> {
     let trace = Trace::default();
     let writer = BetterAuth::new(config)
         .store_arc(raw)
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies(Some(&trace))))
         .build()
         .await?;

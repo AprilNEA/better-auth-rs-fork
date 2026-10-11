@@ -38,6 +38,7 @@ fn policies() -> UserConfig {
 async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, backend: &str) -> AuthResult<()> {
     let writer = BetterAuth::new(fields::config())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies()))
         .build()
         .await?;
@@ -111,6 +112,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, backend: &str) -> A
     });
     let reader = BetterAuth::new(fields::config())
         .store_arc(raw)
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(reader_fields))
         .build()
         .await?;

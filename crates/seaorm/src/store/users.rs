@@ -2,7 +2,7 @@ use super::instrumentation::database_operation;
 use async_trait::async_trait;
 use better_auth_core::id::AdapterIdInput;
 use better_auth_core::store::schema::EntityRole;
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityName, QueryFilter, QuerySelect};
+use sea_orm::{ConnectionTrait, EntityName, QueryFilter, QuerySelect};
 
 use better_auth_core::store::{ResolvedJoin, UserStore};
 use better_auth_core::{FieldMap, FieldValue};

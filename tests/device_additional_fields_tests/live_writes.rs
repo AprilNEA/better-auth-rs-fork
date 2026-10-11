@@ -41,6 +41,7 @@ async fn observations<S: AuthSchema>(
 ) -> AuthResult<Vec<Value>> {
     let writer = BetterAuth::new(fields::config())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies()))
         .build()
         .await?;
@@ -112,6 +113,7 @@ async fn observations<S: AuthSchema>(
     });
     let projecting = BetterAuth::new(fields::config())
         .store_arc(raw)
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(output_fields))
         .build()
         .await?;

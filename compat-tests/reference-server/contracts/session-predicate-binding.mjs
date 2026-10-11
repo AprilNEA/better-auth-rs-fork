@@ -11,7 +11,7 @@ function database() {
   return database;
 }
 
-function context(database, events, preserve, invalidExpiry = false) {
+function context(database, events, preserve, expiryAlias) {
   return betterAuth({
     database,
     baseURL: "http://session-predicate-binding.test",
@@ -21,7 +21,7 @@ function context(database, events, preserve, invalidExpiry = false) {
       storeSessionInDatabase: true,
       preserveSessionInDatabase: preserve,
       additionalFields: {
-        expiresAt: invalidExpiry ? { type: "date", fieldName: "unknownExpiry" } : {
+        expiresAt: expiryAlias ? { type: "date", fieldName: expiryAlias } : {
           type: "date", transform: { input() {
             events.push("expiry-input");
             return new Date("2000-01-02T00:00:00.000Z");
@@ -44,18 +44,42 @@ function context(database, events, preserve, invalidExpiry = false) {
 }
 
 for (const array of [false, true]) {
-  test(`SQLite Session active reads resolve expiry before ${array ? "array" : "scalar"} callbacks`, async () => {
+  test(`SQLite Session active reads retain ${array ? "array" : "scalar"} callback errors through declared aliases`, async () => {
     const db = database();
     try {
       const raw = () => db.query("SELECT * FROM session ORDER BY id").all();
       const before = raw();
       const events = [];
-      const { internalAdapter } = await context(db, events, false, true);
-      const callback = () => { events.push("query"); throw new Error("session-predicate-error"); };
+      const { internalAdapter } = await context(db, events, false, "updatedAt");
+      const failure = new Error("session-predicate-error");
+      const callback = () => { events.push("query"); throw failure; };
       let actual;
       let caught;
       try { actual = await internalAdapter.listSessions(array ? [callback] : callback, { onlyActiveSessions: true }); }
       catch (error) { caught = error; }
+      expect(caught).toBe(failure);
+      expect(actual).toBeUndefined();
+      expect(events).toStrictEqual(["query"]);
+      expect(raw()).toStrictEqual(before);
+    } finally { db.close(); }
+  });
+
+  test(`SQLite Session queries reject unknown names before ${array ? "array" : "scalar"} callbacks`, async () => {
+    const db = database();
+    try {
+      const raw = () => db.query("SELECT * FROM session ORDER BY id").all();
+      const before = raw();
+      const events = [];
+      const { adapter } = await context(db, events, false);
+      const callback = () => { events.push("query"); throw new Error("session-predicate-error"); };
+      let actual;
+      let caught;
+      try {
+        actual = await adapter.findMany({ model: "session", where: [
+          { field: "userId", value: array ? [callback] : callback },
+          { field: "unknownExpiry", value: new Date(), operator: "gt" },
+        ] });
+      } catch (error) { caught = error; }
       expect(caught?.message).toBe("Field unknownExpiry not found in model session");
       expect(actual).toBeUndefined();
       expect(events).toStrictEqual([]);

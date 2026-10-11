@@ -1,9 +1,6 @@
-use super::id_filter::IdColumn;
 use async_trait::async_trait;
 use chrono::Utc;
-use sea_orm::{
-    ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select,
-};
+use sea_orm::{EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select};
 
 use better_auth_core::store::{ListOrganizationMembersParams, MemberStore};
 
@@ -15,7 +12,7 @@ use super::organization_models::{self as models, Entity, values};
 use super::{SeaOrmStore, map_db_err};
 use crate::SeaOrmOrganizationModel;
 use better_auth_core::{FieldValue, SchemaField};
-use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::sea_query::Expr;
 
 mod query;
 

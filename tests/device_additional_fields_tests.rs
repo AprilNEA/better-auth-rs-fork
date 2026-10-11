@@ -118,6 +118,7 @@ async fn memory_serial_device_reference_reaches_output_as_a_number() -> AuthResu
     };
     let auth = BetterAuth::new(config.clone())
         .store(EphemeralStore::new(Arc::new(config)))
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(contract::Fields(fields))
         .build()
         .await?;
@@ -241,6 +242,7 @@ async fn device_registration_accepts_a_native_physical_column_alias() {
     };
     let result = BetterAuth::new(contract::config())
         .store(store)
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(contract::Fields(fields))
         .build()
         .await;

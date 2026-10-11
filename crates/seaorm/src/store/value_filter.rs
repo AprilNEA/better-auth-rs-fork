@@ -259,6 +259,7 @@ pub(super) fn membership(column: SimpleExpr, values: Vec<SimpleExpr>, negated: b
     }
 }
 
+#[cfg(test)]
 pub(super) fn predicate(
     column: impl ColumnTrait,
     operator: WhereOperator,

@@ -127,7 +127,7 @@ fn increment_sql_keeps_outer_guards_and_orders_set_before_both_where_bindings() 
 }
 
 struct LockConnection {
-    target: Option<QueryResult>,
+    target: Mutex<Option<QueryResult>>,
     mutate_after_lock: Option<FieldObject>,
     statements: Mutex<Vec<Statement>>,
 }
@@ -160,7 +160,11 @@ impl ConnectionTrait for LockConnection {
                 .set("toString", FieldValue::Null)
                 .map_err(|error| DbErr::Custom(error.to_string()))?;
         }
-        Ok(self.target.clone())
+        Ok(self
+            .target
+            .lock()
+            .map_err(|_| DbErr::Custom("Target lock is poisoned".into()))?
+            .take())
     }
 
     async fn query_all_raw(&self, _: Statement) -> Result<Vec<QueryResult>, DbErr> {
@@ -205,7 +209,7 @@ async fn mysql_parses_set_only_after_locking_a_non_null_target_id() -> AuthResul
     assert!(matched.is_some());
     for (target, calls_expected) in [(None, 0), (null, 0), (matched, 1)] {
         let connection = LockConnection {
-            target,
+            target: Mutex::new(target),
             mutate_after_lock: None,
             statements: Mutex::new(Vec::new()),
         };
@@ -251,7 +255,7 @@ async fn mysql_reparses_where_from_the_same_object_after_target_locking() -> Aut
     assert!(target.is_some());
     let object = FieldObject::from(FieldMap::new());
     let connection = LockConnection {
-        target,
+        target: Mutex::new(target),
         mutate_after_lock: Some(object.clone()),
         statements: Mutex::new(Vec::new()),
     };

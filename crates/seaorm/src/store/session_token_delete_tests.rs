@@ -2,16 +2,93 @@ use super::*;
 use crate::hooks::{HookControl, SeaOrmHookContext, SeaOrmHooks};
 use crate::store::{bundled_schema::BundledSchema, entities::session, migrator::run_migrations};
 use better_auth_core::{
-    AuthConfig, CreateSession, CreateUser, FieldValue,
+    AuthConfig, AuthError, CreateSession, CreateUser, FieldFunction, FieldValue,
     store::{SessionStore, UserStore},
     user_fields::{UserFieldConfig, UserFieldType},
     wire::SessionView,
 };
-use sea_orm::{Database, sea_query::Expr};
+use sea_orm::{ColumnTrait, Database, sea_query::Expr};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
+
+#[tokio::test]
+async fn session_queries_reject_unknown_names_before_query_callbacks() -> AuthResult<()> {
+    for array in [false, true] {
+        let database = Database::connect("sqlite::memory:")
+            .await
+            .map_err(map_db_err)?;
+        run_migrations(&database).await.map_err(map_db_err)?;
+        let store = SeaOrmStore::<BundledSchema>::new(AuthConfig::default(), database.clone());
+        let owner = store
+            .create_user(
+                CreateUser::new()
+                    .with_name("Session owner")
+                    .with_email("session-query@example.test"),
+            )
+            .await?;
+        let _ = store
+            .create_session(CreateSession {
+                inherited_fields: Default::default(),
+                additional_fields: Default::default(),
+                user_id: owner.id,
+                expires_at: (Utc::now() + chrono::Duration::hours(1)).into(),
+                ip_address: None,
+                user_agent: None,
+                impersonated_by: None,
+                active_organization_id: None,
+            })
+            .await?;
+        let before = session::Entity::find()
+            .all(&database)
+            .await
+            .map_err(map_db_err)?;
+        let calls = Arc::new(AtomicUsize::new(0));
+        let query_calls = calls.clone();
+        let callback: FieldValue = FieldFunction::contextual(move |_, _| {
+            let _ = query_calls.fetch_add(1, Ordering::SeqCst);
+            Err(AuthError::internal("session-predicate-error"))
+        })
+        .into();
+        let value = if array {
+            vec![callback].into()
+        } else {
+            callback
+        };
+        let backend = database.get_database_backend();
+        let result = (|| {
+            let predicates = [
+                ("userId", value, WhereOperator::Eq),
+                ("unknownExpiry", Utc::now().into(), WhereOperator::Gt),
+            ]
+            .into_iter()
+            .map(|(name, value, operator)| {
+                Ok((
+                    store.bind_session_query_field(name, &value, backend)?,
+                    operator,
+                ))
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+            store.resolve_session_predicates(predicates, backend)
+        })();
+        let Err(AuthError::Config(message)) = result else {
+            return Err(AuthError::internal(format!(
+                "Expected the unknown Session field error for array={array}: {result:?}"
+            )));
+        };
+        assert_eq!(message, "Field unknownExpiry not found in model session");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            session::Entity::find()
+                .all(&database)
+                .await
+                .map_err(map_db_err)?,
+            before
+        );
+    }
+    Ok(())
+}
 
 struct ObserveDelete {
     calls: Arc<AtomicUsize>,

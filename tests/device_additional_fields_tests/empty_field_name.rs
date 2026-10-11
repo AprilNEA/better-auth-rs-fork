@@ -44,11 +44,13 @@ async fn observations<S: AuthSchema>(
 ) -> AuthResult<Value> {
     let empty = BetterAuth::new(fields::config())
         .store_arc(raw.clone())
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies(Some(""))))
         .build()
         .await?;
     let omitted = BetterAuth::new(fields::config())
         .store_arc(raw)
+        .plugin(better_auth::plugins::DeviceAuthorizationPlugin::new())
         .plugin(fields::Fields(policies(None)))
         .build()
         .await?;

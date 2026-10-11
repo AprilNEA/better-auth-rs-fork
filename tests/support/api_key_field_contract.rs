@@ -198,12 +198,14 @@ impl<S: AuthSchema> Fixture<S> {
         let fields = |events| fields(events, failure.clone());
         let reader = BetterAuth::new(config())
             .store_arc(raw.clone())
+            .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())
             .plugin(Fields(fields(None)))
             .build()
             .await?;
         let events = Trace::default();
         let auth = BetterAuth::new(config())
             .store_arc(raw)
+            .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())
             .plugin(Fields(fields(Some(events.clone()))))
             .build()
             .await?;

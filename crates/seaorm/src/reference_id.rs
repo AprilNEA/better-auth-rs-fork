@@ -387,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn declared_bindings_preserve_alias_order_and_drop_undeclared_core() {
-        use better_auth_core::FieldValue;
+        use better_auth_core::{FieldMap, FieldValue};
 
         let config = UserConfig {
             additional_fields: Some(
