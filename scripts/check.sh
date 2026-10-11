@@ -778,6 +778,23 @@ run_stage() {
         --test sql_user_extra_output_tests --test plugin_output_capabilities_tests
       ./scripts/consumer-check.sh --test generated_plugin_catalog device_grant -- --include-ignored
       ;;
+    rate-limit-declarations)
+      cargo fmt --all -- --check
+      local rate_limit_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/rate-limit-declaration-priority.test.ts \
+        ./compat-tests/reference-server/contracts/openapi-rate-limit-model.test.ts || rate_limit_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || rate_limit_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test rate_limit_database_tests --test rate_cleanup_background_tests \
+        --test openapi_rate_limit_model_tests -- -D warnings || rate_limit_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        plugin_runtime::fields:: middleware::rate_limit:: || rate_limit_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test rate_limit_database_tests --test rate_cleanup_background_tests \
+        --test openapi_rate_limit_model_tests || rate_limit_status=1
+      return "$rate_limit_status"
+      ;;
     validation-errors)
       cargo fmt --all -- --check
       local validation_status=0

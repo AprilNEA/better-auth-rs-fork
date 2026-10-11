@@ -14,6 +14,12 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, Query
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+#[path = "support/adapter_storage_snapshot.rs"]
+mod adapter_storage_snapshot;
+
+#[path = "rate_limit_database_tests/declarations.rs"]
+mod declarations;
+
 async fn fixture() -> TestResult<(sea_orm::DatabaseConnection, SeaOrmStore<BundledSchema>)> {
     let db = Database::connect("sqlite::memory:").await?;
     let _ = db

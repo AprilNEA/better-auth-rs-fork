@@ -1,4 +1,4 @@
-use super::native_tests::{context, numeric_output, session};
+use super::native_tests::{assert_coded_error, context, numeric_output, session};
 use super::*;
 use crate::plugins::organization::{
     AddMemberInput, OrganizationPlugin, OrganizationTeamsConfig, hooks::*, types::*,
@@ -53,13 +53,13 @@ async fn creation_policy_observes_native_user_and_falsy_session_user_uses_body_s
             serde_json::json!({"name":"Policy", "slug":"policy", "userId":user.id}),
         )
         .unwrap();
-        assert!(matches!(
-            create_organization_core(&body, Some(&data), &config, &ctx, None).await,
-            Err(AuthError::Upstream {
-                code: "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION",
-                ..
-            })
-        ));
+        assert_coded_error(
+            create_organization_core(&body, Some(&data), &config, &ctx, None)
+                .await
+                .unwrap_err(),
+            403,
+            br#"{"message":"You are not allowed to create a new organization","code":"YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION"}"#,
+        );
         let observed = policy.0.lock().unwrap().pop().unwrap();
         if raw.is_truthy() {
             assert!(observed.strict_equals(&raw));

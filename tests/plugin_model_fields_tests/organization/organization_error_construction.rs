@@ -1,111 +1,74 @@
 use super::*;
+use better_auth::plugins::organization::{
+    hooks::{OrganizationActor, OrganizationEndpoint, OrganizationMemberEvent, OrganizationUser},
+    types::OrganizationResponse,
+};
+use better_auth_core::{CreateOrganization, UpdateOrganization};
 
-#[derive(Clone, Copy, Debug)]
-enum Case {
-    TeamSession,
-    SlugSession,
-    TeamOrganization,
-    MissingTeam,
-    CreateSession,
-    RemoveSession,
-    RemoveOrganization,
-    UpdateSession,
-    UpdateOrganization,
-    InvitationOrganization,
+#[path = "organization_error_cases.rs"]
+mod cases;
+use cases::Case;
+
+struct ErrorHooks(Events);
+
+impl ErrorHooks {
+    fn record(&self, name: &str) -> AuthResult<()> {
+        trace_lock(&self.0)?.push(vec![FieldValue::from(name)].into());
+        Ok(())
+    }
 }
 
-impl Case {
-    const ALL: [Self; 10] = [
-        Self::TeamSession,
-        Self::SlugSession,
-        Self::TeamOrganization,
-        Self::MissingTeam,
-        Self::CreateSession,
-        Self::RemoveSession,
-        Self::RemoveOrganization,
-        Self::UpdateSession,
-        Self::UpdateOrganization,
-        Self::InvitationOrganization,
-    ];
-
-    fn authenticated(self) -> bool {
-        matches!(
-            self,
-            Self::TeamOrganization
-                | Self::MissingTeam
-                | Self::UpdateOrganization
-                | Self::InvitationOrganization
-        )
+#[async_trait]
+impl OrganizationHooks for ErrorHooks {
+    async fn before_update_team(
+        &self,
+        updates: &mut UpdateTeam,
+        data: OrganizationTeamEvent<'_>,
+    ) -> AuthResult<()> {
+        Hooks(self.0.clone())
+            .before_update_team(updates, data)
+            .await
     }
-
-    fn request(self) -> (HttpMethod, &'static str, Option<Value>) {
-        match self {
-            Self::TeamSession | Self::TeamOrganization => (
-                HttpMethod::Post,
-                "/organization/update-team",
-                Some(json!({"teamId":"missing", "data":{"name":"Updated"}})),
-            ),
-            Self::MissingTeam => (
-                HttpMethod::Post,
-                "/organization/update-team",
-                Some(
-                    json!({"teamId":"missing", "data":{"name":"Updated", "organizationId":"organization"}}),
-                ),
-            ),
-            Self::SlugSession => (
-                HttpMethod::Post,
-                "/organization/check-slug",
-                Some(json!({"slug":"available"})),
-            ),
-            Self::CreateSession => (
-                HttpMethod::Post,
-                "/organization/create-team",
-                Some(json!({"name":"New", "organizationId":"organization"})),
-            ),
-            Self::RemoveSession => (
-                HttpMethod::Post,
-                "/organization/remove-team",
-                Some(json!({"teamId":"missing", "organizationId":"organization"})),
-            ),
-            Self::RemoveOrganization => (
-                HttpMethod::Post,
-                "/organization/remove-team",
-                Some(json!({"teamId":"missing"})),
-            ),
-            Self::UpdateSession | Self::UpdateOrganization => (
-                HttpMethod::Post,
-                "/organization/update",
-                Some(json!({"data":{"name":"Updated"}})),
-            ),
-            Self::InvitationOrganization => {
-                (HttpMethod::Get, "/organization/list-invitations", None)
-            }
-        }
+    async fn after_update_team(&self, data: OrganizationTeamEvent<'_>) -> AuthResult<()> {
+        Hooks(self.0.clone()).after_update_team(data).await
     }
-
-    fn expected(self) -> (u16, FieldValue) {
-        let (status, message, code) = match self {
-            Self::TeamSession | Self::SlugSession => (401, "Unauthorized", Some("UNAUTHORIZED")),
-            Self::TeamOrganization | Self::RemoveOrganization => (
-                400,
-                "No active organization",
-                Some("NO_ACTIVE_ORGANIZATION"),
-            ),
-            Self::MissingTeam => (400, "Team not found", Some("TEAM_NOT_FOUND")),
-            Self::CreateSession | Self::RemoveSession => return (401, FieldValue::Undefined),
-            Self::UpdateSession => (401, "User not found", None),
-            Self::UpdateOrganization => (
-                400,
-                "Organization not found",
-                Some("ORGANIZATION_NOT_FOUND"),
-            ),
-            Self::InvitationOrganization => (400, "Organization ID is required", None),
-        };
-        let mut body = FieldMap::from([("message".into(), message.into())]);
-        if let Some(code) = code {
-            let _ = body.insert("code".into(), code.into());
-        }
-        (status, body.into())
+    async fn before_create_organization(
+        &self,
+        _: &mut CreateOrganization,
+        _: &FieldValue,
+    ) -> AuthResult<()> {
+        self.record("beforeCreateOrganization")
+    }
+    async fn after_create_organization(&self, _: OrganizationMemberEvent<'_>) -> AuthResult<()> {
+        self.record("afterCreateOrganization")
+    }
+    async fn before_update_organization(
+        &self,
+        _: &mut UpdateOrganization,
+        _: OrganizationActor<'_>,
+    ) -> AuthResult<()> {
+        self.record("beforeUpdateOrganization")
+    }
+    async fn after_update_organization(
+        &self,
+        _: &OrganizationResponse,
+        _: OrganizationActor<'_>,
+    ) -> AuthResult<()> {
+        self.record("afterUpdateOrganization")
+    }
+    async fn before_delete_organization(
+        &self,
+        _: OrganizationUser<'_>,
+        _: OrganizationEndpoint<'_>,
+    ) -> AuthResult<()> {
+        self.record("beforeDeleteOrganization")
+    }
+    async fn after_delete_organization(
+        &self,
+        _: OrganizationUser<'_>,
+        _: OrganizationEndpoint<'_>,
+    ) -> AuthResult<()> {
+        self.record("afterDeleteOrganization")
     }
 }
 
@@ -119,10 +82,24 @@ async fn check<S: AuthSchema>(
     let _ = raw
         .update_session_active_organization_by_token_value(&token.as_str().into(), None)
         .await?;
-    let before = storage.snapshot_with_roles(true).await?;
+    if matches!(case, Case::OrgUpdateDenied | Case::OrgDeleteDenied) {
+        let _ = raw.update_member_role("owner-member", "member").await?;
+    }
+    if case.clears_active() {
+        let _ = raw
+            .update_session_fields(
+                &token,
+                FieldMap::from([
+                    ("activeOrganizationId".into(), "organization".into()),
+                    ("updatedAt".into(), date().into()),
+                ]),
+            )
+            .await?;
+    }
+    let mut before = storage.snapshot_with_roles(true).await?;
     let events = Events::default();
     let events_for_field = events.clone();
-    let policies = vec![(
+    let mut policies = vec![(
         EntityRole::Team,
         declaration([(
             "name",
@@ -138,12 +115,35 @@ async fn check<S: AuthSchema>(
             },
         )]),
     )];
+    if case.clears_active() {
+        let events = events.clone();
+        policies.push((
+            EntityRole::Session,
+            declaration([(
+                "updatedAt",
+                UserFieldConfig {
+                    field_type: UserFieldType::Date,
+                    on_update: Some(Arc::new(move || {
+                        event(&events, "session.updatedAt", "onUpdate".into())?;
+                        Ok(date().into())
+                    })),
+                    ..Default::default()
+                },
+            )]),
+        ));
+    }
     let reader = auth_config(
         raw,
         Ids::default(),
         policies,
         OrganizationConfig {
-            hooks: Some(Arc::new(Hooks(events.clone()))),
+            hooks: Some(Arc::new(ErrorHooks(events.clone()))),
+            allow_user_to_create_organization: case != Case::OrgCreateDenied,
+            organization_limit: (case == Case::OrgCreateLimit).then_some(0),
+            disable_organization_deletion: matches!(
+                case,
+                Case::OrgDeleteDisabled | Case::OrgDeleteDisabledSession
+            ),
             ..Default::default()
         },
     )
@@ -165,14 +165,16 @@ async fn check<S: AuthSchema>(
         );
     }
     let (method, path, body) = case.request();
+    let query = case.query();
     let result = if native {
         reader
             .call_endpoint(
                 method,
                 path,
                 EndpointInput {
-                    headers: Some(headers),
+                    headers: (!case.headerless()).then_some(headers),
                     body,
+                    query,
                     ..Default::default()
                 },
             )
@@ -185,7 +187,7 @@ async fn check<S: AuthSchema>(
                     format!("/api/auth{path}"),
                     headers,
                     body.as_ref().map(serde_json::to_vec).transpose()?,
-                    None,
+                    query,
                 )
                 .with_url(
                     format!("http://fields.test/api/auth{path}")
@@ -215,14 +217,42 @@ async fn check<S: AuthSchema>(
         .transpose()?
         .unwrap_or_default();
     assert_eq!(actual.body.bytes()?.as_ref(), bytes.as_slice(), "{case:?}");
-    assert!(trace_lock(&events)?.is_empty(), "{case:?}");
+    let expected_events: Vec<FieldValue> = if case.clears_active() {
+        vec![
+            vec![
+                FieldValue::from("session.updatedAt"),
+                FieldValue::from("onUpdate"),
+            ]
+            .into(),
+        ]
+    } else {
+        Vec::new()
+    };
+    assert_eq!(*trace_lock(&events)?, expected_events, "{case:?}");
+    if case.clears_active() {
+        let session = before
+            .get_mut("session")
+            .and_then(|sessions| sessions.first_mut())
+            .ok_or_else(|| AuthError::internal("Expected complete stored Session"))?;
+        let field = if storage.memory() {
+            "activeOrganizationId"
+        } else {
+            "active_organization_id"
+        };
+        assert_eq!(
+            session.get(field),
+            Some(&FieldValue::from("organization")),
+            "{case:?}"
+        );
+        let _ = session.insert(field.into(), FieldValue::Null);
+    }
     assert_eq!(storage.snapshot_with_roles(true).await?, before, "{case:?}");
     Ok(())
 }
 
 #[tokio::test]
 async fn organization_errors_preserve_constructor_provenance() -> AuthResult<()> {
-    for case in Case::ALL {
+    for &case in Case::ALL {
         for native in [true, false] {
             let (raw, storage) = memory_fixture();
             check(raw, storage, case, native).await?;

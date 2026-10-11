@@ -2,6 +2,8 @@ mod declarations;
 mod device;
 mod input;
 mod models;
+#[cfg(test)]
+mod rate_limit_tests;
 mod record;
 
 use crate::id::AdapterIdInput;
@@ -125,6 +127,16 @@ impl ModelFields {
 
     /// Retain the same active logical models used by runtime schema validation.
     pub fn set_schema_configuration(&mut self, config: &crate::store::schema::SchemaConfiguration) {
+        if config.database_rate_limit {
+            // getAuthTables replaces the complete plugin model after plugin declarations merge.
+            let _ = self.models.insert(
+                EntityRole::RateLimit,
+                Self::plugin_native_fields(EntityRole::RateLimit),
+            );
+            let _ = self
+                .declarations
+                .insert(ModelDeclaration::Native(EntityRole::RateLimit), None);
+        }
         self.schema_models = Some(config.models());
         self.user_plugin_fields =
             crate::wire::UserView::active_plugin_fields(&config.metadata).collect();

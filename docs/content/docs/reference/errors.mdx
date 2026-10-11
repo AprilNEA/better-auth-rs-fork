@@ -20,6 +20,8 @@ Use `AuthError::from_code(status, code, message)` for the upstream `APIError.fro
 
 An undefined native body produces an empty HTTP body; explicit null serializes as `null`. Undefined object properties remain present for native callers and are omitted at HTTP JSON serialization. Existing convenience constructors retain their current response format. Ordinary runtime failures reach the dispatcher's empty 500 response; explicit API error bodies retain the endpoint's contract.
 
+Organization CRUD keeps endpoint-specific errors. Missing membership returns a coded 400 from update and delete, and a coded 403 from reads and set-active. Failed membership checks in reads and set-active still clear the active organization before returning the error. Create and delete return an empty 401 when authentication is required; update retains its message-only 401. Disabled organization deletion returns its coded 404 before session lookup.
+
 ## AuthError Variants
 
 | Variant | HTTP Status | Description |

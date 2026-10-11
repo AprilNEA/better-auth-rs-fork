@@ -266,6 +266,11 @@ impl EphemeralStore {
             EntityRole::Team => state.teams.snapshot(),
             EntityRole::TeamMember => state.team_members.snapshot(),
             EntityRole::OrganizationRole => state.organization_roles.snapshot(),
+            EntityRole::RateLimit => state
+                .rate_limits
+                .values()
+                .map(AuthRecordFields::field_values)
+                .collect(),
             _ => state.plugin_rows(role)?.snapshot(),
         }
     }

@@ -47,31 +47,28 @@ pub(crate) async fn create_organization_core(
             Some(id) => ctx.database.get_user_by_id(id).await?,
             None => None,
         }
-        .ok_or(AuthError::from(AuthResponse::json(
-            401,
-            &serde_json::Value::Null,
-        )?))?;
+        .ok_or_else(|| AuthError::from(AuthResponse::new(401)))?;
         FieldValue::from(FieldMap::from(user))
     };
     let user = &user;
     let system_action = session.is_none();
     if !config.may_create(user).await? && !system_action {
-        return Err(AuthError::Upstream {
-            status: 403,
-            code: "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION",
-            message: "You are not allowed to create a new organization",
-        });
+        return Err(AuthError::from_code(
+            403,
+            "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION",
+            "You are not allowed to create a new organization",
+        ));
     }
     let user_orgs = user_organizations(&user.model_property("id")?, ctx).await?;
     if config
         .organization_limit_reached(user, user_orgs.len())
         .await?
     {
-        return Err(AuthError::Upstream {
-            status: 403,
-            code: "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
-            message: "You have reached the maximum number of organizations",
-        });
+        return Err(AuthError::from_code(
+            403,
+            "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
+            "You have reached the maximum number of organizations",
+        ));
     }
 
     if ctx
@@ -80,7 +77,11 @@ pub(crate) async fn create_organization_core(
         .await?
         .is_some()
     {
-        return Err(AuthError::bad_request("Organization already exists"));
+        return Err(AuthError::from_code(
+            400,
+            "ORGANIZATION_ALREADY_EXISTS",
+            "Organization already exists",
+        ));
     }
 
     let mut org_data = CreateOrganization {
@@ -238,7 +239,13 @@ pub(crate) async fn update_organization_core(
         .get_member_with_user_value(&org_id, &session.user_property("id")?)
         .await?
         .map(|joined| joined.member)
-        .ok_or_else(|| AuthError::forbidden("Not a member of this organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                400,
+                "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
+                "User is not a member of the organization",
+            )
+        })?;
 
     if !check_permission(
         member.role().typed()?,
@@ -250,7 +257,9 @@ pub(crate) async fn update_organization_core(
     )
     .await?
     {
-        return Err(AuthError::forbidden(
+        return Err(AuthError::from_code(
+            403,
+            "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_ORGANIZATION",
             "You are not allowed to update this organization",
         ));
     }
@@ -259,7 +268,11 @@ pub(crate) async fn update_organization_core(
         && let Some(existing) = ctx.database.get_organization_by_slug(new_slug).await?
         && !existing.id.field_value().strict_equals(&org_id)
     {
-        return Err(AuthError::bad_request("Organization slug already taken"));
+        return Err(AuthError::from_code(
+            400,
+            "ORGANIZATION_SLUG_ALREADY_TAKEN",
+            "Organization slug already taken",
+        ));
     }
 
     let mut update_data = UpdateOrganization {
@@ -305,12 +318,12 @@ pub(crate) async fn delete_organization_core(
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<OrganizationResponse> {
-    if config.disable_organization_deletion {
-        return Err(AuthError::Upstream {
-            status: 404,
-            code: "ORGANIZATION_DELETION_DISABLED",
-            message: "Organization deletion is disabled",
-        });
+    if body.organization_id.is_empty() {
+        return Err(AuthError::from_code(
+            400,
+            "ORGANIZATION_NOT_FOUND",
+            "Organization not found",
+        ));
     }
 
     let member = ctx
@@ -321,7 +334,13 @@ pub(crate) async fn delete_organization_core(
         )
         .await?
         .map(|joined| joined.member)
-        .ok_or_else(|| AuthError::bad_request("User is not a member of the organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                400,
+                "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
+                "User is not a member of the organization",
+            )
+        })?;
 
     if !check_permission(
         member.role().typed()?,
@@ -333,7 +352,9 @@ pub(crate) async fn delete_organization_core(
     )
     .await?
     {
-        return Err(AuthError::forbidden(
+        return Err(AuthError::from_code(
+            403,
+            "YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_ORGANIZATION",
             "You are not allowed to delete this organization",
         ));
     }
@@ -356,7 +377,7 @@ pub(crate) async fn delete_organization_core(
         .database
         .get_organization_by_id(&body.organization_id)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+        .ok_or_else(|| AuthError::from(AuthResponse::new(400)))?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
     let event = OrganizationUser {
@@ -434,7 +455,9 @@ pub(crate) async fn get_full_organization_core(
             include_teams: config.teams.enabled,
         })
         .await?
-        .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+        })?;
     let organization = details.into_public_value(&config.schema)?;
     if ctx
         .database
@@ -452,7 +475,9 @@ pub(crate) async fn get_full_organization_core(
                 None,
             )
             .await?;
-        return Err(AuthError::forbidden(
+        return Err(AuthError::from_code(
+            403,
+            "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
     }
@@ -469,7 +494,11 @@ pub(crate) async fn check_slug_core(
         .await?
         .is_some()
     {
-        return Err(AuthError::bad_request("Organization slug already taken"));
+        return Err(AuthError::from_code(
+            400,
+            "ORGANIZATION_SLUG_ALREADY_TAKEN",
+            "Organization slug already taken",
+        ));
     }
 
     Ok(CheckSlugResponse { status: true })
@@ -525,7 +554,9 @@ pub(crate) async fn set_active_organization_core(
             .database
             .get_organization_by_slug(slug)
             .await?
-            .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+            .ok_or_else(|| {
+                AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+            })?;
         organization.id().field_value()
     } else {
         let active_id = session.session.active_organization_id.field_value();
@@ -535,7 +566,11 @@ pub(crate) async fn set_active_organization_core(
         active_id
     };
     if !org_id.is_truthy() {
-        return Err(AuthError::bad_request("Organization not found"));
+        return Err(AuthError::from_code(
+            400,
+            "ORGANIZATION_NOT_FOUND",
+            "Organization not found",
+        ));
     }
     if ctx
         .database
@@ -550,7 +585,9 @@ pub(crate) async fn set_active_organization_core(
                 None,
             )
             .await?;
-        return Err(AuthError::forbidden(
+        return Err(AuthError::from_code(
+            403,
+            "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
     }
@@ -559,7 +596,9 @@ pub(crate) async fn set_active_organization_core(
         .database
         .get_organization_by_id_value(&org_id)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+        })?;
 
     let updated = ctx
         .database
@@ -599,7 +638,7 @@ pub(crate) async fn leave_organization_core(
             &session.user_property("id")?,
         )
         .await?
-        .ok_or_else(|| AuthError::bad_request("Member not found"))?;
+        .ok_or_else(|| AuthError::from_code(400, "MEMBER_NOT_FOUND", "Member not found"))?;
 
     let member = &joined.member;
     if has_role(member, config.creator_role())? {
@@ -615,7 +654,9 @@ pub(crate) async fn leave_organization_core(
                 })?;
 
         if owner_count <= 1 {
-            return Err(AuthError::bad_request(
+            return Err(AuthError::from_code(
+                400,
+                "YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER",
                 "You cannot leave the organization as the only owner",
             ));
         }
@@ -659,10 +700,7 @@ pub async fn handle_create_organization(
 ) -> AuthResult<AuthResponse> {
     let session = optional_session(req, ctx).await?;
     if session.is_none() && request_present(req, ctx) {
-        return Err(AuthError::from(AuthResponse::json(
-            401,
-            &serde_json::Value::Null,
-        )?));
+        return Err(AuthResponse::new(401).into());
     }
     let body: CreateOrganizationRequest = super::super::request::read(req, &config.schema)?;
     let (mut response, default_team_id) =
@@ -721,6 +759,13 @@ pub async fn handle_delete_organization(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     config: &OrganizationConfig,
 ) -> AuthResult<AuthResponse> {
+    if config.disable_organization_deletion {
+        return Err(AuthError::from_code(
+            404,
+            "ORGANIZATION_DELETION_DISABLED",
+            "Organization deletion is disabled",
+        ));
+    }
     let session = ctx
         .require_native_session(req)
         .await
@@ -764,7 +809,7 @@ pub async fn handle_get_organization(
         }
         ctx.database.get_organization_by_id_value(&id).await?
     }
-    .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+    .ok_or_else(|| AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found"))?;
 
     if ctx
         .database
@@ -782,7 +827,9 @@ pub async fn handle_get_organization(
                 None,
             )
             .await?;
-        return Err(AuthError::forbidden(
+        return Err(AuthError::from_code(
+            403,
+            "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
     }

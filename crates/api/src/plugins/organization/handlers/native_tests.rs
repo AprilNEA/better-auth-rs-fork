@@ -54,6 +54,14 @@ pub(super) async fn session(
     }
 }
 
+pub(super) fn assert_coded_error(error: AuthError, status: u16, expected: &[u8]) {
+    assert!(error.is_api_error());
+    assert_eq!(error.status_code(), status);
+    let response = error.to_auth_response();
+    assert_eq!(response.status, status);
+    assert_eq!(response.body.bytes().unwrap().as_ref(), expected);
+}
+
 #[tokio::test]
 async fn full_organization_keeps_native_dates_undefined_and_response_identity() {
     let config = OrganizationConfig::default();
@@ -150,16 +158,21 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
             .unwrap()
             .is_none()
     );
-    assert!(matches!(
+    assert_coded_error(
         get_full_organization_core(
             &GetFullOrganizationQuery {
                 organization_id: Some("missing".into()),
                 ..Default::default()
             },
-            &data, &config, &ctx,
-        ).await,
-        Err(AuthError::BadRequest(message)) if message == "Organization not found"
-    ));
+            &data,
+            &config,
+            &ctx,
+        )
+        .await
+        .unwrap_err(),
+        400,
+        br#"{"message":"Organization not found","code":"ORGANIZATION_NOT_FOUND"}"#,
+    );
     let active = organization.id.typed().unwrap();
     data.session = ctx
         .database
@@ -199,12 +212,13 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
             get_active_member_core(&data, &ctx).await,
             Err(AuthError::BadRequest(message)) if message == "Member not found"
         ));
-        assert!(matches!(
+        assert_coded_error(
             get_full_organization_core(
                 &GetFullOrganizationQuery::default(), &data, &config, &ctx
-            ).await,
-            Err(AuthError::Forbidden(message)) if message == "User is not a member of the organization"
-        ));
+            ).await.unwrap_err(),
+            403,
+            br#"{"message":"User is not a member of the organization","code":"USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION"}"#,
+        );
         assert_eq!(
             ctx.database
                 .get_session_by_token_value(&data.session.token.field_value())
