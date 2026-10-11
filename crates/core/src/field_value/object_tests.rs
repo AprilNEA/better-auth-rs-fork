@@ -314,3 +314,74 @@ fn object_enumeration_preserves_descriptor_schedules_deletion_and_child_identity
     }
     Ok(())
 }
+
+#[test]
+fn record_consumers_keep_undefined_when_a_selected_descriptor_deletes_its_property()
+-> AuthResult<()> {
+    struct DeletingDescriptor(FieldObject);
+
+    impl FieldObjectSource for DeletingDescriptor {
+        fn own_keys(&self) -> AuthResult<Vec<String>> {
+            self.0.own_keys()
+        }
+
+        fn own_property_descriptor(
+            &self,
+            name: &str,
+        ) -> AuthResult<Option<FieldPropertyDescriptor>> {
+            let descriptor = self.0.own_property_descriptor(name)?;
+            if name == "selected" {
+                let _ = self.0.delete(name)?;
+            }
+            Ok(descriptor)
+        }
+
+        fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            self.0.get(name)
+        }
+
+        fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+            self.0.set(name, value)
+        }
+
+        fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            self.0.delete(name)
+        }
+
+        fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+            Err(AuthError::internal(
+                "Enumeration must inspect property descriptors",
+            ))
+        }
+
+        fn identity(&self) -> usize {
+            std::ptr::from_ref(self) as usize
+        }
+    }
+
+    let source = || {
+        Arc::new(DeletingDescriptor(
+            FieldMap::from([("selected".into(), 1.into()), ("excluded".into(), 2.into())]).into(),
+        ))
+    };
+    for rest in [false, true] {
+        let source = source();
+        let value: FieldValue = FieldObject::from_source(source.clone()).into();
+        let fields = if rest {
+            value.enumerable_fields_except(&["excluded"])?
+        } else {
+            value.enumerable_fields()?
+        };
+        assert_eq!(fields.get("selected"), Some(&FieldValue::Undefined));
+        assert_eq!(source.0.get("selected")?, None);
+        assert_eq!(fields.contains_key("excluded"), !rest);
+        assert_eq!(source.0.get("excluded")?, Some(2.into()));
+    }
+    let source = source();
+    let value: FieldValue = FieldObject::from_source(source.clone()).into();
+    let headers = crate::Headers::from_field_value(&value)?;
+    assert_eq!(headers.get("selected"), Some(&"undefined".to_owned()));
+    assert_eq!(headers.get("excluded"), Some(&"2".to_owned()));
+    assert_eq!(source.0.get("selected")?, None);
+    Ok(())
+}

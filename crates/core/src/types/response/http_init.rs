@@ -112,10 +112,8 @@ pub(super) fn headers_init(value: &FieldValue) -> AuthResult<Headers> {
             {
                 continue;
             }
-            if let Some(value) = fields.get(&name)? {
-                let value = value.display_utf16()?;
-                converted.push(vec![name.into(), value]);
-            }
+            let value = fields.get(&name)?.unwrap_or_default().display_utf16()?;
+            converted.push(vec![name.into(), value]);
         }
     } else if !matches!(value, FieldValue::Date(_) | FieldValue::Function(_)) {
         return Err(AuthError::type_error("Type error"));

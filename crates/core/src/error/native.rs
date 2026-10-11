@@ -28,8 +28,12 @@ pub struct ApiErrorInit {
 pub fn api_error_instance(value: &FieldValue, class: ApiErrorClass) -> bool {
     value
         .as_object()
-        .and_then(|object| object.source::<ApiErrorObject>())
-        .is_some_and(|source| class == ApiErrorClass::BetterCall || source.class == class)
+        .and_then(|object| object.source::<ErrorObject>())
+        .is_some_and(|source| {
+            source
+                .class
+                .is_some_and(|instance| class == ApiErrorClass::BetterCall || instance == class)
+        })
 }
 
 /// Apply Better Call's instance-or-name classification without caching property reads.
@@ -94,32 +98,48 @@ pub(super) fn construct(mut init: ApiErrorInit) -> AuthResult<FieldValue> {
     ] {
         let _ = fields.insert(name.into(), value);
     }
-    Ok(FieldValue::Object(FieldObject::from_source(Arc::new(
-        ApiErrorObject {
-            fields: fields.into(),
-            class: init.class,
-            hidden: Mutex::new(hidden),
-        },
-    ))))
+    Ok(error_object(fields.into(), Some(init.class), hidden))
+}
+
+pub(super) fn better_auth(message: String) -> FieldValue {
+    error_object(
+        FieldMap::from([
+            ("message".into(), message.into()),
+            ("stack".into(), "".into()),
+            ("name".into(), "BetterAuthError".into()),
+        ])
+        .into(),
+        None,
+        HashSet::from(["message".into(), "stack".into()]),
+    )
+}
+
+fn error_object(
+    fields: FieldObject,
+    class: Option<ApiErrorClass>,
+    hidden: HashSet<String>,
+) -> FieldValue {
+    FieldObject::from_source(Arc::new(ErrorObject {
+        fields,
+        class,
+        hidden: Mutex::new(hidden),
+    }))
+    .into()
 }
 
 /// Attach a known native instance brand without constructing or projecting its fields.
 #[cfg(test)]
 pub(crate) fn brand_api_error_object(fields: FieldObject, class: ApiErrorClass) -> FieldValue {
-    FieldValue::Object(FieldObject::from_source(Arc::new(ApiErrorObject {
-        fields,
-        class,
-        hidden: Mutex::default(),
-    })))
+    error_object(fields, Some(class), HashSet::new())
 }
 
-struct ApiErrorObject {
+struct ErrorObject {
     fields: FieldObject,
-    class: ApiErrorClass,
+    class: Option<ApiErrorClass>,
     hidden: Mutex<HashSet<String>>,
 }
 
-impl crate::field_value::FieldObjectSource for ApiErrorObject {
+impl crate::field_value::FieldObjectSource for ErrorObject {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         self.fields.own_keys()
     }

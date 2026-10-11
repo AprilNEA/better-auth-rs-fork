@@ -1,5 +1,10 @@
 # Better Auth 1.7.6 alignment inventory
 
+The native object boundary now exposes separate own-property descriptors. Spread, object rest, and Headers record conversion inspect each included descriptor before reading its value. A property deleted after its descriptor check still supplies `undefined`. JSON and `Object.keys` select enumerable names before reading values. Live storage snapshots retain their previous contract. Descriptor metadata currently covers only enumerability for string keys. Symbol keys, array descriptor metadata, writable/configurable/accessor descriptors, and custom Proxy numeric-key order remain outside this migration. The existing numeric-key ordering policy remains unchanged.
+
+Generic OAuth subject validation now constructs the native `BetterAuthError`, including its enumerable `name`, hidden `message`, empty hidden `stack`, and object identity. APIError constructor brands and name-based detection retain their separate behavior. Targeted CI acceptance is pending.
+
+
 Native OAuth profile capture [38181853040](https://github.com/better-auth-rs/better-auth-rs/actions/runs/38181853040) produced 20 cases at `ead2b04ecd678fa96f5a725b677d15b6c1dbadca`. Two independent upstream runs produced identical bytes. The imported fixture has SHA-256 `a561e4986c9125a3fde2d9ddeff5c389a8d50b3ed17617a40a9cb59a35232dc3`. The upstream replay compares the complete capture, including separate execution, assertion, and observation events. The Rust replay remains in progress; capturing a fixture does not establish parity.
 
 

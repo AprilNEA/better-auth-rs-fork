@@ -367,8 +367,8 @@ impl FieldValue {
                         && object
                             .own_property_descriptor(&name)?
                             .is_some_and(|descriptor| descriptor.enumerable)
-                        && let Some(value) = object.get(&name)?
                     {
+                        let value = object.get(&name)?.unwrap_or_default();
                         let _ = fields.insert(name, value);
                     }
                 }

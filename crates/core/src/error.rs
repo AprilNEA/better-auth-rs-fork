@@ -149,6 +149,11 @@ pub enum AuthError {
 }
 
 impl AuthError {
+    /// Construct an upstream BetterAuthError with native identity and hidden error properties.
+    pub fn better_auth(message: impl Into<String>) -> Self {
+        Self::from_thrown(native::better_auth(message.into()))
+    }
+
     /// Construct an API error and execute message and cause access at this call boundary.
     pub fn try_api_error(init: ApiErrorInit) -> AuthResult<Self> {
         Ok(Self::from_thrown(native::construct(init)?))

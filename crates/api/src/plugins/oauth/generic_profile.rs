@@ -66,7 +66,7 @@ pub(super) fn account_subject_string(subject: FieldValue) -> AuthResult<FieldVal
         || account_id == Utf16String::from("undefined")
         || account_id == Utf16String::from("null")
     {
-        return Err(AuthError::internal("OAUTH_ACCOUNT_SUBJECT_INVALID"));
+        return Err(AuthError::better_auth("OAUTH_ACCOUNT_SUBJECT_INVALID"));
     }
     Ok(account_id.into())
 }

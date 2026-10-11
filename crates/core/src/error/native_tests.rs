@@ -373,6 +373,56 @@ fn constructed_error_presence_and_enumeration_follow_error_properties() -> AuthR
 }
 
 #[test]
+fn better_auth_errors_keep_hidden_properties_and_remain_outside_api_error_brands() -> AuthResult<()>
+{
+    let error = AuthError::better_auth("OAUTH_ACCOUNT_SUBJECT_INVALID");
+    let raw = error
+        .raw_value()
+        .ok_or_else(|| AuthError::internal("Expected native BetterAuthError"))?;
+    let object = raw
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Expected BetterAuthError object"))?;
+    assert_eq!(raw.model_property("name")?, "BetterAuthError".into());
+    assert_eq!(
+        error.message_value()?,
+        "OAUTH_ACCOUNT_SUBJECT_INVALID".into()
+    );
+    assert_eq!(raw.model_property("stack")?, "".into());
+    for name in ["message", "stack"] {
+        assert_eq!(
+            object.own_property_descriptor(name)?,
+            Some(crate::field_value::FieldPropertyDescriptor { enumerable: false })
+        );
+    }
+    assert_eq!(object.enumerable_keys()?, ["name"]);
+    assert_eq!(
+        raw.json()?,
+        Some(serde_json::json!({"name": "BetterAuthError"}))
+    );
+    assert_eq!(
+        raw.display_utf16()?,
+        crate::Utf16String::from("BetterAuthError: OAUTH_ACCOUNT_SUBJECT_INVALID")
+    );
+    assert!(!error.is_api_error()?);
+    for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
+        assert!(!error.is_api_error_instance(class));
+    }
+    let _ = object.set("name", "APIError".into())?;
+    assert!(error.is_api_error()?);
+    for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
+        assert!(!error.is_api_error_instance(class));
+    }
+    let raw = raw.clone();
+    let error = error.capture_native_headers(FieldMap::new().into());
+    assert!(
+        error
+            .raw_value()
+            .is_some_and(|retained| retained.strict_equals(&raw))
+    );
+    Ok(())
+}
+
+#[test]
 fn constructor_defaults_distinguish_undefined_from_null_and_explicit_status_code() -> AuthResult<()>
 {
     let default = AuthError::try_api_error(ApiErrorInit::default())?;

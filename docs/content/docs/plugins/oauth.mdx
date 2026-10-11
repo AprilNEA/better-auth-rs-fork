@@ -38,6 +38,8 @@ Implement `OAuthUserInfoHandler::get_user_info_native` to return a complete Soci
 
 Account identity resolves separately from the displayed user. Both Social and Generic configurations accept `account_subject`; its `resolve_subject_native` method receives the original tokens and raw profile. The resolver result uses the shared JavaScript string conversion and subject validation. `/account-info` returns the complete provider response with the stored account appended and does not resolve a new subject. Admission callbacks receive the original native profile through `UserValidationProvider::profile`.
 
+Use `FieldMap::into()` for ordinary native objects. For observable getters or changing properties, `FieldObject::from_source` accepts a `FieldObjectSource`; implement property descriptors separately from value reads so spread and JSON retain their respective evaluation order. The current descriptor API supports enumerability for string keys.
+
 The default Social decoders still construct typed user records before this boundary. Dynamic default-field coercion, mapper mutations followed by default-field reads, and every provider's original property order are not yet fully aligned. OAuth Proxy keeps its separate JSON transport schema and validates values at the receiver.
 
 ## Built-in Providers
