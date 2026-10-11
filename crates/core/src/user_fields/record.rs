@@ -535,12 +535,16 @@ impl UserConfig {
         supports_native_json: bool,
         supports_native_dates: bool,
     ) -> AuthResult<Vec<FieldMap>> {
-        self.project_adapter_records(
-            adapter_records(storage)?,
-            supports_native_json,
+        let capabilities = FieldOutputCapabilities {
             supports_native_dates,
-        )
-        .await
+            ..FieldOutputCapabilities::json_only(supports_native_json)
+        };
+        self.adapter_fields(&[])
+            .project_adapter_records_with_capabilities(
+                adapter_records(storage, capabilities),
+                capabilities,
+            )
+            .await
     }
 
     /// Complete each successfully projected row without cancelling other started rows.
@@ -555,14 +559,18 @@ impl UserConfig {
     where
         F: std::future::Future<Output = AuthResult<R>> + Send,
     {
-        let records = adapter_records(storage)?;
-        self.project_adapter_records_then(
-            records,
-            supports_native_json,
+        let capabilities = FieldOutputCapabilities {
             supports_native_dates,
-            complete,
-        )
-        .await
+            ..FieldOutputCapabilities::json_only(supports_native_json)
+        };
+        self.adapter_fields(&[])
+            .project_adapter_records_then(
+                adapter_records(storage, capabilities),
+                supports_native_json,
+                supports_native_dates,
+                complete,
+            )
+            .await
     }
 
     /// Continue ready raw records as a batch, retaining each original row index.
@@ -576,13 +584,18 @@ impl UserConfig {
     where
         F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
     {
-        self.project_adapter_records_batches_then(
-            adapter_records(storage)?,
-            supports_native_json,
+        let capabilities = FieldOutputCapabilities {
             supports_native_dates,
-            complete,
-        )
-        .await
+            ..FieldOutputCapabilities::json_only(supports_native_json)
+        };
+        self.adapter_fields(&[])
+            .project_adapter_records_batches_then(
+                adapter_records(storage, capabilities),
+                supports_native_json,
+                supports_native_dates,
+                complete,
+            )
+            .await
     }
 
     /// Apply adapter input policies once to a complete logical record or update patch.
@@ -613,6 +626,7 @@ impl UserConfig {
     }
 
     /// Project stored values without applying endpoint visibility or decoding replacement types.
+    /// Retain already projected logical `core` fields; declared fields read physical `storage` values.
     /// The caller must invoke this after the write and before cache writes or database after hooks.
     pub async fn record_output_fields(
         &self,
@@ -814,26 +828,13 @@ async fn project_organization_field(
     Ok(())
 }
 
-fn adapter_records(storage: &[FieldMap]) -> AuthResult<Vec<AdapterRecord>> {
+fn adapter_records(
+    storage: &[FieldMap],
+    capabilities: FieldOutputCapabilities,
+) -> Vec<AdapterRecord> {
     storage
         .iter()
-        .map(|storage| {
-            let mut core = FieldMap::new();
-            if let Some(id) = storage.get("id") {
-                let _ = core.insert(
-                    "id".into(),
-                    if id.is_null() || id.is_undefined() {
-                        id.clone()
-                    } else {
-                        Value::String(
-                            crate::SchemaValue::<String>::from_field(id.clone())
-                                .display_string()?,
-                        )
-                    },
-                );
-            }
-            Ok(AdapterRecord::new(core, storage.clone()))
-        })
+        .map(|storage| AdapterRecord::from_storage_object(storage.clone().into(), capabilities))
         .collect()
 }
 
@@ -906,6 +907,9 @@ pub(crate) async fn project_adapter_value(
 
 #[cfg(test)]
 mod object_tests;
+
+#[cfg(test)]
+mod projection_tests;
 
 #[cfg(test)]
 mod tests {
