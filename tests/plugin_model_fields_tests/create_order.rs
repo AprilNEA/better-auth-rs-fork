@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::api_key::ApiKeyPlugin;
 use better_auth_core::id::{IdGeneration, IdGenerator};
 use chrono::Utc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -60,6 +61,8 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
         })));
     let auth = BetterAuth::new(config)
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
+        .plugin(ApiKeyPlugin::builder().build())
         .plugin(Fields(vec![
             (EntityRole::Passkey, fields("name", policy.clone())),
             (EntityRole::ApiKey, fields("name", policy)),
@@ -71,7 +74,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
         trace_lock(&trace)?.clear();
         let store = auth.store().clone();
         let owner = owner.clone();
-        let pending = tokio::spawn(async move {
+        let mut pending = tokio::spawn(async move {
             if role == EntityRole::Passkey {
                 let row = store.create_passkey(input(&owner, " Desk ")).await?;
                 Ok((
@@ -87,7 +90,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
                 Ok::<_, AuthError>((row.created_at.typed()?.clone(), row.name))
             }
         });
-        let (entered_at, reply) = required(calls.recv().await, "Expected the next field callback")?;
+        let (entered_at, reply) = next_callback(&mut calls, &mut pending).await?;
         assert_eq!(*trace_lock(&trace)?, ["name:input"]);
         if role == EntityRole::Passkey {
             assert!(

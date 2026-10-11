@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::api_key::ApiKeyPlugin;
 use better_auth_core::{CreateApiKey, UpdateApiKey, store::ApiKeyUsageWrite};
 
 pub(super) fn policy(events: Arc<Mutex<Vec<String>>>) -> UserFieldConfig {
@@ -71,6 +72,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     let events = Arc::new(Mutex::new(Vec::new()));
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(ApiKeyPlugin::builder().build())
         .plugin(Fields(vec![(
             EntityRole::ApiKey,
             fields("name", policy(events.clone())),
@@ -313,16 +315,17 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(ApiKeyPlugin::builder().build())
         .plugin(Fields(vec![(EntityRole::ApiKey, fields("name", policy))]))
         .build()
         .await?;
     let store = auth.store().clone();
-    let pending = tokio::spawn(async move {
+    let mut pending = tokio::spawn(async move {
         store
             .create_api_key(input(Some("Waiting"), "ordinary-await"))
             .await
     });
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(
         (call.stage, call.value),
         ("input", FieldValue::from("Waiting"))
@@ -331,7 +334,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     call.reply
         .send(Ok(FieldValue::from("Stored")))
         .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(
         (call.stage, call.value),
         ("output", FieldValue::from("Stored"))

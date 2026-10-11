@@ -1,6 +1,8 @@
 use super::*;
 use crate::store::schema::SchemaConfiguration;
-use crate::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform};
+use crate::user_fields::{
+    AdapterRecord, FieldOutputCapabilities, FieldTransforms, UserFieldConfig, UserFieldTransform,
+};
 
 fn replacement() -> UserConfig {
     UserConfig {
@@ -223,11 +225,20 @@ async fn database_rate_limit_replaces_the_complete_declaration_without_resetting
             );
             let mut projected = input;
             let _ = projected.insert("id".into(), "counter".into());
-            let actual = schema.project_record(&stored, true, true).await?;
-            assert_eq!(actual, projected);
+            let capabilities = FieldOutputCapabilities::json_only(true);
+            let actual = schema
+                .project_adapter_records_with_capabilities(
+                    vec![AdapterRecord::from_storage_object(
+                        stored.clone().into(),
+                        capabilities,
+                    )],
+                    capabilities,
+                )
+                .await?;
+            assert_eq!(actual, [projected.clone()]);
             assert_eq!(
-                actual.keys().collect::<Vec<_>>(),
-                projected.keys().collect::<Vec<_>>()
+                actual.first().map(|row| row.keys().collect::<Vec<_>>()),
+                Some(projected.keys().collect::<Vec<_>>())
             );
             let update: FieldMap = [("count".into(), 2.into())].into();
             assert_eq!(

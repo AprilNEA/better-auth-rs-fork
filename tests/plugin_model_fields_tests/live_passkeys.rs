@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::passkey::PasskeyPlugin;
 use better_auth_core::Passkey;
 use std::collections::BTreeMap;
 
@@ -91,6 +92,7 @@ async fn observe<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, case: &Value) -> Aut
     for (key, _, after) in ROWS {
         let writer = BetterAuth::new(config())
             .store_arc(raw.clone())
+            .plugin(PasskeyPlugin::new())
             .plugin(Fields(vec![(
                 EntityRole::Passkey,
                 fields(
@@ -180,6 +182,7 @@ async fn observe<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, case: &Value) -> Aut
     }
     let reader = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(EntityRole::Passkey, policies)]))
         .build()
         .await?;

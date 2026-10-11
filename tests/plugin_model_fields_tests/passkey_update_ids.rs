@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::passkey::PasskeyPlugin;
 use better_auth_core::{SchemaValue, UpdatePasskey, id::IdGeneration};
 use better_auth_seaorm::{
     sea_orm::{ActiveModelTrait, ConnectionTrait, IntoActiveModel, Schema},
@@ -32,6 +33,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     let trace = Arc::new(Mutex::new(Vec::new()));
     let auth = BetterAuth::new(serial_config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::Passkey,
             UserConfig {

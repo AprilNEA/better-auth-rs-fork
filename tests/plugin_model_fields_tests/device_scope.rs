@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::device_authorization::DeviceAuthorizationPlugin;
 use better_auth_core::{CreateDeviceCode, DeviceCode, SchemaValue, UpdateDeviceCode};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -105,6 +106,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, backend: &str) -> A
     let failure = Arc::new(AtomicU8::new(0));
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(DeviceAuthorizationPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::DeviceCode,
             fields("scope", policy(trace.clone(), failure.clone())),
@@ -260,6 +262,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(DeviceAuthorizationPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::DeviceCode,
             fields("scope", policy),
@@ -268,12 +271,12 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
         .await?;
     let owner = owner(raw.as_ref(), "scope-await-owner").await?;
     let store = auth.store().clone();
-    let pending = tokio::spawn(async move {
+    let mut pending = tokio::spawn(async move {
         store
             .create_device_code(input("await", Some("Waiting".into()).into())?)
             .await
     });
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(
         (call.stage, call.value),
         ("input", FieldValue::from("Waiting"))
@@ -287,7 +290,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     call.reply
         .send(Ok(FieldValue::from("Stored")))
         .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(
         (call.stage, call.value),
         ("output", FieldValue::from("Stored"))
@@ -306,7 +309,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
         let store = auth.store().clone();
         let id = row.id.clone();
         let owner = owner.clone();
-        let pending = tokio::spawn(async move {
+        let mut pending = tokio::spawn(async move {
             if claim {
                 store.claim_device_code(&id, &owner.into()).await
             } else {
@@ -322,7 +325,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
                     .await
             }
         });
-        let call = required(calls.recv().await, "Expected the next field callback")?;
+        let call = next_callback(&mut calls, &mut pending).await?;
         assert_eq!(
             (call.stage, call.value),
             ("input", FieldValue::from("Renewed"))
@@ -335,7 +338,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
         call.reply
             .send(Ok(FieldValue::from(stored)))
             .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
-        let call = required(calls.recv().await, "Expected the next field callback")?;
+        let call = next_callback(&mut calls, &mut pending).await?;
         assert_eq!(
             (call.stage, call.value),
             ("output", FieldValue::from(stored))
@@ -423,6 +426,7 @@ async fn native_device_scope_declaration_replacement_uses_shared_json_policies()
     let raw = Arc::new(EphemeralStore::new(Arc::new(config())));
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(DeviceAuthorizationPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::DeviceCode,
             fields(

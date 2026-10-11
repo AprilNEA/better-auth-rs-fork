@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::device_authorization::DeviceAuthorizationPlugin;
 use better_auth_core::{
     CreateDeviceCode, DeviceCodeOwnership, UpdateDeviceCode, store::transaction,
 };
@@ -47,6 +48,7 @@ pub(super) async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthR
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(DeviceAuthorizationPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::DeviceCode,
             fields("scope", field),

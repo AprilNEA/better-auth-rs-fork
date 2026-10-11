@@ -69,6 +69,7 @@ async fn contract<S: AuthSchema>(
         stored_policy.transform = None;
         let reader = BetterAuth::new(cfg.clone())
             .store_arc(raw.clone())
+            .plugin(ApiKeyPlugin::builder().build())
             .plugin(Fields(vec![(
                 EntityRole::ApiKey,
                 fields("name", stored_policy),

@@ -1,4 +1,5 @@
 use super::*;
+use better_auth::plugins::passkey::PasskeyPlugin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const FIRST: &str = "EA9B8D66-4D01-1D21-3CE4-B6B48CB575D4";
@@ -72,6 +73,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(EntityRole::Passkey, config_fields)]))
         .build()
         .await?;
@@ -242,6 +244,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     for selected in ["name", "aaguid"] {
         let auth = BetterAuth::new(config())
             .store_arc(raw.clone())
+            .plugin(PasskeyPlugin::new())
             .plugin(Fields(vec![(
                 EntityRole::Passkey,
                 fields(selected, policy(selected, trace.clone(), failure.clone())),
@@ -273,6 +276,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(
             EntityRole::Passkey,
             fields("aaguid", policy),
@@ -281,12 +285,12 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
         .await?;
     let owner = owner(raw.as_ref(), "aaguid-await").await?;
     let store = auth.store().clone();
-    let pending = tokio::spawn(async move {
+    let mut pending = tokio::spawn(async move {
         let mut data = input(&owner, "AaguidAwait");
         data.aaguid = Some(FIRST.into()).into();
         store.create_passkey(data).await
     });
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!((call.stage, call.value), ("input", FieldValue::from(FIRST)));
     assert!(
         raw.get_passkey_by_credential_id("credential:AaguidAwait")
@@ -297,7 +301,7 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     call.reply
         .send(Ok(stored_aaguid))
         .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(
         (call.stage, call.value),
         ("output", FieldValue::from(FIRST.to_ascii_lowercase()))

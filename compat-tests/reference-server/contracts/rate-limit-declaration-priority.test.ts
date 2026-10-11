@@ -141,6 +141,10 @@ for (const backend of ["memory", "sqlite"] as const) for (const mapping of mappi
       expect(last).toBeGreaterThanOrEqual(start);
       expect(last).toBeLessThanOrEqual(finish);
       assertRows(snapshot(), [expectedRow(1, last)]);
+      const projected = await context.adapter.findOne<Row>({ model: "rateLimit", where: [{ field: "key", value: key }] });
+      expect(projected).toStrictEqual({ key, count: 1, lastRequest: last, id: "counter" });
+      expect(Object.keys(projected!)).toStrictEqual(["key", "count", "lastRequest", "id"]);
+      assertRows(snapshot(), [expectedRow(1, last)]);
       expect(ids).toStrictEqual(["rateLimit"]);
       expect(callbacks).toStrictEqual([]);
     } finally { database?.close(); }

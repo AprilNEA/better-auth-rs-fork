@@ -1,7 +1,7 @@
 #![cfg(feature = "seaorm2")]
 
 use async_trait::async_trait;
-use better_auth::{AuthConfig, BetterAuth};
+use better_auth::{AuthConfig, BetterAuth, plugins::passkey::PasskeyPlugin};
 use better_auth_core::{
     AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
     AuthRoute, AuthSchema, AuthStore, CreateAccount, CreatePasskey, CreateSession, CreateUser,
@@ -210,6 +210,7 @@ async fn passkey_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(EntityRole::Passkey, fields("name", policy))]))
         .build()
         .await?;
@@ -399,6 +400,19 @@ struct Call {
     reply: oneshot::Sender<AuthResult<FieldValue>>,
 }
 
+async fn next_callback<C, T>(
+    calls: &mut mpsc::UnboundedReceiver<C>,
+    pending: &mut tokio::task::JoinHandle<AuthResult<T>>,
+) -> AuthResult<C> {
+    tokio::select! {
+        call = calls.recv() => required(call, "Expected the next field callback"),
+        result = pending => {
+            result.map_err(|error| AuthError::internal(format!("Model field task failed: {error}")))??;
+            Err(AuthError::internal("Model operation completed before the expected field callback"))
+        }
+    }
+}
+
 fn awaited(sender: mpsc::UnboundedSender<Call>, stage: &'static str) -> UserFieldTransform {
     UserFieldTransform::new_async(move |value| {
         let sender = sender.clone();
@@ -429,13 +443,15 @@ async fn async_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult
     };
     let auth = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(PasskeyPlugin::new())
         .plugin(Fields(vec![(EntityRole::Passkey, fields("name", policy))]))
         .build()
         .await?;
     let owner = owner(raw.as_ref(), "async").await?;
     let store = auth.store().clone();
-    let pending = tokio::spawn(async move { store.create_passkey(input(&owner, "Waiting")).await });
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let mut pending =
+        tokio::spawn(async move { store.create_passkey(input(&owner, "Waiting")).await });
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(call.stage, "input");
     assert_eq!(call.value, FieldValue::from("Waiting"));
     assert!(
@@ -446,7 +462,7 @@ async fn async_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult
     call.reply
         .send(Ok(FieldValue::from("Stored")))
         .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
-    let call = required(calls.recv().await, "Expected the next field callback")?;
+    let call = next_callback(&mut calls, &mut pending).await?;
     assert_eq!(call.stage, "output");
     assert_eq!(call.value, FieldValue::from("Stored"));
     assert_eq!(
