@@ -1,5 +1,9 @@
-use crate::{AuthError, AuthResult, FieldValue};
+use crate::{AuthError, AuthResult, FieldValue, Headers};
 use std::{borrow::Cow, sync::Arc};
+
+#[cfg(test)]
+#[path = "response_body/http_tests.rs"]
+mod http_tests;
 
 /// Immutable Blob contents. Clones of a Blob response retain the same object identity.
 #[derive(Debug)]
@@ -80,23 +84,69 @@ impl ResponseBody {
 
     /// Encode the native result at an explicit byte boundary.
     pub fn bytes(&self) -> AuthResult<Cow<'_, [u8]>> {
-        match self {
-            Self::Empty => Ok(Cow::Borrowed(&[])),
-            Self::Native(FieldValue::String(value)) => Ok(Cow::Borrowed(value.as_bytes())),
-            Self::Native(FieldValue::Utf16String(value)) => Ok(Cow::Owned(
-                String::from_utf16_lossy(value.as_utf16()).into_bytes(),
-            )),
-            Self::Native(FieldValue::Number(value)) if value.is_nan() => Ok(Cow::Borrowed(b"NaN")),
-            Self::Native(FieldValue::Function(_)) => Err(AuthError::type_error(
-                "Function results cannot be represented as an HTTP body",
-            )),
-            Self::Native(value) => Ok(Cow::Owned(
-                value.stringify()?.unwrap_or_default().into_bytes(),
-            )),
-            Self::Binary(bytes) => Ok(Cow::Borrowed(bytes)),
-            Self::Blob(blob) => Ok(Cow::Borrowed(blob.bytes())),
-            Self::Bytes(bytes) => Ok(Cow::Borrowed(bytes)),
-        }
+        Ok(self.encode_http()?.0.unwrap_or(Cow::Borrowed(&[])))
+    }
+
+    fn encode_http(&self) -> AuthResult<(Option<Cow<'_, [u8]>>, HttpContentType<'_>)> {
+        let (bytes, content_type) = match self {
+            Self::Empty => (None, HttpContentType::Preserve),
+            Self::Native(FieldValue::Undefined) => (None, HttpContentType::Json),
+            Self::Native(FieldValue::String(value)) => (
+                Some(Cow::Borrowed(value.as_bytes())),
+                if value.is_empty() {
+                    HttpContentType::Json
+                } else {
+                    HttpContentType::Set("text/plain")
+                },
+            ),
+            Self::Native(FieldValue::Utf16String(value)) => (
+                Some(Cow::Owned(
+                    String::from_utf16_lossy(value.as_utf16()).into_bytes(),
+                )),
+                if value.as_utf16().is_empty() {
+                    HttpContentType::Json
+                } else {
+                    HttpContentType::Set("text/plain")
+                },
+            ),
+            Self::Native(FieldValue::Number(value)) if value.is_nan() => (
+                Some(Cow::Borrowed(b"NaN".as_slice())),
+                HttpContentType::Json,
+            ),
+            Self::Native(FieldValue::Function(_)) => {
+                return Err(AuthError::type_error(
+                    "Function results cannot be represented as an HTTP body",
+                ));
+            }
+            Self::Native(value @ FieldValue::Object(object)) if !object_is_json(object)? => (
+                Some(Cow::Owned(
+                    String::from_utf16_lossy(value.display_utf16()?.as_utf16()).into_bytes(),
+                )),
+                HttpContentType::Preserve,
+            ),
+            Self::Native(value) => (
+                crate::field_value::stringify_http(value)?
+                    .map(|text| Cow::Owned(text.into_bytes())),
+                HttpContentType::Json,
+            ),
+            Self::Binary(bytes) => (
+                Some(Cow::Borrowed(bytes.as_ref())),
+                HttpContentType::Set("application/octet-stream"),
+            ),
+            Self::Blob(blob) => (
+                Some(Cow::Borrowed(blob.bytes())),
+                HttpContentType::Set(if blob.mime_type().is_empty() {
+                    "application/octet-stream"
+                } else {
+                    blob.mime_type()
+                }),
+            ),
+            Self::Bytes(bytes) => (
+                Some(Cow::Borrowed(bytes.as_slice())),
+                HttpContentType::Preserve,
+            ),
+        };
+        Ok((bytes, content_type))
     }
 
     pub fn into_bytes(self) -> AuthResult<Vec<u8>> {
@@ -128,7 +178,51 @@ impl ResponseBody {
         }
     }
 
-    pub(crate) fn is_null_body(&self) -> bool {
-        matches!(self, Self::Native(FieldValue::Undefined) | Self::Empty)
+    pub(crate) fn into_http_body(self, headers: &mut Headers) -> AuthResult<Self> {
+        if matches!(self, Self::Empty | Self::Bytes(_)) {
+            return Ok(self);
+        }
+        let (bytes, content_type) = self.encode_http()?;
+        let content_type = match content_type {
+            HttpContentType::Json => Some("application/json"),
+            HttpContentType::Set(value) => Some(value),
+            HttpContentType::Preserve => None,
+        };
+        if let Some(content_type) = content_type {
+            let _ = headers.insert("content-type", content_type);
+        }
+        Ok(bytes.map_or(Self::Empty, |bytes| Self::Bytes(bytes.into_owned())))
     }
+}
+
+enum HttpContentType<'a> {
+    Json,
+    Set(&'a str),
+    Preserve,
+}
+
+fn object_is_json(object: &crate::FieldObject) -> AuthResult<bool> {
+    if object.get("buffer")?.is_some_and(|value| value.is_truthy()) {
+        return Ok(false);
+    }
+    // An absent own constructor resolves to Object.prototype.constructor. A getter still runs twice.
+    if object
+        .get("constructor")?
+        .as_ref()
+        .is_none_or(FieldValue::is_truthy)
+    {
+        let object_constructor = match object.get("constructor")? {
+            None => true,
+            Some(constructor) => constructor
+                .model_property("name")?
+                .strict_equals(&FieldValue::from("Object")),
+        };
+        if object_constructor {
+            return Ok(true);
+        }
+    }
+    Ok(matches!(
+        object.get("toJSON")?,
+        Some(FieldValue::Function(_))
+    ))
 }

@@ -2,7 +2,7 @@
 
 use better_auth_core::{
     AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-    AuthSchema, BeforeRequestAction, HttpMethod, OAuthStateStrategy,
+    AuthSchema, BeforeRequestAction, FieldValue, HttpMethod, OAuthStateStrategy, ResponseBody,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ mod environment;
 
 #[cfg(test)]
 mod config_tests;
+#[cfg(test)]
+mod native_result_tests;
 
 /// Production-to-preview callback configuration.
 #[derive(Clone, better_auth_core::PluginConfig)]
@@ -226,7 +228,7 @@ impl<S: AuthSchema> AuthPlugin<S> for OAuthProxyPlugin {
                 "after",
                 "plugin:oauth-proxy",
                 async {
-                    if req.server_context(REDIRECT_BASE_CONTEXT)?.is_some() {
+                    if !self.config.skip_proxy(req, ctx) {
                         self.wrap_authorization(response, ctx).await?;
                     }
                     Ok(())
@@ -350,47 +352,91 @@ impl OAuthProxyPlugin {
         response: &mut AuthResponse,
         ctx: &AuthContext<S>,
     ) -> AuthResult<()> {
-        if response.status != 200 {
+        if !response.is_native() || response.is_api_error() {
             return Ok(());
         }
-        let mut body: serde_json::Map<String, Value> =
-            serde_json::from_slice(&response.body.bytes()?)?;
-        let Some(url) = body
-            .get("url")
-            .and_then(Value::as_str)
+        let ResponseBody::Native(FieldValue::Object(body)) = &response.body else {
+            return Ok(());
+        };
+        let provider_url = body.get("url")?.unwrap_or_default();
+        if !provider_url.is_string() || !provider_url.is_truthy() {
+            return Ok(());
+        }
+        // URL construction consumes a USVString before the upstream state-processing try block.
+        let provider_url = String::from_utf16_lossy(provider_url.display_utf16()?.as_utf16());
+        let url = Url::parse(&provider_url).map_err(|_| AuthError::type_error("Invalid URL"))?;
+        let Some(original_state) = url
+            .query_pairs()
+            .find(|(key, _)| key == "state")
+            .map(|(_, value)| value.into_owned())
             .filter(|value| !value.is_empty())
         else {
             return Ok(());
         };
-        let mut url = parse_url(url)?;
-        let Some((_, original_state)) = url.query_pairs().find(|(key, _)| key == "state") else {
-            return Ok(());
-        };
-        let original_state = original_state.into_owned();
+        match self
+            .wrapped_authorization(response, url, original_state, ctx)
+            .await
+        {
+            Ok(Some(body)) => response.body = ResponseBody::Native(body),
+            Ok(None) => {}
+            Err(error) => ctx.config.logger.error(
+                "Failed to prepare OAuth proxy state:",
+                &[better_auth_core::observability::logger::LogArgument::Error(
+                    &error,
+                )],
+            ),
+        }
+        Ok(())
+    }
+
+    async fn wrapped_authorization<S: AuthSchema>(
+        &self,
+        response: &AuthResponse,
+        mut url: Url,
+        original_state: String,
+        ctx: &AuthContext<S>,
+    ) -> AuthResult<Option<FieldValue>> {
         let payload = match ctx.config.account.store_state_strategy() {
-            OAuthStateStrategy::Database => {
-                let verification = ctx
-                    .database
-                    .get_verification_by_identifier(&original_state)
-                    .await?
-                    .ok_or_else(|| AuthError::internal("OAuth proxy state was not persisted"))?;
-                verification.value.typed()?.clone()
-            }
+            OAuthStateStrategy::Database => ctx
+                .database
+                .get_verification_by_identifier(&original_state)
+                .await?
+                .map(|verification| verification.value.field_value())
+                .unwrap_or_default(),
             OAuthStateStrategy::Cookie => {
                 let name = state::state_cookie_name(&ctx.config);
                 let value = response
                     .headers
                     .get_all("set-cookie")
-                    .find_map(|header| header.split(';').next()?.strip_prefix(&format!("{name}=")))
-                    .ok_or_else(|| {
-                        AuthError::internal("OAuth proxy state cookie was not issued")
-                    })?;
-                serde_json::to_string(&state::decode_cookie_state_value(
-                    ctx.config.encryption_secret(),
-                    value,
-                )?)?
+                    .filter_map(|header| {
+                        header
+                            .split(';')
+                            .next()?
+                            .trim()
+                            .strip_prefix(&format!("{name}="))
+                    })
+                    .last()
+                    .filter(|value| !value.is_empty());
+                match value {
+                    Some(value) => {
+                        let value =
+                            better_auth_core::utils::cookie_utils::decode_cookie_value(value);
+                        symmetric::decrypt(ctx.config.encryption_secret(), &value)?.into()
+                    }
+                    None => FieldValue::Undefined,
+                }
             }
         };
+        if !payload.is_truthy() {
+            ctx.config
+                .logger
+                .warn("No OAuth state found for proxy", &[]);
+            return Ok(None);
+        }
+        if !payload.is_string() {
+            return Err(AuthError::type_error("string expected"));
+        }
+        let payload = String::from_utf16_lossy(payload.display_utf16()?.as_utf16());
         let package = StatePackage {
             state: original_state,
             state_cookie: symmetric::encrypt(self.encryption_key(ctx), &payload)?,
@@ -412,9 +458,9 @@ impl OAuthProxyPlugin {
             })
             .collect();
         let _ = url.query_pairs_mut().clear().extend_pairs(pairs);
+        let mut body = response.body.field_value()?.enumerable_fields()?;
         let _ = body.insert("url".into(), url.to_string().into());
-        response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&body)?);
-        Ok(())
+        Ok(Some(body.into()))
     }
 
     async fn production_callback<S: AuthSchema>(

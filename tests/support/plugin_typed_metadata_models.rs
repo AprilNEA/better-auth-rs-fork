@@ -289,7 +289,7 @@ impl Record {
             Self::ApiKey(row) => {
                 let fields = row.field_values()?;
                 json(&row, &fields)?;
-                let view = ApiKeyView::try_from_api_key(&row)?;
+                let view = ApiKeyView::try_from_api_key(row.as_ref())?;
                 let mut expected = fields.clone();
                 let _ = expected.insert("metadata".into(), FieldValue::Undefined);
                 let _ = expected.insert("permissions".into(), FieldValue::Null);

@@ -97,7 +97,7 @@ pub struct AuthResponse {
     /// Endpoint headers during native dispatch, or merged headers after HTTP materialization.
     pub headers: Headers,
     pub body: crate::ResponseBody,
-    native_output: bool,
+    origin: ResponseOrigin,
     metadata: Option<Box<ResponseMetadata>>,
     native_status: NativeResponseStatus,
     api_error_status: Option<u16>,
@@ -108,6 +108,14 @@ struct ResponseMetadata {
     error_headers: Option<Headers>,
     captured_headers: Option<Headers>,
     explicit_response_headers: Option<Headers>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResponseOrigin {
+    Explicit,
+    Native,
+    Json,
+    HttpBeforeJson,
 }
 
 /// Status property returned by native endpoint dispatch with `returnStatus` enabled.

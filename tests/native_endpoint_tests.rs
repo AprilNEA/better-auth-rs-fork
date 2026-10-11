@@ -16,6 +16,9 @@ use better_auth_core::{
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
+#[path = "native_endpoint_tests/http_json_router.rs"]
+mod http_json_router;
+
 #[derive(Default)]
 struct State {
     mode: String,

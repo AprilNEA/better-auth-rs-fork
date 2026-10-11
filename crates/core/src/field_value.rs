@@ -22,7 +22,7 @@ mod structured_clone;
 pub use structured_clone::StructuredCloneContext;
 pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, prepare_clone};
 mod json;
-pub(crate) use json::project_input_json;
+pub(crate) use json::{project_input_json, stringify_http};
 mod primitive;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;

@@ -1,5 +1,11 @@
 use super::*;
 
+mod json_wrapper;
+
+#[cfg(test)]
+#[path = "response/json_wrapper_tests.rs"]
+mod json_wrapper_tests;
+
 impl AuthResponse {
     fn metadata_mut(&mut self) -> &mut ResponseMetadata {
         self.metadata.get_or_insert_default()
@@ -30,7 +36,7 @@ impl AuthResponse {
         self.native_status = status;
         if let Some(error_status) = self.api_error_status {
             self.status = status.value().unwrap_or(error_status);
-        } else if self.native_output {
+        } else if self.is_native() {
             self.status = status.value().unwrap_or(200);
         }
     }
@@ -41,6 +47,12 @@ impl AuthResponse {
     }
 
     pub(crate) fn into_api_error(mut self) -> Self {
+        if matches!(
+            self.origin,
+            ResponseOrigin::Json | ResponseOrigin::HttpBeforeJson
+        ) {
+            self.origin = ResponseOrigin::Native;
+        }
         if self.api_error_status.is_none() {
             self.api_error_status = Some(self.status);
             self.native_status = NativeResponseStatus::Undefined;
@@ -75,8 +87,7 @@ impl AuthResponse {
     }
 
     fn separate_explicit_response_headers(&mut self) {
-        if !self.native_output && !self.is_api_error() && self.explicit_response_headers().is_none()
-        {
+        if !self.is_native() && !self.is_api_error() && self.explicit_response_headers().is_none() {
             let headers = std::mem::take(&mut self.headers);
             self.metadata_mut().explicit_response_headers = Some(headers);
         }
@@ -103,7 +114,7 @@ impl AuthResponse {
         self.body = crate::ResponseBody::Native(crate::FieldValue::parse_json(
             &serde_json::to_string(value)?,
         )?);
-        self.native_output = true;
+        self.origin = ResponseOrigin::Json;
         self.api_error_status = None;
         self.metadata = None;
         self.set_native_status(self.native_status);
@@ -112,7 +123,7 @@ impl AuthResponse {
 
     /// Replace the returned value while retaining native endpoint status and accumulated response headers.
     pub fn replace_returned(&mut self, mut returned: Self) {
-        if returned.native_output
+        if returned.is_native()
             && !returned.is_api_error()
             && matches!(
                 returned.body,
@@ -130,9 +141,20 @@ impl AuthResponse {
         *self = returned;
     }
 
+    pub(crate) fn prepare_before_return(&mut self, http: bool) {
+        if http && self.origin == ResponseOrigin::Json {
+            self.origin = ResponseOrigin::HttpBeforeJson;
+        }
+    }
+
+    fn has_json_wrapper(&self) -> bool {
+        self.origin == ResponseOrigin::HttpBeforeJson
+    }
+
     pub(crate) fn stops_before_hooks(&self) -> bool {
-        self.is_api_error()
-            || !self.native_output
+        self.has_json_wrapper()
+            || self.is_api_error()
+            || !self.is_native()
             || !matches!(&self.body,
                 crate::ResponseBody::Native(value)
                     if !matches!(value, crate::FieldValue::Array(_) | crate::FieldValue::Object(_) | crate::FieldValue::Date(_))
@@ -145,7 +167,7 @@ impl AuthResponse {
             status,
             headers: Headers::new(),
             body: crate::ResponseBody::Empty,
-            native_output: false,
+            origin: ResponseOrigin::Explicit,
             metadata: None,
             native_status: NativeResponseStatus::Undefined,
             api_error_status: None,
@@ -159,7 +181,7 @@ impl AuthResponse {
         let status = status.into();
         let mut response = Self::new(status.unwrap_or(200));
         response.body = crate::ResponseBody::Native(value);
-        response.native_output = true;
+        response.origin = ResponseOrigin::Native;
         response.native_status =
             status.map_or(NativeResponseStatus::Undefined, NativeResponseStatus::Value);
         response
@@ -186,10 +208,18 @@ impl AuthResponse {
     /// `None` preserves an unset native status; a code sets it explicitly.
     /// The active endpoint's `set_response_status` call takes precedence over this constructor's status.
     pub fn json<T: Serialize>(status: impl Into<Option<u16>>, data: &T) -> crate::AuthResult<Self> {
-        Ok(Self::native(
+        Ok(Self::json_value(
             status,
             crate::FieldValue::parse_json(&serde_json::to_string(data)?)?,
         ))
+    }
+
+    /// Return `ctx.json` data without a Serde conversion or early JSON encoding.
+    /// HTTP before hooks use strict JSON; endpoint and after-hook results use native HTTP encoding.
+    pub fn json_value(status: impl Into<Option<u16>>, value: crate::FieldValue) -> Self {
+        let mut response = Self::native(status, value);
+        response.origin = ResponseOrigin::Json;
+        response
     }
 
     /// Construct an explicit text response with its own HTTP status.
@@ -202,7 +232,7 @@ impl AuthResponse {
             status,
             headers,
             body,
-            native_output: false,
+            origin: ResponseOrigin::Explicit,
             metadata: None,
             native_status: NativeResponseStatus::Undefined,
             api_error_status: None,
@@ -222,7 +252,7 @@ impl AuthResponse {
             status,
             headers,
             body,
-            native_output: false,
+            origin: ResponseOrigin::Explicit,
             metadata: None,
             native_status: NativeResponseStatus::Undefined,
             api_error_status: None,
@@ -233,47 +263,66 @@ impl AuthResponse {
     /// Native results keep endpoint headers separate from explicit response headers.
     /// Match the pinned Bun Response constructor; the HTTP transport owns wire restrictions.
     pub fn into_http_response(mut self) -> crate::AuthResult<Self> {
+        if self.is_native()
+            && matches!(
+                self.body,
+                crate::ResponseBody::Bytes(_) | crate::ResponseBody::Empty
+            )
+        {
+            self.body = crate::ResponseBody::Native(self.body.field_value()?);
+        }
+        let json_wrapper = self.has_json_wrapper();
+        if self.is_native() {
+            if !json_wrapper
+                && let crate::ResponseBody::Native(crate::FieldValue::Object(fields)) = &self.body
+                && fields
+                    .get("_flag")?
+                    .is_some_and(|flag| flag.strict_equals(&"json".into()))
+            {
+                let fields = fields.clone();
+                self.materialize_json_wrapper(&fields)?;
+            } else {
+                self.headers = std::mem::take(&mut self.headers).into_response_init()?;
+            }
+            self.origin = ResponseOrigin::Explicit;
+        } else if let Some(mut owned) = self.take_explicit_response_headers() {
+            owned.merge(std::mem::take(&mut self.headers).into_response_init()?);
+            self.headers = owned;
+        }
+        self.body = if json_wrapper {
+            let _ = self.headers.insert("content-type", "application/json");
+            self.body
+                .field_value()?
+                .stringify()?
+                .map_or(crate::ResponseBody::Empty, |text| {
+                    crate::ResponseBody::Bytes(text.into_bytes())
+                })
+        } else {
+            self.body.into_http_body(&mut self.headers)?
+        };
         if self.status != 101 && !(200..=599).contains(&self.status) {
             return Err(crate::AuthError::RangeError(format!(
                 "The status provided ({}) must be 101 or in the range of [200, 599]",
                 self.status
             )));
         }
-        if self.native_output && matches!(self.body, crate::ResponseBody::Bytes(_)) {
-            self.body = crate::ResponseBody::Native(self.body.field_value()?);
-        }
-        if self.native_output {
-            // Better-call strips request and transport headers from native endpoint output before HTTP serialization.
-            self.headers.strip_request_only();
-            let _ = self
-                .headers
-                .insert("content-type", self.body.http_content_type());
-            self.native_output = false;
-        } else if let Some(mut owned) = self.take_explicit_response_headers() {
-            self.headers.strip_request_only();
-            owned.merge(std::mem::take(&mut self.headers));
-            self.headers = owned;
-        }
-        self.body = if self.body.is_null_body() {
-            crate::ResponseBody::Empty
-        } else {
-            crate::ResponseBody::Bytes(self.body.into_bytes()?)
-        };
         Ok(self)
     }
 
     /// Whether this response retains a native endpoint value instead of an explicit HTTP Response.
     pub fn is_native(&self) -> bool {
-        self.native_output
+        self.origin != ResponseOrigin::Explicit
     }
 
     /// Identify JSON by the effective HTTP MIME type, without parsing or projecting the body.
     /// A Blob with a JSON MIME type still requires byte decoding; its native value is a Blob.
     pub fn is_json(&self) -> bool {
-        if self.native_output {
-            self.body
-                .http_content_type()
-                .starts_with("application/json")
+        if self.is_native() {
+            self.has_json_wrapper()
+                || self
+                    .body
+                    .http_content_type()
+                    .starts_with("application/json")
         } else {
             self.headers
                 .get("content-type")

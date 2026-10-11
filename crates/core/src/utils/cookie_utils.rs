@@ -84,7 +84,8 @@ pub fn verify_cookie_value(value: &str, secret: &str) -> Option<String> {
     Some(value.to_string())
 }
 
-fn decode_cookie_value(value: &str) -> std::borrow::Cow<'_, str> {
+/// Decode a cookie component; preserve the complete input when JavaScript `decodeURIComponent` rejects its escapes or UTF-8 sequence.
+pub fn decode_cookie_value(value: &str) -> std::borrow::Cow<'_, str> {
     let mut bytes = value.bytes();
     while let Some(byte) = bytes.next() {
         if byte == b'%'

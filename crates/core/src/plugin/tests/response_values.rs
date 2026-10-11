@@ -17,6 +17,9 @@ use crate::{
     store::{EphemeralStore, StatelessSchema as S},
 };
 
+#[path = "http_json.rs"]
+mod http_json;
+
 #[derive(Clone)]
 struct Hooks {
     phase: &'static str,

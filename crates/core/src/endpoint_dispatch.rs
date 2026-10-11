@@ -142,7 +142,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                 Err(error) => return Err(endpoint_error(error, &internal_req)?),
             };
             if let Some(response) =
-                apply_before_action(action, &mut internal_req, req, &mut input_patch)?
+                apply_before_action(action, &mut internal_req, req, &mut input_patch, http)?
             {
                 return if http {
                     response.into_http_response()
@@ -161,7 +161,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                 Err(error) => return Err(endpoint_error(error, &internal_req)?),
             };
             if let Some(response) =
-                apply_before_action(action, &mut internal_req, req, &mut input_patch)?
+                apply_before_action(action, &mut internal_req, req, &mut input_patch, http)?
             {
                 return if http {
                     response.into_http_response()
@@ -325,9 +325,11 @@ fn apply_before_action(
     internal: &mut AuthRequest,
     original: &mut AuthRequest,
     input_patch: &mut crate::endpoint_input::EndpointInputPatch,
+    http: bool,
 ) -> AuthResult<Option<AuthResponse>> {
     match action {
         Some(BeforeRequestAction::Respond(mut response)) => {
+            response.prepare_before_return(http);
             if !response.stops_before_hooks() {
                 for (name, value) in response.headers {
                     if name.eq_ignore_ascii_case("set-cookie") {

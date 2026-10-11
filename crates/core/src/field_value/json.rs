@@ -7,7 +7,10 @@ mod tests;
 use super::{ContainerIdentity, FieldMap, FieldValue};
 use crate::{AuthError, AuthResult};
 use serde::{Serialize, ser::SerializeMap};
-use std::{cell::RefCell, collections::HashSet};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 pub(crate) struct Json<'a>(pub(crate) &'a FieldValue);
 
@@ -15,7 +18,7 @@ impl Serialize for Json<'_> {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let state = JsonState::default();
         let value = state
-            .prepare("", self.0)
+            .prepare("", self.0, None)
             .map_err(|error| state.error(error))?;
         JsonNode(&value, &state).serialize(serializer)
     }
@@ -41,10 +44,16 @@ struct JsonState {
     preparation: Preparation,
     active: RefCell<HashSet<ContainerIdentity>>,
     source_error: RefCell<Option<AuthError>>,
+    http_references: Option<RefCell<HttpReferences>>,
 }
 
 impl JsonState {
-    fn prepare(&self, key: &str, value: &FieldValue) -> AuthResult<PreparedJson> {
+    fn prepare(
+        &self,
+        key: &str,
+        value: &FieldValue,
+        holder: Option<JsonIdentity>,
+    ) -> AuthResult<PreparedJson> {
         let prepared = match value {
             FieldValue::Object(object) if matches!(self.preparation, Preparation::Json) => {
                 match object.get("toJSON")? {
@@ -56,6 +65,10 @@ impl JsonState {
                 .iso_string()?
                 .map_or(FieldValue::Null, FieldValue::String),
             _ => value.clone(),
+        };
+        let prepared = match &self.http_references {
+            Some(references) => references.borrow_mut().replace(prepared, holder),
+            None => prepared,
         };
         Ok(PreparedJson(prepared))
     }
@@ -74,8 +87,21 @@ impl JsonState {
 struct PreparedJson(FieldValue);
 
 pub(super) fn stringify(value: &FieldValue) -> AuthResult<Option<String>> {
-    let state = JsonState::default();
-    let value = state.prepare("", value)?;
+    stringify_with_state(value, JsonState::default())
+}
+
+pub(crate) fn stringify_http(value: &FieldValue) -> AuthResult<Option<String>> {
+    stringify_with_state(
+        value,
+        JsonState {
+            http_references: Some(RefCell::default()),
+            ..JsonState::default()
+        },
+    )
+}
+
+fn stringify_with_state(value: &FieldValue, state: JsonState) -> AuthResult<Option<String>> {
+    let value = state.prepare("", value, None)?;
     if value.0.is_json_omitted() {
         return Ok(None);
     }
@@ -100,7 +126,7 @@ fn value_with_preparation(
         preparation,
         ..JsonState::default()
     };
-    let value = state.prepare("", value)?;
+    let value = state.prepare("", value, None)?;
     if value.0.is_json_omitted() {
         return Ok(None);
     }
@@ -178,7 +204,11 @@ impl Serialize for JsonNode<'_> {
                             .unwrap_or_default();
                         let value = self
                             .1
-                            .prepare(&index.to_string(), &value)
+                            .prepare(
+                                &index.to_string(),
+                                &value,
+                                Some(JsonIdentity::Container(identity)),
+                            )
                             .map_err(|error| self.1.error(error))?;
                         sequence.serialize_element(&JsonNode(&value, self.1))?;
                     }
@@ -202,7 +232,13 @@ impl Serialize for JsonNode<'_> {
                             .get(&name)
                             .map_err(|error| self.1.error(error))?
                             .unwrap_or_default();
-                        serialize_entry(&mut output, &name, &value, self.1)?;
+                        serialize_entry(
+                            &mut output,
+                            &name,
+                            &value,
+                            self.1,
+                            Some(JsonIdentity::Container(identity)),
+                        )?;
                     }
                     output.end()
                 })();
@@ -218,9 +254,10 @@ fn serialize_entry<S: SerializeMap>(
     name: &str,
     value: &FieldValue,
     state: &JsonState,
+    holder: Option<JsonIdentity>,
 ) -> Result<(), S::Error> {
     let value = state
-        .prepare(name, value)
+        .prepare(name, value, holder)
         .map_err(|error| state.error(error))?;
     if !value.0.is_json_omitted() {
         output.serialize_entry(name, &JsonNode(&value, state))?;
@@ -238,8 +275,66 @@ impl Serialize for JsonFields<'_> {
         });
         let mut output = serializer.serialize_map(None)?;
         for (name, value) in fields {
-            serialize_entry(&mut output, name, value, self.1)?;
+            serialize_entry(&mut output, name, value, self.1, None)?;
         }
         output.end()
+    }
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+enum JsonIdentity {
+    Container(ContainerIdentity),
+    Date(usize),
+}
+
+impl JsonIdentity {
+    fn of(value: &FieldValue) -> Option<Self> {
+        match value {
+            FieldValue::Object(object) => Some(Self::Container(ContainerIdentity::Object(
+                object.identity(),
+            ))),
+            FieldValue::Array(array) => {
+                Some(Self::Container(ContainerIdentity::Array(array.identity())))
+            }
+            FieldValue::Date(date) => Some(Self::Date(std::sync::Arc::as_ptr(&date.0) as usize)),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Default)]
+struct HttpReferences {
+    objects: HashMap<JsonIdentity, HttpReference>,
+}
+
+struct HttpReference {
+    parent: Option<JsonIdentity>,
+    id: usize,
+    // Retain temporary method results so allocator reuse cannot conflate different objects.
+    _value: FieldValue,
+}
+
+impl HttpReferences {
+    fn replace(&mut self, value: FieldValue, holder: Option<JsonIdentity>) -> FieldValue {
+        let Some(identity) = JsonIdentity::of(&value) else {
+            return value;
+        };
+        let mut ancestor = holder;
+        while let Some(entry) = ancestor.and_then(|current| self.objects.get(&current)) {
+            if ancestor == Some(identity) {
+                return format!("[Circular ref-{}]", entry.id).into();
+            }
+            ancestor = entry.parent;
+        }
+        let next_id = self.objects.len();
+        self.objects
+            .entry(identity)
+            .and_modify(|entry| entry.parent = holder)
+            .or_insert_with(|| HttpReference {
+                parent: holder,
+                id: next_id,
+                _value: value.clone(),
+            });
+        value
     }
 }
