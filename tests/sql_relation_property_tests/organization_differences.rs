@@ -84,7 +84,7 @@ pub(super) fn assert_error(scenario: &str, expected: &Value, error: &AuthError) 
             difference.reason
         );
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message()?,
             difference.rust_message,
             "{scenario}: {}",
             difference.reason
@@ -101,7 +101,7 @@ pub(super) fn assert_error(scenario: &str, expected: &Value, error: &AuthError) 
         return Ok(());
     }
     assert_eq!(
-        Some(error.instrumentation_message().as_str()),
+        Some(error.instrumentation_message()?.as_str()),
         expected.get("message").and_then(Value::as_str),
         "{scenario}"
     );

@@ -393,8 +393,7 @@ async fn body_schemas_keep_each_instances_global_and_nested_password_policy() {
                 .await;
             if required {
                 let response = result.unwrap_err().to_auth_response();
-                let body: serde_json::Value =
-                    serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+                let body = response.api_error_body().unwrap().json().unwrap().unwrap();
                 assert_eq!(
                     body["message"],
                     "[body.password] Invalid input: expected string, received undefined"

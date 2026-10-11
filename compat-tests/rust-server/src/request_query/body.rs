@@ -77,6 +77,16 @@ impl BodyTrace {
             .or_else(|| context.is_http.then_some(&context.request));
         let error = response
             .and_then(|response| {
+                if response
+                    .is_api_error()
+                    .expect("The fixture response must be classifiable")
+                {
+                    return response
+                        .api_error_body()
+                        .expect("The fixture error body must be readable")
+                        .json()
+                        .expect("The fixture error body must serialize");
+                }
                 serde_json::from_slice::<Value>(
                     &response
                         .body

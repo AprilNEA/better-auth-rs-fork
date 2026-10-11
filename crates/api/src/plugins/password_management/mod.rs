@@ -273,9 +273,7 @@ impl PasswordManagementPlugin {
         let Some(user) = user else {
             // better-call's default body for a session-gated endpoint hit
             // without a session, which upstream returns verbatim.
-            return Ok(
-                AuthError::AuthenticationFailed("Unauthorized".to_string()).to_auth_response()
-            );
+            return Err(AuthError::AuthenticationFailed("Unauthorized".to_string()));
         };
         let response = verify_password_core(&body, &user, ctx).await?;
         AuthResponse::json(None, &response)

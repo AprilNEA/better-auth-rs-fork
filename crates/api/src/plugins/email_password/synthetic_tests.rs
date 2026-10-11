@@ -290,9 +290,9 @@ async fn check_synthetic_transaction<S: AuthSchema>(
         assert_eq!(response.body.json()?.unwrap()["user"]["probe"], "parsed");
     } else {
         let error = result.unwrap_err();
-        assert_eq!(error.status_code(), 500);
+        assert_eq!(error.status_code().unwrap(), 500);
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message().unwrap(),
             format!("synthetic {mode} failed")
         );
     }

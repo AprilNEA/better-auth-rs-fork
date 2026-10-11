@@ -384,11 +384,14 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     ));
     let request = request(&ctx, &data, "/one-time-token/generate")?;
     let error = plugin.on_request(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error());
+    assert!(error.is_api_error().unwrap());
     let response = error.to_auth_response();
-    assert_eq!(response.status, 400);
     assert_eq!(
-        response.body.json()?,
+        response.api_error_status()?,
+        better_auth_core::SchemaValue::Typed(400)
+    );
+    assert_eq!(
+        response.api_error_body()?.json()?,
         Some(json!({"message":"Client requests are disabled"}))
     );
     assert!(observations.lock().unwrap().is_empty());
@@ -408,11 +411,14 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     let error = with_request_hook_context_value(scope, plugin.on_request(&explicit, &ctx))
         .await
         .unwrap_err();
-    assert!(error.is_api_error());
+    assert!(error.is_api_error().unwrap());
     let response = error.to_auth_response();
-    assert_eq!(response.status, 400);
     assert_eq!(
-        response.body.json()?,
+        response.api_error_status()?,
+        better_auth_core::SchemaValue::Typed(400)
+    );
+    assert_eq!(
+        response.api_error_body()?.json()?,
         Some(json!({"message":"Client requests are disabled"}))
     );
     assert_eq!(observations.lock().unwrap().len(), 1);

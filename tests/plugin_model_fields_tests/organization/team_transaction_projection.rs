@@ -203,10 +203,9 @@ async fn check<S: AuthSchema>(
             .err()
             .ok_or_else(|| AuthError::internal("Expected Team transaction failure"))?;
         if scenario.mismatch() {
-            let response = error.to_auth_response();
-            assert_eq!(response.status, 400, "{run:?}");
+            assert_eq!(error.status_code()?, 400, "{run:?}");
             assert_eq!(
-                response.body.json()?,
+                error.body_value()?.json()?,
                 Some(json!({"code":"TEAM_NOT_FOUND", "message":"Team not found"})),
                 "{run:?}"
             );

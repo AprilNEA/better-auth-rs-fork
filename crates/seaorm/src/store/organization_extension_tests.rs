@@ -770,7 +770,7 @@ async fn dynamic_team_limits_run_in_order_and_rollback_callback_failures() {
         )
         .await
         .unwrap_err();
-    assert_eq!(error.status_code(), 403);
+    assert_eq!(error.status_code().unwrap(), 403);
     assert_eq!(
         *limits.calls.lock().unwrap(),
         [

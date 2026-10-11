@@ -204,7 +204,10 @@ async fn backup_invalid_values_and_method_errors_keep_distinct_failure_budgets()
     ] {
         let fixture = Fixture::new(value.clone(), true.into()).await?;
         let error = fixture.verify("not-present").await.unwrap_err();
-        assert_eq!(error.status_code(), if invalid_code { 401 } else { 500 });
+        assert_eq!(
+            error.status_code().unwrap(),
+            if invalid_code { 401 } else { 500 }
+        );
         assert_eq!(
             fixture.attempts().await?,
             Some(if invalid_code { "1" } else { "0" }.into())
@@ -262,7 +265,12 @@ async fn failed_attempt_reuses_main_challenge_expiry() -> TestResult {
         })
         .await?;
     assert_eq!(
-        fixture.verify("missing").await.unwrap_err().status_code(),
+        fixture
+            .verify("missing")
+            .await
+            .unwrap_err()
+            .status_code()
+            .unwrap(),
         401
     );
     let counter = fixture
@@ -356,7 +364,7 @@ async fn otp_native_values_preserve_counter_parsing_and_consumption() -> TestRes
         )
         .await
         .unwrap_err();
-        assert_eq!(error.status_code(), status);
+        assert_eq!(error.status_code().unwrap(), status);
         let remaining = fixture
             .ctx
             .database
@@ -408,7 +416,7 @@ async fn decrypted_short_secret_reaches_totp_verification() -> TestResult {
     )
     .await
     .unwrap_err();
-    assert_eq!(error.status_code(), 401);
+    assert_eq!(error.status_code().unwrap(), 401);
     assert_eq!(fixture.attempts().await?, Some("1".into()));
     assert_eq!(
         fixture
@@ -464,7 +472,7 @@ async fn native_cipher_receives_original_value_and_cas_keeps_concurrent_replacem
     });
     fixture.config.backup_code_options.storage = BackupCodeStorage::Custom(cipher.clone());
     let error = fixture.verify("used").await.unwrap_err();
-    assert_eq!(error.status_code(), 409);
+    assert_eq!(error.status_code().unwrap(), 409);
     assert_eq!(cipher.seen.lock().unwrap().len(), 1);
     assert!(
         cipher

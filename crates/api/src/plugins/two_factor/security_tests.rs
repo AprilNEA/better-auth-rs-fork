@@ -84,7 +84,7 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
     );
     connection.close().await.unwrap();
     let failure = begin_attempt(&state, &req, &ctx).await.err().unwrap();
-    assert_eq!(failure.status_code(), 401);
+    assert_eq!(failure.status_code().unwrap(), 401);
     assert_eq!(failure.to_string(), "Invalid two factor cookie");
 }
 
@@ -342,14 +342,18 @@ async fn failed_challenge_budget_and_account_lock_survive_new_challenges() {
                 verify_backup_code_core(&req, &invalid, &config, &ctx)
                     .await
                     .unwrap_err()
-                    .status_code(),
+                    .status_code()
+                    .unwrap(),
                 401
             );
         }
         let blocked = verify_backup_code_core(&req, &invalid, &config, &ctx)
             .await
             .unwrap_err();
-        assert_eq!(blocked.status_code(), if round == 0 { 400 } else { 429 });
+        assert_eq!(
+            blocked.status_code().unwrap(),
+            if round == 0 { 400 } else { 429 }
+        );
         if round == 0 {
             assert!(!req.take_response_headers().unwrap().is_empty());
         }

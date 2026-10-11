@@ -90,11 +90,10 @@ impl Trace {
             return Ok(());
         }
         let (sessions, proofs) = self.counts(ctx).await?;
-        let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
-        let returned = if response.is_api_error() {
-            json!({"apiError":{"status":response.status,"body":body}})
+        let returned = if response.is_api_error()? {
+            json!({"apiError":{"status":response.api_error_status()?,"body":response.api_error_body()?.json()?}})
         } else {
-            shape(body)
+            shape(serde_json::from_slice(&response.body.bytes()?)?)
         };
         self.event(json!({"phase":phase,"returned":returned,"newSession":req.new_session()?.is_some(),"sessions":sessions,"proofs":proofs}));
         Ok(())
@@ -395,9 +394,11 @@ async fn control<S: AuthSchema>(
         Ok(response) => {
             json!({"status":response.status,"body":if response.body.is_empty(){Value::Null}else{shape(serde_json::from_slice(&response.body.bytes()?)?)},"cookies":cookies(&response)})
         }
-        Err(error) if error.is_api_error() => {
-            let response = error.to_auth_response();
-            let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+        Err(error) if error.is_api_error()? => {
+            let body = error
+                .body_value()?
+                .json()?
+                .ok_or_else(|| AuthError::internal("Two-factor error body must be JSON"))?;
             json!({"error":{"ordinary":false,"message":body["message"],"code":body["code"]}})
         }
         Err(AuthError::Internal(message)) => {

@@ -66,11 +66,11 @@ fn reference(model: &str) -> UserFieldConfig {
     }
 }
 
-fn result(value: AuthResult<()>) -> Value {
-    match value {
+fn result(value: AuthResult<()>) -> AuthResult<Value> {
+    Ok(match value {
         Ok(()) => Value::Null,
-        Err(error) => json!({ "error": error.instrumentation_message() }),
-    }
+        Err(error) => json!({ "error": error.instrumentation_message()? }),
+    })
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn logical_reference_resolution_matches_the_pinned_adapter_boundary()
             }
         };
         assert_eq!(
-            result(actual),
+            result(actual)?,
             case.result,
             "{} {:?}",
             case.name,
@@ -209,7 +209,7 @@ async fn runtime_join_resolution_uses_secondary_storage_schema_presence()
             .await;
         if store_session {
             assert_eq!(
-                result(observed.map(|_| ())),
+                result(observed.map(|_| ()))?,
                 json!({ "error":
                     "No foreign key found for model account and base model user while performing join operation."
                 })

@@ -44,11 +44,11 @@ fn configuration(config: AuthConfig, secondary_storage: bool) -> SchemaConfigura
     }
 }
 
-fn boundary_result(result: AuthResult<()>) -> Value {
-    match result {
+fn boundary_result(result: AuthResult<()>) -> AuthResult<Value> {
+    Ok(match result {
         Ok(()) => Value::Null,
-        Err(error) => json!({ "error": error.instrumentation_message() }),
-    }
+        Err(error) => json!({ "error": error.instrumentation_message()? }),
+    })
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn unknown_reference_resolution_matches_the_pinned_adapter_boundary()
             }
         };
         assert_eq!(
-            boundary_result(actual),
+            boundary_result(actual)?,
             case.result,
             "{} {:?}",
             case.name,
@@ -198,7 +198,7 @@ async fn check_runtime<S: AuthSchema>(
         };
         if let Some(model) = unknown {
             assert_eq!(
-                boundary_result(result.map(|_| ())),
+                boundary_result(result.map(|_| ()))?,
                 json!({ "error": format!("Model \"{model}\" not found in schema") })
             );
             assert!(

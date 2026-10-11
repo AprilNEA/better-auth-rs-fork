@@ -97,8 +97,8 @@ fn config(joins: bool, events: &Events) -> AuthConfig {
     config
 }
 
-async fn owner<S: AuthSchema>(store: &impl AuthStore<S>) -> Value {
-    match store.get_account_owner("provider", "missing").await {
+async fn owner<S: AuthSchema>(store: &impl AuthStore<S>) -> AuthResult<Value> {
+    Ok(match store.get_account_owner("provider", "missing").await {
         Ok(None) => Value::Null,
         Ok(Some(row)) => {
             let user = match row.user {
@@ -107,8 +107,8 @@ async fn owner<S: AuthSchema>(store: &impl AuthStore<S>) -> Value {
             };
             json!({"account": row.account, "user": user})
         }
-        Err(error) => json!({"error": error.instrumentation_message()}),
-    }
+        Err(error) => json!({"error": error.instrumentation_message()?}),
+    })
 }
 
 async fn check<S: AuthSchema>(
@@ -117,14 +117,14 @@ async fn check<S: AuthSchema>(
     events: &Events,
 ) -> AuthResult<()> {
     let duplicate = json!({"error":"Multiple foreign keys found for model user and base model account while performing join operation. Only one foreign key is supported."});
-    assert_eq!(owner(store).await, duplicate, "{} before", case.name);
+    assert_eq!(owner(store).await?, duplicate, "{} before", case.name);
     assert!(events.take().is_empty(), "{} before events", case.name);
 
     match &case.probe {
         Probe::List(params) => {
             let actual = match store.list_users(params.as_ref().clone()).await {
                 Ok((users, total)) => json!({"users":users, "total":total}),
-                Err(error) => json!({"error":error.instrumentation_message()}),
+                Err(error) => json!({"error":error.instrumentation_message()?}),
             };
             let expected = if case.fails {
                 json!({"error":"Field missingUserField not found in model user"})
@@ -166,7 +166,7 @@ async fn check<S: AuthSchema>(
     }
 
     assert_eq!(
-        owner(store).await,
+        owner(store).await?,
         if case.warmed { Value::Null } else { duplicate },
         "{} after",
         case.name

@@ -305,18 +305,9 @@ pub(super) fn convert_auth_response(auth_response: AuthResponse) -> Response {
         Ok(body) => body,
         Err(error) => return error.into_response(),
     };
-    let mut response = Response::builder().status(
-        StatusCode::from_u16(auth_response.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-    );
-
-    // Add headers
+    let mut response = Response::builder().status(auth_response.status);
     for (name, value) in auth_response.headers {
-        if let (Ok(header_name), Ok(header_value)) = (
-            axum::http::HeaderName::from_bytes(name.as_bytes()),
-            axum::http::HeaderValue::from_str(&value),
-        ) {
-            response = response.header(header_name, header_value);
-        }
+        response = response.header(name, value);
     }
 
     match response.body(axum::body::Body::from(body)) {

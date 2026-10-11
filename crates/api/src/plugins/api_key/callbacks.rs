@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema,
-    RuntimeExtensions,
+    AuthConfig, AuthContext, AuthRequest, AuthResult, AuthSchema, RuntimeExtensions,
     plugin::MetadataMap,
     store::{ApiKeyStore, MemberStore, OrganizationStore},
 };
@@ -80,20 +79,4 @@ pub trait ApiKeyDefaultPermissions: Send + Sync {
         reference_id: &better_auth_core::FieldValue,
         ctx: ApiKeyEndpoint<'_>,
     ) -> AuthResult<ApiKeyPermissions>;
-}
-
-// The HTTP router hides ordinary callback errors; requestless APIs preserve them.
-pub(super) fn callback_error(error: AuthError, request: Option<&AuthRequest>) -> AuthError {
-    if request.is_some()
-        && error.status_code() == 500
-        && !matches!(error, AuthError::Response(_) | AuthError::Upstream { .. })
-    {
-        better_auth_core::observability::logger::current().error(
-            "API key callback failed",
-            &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
-        AuthResponse::new(500).into()
-    } else {
-        error
-    }
 }

@@ -345,8 +345,9 @@ async fn scenario<S: AuthSchema>(auth: Arc<BetterAuth<S>>, state: Arc<State>) ->
                 let result = match endpoint.organization()?.add_member(Some(body)).await {
                     Ok(result) => result,
                     Err(error) if matches!(mode, "tx-team-catch" | "tx-team-reassign") => {
-                        let response = error.to_auth_response();
-                        let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+                        let body = error.body_value()?.json()?.ok_or_else(|| {
+                            AuthError::internal("Transaction error body must be JSON")
+                        })?;
                         json!({"caught":body.get("code")})
                     }
                     Err(error) => return Err(error),
@@ -371,13 +372,11 @@ async fn scenario<S: AuthSchema>(auth: Arc<BetterAuth<S>>, state: Arc<State>) ->
         Ok(result) => json!({"result":project(result)}),
         Err(AuthError::Internal(message)) => json!({"error":{"message":message}}),
         Err(error) => {
-            let response = error.to_auth_response();
-            let mut error = json!({"status":response.status});
-            if !response.body.is_empty() {
-                let _ = error.as_object_mut().unwrap().insert(
-                    "body".into(),
-                    serde_json::from_slice(&response.body.bytes()?)?,
-                );
+            let status = error.status_code()?;
+            let body = error.body_value()?.json()?;
+            let mut error = json!({"status":status});
+            if let Some(body) = body {
+                let _ = error.as_object_mut().unwrap().insert("body".into(), body);
             }
             json!({"error":error})
         }

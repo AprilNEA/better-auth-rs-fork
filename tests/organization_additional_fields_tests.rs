@@ -282,7 +282,8 @@ async fn assert_http_metadata(
             },
         )
         .await
-        .unwrap_or_else(|error| error.to_auth_response());
+        .unwrap_or_else(|error| error.to_auth_response())
+        .into_http_response()?;
     let body: serde_json::Value = serde_json::from_slice(&response.body.bytes()?)?;
     if expected.is_null() {
         assert_eq!(response.status, 400);

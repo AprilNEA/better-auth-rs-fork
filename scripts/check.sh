@@ -505,6 +505,8 @@ run_stage() {
       local json_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/native-json.test.ts \
+        ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
+        ./compat-tests/reference-server/contracts/error-construction.test.ts \
         ./compat-tests/reference-server/contracts/endpoint-content-type.test.ts \
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
@@ -516,11 +518,13 @@ run_stage() {
         --test api_key_number_name_tests --test api_key_additional_fields_tests \
         --test oauth_token_duration_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: \
+        error:: field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: \
+        plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
         plugin::tests::response_status:: response_body::http_tests:: types::response:: || json_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
         plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::oauth:: \
+        plugins::passkey:: plugins::siwe:: \
         plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests -- response_to_json:: || json_status=1

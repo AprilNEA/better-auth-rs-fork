@@ -227,7 +227,7 @@ async fn create_user_preserves_supplied_headers_and_requires_their_session() -> 
         .create_user(&input("unauthenticated@native-admin.test"), Some(&empty))
         .await
         .unwrap_err();
-    assert_eq!(error.status_code(), 401);
+    assert_eq!(error.status_code().unwrap(), 401);
     assert_eq!(
         probe.events(),
         vec![
@@ -305,9 +305,9 @@ async fn invalid_hook_input_runs_after_without_admission_or_store_writes() -> Au
         .create_user(&input("invalid@native-admin.test"), None)
         .await
         .unwrap_err();
-    assert_eq!(error.status_code(), 400);
+    assert_eq!(error.status_code().unwrap(), 400);
     assert_eq!(
-        error.to_auth_response().body.json()?,
+        error.body_value()?.json()?,
         Some(json!({
             "code":"VALIDATION_ERROR",
             "message":"[body.email] Invalid input: expected string, received number",

@@ -174,7 +174,7 @@ async fn check_prepared_creation<S: AuthSchema>(
         let stored = context.database.get_user_by_email(&email).await?;
         if mode == "rollback" {
             assert_eq!(
-                result.unwrap_err().instrumentation_message(),
+                result.unwrap_err().instrumentation_message().unwrap(),
                 "admission-test-rollback"
             );
             assert!(stored.is_none());
@@ -223,7 +223,7 @@ async fn invalid_runtime_email_fails_before_admission_and_database_hooks() -> Au
     .await
     .unwrap_err();
     assert_eq!(
-        error.instrumentation_message(),
+        error.instrumentation_message().unwrap(),
         "user.email.toLowerCase is not a function"
     );
     assert!(trace.0.lock().unwrap().is_empty());

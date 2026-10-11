@@ -340,7 +340,7 @@ async fn memory_partial_team_callback_errors_preserve_the_write_boundary() -> Au
                 .ok_or_else(|| AuthError::internal("Expected the configured callback failure"))?;
             assert!(matches!(error, AuthError::Internal(_)));
             assert_eq!(
-                error.instrumentation_message(),
+                error.instrumentation_message()?,
                 format!("partial-team-{}-failed", phase.name())
             );
             let mut events = vec![json!(["input", "organizationId", "next"])];

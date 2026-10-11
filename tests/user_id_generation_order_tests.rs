@@ -162,7 +162,7 @@ async fn create<S: AuthSchema>(
         .await;
     match result {
         Ok(user) => view(&user, fields).await,
-        Err(error) => Ok(json!({"error": error.instrumentation_message()})),
+        Err(error) => Ok(json!({"error": error.instrumentation_message()?})),
     }
 }
 

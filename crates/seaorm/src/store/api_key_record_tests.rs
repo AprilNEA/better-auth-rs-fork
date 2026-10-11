@@ -276,7 +276,7 @@ async fn nested_create_without_id_leaves_an_unforced_uuid_policy() -> AuthResult
                                         .await
                                         .expect_err("nested input must fail before storing a row");
                                     assert_eq!(
-                                        error.instrumentation_message(),
+                                        error.instrumentation_message()?,
                                         "nested input failure"
                                     );
                                     Ok(value)

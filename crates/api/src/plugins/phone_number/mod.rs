@@ -320,10 +320,7 @@ impl PhoneNumberPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match request::read(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         if !self.has_sender(ctx, Delivery::Verification) {
             return Err(error(
@@ -365,10 +362,7 @@ impl PhoneNumberPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match request::read(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         let mut endpoint = EndpointContext::new(
             Some(req),
@@ -497,10 +491,7 @@ impl PhoneNumberPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match request::read(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         let password = string(&body, "password");
         self.validate(phone).await?;
@@ -616,10 +607,7 @@ impl PhoneNumberPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match request::read(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         let user = ctx.database.get_user_by_phone_number(phone).await?;
         let code = self
@@ -653,10 +641,7 @@ impl PhoneNumberPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match request::read(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         let password = string(&body, "newPassword");
         self.verify_stored_otp(
@@ -799,12 +784,7 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
             _ctx: &AuthContext<S>,
         ) -> AuthResult<Option<better_auth_core::BeforeRequestAction>> {
             if req.path() == "/update-user" {
-                let body = match super::json_body::parse(req) {
-                    Ok(body) => body,
-                    Err(response) => {
-                        return Ok(Some(better_auth_core::BeforeRequestAction::Respond(response)));
-                    }
-                };
+                let body = super::json_body::parse(req)?;
                 if body
                     .as_ref()
                     .and_then(|body| body.get("phoneNumber"))

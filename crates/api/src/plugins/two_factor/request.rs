@@ -34,13 +34,10 @@ pub(super) fn validate(req: &AuthRequest, password_optional: bool) -> AuthResult
     if req.path() == "/two-factor/send-otp" && input.is_none() {
         return Ok(ValidatedBody::new(None, Value::Null));
     }
-    let body = input.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            input.as_ref(),
-        )))
-    })?;
+    let body = input
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", input.as_ref())))?;
     let fields: &[(&str, &str, bool)] = match req.path() {
         "/two-factor/enable" => &[
             ("password", "string", !password_optional),
@@ -106,7 +103,7 @@ pub(super) fn validate(req: &AuthRequest, password_optional: bool) -> AuthResult
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     match req.path() {
         "/two-factor/enable" => typed::<EnableRequest>(output),

@@ -342,8 +342,12 @@ async fn earlier_key_root_publishes_before_later_user_json_failure() -> AuthResu
     )?;
     assert!(matches!(&failure, AuthError::TypeError(_)));
     assert_eq!(
-        failure.instrumentation_message(),
-        expected_failure.instrumentation_message()
+        failure
+            .instrumentation_message()
+            .expect("fixture error message"),
+        expected_failure
+            .instrumentation_message()
+            .expect("fixture error message")
     );
     assert_eq!(callback, key("target", 4.0));
     assert_eq!(

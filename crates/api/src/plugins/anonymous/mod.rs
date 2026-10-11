@@ -142,8 +142,7 @@ impl AnonymousPlugin {
             .as_deref()
             .filter(|body| !body.is_empty())
             .map(super::json_body::decode)
-            .transpose()
-            .map_err(AuthError::from)?
+            .transpose()?
             .unwrap_or(serde_json::Value::Null);
         let mut endpoint = super::endpoint_context::EndpointContext::new(
             Some(req),
@@ -398,8 +397,7 @@ impl AnonymousPlugin {
                 .as_deref()
                 .filter(|body| !body.is_empty())
                 .map(super::json_body::decode)
-                .transpose()
-                .map_err(AuthError::from)?
+                .transpose()?
                 .unwrap_or(serde_json::Value::Null);
             let mut endpoint = super::endpoint_context::EndpointContext::new(
                 Some(req),

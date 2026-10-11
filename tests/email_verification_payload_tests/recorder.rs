@@ -31,7 +31,7 @@ impl<S: AuthSchema> ApiErrorHandler<S> for Events {
             other => json!({"variant": "other", "message": other.to_string()}),
         };
         self.push(
-            json!({"kind": "api-error", "native": native, "isApiError": error.is_api_error()}),
+            json!({"kind": "api-error", "native": native, "isApiError": error.is_api_error()?}),
         )?;
         Ok(None)
     }

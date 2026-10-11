@@ -231,7 +231,7 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message().unwrap(),
             "Multiple accounts match the same accountId for provider \"credential\". Resolve duplicate account identities before continuing."
         );
         database.close().await.unwrap();

@@ -361,7 +361,12 @@ async fn later_user_input_errors_stop_writes_and_after_hooks() -> AuthResult<()>
         let error = write(store.as_ref(), create, contract::native_user())
             .await
             .unwrap_err();
-        assert_eq!(error.instrumentation_message(), "user-input-stop");
+        assert_eq!(
+            error
+                .instrumentation_message()
+                .expect("fixture error message"),
+            "user-input-stop"
+        );
         assert_eq!(*calls.lock().unwrap(), ["emailVerified", "createdAt"]);
         assert_eq!(
             events

@@ -43,9 +43,9 @@ pub(crate) struct PasskeyResponse {
 
 fn body_object(
     req: &better_auth_core::AuthRequest,
-) -> Result<serde_json::Map<String, serde_json::Value>, better_auth_core::AuthResponse> {
+) -> better_auth_core::AuthResult<serde_json::Map<String, serde_json::Value>> {
     use crate::plugins::json_body;
-    match req.input_body().map_err(|error| error.to_auth_response())? {
+    match req.input_body()? {
         Some(serde_json::Value::Object(value)) => Ok(value),
         value => Err(json_body::validation_error(&json_body::invalid_type(
             "body",
@@ -62,9 +62,7 @@ pub(super) fn trim_name(value: &str) -> &str {
 }
 
 impl VerifyRegistrationRequest {
-    pub(super) fn parse(
-        req: &better_auth_core::AuthRequest,
-    ) -> Result<Self, better_auth_core::AuthResponse> {
+    pub(super) fn parse(req: &better_auth_core::AuthRequest) -> better_auth_core::AuthResult<Self> {
         use crate::plugins::json_body;
         if let Some(body) = req.validated_body::<Self>() {
             return Ok(body.clone());
@@ -108,9 +106,7 @@ impl VerifyRegistrationRequest {
     }
 }
 impl VerifyAuthenticationRequest {
-    pub(super) fn parse(
-        req: &better_auth_core::AuthRequest,
-    ) -> Result<Self, better_auth_core::AuthResponse> {
+    pub(super) fn parse(req: &better_auth_core::AuthRequest) -> better_auth_core::AuthResult<Self> {
         use crate::plugins::json_body;
         if let Some(body) = req.validated_body::<Self>() {
             return Ok(body.clone());
@@ -140,12 +136,12 @@ fn projected<T: Serialize + Send + Sync + 'static>(
 pub(super) fn registration_body(
     req: &better_auth_core::AuthRequest,
 ) -> better_auth_core::AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
-    projected(VerifyRegistrationRequest::parse(req).map_err(better_auth_core::AuthError::from)?)
+    projected(VerifyRegistrationRequest::parse(req)?)
 }
 pub(super) fn authentication_body(
     req: &better_auth_core::AuthRequest,
 ) -> better_auth_core::AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
-    projected(VerifyAuthenticationRequest::parse(req).map_err(better_auth_core::AuthError::from)?)
+    projected(VerifyAuthenticationRequest::parse(req)?)
 }
 pub(super) fn deletion_body(
     req: &better_auth_core::AuthRequest,
@@ -158,7 +154,7 @@ pub(super) fn update_body(
     req: &better_auth_core::AuthRequest,
 ) -> better_auth_core::AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
     use crate::plugins::json_body;
-    let body = body_object(req).map_err(better_auth_core::AuthError::from)?;
+    let body = body_object(req)?;
     let mut errors = Vec::new();
     for name in ["id", "name"] {
         match body.get(name) {
@@ -178,7 +174,7 @@ pub(super) fn update_body(
         }
     }
     if !errors.is_empty() {
-        return Err(json_body::validation_error(&errors.join("; ")).into());
+        return Err(json_body::validation_error(&errors.join("; ")));
     }
     let mut typed: UpdatePasskeyRequest = serde_json::from_value(serde_json::Value::Object(body))?;
     typed.name = trim_name(&typed.name).to_owned();

@@ -78,12 +78,41 @@ where
     async move {
         let result = operation.await;
         if enabled && let Err(error) = &result {
-            if error.is_api_error() && (300..400).contains(&error.status_code()) {
-                let _ = records.record("http.response.status_code", error.status_code());
+            let redirect = if let Some(value) = error.raw_value() {
+                if let Some(object) = value.as_object()
+                    && object.has_property("name")?
+                    && object.get("name")?.is_some_and(|name| name.strict_equals(&"APIError".into()))
+                    && object.has_property("statusCode")?
+                {
+                    let status = object.get("statusCode")?.unwrap_or_default();
+                    crate::query::field_number(&status)? >= 300.0
+                        && crate::query::field_number(&status)? < 400.0
+                } else {
+                    false
+                }
+            } else {
+                error.is_api_error()? && {
+                    let status = error.status_code()?.field_value();
+                    crate::query::field_number(&status)? >= 300.0
+                        && crate::query::field_number(&status)? < 400.0
+                }
+            };
+            if redirect {
+                let status = error.status_code()?.into_field_value();
+                match status {
+                    crate::FieldValue::Number(status) => { let _ = records.record("http.response.status_code", status); }
+                    status => { let _ = records.record("http.response.status_code", field::debug(status)); }
+                }
                 let _ = records.record("otel.status_code", "OK");
             } else {
-                let message = error.instrumentation_message();
-                tracing::event!(name: "exception", target: "better-auth", tracing::Level::ERROR, "exception.message" = %message);
+                // Record the exception before reading its dynamic message, as the upstream tracer does.
+                let diagnostic = if error.raw_value().is_some() {
+                    error.to_string()
+                } else {
+                    error.instrumentation_message()?
+                };
+                tracing::event!(name: "exception", target: "better-auth", tracing::Level::ERROR, "exception.message" = %diagnostic);
+                let message = error.instrumentation_message()?;
                 let _ = records.record("otel.status_code", "ERROR");
                 let _ = records.record("otel.status_description", message.as_str());
             }
@@ -122,7 +151,15 @@ pub async fn with_endpoint_hook<T>(
             context: Some(source),
             ..Default::default()
         },
-        operation,
+        async {
+            match operation.await {
+                Ok(value) => Ok(value),
+                Err(error) => {
+                    request.mark_hook_error_handled();
+                    Err(crate::endpoint_dispatch::endpoint_error(error, request)?)
+                }
+            }
+        },
     )
     .await
 }

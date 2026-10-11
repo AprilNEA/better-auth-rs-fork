@@ -464,8 +464,12 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
             matches!(&result, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
         );
         assert_eq!(
-            required(result.err())?.instrumentation_message(),
-            expected_failure.instrumentation_message()
+            required(result.err())?
+                .instrumentation_message()
+                .expect("fixture error message"),
+            expected_failure
+                .instrumentation_message()
+                .expect("fixture error message")
         );
         assert_eq!(
             events(&trace)?,
@@ -600,7 +604,9 @@ fn clone_getter_failures_preserve_original_errors_and_live_writes_before_work() 
             } else {
                 assert!(matches!(failure, AuthError::DataClone));
                 assert_eq!(
-                    failure.instrumentation_message(),
+                    failure
+                        .instrumentation_message()
+                        .expect("fixture error message"),
                     "The object can not be cloned."
                 );
             }

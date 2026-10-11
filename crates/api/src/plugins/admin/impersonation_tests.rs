@@ -313,10 +313,10 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
             .handle_stop_impersonating(&request, &fixture.ctx)
             .await
             .unwrap_err();
-        assert!(error.is_api_error());
-        assert_eq!(error.status_code(), 500);
+        assert!(error.is_api_error().unwrap());
+        assert_eq!(error.status_code().unwrap(), 500);
         assert_eq!(
-            error.to_auth_response().body.json()?,
+            error.body_value()?.json()?,
             Some(serde_json::json!({"message":"Failed to find admin session"}))
         );
         assert_eq!(fixture.ctx.database.get_session(&token).await?, current);
@@ -348,10 +348,10 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
         .handle_stop_impersonating(&request, &fixture.ctx)
         .await
         .unwrap_err();
-    assert!(error.is_api_error());
-    assert_eq!(error.status_code(), 500);
+    assert!(error.is_api_error().unwrap());
+    assert_eq!(error.status_code().unwrap(), 500);
     assert_eq!(
-        error.to_auth_response().body.json()?,
+        error.body_value()?.json()?,
         Some(serde_json::json!({"message":"Failed to find user"}))
     );
     assert_eq!(

@@ -1,5 +1,5 @@
 use crate::plugins::json_body::{invalid_type, validation_error};
-use better_auth_core::{AuthRequest, AuthResponse, AuthResult, endpoint_input::ValidatedBody};
+use better_auth_core::{AuthRequest, AuthResult, endpoint_input::ValidatedBody};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -14,13 +14,10 @@ pub(crate) struct SignInUsernameRequest {
 }
 fn sign_in_input(request: &AuthRequest) -> AuthResult<(SignInUsernameRequest, Value)> {
     let body = request.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let mut issues = Vec::new();
     let mut output = Map::new();
     for (name, expected, required) in [
@@ -48,7 +45,7 @@ fn sign_in_input(request: &AuthRequest) -> AuthResult<(SignInUsernameRequest, Va
         }
     }
     if !issues.is_empty() {
-        return Err(validation_error(&issues.join("; ")).into());
+        return Err(validation_error(&issues.join("; ")));
     }
     let projection = Value::Object(output);
     Ok((serde_json::from_value(projection.clone())?, projection))
@@ -57,12 +54,10 @@ pub(super) fn sign_in_body(request: &AuthRequest) -> AuthResult<ValidatedBody> {
     let (body, projection) = sign_in_input(request)?;
     Ok(ValidatedBody::new(Some(projection), body))
 }
-pub(super) fn sign_in(request: &AuthRequest) -> Result<SignInUsernameRequest, AuthResponse> {
+pub(super) fn sign_in(request: &AuthRequest) -> AuthResult<SignInUsernameRequest> {
     match request.validated_body::<SignInUsernameRequest>() {
         Some(body) => Ok(body.clone()),
-        None => sign_in_input(request)
-            .map(|(body, _)| body)
-            .map_err(|error| error.to_auth_response()),
+        None => sign_in_input(request).map(|(body, _)| body),
     }
 }
 #[derive(Deserialize)]
@@ -74,13 +69,12 @@ pub(super) fn availability_body(request: &AuthRequest) -> AuthResult<ValidatedBo
         crate::plugins::json_body::string_input::<Availability>(request, &[("username", true)])?;
     Ok(ValidatedBody::new(Some(projection), body.username))
 }
-pub(super) fn availability(request: &AuthRequest) -> Result<String, AuthResponse> {
+pub(super) fn availability(request: &AuthRequest) -> AuthResult<String> {
     match request.validated_body::<String>() {
         Some(body) => Ok(body.clone()),
         None => {
             crate::plugins::json_body::string_input::<Availability>(request, &[("username", true)])
                 .map(|(body, _)| body.username)
-                .map_err(|error| error.to_auth_response())
         }
     }
 }

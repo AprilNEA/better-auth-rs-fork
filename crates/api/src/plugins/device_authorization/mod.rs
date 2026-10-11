@@ -410,12 +410,7 @@ impl DeviceAuthorizationPlugin {
             },
             |_device_code, _authorization, _endpoint| Box::pin(async { Ok(()) }),
         )
-        .await;
-        let redemption = match redemption {
-            Ok(redemption) => redemption,
-            Err(error @ AuthError::Response(_)) => return Ok(error.to_auth_response()),
-            Err(error) => return Err(error),
-        };
+        .await?;
         let device_code = redemption.claimed_device_code;
         let meta = RequestMeta::from_request_with_config(req, &ctx.config.advanced.ip_address);
         let issued = issue_selected_user_session_optional(

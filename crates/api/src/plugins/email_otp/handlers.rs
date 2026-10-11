@@ -17,10 +17,7 @@ use serde_json::json;
 
 macro_rules! body {
     ($req:expr) => {
-        match Body::parse($req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        }
+        Body::parse($req)?
     };
 }
 

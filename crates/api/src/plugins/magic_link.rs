@@ -133,10 +133,7 @@ impl MagicLinkPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
-        let body: SendBody = match parse_send(req) {
-            Ok(body) => body,
-            Err(response) => return Ok(response),
-        };
+        let body = parse_send(req)?;
         let endpoint = super::endpoint_context::EndpointContext::new(
             Some(req),
             better_auth_core::FieldValue::from_json(serde_json::to_value(&body)?)?,
@@ -223,7 +220,7 @@ impl MagicLinkPlugin {
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
         let Some(token) = req.query_string("token")? else {
-            return Ok(super::json_body::validation_error(
+            return Err(super::json_body::validation_error(
                 "[query.token] Invalid input: expected string, received undefined",
             ));
         };
@@ -368,12 +365,12 @@ fn callback_url<S: AuthSchema>(
         .map_err(|error| AuthError::bad_request(format!("Invalid callback URL: {error}")))
 }
 
-fn parse_send(req: &AuthRequest) -> Result<SendBody, AuthResponse> {
+fn parse_send(req: &AuthRequest) -> AuthResult<SendBody> {
     use super::json_body;
     if let Some(body) = req.validated_body::<SendBody>() {
         return Ok(body.clone());
     }
-    let value = req.input_body().map_err(|error| error.to_auth_response())?;
+    let value = req.input_body()?;
     let Some(serde_json::Value::Object(body)) = value.as_ref() else {
         return Err(json_body::validation_error(&json_body::invalid_type(
             "body",
@@ -416,8 +413,7 @@ fn parse_send(req: &AuthRequest) -> Result<SendBody, AuthResponse> {
                 value
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or_default(),
-            )
-            .map_err(|error| error.to_auth_response())?
+            )?
         {
             errors.push("[body.email] Invalid email address".into());
         }
@@ -450,7 +446,7 @@ fn error_redirect(mut url: Url, error: &str) -> AuthResponse {
 }
 
 fn send_body(req: &AuthRequest) -> AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
-    let body = parse_send(req).map_err(AuthError::from)?;
+    let body = parse_send(req)?;
     Ok(better_auth_core::endpoint_input::ValidatedBody::new(
         Some(serde_json::to_value(&body)?),
         body,

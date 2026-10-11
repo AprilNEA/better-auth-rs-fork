@@ -637,7 +637,9 @@ async fn social_code_exchange_and_profile_mapping_persist_through_sqlite() {
                     .call_endpoint(HttpMethod::Post, "/refresh-token", input())
                     .await
                     .unwrap_err()
-                    .to_auth_response();
+                    .to_auth_response()
+                    .into_http_response()
+                    .unwrap();
                 assert_eq!(refresh.status, 400);
                 let refresh: Value =
                     serde_json::from_slice(&refresh.body.bytes().unwrap()).unwrap();

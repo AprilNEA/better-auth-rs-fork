@@ -248,13 +248,10 @@ fn validate(
     use crate::plugins::json_body::{invalid_type, validation_error};
     use better_auth_core::endpoint_input::ValidatedBody;
     let input = request.input_body()?;
-    let object = input.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            input.as_ref(),
-        )))
-    })?;
+    let object = input
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", input.as_ref())))?;
     let fields = if sign {
         [
             ("payload", "record", true),
@@ -283,7 +280,7 @@ fn validate(
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let value = Value::Object(projected);
     if sign {

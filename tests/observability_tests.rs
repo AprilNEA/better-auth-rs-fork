@@ -160,8 +160,7 @@ async fn global_input_patches_are_deferred_and_schema_errors_are_traced() -> Aut
             assert_eq!(
                 result
                     .expect_err("invalid schema input must fail")
-                    .to_auth_response()
-                    .status,
+                    .status_code()?,
                 400
             );
         } else {
@@ -625,7 +624,7 @@ async fn global_hook_errors_preserve_awaiting_and_api_error_continuation() -> Au
             let error = result
                 .err()
                 .ok_or_else(|| AuthError::internal("hook error was swallowed"))?;
-            assert_eq!(error.instrumentation_message(), "global rejection");
+            assert_eq!(error.instrumentation_message()?, "global rejection");
             assert_eq!(matches!(error, AuthError::Internal(_)), ordinary);
             assert!(hook.completed.load(std::sync::atomic::Ordering::SeqCst));
             let records = capture

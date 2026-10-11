@@ -569,16 +569,35 @@ async fn exercise_endpoint_verifier(
         request.server_context("verifier-state")?,
         Some(if disabled { "before" } else { "verified" }.into())
     );
+    let response_headers = if response.is_api_error()? {
+        match response.captured_headers()? {
+            Some(headers) => headers,
+            None => response.api_error_headers()?,
+        }
+    } else {
+        response.headers.clone()
+    };
     assert_eq!(
-        response.headers.get("x-verifier-state").map(String::as_str),
+        response_headers.get("x-verifier-state").map(String::as_str),
         (!disabled).then_some("verified")
     );
     if accepted {
         assert_eq!(response.status, 200);
     } else {
-        assert_eq!(response.status, if disabled { 404 } else { 401 });
+        let (status, body) = if response.is_api_error()? {
+            (
+                response.api_error_status()?.typed().copied()?,
+                response.api_error_body()?.json()?.unwrap(),
+            )
+        } else {
+            (
+                response.status,
+                serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+            )
+        };
+        assert_eq!(status, if disabled { 404 } else { 401 });
         assert_eq!(
-            serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+            body,
             if disabled {
                 json!({ "code": "ID_TOKEN_NOT_SUPPORTED", "message": "id_token not supported" })
             } else {

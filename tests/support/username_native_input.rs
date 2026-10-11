@@ -83,7 +83,7 @@ async fn username_hooks_preserve_dynamic_values_and_fail_before_mutating_storage
                 assert!(
                     result
                         .unwrap_err()
-                        .instrumentation_message()
+                        .instrumentation_message()?
                         .contains(error.as_str().unwrap())
                 );
                 assert_eq!(

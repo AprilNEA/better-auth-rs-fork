@@ -1,4 +1,4 @@
-use better_auth_core::{AuthError, AuthRequest, AuthResult};
+use better_auth_core::{AuthRequest, AuthResult};
 use serde_json::Value;
 
 use super::SignInRequest;
@@ -6,13 +6,10 @@ use crate::plugins::json_body::{invalid_type, type_name, validation_error};
 
 fn parse_sign_in(req: &AuthRequest) -> AuthResult<(SignInRequest, Value)> {
     let body = req.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let mut issues = Vec::new();
     let mut output = serde_json::Map::new();
     for (field, expected, required) in [
@@ -29,7 +26,7 @@ fn parse_sign_in(req: &AuthRequest) -> AuthResult<(SignInRequest, Value)> {
         }
     }
     if !issues.is_empty() {
-        return Err(validation_error(&issues.join("; ")).into());
+        return Err(validation_error(&issues.join("; ")));
     }
     let _ = output
         .entry("rememberMe".to_owned())
@@ -75,11 +72,11 @@ pub(super) async fn form_csrf(
 fn parse_sign_up(req: &AuthRequest) -> AuthResult<(super::SignUpRequest, Value)> {
     let body = req.input_body()?;
     let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&format!(
+        validation_error(&format!(
             "{}; {}",
             invalid_type("body", "object", body.as_ref()),
             invalid_type("body", "record", body.as_ref())
-        )))
+        ))
     })?;
     let mut errors = Vec::new();
     for (field, expected, required) in [
@@ -105,7 +102,7 @@ fn parse_sign_up(req: &AuthRequest) -> AuthResult<(super::SignUpRequest, Value)>
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let projection = Value::Object(object.clone());
     Ok((serde_json::from_value(projection.clone())?, projection))

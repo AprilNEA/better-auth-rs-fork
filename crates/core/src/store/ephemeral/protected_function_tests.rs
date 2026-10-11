@@ -353,7 +353,9 @@ fn check_error(error: &AuthError, expected: &Value) {
         assert!(matches!(error, AuthError::Internal(_)));
     }
     assert_eq!(
-        error.instrumentation_message(),
+        error
+            .instrumentation_message()
+            .expect("fixture error message"),
         expected["error"]["message"].as_str().unwrap()
     );
 }

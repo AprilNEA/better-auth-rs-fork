@@ -212,7 +212,7 @@ async fn check(database: DatabaseConnection) -> TestResult {
         };
         if present && label == Some("reject") {
             assert_eq!(
-                result.unwrap_err().instrumentation_message(),
+                result.unwrap_err().instrumentation_message()?,
                 "enum-output-stop",
                 "{stage} output error"
             );

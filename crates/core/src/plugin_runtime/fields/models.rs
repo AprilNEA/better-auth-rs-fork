@@ -431,7 +431,9 @@ mod tests {
                 .register_custom_model(name, None, UserConfig::default())
                 .unwrap_err();
             assert_eq!(
-                error.instrumentation_message(),
+                error
+                    .instrumentation_message()
+                    .expect("fixture error message"),
                 format!(
                     "Model \"{name}\" is reserved for a native model and cannot be declared as a custom model"
                 )
@@ -446,7 +448,8 @@ mod tests {
             schema
                 .resolve_model_name("missingBadge", &aliases)
                 .unwrap_err()
-                .instrumentation_message(),
+                .instrumentation_message()
+                .expect("fixture error message"),
             "Model \"missingBadge\" not found in schema"
         );
     }

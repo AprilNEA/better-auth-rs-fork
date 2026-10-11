@@ -197,7 +197,7 @@ async fn run<S: AuthSchema>(
     let Err(error) = store.get_account_owner("provider-1", "alice-1").await else {
         return Err(AuthError::internal("owner projection should reject"));
     };
-    assert_eq!(error.instrumentation_message(), "user projection rejected");
+    assert_eq!(error.instrumentation_message()?, "user projection rejected");
     assert_eq!(take(events)?, ["account:alice-1", "user:alice"]);
     assert_eq!(
         store

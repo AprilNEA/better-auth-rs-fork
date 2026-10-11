@@ -85,7 +85,7 @@ fn assert_rejection<T>(result: AuthResult<T>, expected: &JsonValue) -> AuthResul
         .err()
         .ok_or_else(|| AuthError::internal("Function expression unexpectedly succeeded"))?;
     assert_eq!(
-        error.instrumentation_message(),
+        error.instrumentation_message()?,
         expected["error"]["message"]
     );
     assert_eq!(expected["returned"], false);
@@ -276,7 +276,7 @@ fn null_results_fail_after_invocation_and_nested_driver_functions_are_not_called
             .err()
             .ok_or_else(|| AuthError::internal("Null expression result unexpectedly succeeded"))?;
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message()?,
             "null is not an object (evaluating 'exp(expressionBuilder()).toOperationNode')"
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -298,7 +298,7 @@ fn null_results_fail_after_invocation_and_nested_driver_functions_are_not_called
                 AuthError::internal("Nested driver function unexpectedly encoded")
             })?;
             assert_eq!(
-                error.instrumentation_message(),
+                error.instrumentation_message()?,
                 if backend == DbBackend::Sqlite {
                     "Binding expected string, TypedArray, boolean, number, bigint or null"
                 } else {

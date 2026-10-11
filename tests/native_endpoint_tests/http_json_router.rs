@@ -248,7 +248,7 @@ impl ApiErrorHandler<S> for Contract {
     fn on_error(&self, error: &AuthError, _: &AuthContext<S>) -> AuthResult<Option<ApiErrorTask>> {
         self.trace.push("on-error")?;
         let _ = self.trace.error_callbacks.fetch_add(1, Ordering::SeqCst);
-        assert!(!error.is_api_error());
+        assert!(!error.is_api_error()?);
         if self.specimen == "method-error" {
             assert!(matches!(error, AuthError::Internal(message)
                 if message == "original HTTP JSON router method error"
@@ -311,5 +311,108 @@ async fn http_json_router_preserves_catch_headers_and_response_hook_order() -> A
             }
         }
     }
+    Ok(())
+}
+
+#[derive(Clone)]
+struct RawBeforeError {
+    value: FieldValue,
+    trace: Arc<Trace>,
+}
+
+#[async_trait]
+impl BeforeEndpointHook<S> for RawBeforeError {
+    async fn before(
+        &self,
+        request: &AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<BeforeRequestAction>> {
+        self.trace.push("before")?;
+        request.set_response_header("x-before", "1")?;
+        request.append_response_header("set-cookie", "context=1")?;
+        Err(AuthError::from_thrown(self.value.clone()))
+    }
+}
+
+impl ApiErrorHandler<S> for RawBeforeError {
+    fn on_error(&self, error: &AuthError, _: &AuthContext<S>) -> AuthResult<Option<ApiErrorTask>> {
+        self.trace.push("on-error")?;
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&self.value))
+        );
+        let captured = better_auth_core::Headers::from_field_value(
+            &error
+                .captured_headers_value()
+                .ok_or_else(|| AuthError::internal("Missing captured headers"))?,
+        )?;
+        assert_eq!(captured.iter().count(), 2);
+        assert_eq!(captured.get("x-before").map(String::as_str), Some("1"));
+        assert_eq!(
+            captured.get("set-cookie").map(String::as_str),
+            Some("context=1")
+        );
+        Ok(None)
+    }
+}
+
+#[tokio::test]
+async fn structural_api_error_reaches_router_callback_without_losing_owned_headers()
+-> AuthResult<()> {
+    let contract = RawBeforeError {
+        value: FieldMap::from([
+            ("name".into(), "APIError".into()),
+            ("status".into(), "BAD_REQUEST".into()),
+            ("statusCode".into(), 418.0.into()),
+            (
+                "body".into(),
+                FieldMap::from([
+                    ("code".into(), "RAW_API_ERROR".into()),
+                    ("message".into(), "raw failure".into()),
+                ])
+                .into(),
+            ),
+            (
+                "headers".into(),
+                FieldMap::from([
+                    ("x-owned".into(), "1".into()),
+                    ("set-cookie".into(), "owned=1".into()),
+                ])
+                .into(),
+            ),
+        ])
+        .into(),
+        trace: Arc::new(Trace::default()),
+    };
+    let mut config = AuthConfig::new("raw-router-contract-at-least-32-characters").base_url(ORIGIN);
+    config.logger.disabled = Some(true);
+    config.experimental.instrumentation.enabled = false;
+    let auth = BetterAuth::stateless(config)
+        .hooks(EndpointHooks {
+            before: Some(Arc::new(contract.clone())),
+            after: None,
+        })
+        .on_api_error(Arc::new(contract.clone()))
+        .build()
+        .await?;
+    let response = auth
+        .handle_request(AuthRequest::new(HttpMethod::Get, "/api/auth/ok"))
+        .await?;
+    assert_eq!(contract.trace.events()?, ["before", "on-error"]);
+    assert_eq!(response.status, 418);
+    assert_eq!(response.status_text, "BAD_REQUEST".into());
+    assert_eq!(response.headers.iter().count(), 3);
+    for (name, value) in [
+        ("content-type", "application/json"),
+        ("x-owned", "1"),
+        ("set-cookie", "owned=1"),
+    ] {
+        assert_eq!(response.headers.get(name).map(String::as_str), Some(value));
+    }
+    assert_eq!(
+        response.body.bytes()?.as_ref(),
+        br#"{"code":"RAW_API_ERROR","message":"raw failure"}"#
+    );
     Ok(())
 }

@@ -143,7 +143,7 @@ async fn sparse_native_and_fallback_joins_match_complete_results_callbacks_and_s
                 }
                 if reject {
                     assert_eq!(
-                        result.unwrap_err().instrumentation_message(),
+                        result.unwrap_err().instrumentation_message()?,
                         "sparse-native-output-rejected"
                     );
                 } else {

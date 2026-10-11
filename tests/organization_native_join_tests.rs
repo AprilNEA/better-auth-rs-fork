@@ -255,13 +255,17 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
         }
         Err(error) => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
+            assert_eq!(error.status_code().unwrap(), 400);
             let response = error.to_auth_response();
-            assert_eq!(response.status, 400);
             assert_eq!(
-                response.headers.get("x-ordinary-error").map(String::as_str),
+                response
+                    .api_error_headers()
+                    .unwrap()
+                    .get("x-ordinary-error")
+                    .map(String::as_str),
                 Some("original")
             );
-            let body: Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+            let body: Value = response.api_error_body().unwrap().json().unwrap().unwrap();
             assert_eq!(
                 json!({"status":"BAD_REQUEST","code":body["code"],"message":body["message"]}),
                 fixture["error"]

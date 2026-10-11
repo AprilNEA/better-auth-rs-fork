@@ -1003,7 +1003,7 @@ mod tests {
         )
         .await
         .unwrap_err();
-        assert_eq!(error.status_code(), 403);
+        assert_eq!(error.status_code().unwrap(), 403);
         assert!(error.to_string().contains("Invitation limit reached"));
     }
 }

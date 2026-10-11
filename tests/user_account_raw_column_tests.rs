@@ -279,7 +279,7 @@ async fn sqlite_raw_user_and_account_columns_reach_callbacks_before_any_typed_de
                 );
                 if failed {
                     assert_eq!(
-                        result.unwrap_err().instrumentation_message(),
+                        result.unwrap_err().instrumentation_message()?,
                         "raw-column-stop"
                     );
                 } else {

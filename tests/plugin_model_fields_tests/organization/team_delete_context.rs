@@ -571,16 +571,16 @@ async fn check<S: AuthSchema>(
         }
         Case::WrongProjectedOwner => {
             let error = required(response.err(), "Projected owner must determine access")?;
-            assert_eq!(error.status_code(), 400);
-            let response = error.to_auth_response();
+            assert_eq!(error.status_code()?, 400);
             ordered(
-                &response.body.field_value()?,
+                &error.body_value()?,
                 &FieldMap::from([
                     ("message".into(), "Team not found".into()),
                     ("code".into(), "TEAM_NOT_FOUND".into()),
                 ])
                 .into(),
             )?;
+            let response = error.to_auth_response().into_http_response()?;
             assert_eq!(
                 response.body.bytes()?.as_ref(),
                 br#"{"message":"Team not found","code":"TEAM_NOT_FOUND"}"#.as_slice()

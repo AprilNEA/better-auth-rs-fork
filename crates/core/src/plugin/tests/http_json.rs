@@ -306,7 +306,7 @@ async fn http_json_cycles_aliases_and_method_results_match_pinned_dispatch() -> 
                         if before {
                             NativeResponseStatus::Absent
                         } else {
-                            NativeResponseStatus::Value(201)
+                            NativeResponseStatus::Present(crate::SchemaValue::Typed(201))
                         },
                         "{name}/{phase}/{http}"
                     );
@@ -374,7 +374,7 @@ async fn http_before_json_wraps_scalars_while_native_and_raw_returns_fall_throug
                     if short {
                         NativeResponseStatus::Absent
                     } else {
-                        NativeResponseStatus::Value(201)
+                        NativeResponseStatus::Present(crate::SchemaValue::Typed(201))
                     }
                 );
                 if short {
@@ -446,7 +446,7 @@ async fn json_errors_keep_original_allocation_before_invalid_http_status() -> Au
             if phase_name(phase) == "before" {
                 NativeResponseStatus::Absent
             } else {
-                NativeResponseStatus::Value(199)
+                NativeResponseStatus::Present(crate::SchemaValue::Typed(199))
             }
         );
         assert_observed(phase, &observed, &value);
@@ -479,17 +479,31 @@ async fn json_errors_keep_original_allocation_before_invalid_http_status() -> Au
 async fn api_error_and_explicit_responses_keep_their_http_paths() -> AuthResult<()> {
     for phase in ["before-raw", "before-json", "endpoint", "after-json"] {
         let sample = Sample::new("object-self")?;
-        let response = AuthResponse::json_value(418, sample.value.clone()).into_api_error();
+        let response =
+            AuthError::from(AuthResponse::json_value(418, sample.value.clone())).to_auth_response();
+        let raw_error = response.body.field_value()?;
+        assert!(
+            raw_error
+                .model_property("body")?
+                .strict_equals(&sample.value)
+        );
         let (result, observed, calls) = dispatch(phase, response, true, None).await;
         assert_eq!(calls, usize::from(phase_name(phase) != "before"));
         let result = result?;
         assert_eq!(result.status, 418);
-        assert_eq!(result.api_error_status(), Some(418));
+        assert!(!result.is_api_error()?);
         assert_eq!(
             result.body.bytes()?.as_ref(),
             sample.bytes.unwrap().as_bytes()
         );
-        assert_observed(phase, &observed, &sample.value);
+        assert_observed(phase, &observed, &raw_error);
+        for returned in &observed {
+            let value = returned.field_value()?;
+            if value.strict_equals(&raw_error) {
+                assert!(value.model_property("body")?.strict_equals(&sample.value));
+                assert_eq!(value.model_property("statusCode")?, 418.0.into());
+            }
+        }
         sample.cleanup()?;
         for http in [false, true] {
             let response = AuthResponse::text(207, "explicit").with_header("x-owned", "retained");

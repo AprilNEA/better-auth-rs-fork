@@ -259,7 +259,13 @@ fn observe(result: AuthResult<AuthResponse>) -> Value {
     let (response, thrown) = match result {
         Ok(response) => (response, false),
         Err(AuthError::Internal(message)) => return json!({"thrown":true,"message":message}),
-        Err(error) => (error.to_auth_response(), true),
+        Err(error) => (
+            error
+                .to_auth_response()
+                .into_http_response()
+                .expect("The fixture error must materialize"),
+            true,
+        ),
     };
     let body: Option<Value> = serde_json::from_slice(
         &response

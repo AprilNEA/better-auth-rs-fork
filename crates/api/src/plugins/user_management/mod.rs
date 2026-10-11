@@ -292,12 +292,9 @@ impl UserManagementPlugin {
         let data = ctx
             .require_authoritative_native_session(req)
             .await
-            .map_err(|error| {
-                if error.status_code() == 401 {
-                    AuthError::not_found("Failed to get user info")
-                } else {
-                    error
-                }
+            .map_err(|error| match error {
+                AuthError::Unauthenticated => AuthError::not_found("Failed to get user info"),
+                error => error,
             })?;
         let query: TokenQuery = serde_json::from_value(serde_json::json!({
             "token": req.query_string("token")?.map(str::to_owned),

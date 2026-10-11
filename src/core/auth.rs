@@ -13,10 +13,10 @@ use better_auth_core::{
 };
 
 fn endpoint_error(error: AuthError, request: &AuthRequest) -> AuthResult<AuthError> {
-    if !error.is_api_error() {
+    if !error.is_api_error()? {
         return Ok(error);
     }
-    Ok(error.capture_endpoint_headers(request.take_response_headers()?))
+    Ok(error.capture_native_headers(request.take_response_headers_value()?))
 }
 
 pub(crate) fn core_routes() -> [better_auth_core::AuthRoute; 4] {

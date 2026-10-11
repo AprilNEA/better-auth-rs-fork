@@ -16,6 +16,10 @@ Coded native API errors contain `message` followed by `code`:
 
 Use `AuthError::from_code(status, code, message)` for the upstream `APIError.from` construction. Explicit bodies created with `AuthResponse::native(status, body).into()` retain their property order, extra fields, and native object identity. An explicit body can contain only `message`, even when another endpoint returns a coded error with the same message. Clients should use `code` when present and the status otherwise.
 
+Native errors retain the complete original `FieldValue`. Use `AuthError::from_thrown(value)` to propagate an existing thrown value or `AuthError::try_api_error(ApiErrorInit { .. })?` to run the upstream constructor. `ApiErrorClass` distinguishes Better Call and Better Auth instances. `is_api_error()?` also recognizes structural errors through their current `name` property; `is_api_error_instance(class)` checks the instance without reading that property.
+
+`status_code()?` returns `SchemaValue<u16>` and preserves undefined, null, and dynamic values. Use `.typed()?` when the caller requires an ordinary status code. `body_value()?`, `headers_value()?`, and `message_value()?` read current properties and propagate getter errors. `raw_value()` retains the original object identity. `to_auth_response()` moves the complete error into `response.body`; use `api_error_body()?` to read its public payload or `into_http_response()?` to materialize HTTP bytes. HTTP conversion reads body, selected status, `status.toString()`, and selected headers in the upstream order.
+
 `AuthError::FieldInput` retains its code and message for input issue aggregation. Response conversion uses the same message-first native coded body as endpoint body, query, and required-header validation. `validation_error_response` and `validate_request_body` remain Rust convenience helpers with their existing response behavior.
 
 An undefined native body produces an empty HTTP body; explicit null serializes as `null`. Undefined object properties remain present for native callers and are omitted at HTTP JSON serialization. Existing convenience constructors retain their current response format. Ordinary runtime failures reach the dispatcher's empty 500 response; explicit API error bodies retain the endpoint's contract.
@@ -26,7 +30,7 @@ Organization CRUD keeps endpoint-specific errors. Missing membership returns a c
 
 | Variant | HTTP Status | Description |
 |---------|-------------|-------------|
-| `Response` | Provided status | Explicit native API error body and headers |
+| `Response` | Native `statusCode` | Original thrown value, with optional captured endpoint headers |
 | `BadRequest` | 400 | Malformed request |
 | `InvalidRequest` | 400 | Invalid request parameters |
 | `Validation` | 400 | Input validation failed |
@@ -70,14 +74,15 @@ Database errors are wrapped in `AuthError::Database`:
 ```rust
 use better_auth::error::{AuthError, AuthResult};
 
-fn handle_result(result: AuthResult<()>) {
+fn handle_result(result: AuthResult<()>) -> AuthResult<()> {
     match result {
         Ok(()) => println!("Success"),
         Err(e) => {
-            println!("Status: {}", e.status_code());
+            println!("Status: {:?}", e.status_code()?.field_value());
             println!("Message: {}", e);
         }
     }
+    Ok(())
 }
 ```
 
@@ -97,7 +102,8 @@ AuthError::not_implemented("Feature not available yet");
 Construct an upstream coded error or preserve an explicit body:
 
 ```rust
-use better_auth::{AuthError, AuthResponse, FieldMap};
+use better_auth::{AuthError, FieldMap};
+use better_auth::prelude::AuthResponse;
 
 let coded = AuthError::from_code(400, "USER_NOT_FOUND", "User not found");
 let body = FieldMap::from([("message".into(), "User not found".into())]);

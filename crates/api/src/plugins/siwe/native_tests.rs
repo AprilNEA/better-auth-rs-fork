@@ -212,11 +212,14 @@ async fn large_chain_numbers_persist_before_cancelled_session_without_consuming_
     let chain = 1e30;
     let request = request(&ctx, "1e30").await?;
     let error = plugin.verify(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error());
-    assert_eq!(error.status_code(), 500);
+    assert!(error.is_api_error().unwrap());
+    assert_eq!(error.status_code().unwrap(), 500);
     let response = error.to_auth_response();
-    assert_eq!(response.status, 500);
-    let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+    assert_eq!(
+        response.api_error_status()?,
+        better_auth_core::SchemaValue::Typed(500)
+    );
+    let body = response.api_error_body()?.json()?.unwrap();
     assert_eq!(
         body,
         json!({"message":"Internal Server Error","status":500})
@@ -335,12 +338,21 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                     .native(req.clone(), route, &ctx, handler)
                     .await
                     .unwrap_err();
-                assert!(error.is_api_error(), "{mode}");
-                assert_eq!(error.status_code(), status, "{mode}");
+                assert!(error.is_api_error().unwrap(), "{mode}");
+                assert_eq!(error.status_code().unwrap(), status, "{mode}");
                 error.to_auth_response()
             };
-            assert_eq!(response.status, status, "{mode} HTTP={http}");
-            assert_eq!(response.body.json()?, Some(expected), "{mode} HTTP={http}");
+            let body = if http {
+                assert_eq!(response.status, status, "{mode} HTTP={http}");
+                response.body.json()?
+            } else {
+                assert_eq!(
+                    response.api_error_status()?,
+                    better_auth_core::SchemaValue::Typed(status)
+                );
+                response.api_error_body()?.json()?
+            };
+            assert_eq!(body, Some(expected), "{mode} HTTP={http}");
             assert_eq!(
                 response.headers.get("content-type").map(String::as_str),
                 http.then_some("application/json")

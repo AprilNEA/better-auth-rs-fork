@@ -171,7 +171,10 @@ async fn verify<S: AuthSchema>(store: &impl AuthStore<S>) -> AuthResult<()> {
                 let observed = events.take();
                 if let Some(error) = expected_error(scenario, operation) {
                     assert_eq!(
-                        result.err().map(|error| error.instrumentation_message()),
+                        result
+                            .err()
+                            .map(|error| error.instrumentation_message())
+                            .transpose()?,
                         Some(error),
                         "{scenario:?}/{operation:?}/joins={joins}"
                     );

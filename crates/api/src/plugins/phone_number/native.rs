@@ -83,20 +83,17 @@ impl<'a, S: AuthSchema> PhoneNumberApi<'a, S> {
 
 fn validate(request: &AuthRequest) -> AuthResult<ValidatedBody> {
     let input = request.input_body()?;
-    let object = input.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            input.as_ref(),
-        )))
-    })?;
+    let object = input
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", input.as_ref())))?;
     let errors: Vec<_> = ["phoneNumber", "code"]
         .into_iter()
         .filter(|name| !object.get(*name).is_some_and(Value::is_string))
         .map(|name| invalid_type(&format!("body.{name}"), "string", object.get(name)))
         .collect();
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let body = Value::Object(
         object

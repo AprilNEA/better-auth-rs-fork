@@ -103,9 +103,11 @@ fn context_value(context: &AuthContext<StatelessSchema>) -> Value {
     json!({"baseURL":context.base_url(),"optionURL":option_url,"origins":context.trusted_origins(),"providers":context.trusted_providers(),"cookie":{"name":cookie.name,"secure":cookie.attributes.secure,"domain":cookie.attributes.domain}})
 }
 fn error_value(error: AuthError) -> Value {
-    if error.is_api_error() {
-        let response = error.to_auth_response();
-        json!({"thrown":true,"kind":"APIError","status":response.status,"body":serde_json::from_slice::<Value>(&response.body.bytes().expect("The fixture response must serialize")).unwrap_or(Value::Null)})
+    if error
+        .is_api_error()
+        .expect("The fixture error must be classifiable")
+    {
+        json!({"thrown":true,"kind":"APIError","status":error.status_code().expect("The fixture status must be readable"),"body":error.body_value().expect("The fixture body must be readable").json().expect("The fixture body must serialize")})
     } else {
         let (kind, message) = match error {
             AuthError::Config(message) => ("BetterAuthError", message),
@@ -115,6 +117,7 @@ fn error_value(error: AuthError) -> Value {
         json!({"thrown":true,"kind":kind,"message":message})
     }
 }
+
 impl Fixture {
     fn record(&self, stage: &str, request: Option<&AuthRequest>, base_url: Option<&str>) {
         let mut value = json!({"stage":stage,"request":request_value(request)});

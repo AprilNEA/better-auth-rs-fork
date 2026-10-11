@@ -153,7 +153,7 @@ fn set_driver_encoding_precedes_where_driver_encoding() -> AuthResult<()> {
             .err()
             .ok_or_else(|| AuthError::internal("Invalid SET driver value must fail"))?;
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message()?,
             if backend == DbBackend::Sqlite {
                 "Invalid Date"
             } else {

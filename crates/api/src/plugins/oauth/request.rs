@@ -90,7 +90,7 @@ pub(super) fn validate(req: &AuthRequest) -> AuthResult<ValidatedBody> {
     let mut errors = Vec::new();
     let body = project_object(req.input_body()?.as_ref(), "body", fields, &mut errors);
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     if req.path() == "/sign-in/social" {
         typed::<SocialSignInRequest>(body)

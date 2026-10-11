@@ -1,13 +1,13 @@
 use better_auth_core::endpoint_input::ValidatedBody;
-use better_auth_core::{AuthError, AuthRequest, AuthResponse, AuthResult};
+use better_auth_core::{AuthError, AuthRequest, AuthResult};
 use serde_json::Value;
 
 use crate::plugins::json_body::{invalid_type, validation_error};
 
-pub(super) fn read(req: &AuthRequest) -> Result<Value, AuthResponse> {
+pub(super) fn read(req: &AuthRequest) -> AuthResult<Value> {
     req.validated_body::<Value>()
         .cloned()
-        .map_or_else(|| parse(req).map_err(|error| error.to_auth_response()), Ok)
+        .map_or_else(|| parse(req), Ok)
 }
 
 pub(super) fn validate(req: &AuthRequest) -> AuthResult<ValidatedBody> {
@@ -36,7 +36,7 @@ fn parse(req: &AuthRequest) -> AuthResult<Value> {
             message.push_str("; ");
             message.push_str(&invalid_type("body", "record", input.as_ref()));
         }
-        AuthError::from(validation_error(&message))
+        validation_error(&message)
     })?;
     let mut errors = Vec::new();
     for key in strings {
@@ -58,7 +58,7 @@ fn parse(req: &AuthRequest) -> AuthResult<Value> {
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     Ok(Value::Object(
         body.iter()

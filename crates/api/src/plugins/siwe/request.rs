@@ -18,11 +18,10 @@ pub(super) fn nonce(req: &AuthRequest) -> AuthResult<ValidatedBody> {
                 "body",
                 "object",
                 Some(value),
-            ))
-            .into());
+            )));
         }
         if let Some(error) = super::unknown_keys(value, &[]) {
-            return Err(json_body::validation_error(&error).into());
+            return Err(json_body::validation_error(&error));
         }
     }
     Ok(ValidatedBody::new(body, ()))
@@ -33,11 +32,7 @@ pub(super) fn verify(req: &AuthRequest, anonymous: bool) -> AuthResult<Validated
         .as_ref()
         .filter(|body| body.is_object())
         .ok_or_else(|| {
-            AuthError::from(json_body::validation_error(&json_body::invalid_type(
-                "body",
-                "object",
-                input.as_ref(),
-            )))
+            json_body::validation_error(&json_body::invalid_type("body", "object", input.as_ref()))
         })?;
     let mut errors = Vec::new();
     let mut valid_types = true;
@@ -78,13 +73,13 @@ pub(super) fn verify(req: &AuthRequest, anonymous: bool) -> AuthResult<Validated
         );
     }
     if !errors.is_empty() {
-        return Err(json_body::validation_error(&errors.join("; ")).into());
+        return Err(json_body::validation_error(&errors.join("; ")));
     }
     if req.original_request().is_none()
         && better_auth_core::hooks::current_request_hook_context()
             .is_some_and(|context| !context.is_http)
     {
-        return Err(json_body::validation_error("Request is required").into());
+        return Err(json_body::validation_error("Request is required"));
     }
     let typed: VerifyBody = serde_json::from_value(body.clone())?;
     Ok(ValidatedBody::new(

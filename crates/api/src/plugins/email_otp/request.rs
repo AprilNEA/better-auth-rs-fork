@@ -1,5 +1,5 @@
 use better_auth_core::endpoint_input::ValidatedBody;
-use better_auth_core::{AuthError, AuthRequest, AuthResponse, AuthResult};
+use better_auth_core::{AuthError, AuthRequest, AuthResult};
 use serde_json::{Map, Value};
 
 use super::EmailOtpType;
@@ -9,10 +9,10 @@ use crate::plugins::json_body;
 pub(super) struct Body(Map<String, Value>);
 
 impl Body {
-    pub(super) fn parse(req: &AuthRequest) -> Result<Self, AuthResponse> {
+    pub(super) fn parse(req: &AuthRequest) -> AuthResult<Self> {
         req.validated_body::<Self>()
             .cloned()
-            .map_or_else(|| parse(req).map_err(|error| error.to_auth_response()), Ok)
+            .map_or_else(|| parse(req), Ok)
     }
     pub(super) fn value(&self) -> Value {
         Value::Object(self.0.clone())
@@ -61,7 +61,7 @@ fn parse(req: &AuthRequest) -> AuthResult<Body> {
             message.push_str("; ");
             message.push_str(&json_body::invalid_type("body", "record", input.as_ref()));
         }
-        AuthError::from(json_body::validation_error(&message))
+        json_body::validation_error(&message)
     })?;
     let mut errors = Vec::new();
     for field in required.iter().chain(optional) {
@@ -84,7 +84,7 @@ fn parse(req: &AuthRequest) -> AuthResult<Body> {
         }
     }
     if !errors.is_empty() {
-        return Err(json_body::validation_error(&errors.join("; ")).into());
+        return Err(json_body::validation_error(&errors.join("; ")));
     }
     Ok(Body(
         body.iter()

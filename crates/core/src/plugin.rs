@@ -743,6 +743,7 @@ impl<S: AuthSchema> AuthContext<S> {
 mod tests {
     mod async_body_dispatch;
     mod native_session_hooks;
+    mod raw_api_errors;
     mod response_headers;
     mod response_status;
     mod response_values;

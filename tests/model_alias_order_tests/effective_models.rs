@@ -135,7 +135,7 @@ fn assert_error(
         .err()
         .ok_or_else(|| AuthError::internal("Expected reference resolution failure"))?;
     assert!(matches!(error, AuthError::Config(_)));
-    assert_eq!(error.instrumentation_message(), message);
+    assert_eq!(error.instrumentation_message()?, message);
     Ok(())
 }
 

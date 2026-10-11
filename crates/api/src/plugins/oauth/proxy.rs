@@ -352,7 +352,7 @@ impl OAuthProxyPlugin {
         response: &mut AuthResponse,
         ctx: &AuthContext<S>,
     ) -> AuthResult<()> {
-        if !response.is_native() || response.is_api_error() {
+        if !response.is_native() || response.is_api_error()? {
             return Ok(());
         }
         let ResponseBody::Native(FieldValue::Object(body)) = &response.body else {
@@ -663,7 +663,7 @@ impl OAuthProxyPlugin {
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
         let Some(callback) = req.query_string("callbackURL")? else {
-            return Ok(json_body::validation_error(
+            return Err(json_body::validation_error(
                 "[query.callbackURL] Invalid input: expected string, received undefined",
             ));
         };

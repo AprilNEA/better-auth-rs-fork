@@ -16,7 +16,12 @@ use super::*;
 type TestSchema = better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema;
 
 pub(super) fn json_body(response: &AuthResponse) -> Value {
-    serde_json::from_slice(&response.body.bytes().unwrap()).unwrap()
+    let value = if response.is_api_error().unwrap() {
+        better_auth_core::ResponseBody::Native(response.api_error_body().unwrap())
+    } else {
+        response.body.clone()
+    };
+    serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
 #[tokio::test]

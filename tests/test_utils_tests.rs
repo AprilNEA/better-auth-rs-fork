@@ -608,7 +608,7 @@ async fn admission_requires_endpoint_and_transactional_helpers_commit_or_roll_ba
     let Err(error) = error else {
         return Err(AuthError::internal("missing endpoint must reject"));
     };
-    assert!(error.is_api_error());
+    assert!(error.is_api_error()?);
     assert!(calls.lock().unwrap().is_empty());
     for reject in [true, false] {
         let runtime = auth.clone();

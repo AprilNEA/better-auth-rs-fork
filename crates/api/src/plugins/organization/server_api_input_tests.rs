@@ -2,7 +2,7 @@ use super::*;
 use crate::plugins::organization::OrganizationConfig;
 use crate::plugins::test_helpers::{create_test_config, create_test_context_with_plugins};
 use better_auth_core::{CreateOrganization, CreateUser, user_fields::UserFieldConfig};
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -101,9 +101,12 @@ async fn add_member_validates_fields_before_queries_and_limit_callbacks() {
             .await
             .unwrap_err()
             .to_auth_response();
-        assert_eq!(response.status, 400);
         assert_eq!(
-            serde_json::from_slice::<Value>(&response.body.bytes().unwrap()).unwrap(),
+            response.api_error_status().unwrap(),
+            better_auth_core::SchemaValue::Typed(400)
+        );
+        assert_eq!(
+            response.api_error_body().unwrap().json().unwrap().unwrap(),
             json!({
                 "code":"VALIDATION_ERROR", "message":message
             })

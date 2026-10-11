@@ -262,7 +262,7 @@ async fn run(base: &str, input: Value) -> AuthResult<Value> {
                 for (name, headers) in cases {
                     let response = match auth.call_endpoint(HttpMethod::Get, "/token", EndpointInput {headers, ..Default::default()}).await {
                         Ok(response) => response,
-                        Err(error) => error.to_auth_response(),
+                        Err(error) => error.to_auth_response().into_http_response()?,
                     };
                     let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
                     let body = match body["token"].as_str() {
@@ -356,7 +356,10 @@ async fn run(base: &str, input: Value) -> AuthResult<Value> {
         Ok(output) => output,
         Err(AuthError::Internal(message)) => json!({"thrown":true,"message":message}),
         Err(error @ AuthError::Response(_)) => {
-            let body: Value = serde_json::from_slice(&error.to_auth_response().body.bytes()?)?;
+            let body = error
+                .body_value()?
+                .json()?
+                .ok_or_else(|| AuthError::internal("JWT error body must be JSON"))?;
             json!({"thrown":true,"message":body["message"]})
         }
         Err(error) => json!({"thrown":true,"message":error.to_string()}),

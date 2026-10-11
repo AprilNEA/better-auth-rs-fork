@@ -126,7 +126,7 @@ fn snapshot(value: Option<&NativeSessionData>) -> FieldValue {
 
 fn returned(response: &AuthResponse) -> AuthResult<FieldValue> {
     let value = response.body.field_value()?;
-    Ok(if response.is_api_error() {
+    Ok(if response.is_api_error()? {
         let message = value
             .as_object()
             .map(|fields| fields.get("message"))
@@ -137,11 +137,8 @@ fn returned(response: &AuthResponse) -> AuthResult<FieldValue> {
             ("kind", "api-error".into()),
             ("name", "APIError".into()),
             ("message", message.into()),
-            (
-                "status",
-                f64::from(response.api_error_status().unwrap()).into(),
-            ),
-            ("body", value),
+            ("status", response.api_error_status()?.into_field_value()),
+            ("body", response.api_error_body()?),
         ])
     } else {
         object([("kind", "value".into()), ("value", value)])
@@ -641,14 +638,14 @@ async fn check(case: &Value) -> AuthResult<()> {
         Err(AuthError::TypeError(message)) => {
             json!({"kind":"error", "name":"TypeError", "message":message, "headers":{"entries":[], "cookies":[]}})
         }
-        Err(error) if error.is_api_error() => {
+        Err(error) if error.is_api_error()? => {
             let response = error.to_auth_response();
             let mut result = observe(&returned(&response)?, clock.shift)?;
-            let headers = response
-                .captured_headers()
-                .or_else(|| response.api_error_headers())
-                .unwrap_or(&response.headers);
-            result["headers"] = clock.actual_headers(headers)?;
+            let headers = match response.captured_headers()? {
+                Some(headers) => headers,
+                None => response.api_error_headers()?,
+            };
+            result["headers"] = clock.actual_headers(&headers)?;
             result
         }
         Err(error) => return Err(error),
@@ -672,10 +669,7 @@ async fn check(case: &Value) -> AuthResult<()> {
 
 fn observe_native_status(response: &AuthResponse, shift: i64) -> AuthResult<Value> {
     let value = match response.native_status() {
-        better_auth_core::NativeResponseStatus::Undefined => FieldValue::Undefined,
-        better_auth_core::NativeResponseStatus::Value(status) => {
-            FieldValue::Number(f64::from(status))
-        }
+        better_auth_core::NativeResponseStatus::Present(status) => status.into_field_value(),
         better_auth_core::NativeResponseStatus::Absent => {
             panic!("Endpoint status property is absent")
         }

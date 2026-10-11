@@ -74,7 +74,9 @@ async fn native_join_reads_missing_child_only_after_a_matching_base_row() -> Aut
                     AuthError::internal("A matched native join must read its missing child table")
                 })?;
                 assert_eq!(
-                    error.instrumentation_message(),
+                    error
+                        .instrumentation_message()
+                        .expect("fixture error message"),
                     "JoinOption model user not found"
                 );
             } else {

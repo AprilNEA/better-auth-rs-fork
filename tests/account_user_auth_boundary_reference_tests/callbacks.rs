@@ -157,7 +157,7 @@ impl<S: AuthSchema> ApiErrorHandler<S> for Callbacks {
             _ => "unexpected",
         };
         self.events.push(json!({"kind": "api-error", "native": {
-            "variant": variant, "message": error.to_string(), "debug": format!("{error:?}"), "isApiError": error.is_api_error(),
+            "variant": variant, "message": error.to_string(), "debug": format!("{error:?}"), "isApiError": error.is_api_error()?,
         }}))?;
         Ok(None)
     }

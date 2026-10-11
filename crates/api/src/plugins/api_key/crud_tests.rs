@@ -141,7 +141,8 @@ async fn http_requests_cannot_impersonate_users_or_change_server_permissions() {
             .handle_create(&create, &ctx)
             .await
             .unwrap_err()
-            .status_code(),
+            .status_code()
+            .unwrap(),
         401
     );
     let key = server_key(&plugin, &ctx, &user_id, "default").await;
@@ -155,7 +156,8 @@ async fn http_requests_cannot_impersonate_users_or_change_server_permissions() {
             .handle_update(&update, &ctx)
             .await
             .unwrap_err()
-            .status_code(),
+            .status_code()
+            .unwrap(),
         401
     );
     let update = request(
@@ -177,7 +179,8 @@ async fn http_requests_cannot_impersonate_users_or_change_server_permissions() {
             .handle_update(&update, &ctx)
             .await
             .unwrap_err()
-            .status_code(),
+            .status_code()
+            .unwrap(),
         404
     );
 }
@@ -339,9 +342,12 @@ async fn list_rejects_invalid_pagination_instead_of_ignoring_it() {
             }
             Err(error) => error.to_auth_response(),
         };
-        assert_eq!(response.status, 400);
         assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap()["code"],
+            response.api_error_status().unwrap(),
+            better_auth_core::SchemaValue::Typed(400)
+        );
+        assert_eq!(
+            response.api_error_body().unwrap().json().unwrap().unwrap()["code"],
             "VALIDATION_ERROR"
         );
     }

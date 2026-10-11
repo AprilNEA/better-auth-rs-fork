@@ -15,7 +15,7 @@ impl UsernamePlugin {
         request: &AuthRequest,
         context: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
-        let username = request::availability(request).map_err(better_auth_core::AuthError::from)?;
+        let username = request::availability(request)?;
         if username.is_empty() {
             return Err(error(422, "INVALID_USERNAME", "Username is invalid"));
         }
@@ -44,7 +44,7 @@ impl UsernamePlugin {
         context: &AuthContext<S>,
         verification: Option<&crate::plugins::email_verification::EmailVerificationPlugin>,
     ) -> AuthResult<AuthResponse> {
-        let body = request::sign_in(request).map_err(better_auth_core::AuthError::from)?;
+        let body = request::sign_in(request)?;
         if body.username.is_empty() || body.password.is_empty() {
             return Err(error(
                 401,

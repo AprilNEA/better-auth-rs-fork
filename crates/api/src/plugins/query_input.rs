@@ -20,7 +20,11 @@ fn object(query: Option<Value>, optional: bool) -> AuthResult<Option<Map<String,
     match query {
         None if optional => Ok(None),
         Some(Value::Object(query)) => Ok(Some(query)),
-        value => Err(validation_error(&invalid_type("query", "object", value.as_ref())).into()),
+        value => Err(validation_error(&invalid_type(
+            "query",
+            "object",
+            value.as_ref(),
+        ))),
     }
 }
 
@@ -54,7 +58,7 @@ fn finish(output: Map<String, Value>, errors: Vec<String>) -> AuthResult<Option<
     if errors.is_empty() {
         Ok(Some(Value::Object(output)))
     } else {
-        Err(validation_error(&errors.join("; ")).into())
+        Err(validation_error(&errors.join("; ")))
     }
 }
 

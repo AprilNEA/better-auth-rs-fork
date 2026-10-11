@@ -183,19 +183,23 @@ impl ApiKeyCallbacks {
                         Json(match result {
                             Ok(result) => NativeResult::Result { result },
                             Err(AuthError::Internal(message)) => NativeResult::Error { message },
-                            Err(error) => {
-                                let response = error.to_auth_response();
-                                NativeResult::Thrown {
-                                    status: response.status,
-                                    body: serde_json::from_slice(
-                                        &response
-                                            .body
-                                            .bytes()
-                                            .expect("The fixture response must serialize"),
+                            Err(error) => NativeResult::Thrown {
+                                status: *error
+                                    .status_code()
+                                    .expect("The fixture status must be readable")
+                                    .typed()
+                                    .expect("The fixture status must be numeric"),
+                                body: serde_json::from_slice(
+                                    &better_auth_core::ResponseBody::Native(
+                                        error
+                                            .body_value()
+                                            .expect("The fixture body must be readable"),
                                     )
-                                    .unwrap(),
-                                }
-                            }
+                                    .bytes()
+                                    .expect("The fixture response must serialize"),
+                                )
+                                .unwrap(),
+                            },
                         })
                     }
                 }),

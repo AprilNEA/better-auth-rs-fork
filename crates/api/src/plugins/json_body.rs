@@ -1,4 +1,4 @@
-use better_auth_core::{AuthError, AuthRequest, AuthResponse};
+use better_auth_core::{AuthError, AuthRequest, AuthResult};
 use serde_json::Value;
 
 pub(crate) fn is_truthy(value: &Value) -> bool {
@@ -12,7 +12,7 @@ pub(crate) fn is_truthy(value: &Value) -> bool {
 }
 
 /// Parse the HTTP JSON boundary before endpoint schema validation.
-pub(crate) fn parse(req: &AuthRequest) -> Result<Option<Value>, AuthResponse> {
+pub(crate) fn parse(req: &AuthRequest) -> AuthResult<Option<Value>> {
     let Some(bytes) = req.body.as_deref().filter(|bytes| !bytes.is_empty()) else {
         return Ok(None);
     };
@@ -42,14 +42,14 @@ pub(crate) fn parse(req: &AuthRequest) -> Result<Option<Value>, AuthResponse> {
                 "Content-Type \"{content_type}\" is not allowed. Allowed types: application/json"
             )
         };
-        return Err(error_response(415, "UNSUPPORTED_MEDIA_TYPE", &message));
+        return Err(AuthError::from_code(415, "UNSUPPORTED_MEDIA_TYPE", message));
     }
     decode(bytes).map(Some)
 }
 
-pub(crate) fn decode(bytes: &[u8]) -> Result<Value, AuthResponse> {
+pub(crate) fn decode(bytes: &[u8]) -> AuthResult<Value> {
     serde_json::from_slice(bytes)
-        .map_err(|_| error_response(400, "BAD_REQUEST", "Invalid JSON in request body"))
+        .map_err(|_| AuthError::from_code(400, "BAD_REQUEST", "Invalid JSON in request body"))
 }
 
 pub(crate) fn type_name(value: Option<&Value>) -> &'static str {
@@ -71,12 +71,8 @@ pub(crate) fn invalid_type(location: &str, expected: &str, value: Option<&Value>
     )
 }
 
-pub(crate) fn validation_error(message: &str) -> AuthResponse {
-    error_response(400, "VALIDATION_ERROR", message)
-}
-
-fn error_response(status: u16, code: &str, message: &str) -> AuthResponse {
-    AuthError::from_code(status, code, message).to_auth_response()
+pub(crate) fn validation_error(message: &str) -> AuthError {
+    AuthError::from_code(400, "VALIDATION_ERROR", message)
 }
 
 #[derive(Clone, Default)]
@@ -91,13 +87,9 @@ fn parse_sign_out(req: &AuthRequest) -> better_auth_core::AuthResult<(SignOutBod
     let Some(body) = input else {
         return Ok((SignOutBody::default(), None));
     };
-    let object = body.as_object().ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            Some(&body),
-        )))
-    })?;
+    let object = body
+        .as_object()
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", Some(&body))))?;
     let mut errors = Vec::new();
     let mut output = serde_json::Map::new();
     for (field, expected) in [
@@ -118,7 +110,7 @@ fn parse_sign_out(req: &AuthRequest) -> better_auth_core::AuthResult<(SignOutBod
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let typed = SignOutBody {
         callback_url: output
@@ -143,12 +135,10 @@ pub(crate) fn sign_out_body(
     ))
 }
 
-pub(crate) fn sign_out(req: &AuthRequest) -> Result<SignOutBody, AuthResponse> {
+pub(crate) fn sign_out(req: &AuthRequest) -> AuthResult<SignOutBody> {
     match req.validated_body::<SignOutBody>() {
         Some(body) => Ok(body.clone()),
-        None => parse_sign_out(req)
-            .map(|(body, _)| body)
-            .map_err(|error| error.to_auth_response()),
+        None => parse_sign_out(req).map(|(body, _)| body),
     }
 }
 
@@ -186,13 +176,10 @@ fn string_fields_input<T: serde::de::DeserializeOwned>(
     email: Option<&str>,
 ) -> better_auth_core::AuthResult<(T, Value)> {
     let body = req.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let mut output = serde_json::Map::new();
     let mut errors = Vec::new();
     for &(name, required) in fields {
@@ -208,7 +195,7 @@ fn string_fields_input<T: serde::de::DeserializeOwned>(
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let projection = Value::Object(output);
     Ok((serde_json::from_value(projection.clone())?, projection))

@@ -16,7 +16,7 @@ fn assert_error(error: AuthError, expected: &Value) -> AuthResult<()> {
         Some("BetterAuthError") => {
             assert!(matches!(error, AuthError::Config(_)), "{error:?}");
             assert_eq!(
-                Value::String(error.instrumentation_message()),
+                Value::String(error.instrumentation_message()?),
                 *error_field(expected, "message")?
             );
             assert_eq!(
@@ -27,7 +27,7 @@ fn assert_error(error: AuthError, expected: &Value) -> AuthResult<()> {
         Some("TypeError") => {
             assert!(matches!(error, AuthError::TypeError(_)), "{error:?}");
             assert_eq!(
-                Value::String(error.instrumentation_message()),
+                Value::String(error.instrumentation_message()?),
                 *error_field(expected, "message")?
             );
             assert_eq!(
@@ -37,20 +37,21 @@ fn assert_error(error: AuthError, expected: &Value) -> AuthResult<()> {
         }
         Some("APIError") => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
+            let status = error.status_code()?;
             let response = error.to_auth_response();
             let properties = error_field(expected, "properties")?;
-            assert_eq!(
-                json!(response.status),
-                *error_field(properties, "statusCode")?
-            );
+            assert_eq!(json!(status), *error_field(properties, "statusCode")?);
             assert_eq!(
                 response
-                    .headers
+                    .api_error_headers()?
                     .get("x-member-join-callback")
                     .map(String::as_str),
                 Some("original")
             );
-            let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+            let body = response
+                .api_error_body()?
+                .json()?
+                .ok_or_else(|| AuthError::internal("Callback error body must be JSON"))?;
             assert_eq!(body, *error_field(properties, "body")?);
             assert_eq!(body.get("message"), Some(error_field(expected, "message")?));
             assert_eq!(

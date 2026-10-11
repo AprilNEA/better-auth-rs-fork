@@ -96,7 +96,11 @@ async fn username_login_only_sends_verification_when_required_and_logs_async_del
             )
             .await;
         if required {
-            let response = result.unwrap_err().to_auth_response();
+            let response = result
+                .unwrap_err()
+                .to_auth_response()
+                .into_http_response()
+                .unwrap();
             assert_eq!(response.status, 403);
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap())

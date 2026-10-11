@@ -336,7 +336,7 @@ async fn test_reset_password_invalid_token() {
     );
 
     let err = plugin.handle_reset_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.test.ts :: describe("forget password") and packages/better-auth/src/api/routes/password.ts; adapted to the Rust password-management plugin.
@@ -360,7 +360,7 @@ async fn test_reset_password_weak_password() {
     );
 
     let err = plugin.handle_reset_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.test.ts :: describe("forget password") and packages/better-auth/src/api/routes/password.ts; adapted to the Rust password-management plugin.
@@ -567,7 +567,7 @@ async fn test_change_password_wrong_current_password() {
     );
 
     let err = plugin.handle_change_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.test.ts :: describe("forget password") and packages/better-auth/src/api/routes/password.ts; adapted to the Rust password-management plugin.
@@ -589,7 +589,7 @@ async fn test_change_password_unauthorized() {
     );
 
     let err = plugin.handle_change_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 401);
+    assert_eq!(err.status_code().unwrap(), 401);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.test.ts :: verifyPassword with
@@ -637,7 +637,7 @@ async fn test_verify_password_invalid_password() {
     );
 
     let err = plugin.handle_verify_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
     assert_eq!(err.to_string(), "Invalid password");
 }
 
@@ -660,7 +660,7 @@ async fn test_verify_password_oauth_only_user_returns_invalid_password() {
     );
 
     let err = plugin.handle_verify_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
     assert_eq!(err.to_string(), "Invalid password");
 }
 

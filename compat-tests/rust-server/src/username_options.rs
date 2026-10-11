@@ -566,15 +566,15 @@ async fn native<S: AuthSchema>(
     match invoke(&fixture, headers, input).await {
         Ok(body) => Json(json!({"status":200,"body":body})),
         Err(error) => {
-            let response = error.to_auth_response();
-            let body: Value = serde_json::from_slice(
-                &response
-                    .body
-                    .bytes()
-                    .expect("The fixture response must serialize"),
-            )
-            .unwrap_or(Value::Null);
-            Json(json!({"status":response.status,"body":body}))
+            let status = error
+                .status_code()
+                .expect("The fixture status must be readable");
+            let body = error
+                .body_value()
+                .expect("The fixture body must be readable")
+                .json()
+                .expect("The fixture body must serialize");
+            Json(json!({"status":status,"body":body}))
         }
     }
 }

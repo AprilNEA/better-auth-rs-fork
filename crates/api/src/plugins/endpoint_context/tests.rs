@@ -51,7 +51,7 @@ async fn callback_wrapper_preserves_http_response_mutations_replacement_and_erro
             .on_http_response(&request, &mut response, &context)
             .await;
         if fail {
-            assert_eq!(result.unwrap_err().to_auth_response().status, 400);
+            assert_eq!(result.unwrap_err().status_code().unwrap(), 400);
             assert!(response.headers.get("x-request-path").is_none());
         } else {
             assert_eq!(

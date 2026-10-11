@@ -352,7 +352,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
             let returned = if rejected {
                 let error = result.err().ok_or("Expected the original callback error")?;
                 assert_eq!(
-                    error.instrumentation_message(),
+                    error.instrumentation_message()?,
                     if stage == "input-error" {
                         "passkey-input-stop"
                     } else {

@@ -1,32 +1,39 @@
+use crate::{FieldMap, FieldValue, SchemaValue};
 use thiserror::Error;
 
-/// An endpoint error response whose body and headers are excluded from diagnostics.
-pub struct ApiErrorResponse(Box<crate::types::AuthResponse>, bool);
+mod native;
+#[cfg(test)]
+pub(crate) use native::brand_api_error_object;
+pub use native::{ApiErrorClass, ApiErrorInit, api_error_instance, is_api_error_value};
+
+/// A thrown native value whose properties are excluded from Rust diagnostics.
+pub struct ApiErrorResponse {
+    value: FieldValue,
+    captured_headers: Option<FieldValue>,
+}
 
 impl std::fmt::Debug for ApiErrorResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ApiErrorResponse")
-            .field("status", &self.0.status)
-            .finish()
+        f.debug_struct("ApiErrorResponse").finish_non_exhaustive()
     }
 }
 
 impl std::fmt::Display for ApiErrorResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Endpoint rejected request (HTTP {})", self.0.status)
+        f.write_str("Native endpoint error")
     }
 }
 
 /// Authentication framework error types.
 ///
-/// Each variant maps to an HTTP status code via [`AuthError::status_code`].
-/// Use [`AuthError::to_auth_response`] to retain explicit endpoint bodies or serialize legacy error variants.
+/// Native errors retain their status values until HTTP materialization.
+/// Typed variants remain available for ordinary Rust callers.
 #[derive(Error, Debug)]
 pub enum AuthError {
     /// Runtime schema failures reject the host entry point before endpoint error handling.
     #[error(transparent)]
     SchemaCheck(std::sync::Arc<crate::store::schema::SchemaCheckError>),
-    /// Preserve an endpoint's complete error body and repeated response headers.
+    /// Preserve a thrown value, its object identity, and captured endpoint headers.
     #[error("{0}")]
     Response(ApiErrorResponse),
     /// Public schema error with a field-specific message.
@@ -142,82 +149,171 @@ pub enum AuthError {
 }
 
 impl AuthError {
+    /// Construct an API error and execute message and cause access at this call boundary.
+    pub fn try_api_error(init: ApiErrorInit) -> AuthResult<Self> {
+        Ok(Self::from_thrown(native::construct(init)?))
+    }
+
+    /// Retain a thrown value without constructing an API error or reading properties.
+    pub fn from_thrown(value: FieldValue) -> Self {
+        Self::Response(ApiErrorResponse {
+            value,
+            captured_headers: None,
+        })
+    }
+
+    /// Recover an already returned error without running its constructor again.
+    pub fn from_returned_response(response: crate::AuthResponse) -> AuthResult<Self> {
+        let captured_headers = response.captured_headers_value();
+        let mut error = Self::from_thrown(response.body.field_value()?);
+        if let Some(headers) = captured_headers {
+            error = error.capture_native_headers(headers);
+        }
+        Ok(error)
+    }
+
+    /// Borrow a native thrown value without projecting its properties.
+    pub fn raw_value(&self) -> Option<&FieldValue> {
+        match self {
+            Self::Response(error) => Some(&error.value),
+            _ => None,
+        }
+    }
+
     /// Construct an upstream coded API error with `message` before `code` in the native body.
     /// Use `AuthResponse::native(Some(status), body).into()` to preserve an explicit error body instead.
     pub fn from_code(status: u16, code: impl Into<String>, message: impl Into<String>) -> Self {
-        crate::AuthResponse::native(
-            Some(status),
-            crate::FieldMap::from([
+        match Self::try_api_error(ApiErrorInit {
+            status: f64::from(status).into(),
+            body: FieldMap::from([
                 ("message".into(), message.into().into()),
                 ("code".into(), code.into().into()),
             ])
             .into(),
-        )
-        .into()
+            ..Default::default()
+        }) {
+            Ok(error) | Err(error) => error,
+        }
     }
 
     /// Diagnostic message for tracing. Response headers are never included.
-    pub fn instrumentation_message(&self) -> String {
-        match self {
-            Self::Response(response) => response
-                .0
-                .body
-                .json()
-                .ok()
-                .flatten()
-                .and_then(|body| {
-                    body.get("message")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                })
-                .unwrap_or_else(|| self.to_string()),
+    pub fn instrumentation_message(&self) -> AuthResult<String> {
+        let message = self.message_value()?;
+        let value = if message.is_null() || message.is_undefined() {
+            self.raw_value()
+                .cloned()
+                .unwrap_or_else(|| self.to_string().into())
+        } else {
+            message
+        };
+        SchemaValue::<String>::from_field(value).display_string()
+    }
+
+    /// Read the current top-level message independently of the error body.
+    pub fn message_value(&self) -> AuthResult<FieldValue> {
+        Ok(match self {
+            Self::Response(response) => {
+                return native::optional_property(&response.value, "message");
+            }
             Self::Internal(message)
             | Self::TypeError(message)
             | Self::RangeError(message)
             | Self::Config(message)
-            | Self::PasswordHash(message) => message.clone(),
-            _ => self.to_string(),
+            | Self::PasswordHash(message) => message.clone().into(),
+            _ => self.to_string().into(),
+        })
+    }
+
+    /// Read the original status value, which can be a symbolic name or any native value.
+    pub fn status_value(&self) -> AuthResult<FieldValue> {
+        match self {
+            Self::Response(response) => native::optional_property(&response.value, "status"),
+            _ => Ok(self.status_code()?.into_field_value()),
+        }
+    }
+
+    /// Read one current body value without applying JSON conversion.
+    pub fn body_value(&self) -> AuthResult<FieldValue> {
+        if let Self::Response(response) = self {
+            return native::optional_property(&response.value, "body");
+        }
+        let (_, code, message) = self.error_payload()?;
+        let mut fields = FieldMap::new();
+        if matches!(self, Self::FieldInput { .. }) {
+            let _ = fields.insert("message".into(), message.clone().into());
+        }
+        if let Some(code) = code {
+            let _ = fields.insert("code".into(), code.into());
+        }
+        let _ = fields.insert("message".into(), message.into());
+        Ok(fields.into())
+    }
+
+    /// Read one current header initializer without converting or copying its object.
+    pub fn headers_value(&self) -> AuthResult<FieldValue> {
+        match self {
+            Self::Response(response) => native::optional_property(&response.value, "headers"),
+            _ => Ok(FieldMap::new().into()),
         }
     }
 
     /// Create a redirect that bypasses the HTTP error callback, like upstream `FOUND`.
     /// Numeric 302 errors created from `AuthResponse` retain the ordinary API error policy.
     pub fn redirect(location: impl Into<String>) -> Self {
-        Self::Response(ApiErrorResponse(
-            Box::new(
-                crate::AuthResponse::new(302)
-                    .with_header("location", location)
-                    .with_header("content-type", "application/json"),
-            ),
-            true,
-        ))
+        match Self::try_api_error(ApiErrorInit {
+            status: "FOUND".into(),
+            headers: FieldMap::from([("location".into(), location.into().into())]).into(),
+            ..Default::default()
+        }) {
+            Ok(error) | Err(error) => error,
+        }
     }
 
     /// Whether this error is an explicit `FOUND` redirect.
-    pub fn is_found_redirect(&self) -> bool {
-        matches!(self, Self::Response(ApiErrorResponse(_, true)))
+    pub fn is_found_redirect(&self) -> AuthResult<bool> {
+        Ok(self.is_api_error()? && self.status_value()?.strict_equals(&"FOUND".into()))
     }
 
     /// Attach endpoint headers while preserving the redirect's error-policy behavior.
     pub fn capture_endpoint_headers(self, headers: crate::Headers) -> Self {
+        self.capture_native_headers(headers.into())
+    }
+
+    /// Retain captured endpoint headers, including the original initializer identity.
+    pub fn capture_native_headers(self, headers: FieldValue) -> Self {
         match self {
             Self::Response(mut response) => {
-                response.0.capture_error_headers(headers);
+                response.captured_headers = Some(headers);
                 Self::Response(response)
             }
-            other => {
-                let mut response = other.to_auth_response();
-                response.capture_error_headers(headers);
-                response.into()
-            }
+            other => match Self::from_returned_response(other.to_auth_response()) {
+                Ok(error) => error.capture_native_headers(headers),
+                Err(error) => error,
+            },
+        }
+    }
+
+    /// Read captured endpoint headers without materializing a Headers value.
+    pub fn captured_headers_value(&self) -> Option<FieldValue> {
+        match self {
+            Self::Response(response) => response.captured_headers.clone(),
+            _ => None,
         }
     }
 
     /// Whether the error is an intentional endpoint rejection, including redirects and server API errors.
-    pub fn is_api_error(&self) -> bool {
+    pub fn is_api_error(&self) -> AuthResult<bool> {
+        if let Self::Response(error) = self {
+            return is_api_error_value(&error.value);
+        }
+        Ok(self.is_api_error_instance(ApiErrorClass::BetterCall))
+    }
+
+    /// Check the constructor family without invoking a structural name getter.
+    pub fn is_api_error_instance(&self, class: ApiErrorClass) -> bool {
         match self {
-            Self::Response(_)
-            | Self::FieldInput { .. }
+            Self::Response(error) => api_error_instance(&error.value, class),
+            Self::FieldInput { .. }
             | Self::Upstream { .. }
             | Self::BadRequest(_)
             | Self::InvalidRequest(_)
@@ -255,7 +351,7 @@ impl AuthError {
 
     /// Serialize an HTTP endpoint failure without exposing ordinary runtime errors.
     pub fn to_http_response(self) -> AuthResult<crate::AuthResponse> {
-        if self.is_api_error() {
+        if self.is_api_error()? {
             self.to_auth_response().into_http_response()
         } else {
             crate::observability::logger::current().error(
@@ -267,9 +363,14 @@ impl AuthError {
     }
 
     /// Status owned by this error. Dispatch can preserve a different endpoint status for HTTP output.
-    pub fn status_code(&self) -> u16 {
-        match self {
-            Self::Response(response) => response.0.api_error_status().unwrap_or(response.0.status),
+    pub fn status_code(&self) -> AuthResult<SchemaValue<u16>> {
+        let status = match self {
+            Self::Response(response) => {
+                return Ok(SchemaValue::from_field(native::optional_property(
+                    &response.value,
+                    "statusCode",
+                )?));
+            }
             Self::FieldInput { .. } => 400,
             Self::Upstream { status, .. } => *status,
             // 400
@@ -309,7 +410,8 @@ impl AuthError {
             | Self::DataClone
             | Self::PasswordHash(_)
             | Self::Jwt(_) => 500,
-        }
+        };
+        Ok(SchemaValue::Typed(status))
     }
 
     /// Resolve the wire error code for a message, if upstream defines one.
@@ -330,8 +432,19 @@ impl AuthError {
     ///
     /// Internal errors (500) are logged and replaced with a generic message
     /// to avoid leaking details.
-    pub fn error_payload(&self) -> (u16, Option<String>, String) {
-        let status = self.status_code();
+    pub fn error_payload(&self) -> AuthResult<(SchemaValue<u16>, Option<String>, String)> {
+        let status = self.status_code()?;
+        if matches!(self, Self::Response(_)) {
+            let body = self.body_value()?;
+            let code = native::optional_property(&body, "code")?;
+            let code = if code.is_undefined() {
+                None
+            } else {
+                Some(code.decode::<String>()?)
+            };
+            let message = native::optional_property(&body, "message")?.decode::<String>()?;
+            return Ok((status, code, message));
+        }
         let (code, message) = match self {
             Self::FieldInput { code, message } => (Some((*code).to_owned()), message.clone()),
             Self::Upstream { code, message, .. } => {
@@ -339,33 +452,37 @@ impl AuthError {
             }
             Self::BannedUser(message) => (Some("BANNED_USER".to_string()), message.clone()),
             _ => {
-                let message = match status {
-                    500 => {
-                        crate::observability::logger::current().error(
-                            "Internal server error",
-                            &[crate::observability::LogArgument::Error(self)],
-                        );
-                        "Internal server error".to_string()
-                    }
-                    _ => self.to_string(),
+                let message = if status == 500 {
+                    crate::observability::logger::current().error(
+                        "Internal server error",
+                        &[crate::observability::LogArgument::Error(self)],
+                    );
+                    "Internal server error".to_string()
+                } else {
+                    self.to_string()
                 };
                 let code = Self::code_from_message(&message);
                 (code, message)
             }
         };
-        (status, code, message)
+        Ok((status, code, message))
     }
 
     /// Convert this error into an [`AuthResponse`](crate::types::AuthResponse).
-    /// Explicit response errors retain their native body and property order.
+    /// Native errors move their complete raw value without reading properties.
     /// Field input errors use the upstream message-first coded body.
     /// Legacy convenience variants generate a code-first body from [`Self::error_payload`].
     ///
     /// Named `to_auth_response` to avoid collision with Axum's
     /// `IntoResponse::into_response` when the `axum` feature is enabled.
     pub fn to_auth_response(self) -> crate::types::AuthResponse {
-        if let Self::Response(response) = self {
-            return (*response.0).into_api_error();
+        if let Self::Response(error) = self {
+            let mut response = crate::AuthResponse::native(None, error.value);
+            response.set_endpoint_headers(None);
+            if let Some(headers) = error.captured_headers {
+                response.capture_native_error_headers(headers);
+            }
+            return response;
         }
         if let Self::FieldInput { code, message } = self {
             return Self::from_code(400, code, message).to_auth_response();
@@ -379,20 +496,30 @@ impl AuthError {
             );
             return crate::types::AuthResponse::new(500);
         }
-        let is_api_error = self.is_api_error();
-        let (status, code, message) = self.error_payload();
-        let response = crate::types::AuthResponse::json(
-            status,
-            &crate::types::ErrorCodeMessageResponse {
-                code,
-                message: message.clone(),
-            },
-        )
-        .unwrap_or_else(|_| crate::types::AuthResponse::text(status, &message));
+        let is_api_error = self.is_api_error_instance(ApiErrorClass::BetterCall);
+        let status = match self.status_code() {
+            Ok(status) => status,
+            Err(error) => return error.to_auth_response(),
+        };
+        let body = match self.body_value() {
+            Ok(body) => body,
+            Err(error) => return error.to_auth_response(),
+        };
         if is_api_error {
-            response.into_api_error()
+            let error = match Self::try_api_error(ApiErrorInit {
+                status: status.into_field_value(),
+                body,
+                ..Default::default()
+            }) {
+                Ok(error) | Err(error) => error,
+            };
+            error.to_auth_response()
         } else {
-            response
+            // Native thrown values returned above; these convenience variants own a fixed status.
+            match status.typed() {
+                Ok(status) => crate::AuthResponse::native(Some(*status), body),
+                Err(error) => error.to_auth_response(),
+            }
         }
     }
 
@@ -483,7 +610,55 @@ pub type AuthResult<T> = Result<T, AuthError>;
 
 impl From<crate::types::AuthResponse> for AuthError {
     fn from(response: crate::types::AuthResponse) -> Self {
-        Self::Response(ApiErrorResponse(Box::new(response), false))
+        let status = if response.is_native() {
+            response.native_status().field_value()
+        } else {
+            f64::from(response.status).into()
+        };
+        let captured_headers = response.captured_headers_value();
+        let headers = match response.explicit_response_headers().cloned() {
+            Some(mut owned) => {
+                owned.merge(response.headers.clone());
+                owned
+            }
+            None => response.headers.clone(),
+        };
+        let body = match &response.body {
+            crate::ResponseBody::Bytes(bytes)
+                if headers.get("content-type").is_some_and(|value| {
+                    value
+                        .get(..5)
+                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("text/"))
+                }) =>
+            {
+                std::str::from_utf8(bytes)
+                    .map(|text| FieldValue::from(text.to_owned()))
+                    .map_err(|error| {
+                        AuthError::internal(format!(
+                            "Cannot decode explicit text response as UTF-8: {error}"
+                        ))
+                    })
+            }
+            body => body.field_value(),
+        };
+        let body = match body {
+            Ok(body) => body,
+            Err(error) => return error,
+        };
+        match Self::try_api_error(ApiErrorInit {
+            status,
+            body,
+            headers: headers.into(),
+            ..Default::default()
+        }) {
+            Ok(mut error) => {
+                if let Some(headers) = captured_headers {
+                    error = error.capture_native_headers(headers);
+                }
+                error
+            }
+            Err(error) => error,
+        }
     }
 }
 
@@ -498,19 +673,16 @@ impl axum::response::IntoResponse for AuthError {
             Ok(body) => body,
             Err(error) => return error.into_response(),
         };
-        let status = axum::http::StatusCode::from_u16(response.status)
-            .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
-        let mut output = axum::response::Response::new(axum::body::Body::from(body));
-        *output.status_mut() = status;
+        let mut output = axum::response::Response::builder().status(response.status);
         for (name, value) in response.headers {
-            if let (Ok(name), Ok(value)) = (
-                axum::http::HeaderName::from_bytes(name.as_bytes()),
-                axum::http::HeaderValue::from_str(&value),
-            ) {
-                let _ = output.headers_mut().append(name, value);
+            output = output.header(name, value);
+        }
+        match output.body(axum::body::Body::from(body)) {
+            Ok(response) => response,
+            Err(error) => {
+                Self::internal(format!("Cannot build Axum response: {error}")).into_response()
             }
         }
-        output
     }
 }
 
@@ -577,344 +749,9 @@ where
 mod construction_tests;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "error/tests.rs"]
+mod tests;
 
-    #[test]
-    fn endpoint_error_preserves_body_headers_and_redacts_diagnostics() {
-        let body = serde_json::json!({"code":"RATE_LIMITED", "message":"Rate limit exceeded.", "details":{"tryAgainIn":1234}});
-        let mut response = crate::types::AuthResponse::json(429, &body).unwrap();
-        response.headers.append("Set-Cookie", "sensitive=first");
-        response.headers.append("Set-Cookie", "sensitive=second");
-        let error = AuthError::from(response);
-        assert_eq!(error.status_code(), 429);
-        assert!(!format!("{error:?} {error}").contains("sensitive"));
-        assert!(!format!("{error:?} {error}").contains("tryAgainIn"));
-        let response = error.to_auth_response();
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap(),
-            body
-        );
-        assert_eq!(
-            response.headers.get_all("set-cookie").collect::<Vec<_>>(),
-            ["sensitive=first", "sensitive=second"]
-        );
-    }
-
-    #[cfg(feature = "axum")]
-    #[tokio::test]
-    async fn endpoint_error_into_axum_preserves_json_and_repeated_headers() {
-        use axum::response::IntoResponse;
-        let mut response = crate::types::AuthResponse::json(
-            429,
-            &serde_json::json!({"details":{"tryAgainIn":1234}}),
-        )
-        .unwrap();
-        response.headers.append("Set-Cookie", "first=1");
-        response.headers.append("Set-Cookie", "second=2");
-        let output = AuthError::from(response).into_response();
-        assert_eq!(output.status(), 429);
-        assert_eq!(output.headers().get_all("set-cookie").iter().count(), 2);
-        assert_eq!(output.headers()["content-type"], "application/json");
-        let body = axum::body::to_bytes(output.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        assert_eq!(
-            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["details"]["tryAgainIn"],
-            1234
-        );
-    }
-
-    // ── status_code ─────────────────────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn bad_request_is_400() {
-        assert_eq!(AuthError::bad_request("oops").status_code(), 400);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn invalid_request_is_400() {
-        assert_eq!(AuthError::InvalidRequest("x".into()).status_code(), 400);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn validation_is_400() {
-        assert_eq!(AuthError::validation("x").status_code(), 400);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn invalid_credentials_is_401() {
-        assert_eq!(AuthError::InvalidCredentials.status_code(), 401);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn unauthenticated_is_401() {
-        assert_eq!(AuthError::Unauthenticated.status_code(), 401);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn session_not_found_is_401() {
-        assert_eq!(AuthError::SessionNotFound.status_code(), 401);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn forbidden_is_403() {
-        assert_eq!(AuthError::forbidden("nope").status_code(), 403);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn unauthorized_is_403() {
-        assert_eq!(AuthError::Unauthorized.status_code(), 403);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn not_found_is_404() {
-        assert_eq!(AuthError::not_found("gone").status_code(), 404);
-        assert_eq!(AuthError::UserNotFound.status_code(), 404);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn conflict_is_409() {
-        assert_eq!(AuthError::conflict("dup").status_code(), 409);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn unprocessable_entity_is_422() {
-        assert_eq!(
-            AuthError::UnprocessableEntity("x".into()).status_code(),
-            422
-        );
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn rate_limited_is_429() {
-        assert_eq!(AuthError::RateLimited.status_code(), 429);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn not_implemented_is_501() {
-        assert_eq!(AuthError::not_implemented("todo").status_code(), 501);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn internal_errors_are_500() {
-        assert_eq!(AuthError::config("bad").status_code(), 500);
-        assert_eq!(AuthError::internal("fail").status_code(), 500);
-        assert_eq!(AuthError::plugin("p", "m").status_code(), 500);
-        assert_eq!(AuthError::PasswordHash("h".into()).status_code(), 500);
-        assert_eq!(
-            AuthError::Database(DatabaseError::Connection("c".into())).status_code(),
-            500
-        );
-    }
-
-    // ── code_from_message ───────────────────────────────────────────────
-
-    // Upstream reference: BASE_ERROR_CODES in @better-auth/core — a message
-    // upstream defines a constant for carries that constant.
-    #[test]
-    fn code_from_message_returns_the_upstream_constant() {
-        assert_eq!(
-            AuthError::code_from_message("User not found").as_deref(),
-            Some("USER_NOT_FOUND")
-        );
-    }
-
-    // Upstream reference: packages/core/src/error/index.ts :: `APIError.from`
-    // attaches a code, while `new APIError(status, { message })` does not — so
-    // a message outside every upstream table has no code on the wire.
-    #[test]
-    fn code_from_message_is_none_for_unknown_messages() {
-        assert_eq!(AuthError::code_from_message("invalid email!"), None);
-        assert_eq!(AuthError::code_from_message("Email is the same"), None);
-        assert_eq!(AuthError::code_from_message(""), None);
-    }
-
-    // Upstream reference: plugin tables built with `defineErrorCodes` are part
-    // of the same vocabulary, not just the base set.
-    #[test]
-    fn code_from_message_covers_plugin_tables() {
-        assert_eq!(
-            AuthError::code_from_message("Username is already taken. Please try another.")
-                .as_deref(),
-            Some("USERNAME_IS_ALREADY_TAKEN")
-        );
-    }
-
-    // Upstream reference: BASE_ERROR_CODES in @better-auth/core ::
-    // packages/core/src/error/codes.ts — codes are explicit constants since
-    // better-auth 1.5, so these must not be re-derived from the message.
-    #[test]
-    fn base_error_codes_are_not_derived_from_the_message() {
-        for (message, expected) in [
-            ("Invalid callbackURL", "INVALID_CALLBACK_URL"),
-            ("Invalid redirectURL", "INVALID_REDIRECT_URL"),
-            ("Invalid errorCallbackURL", "INVALID_ERROR_CALLBACK_URL"),
-            (
-                "Invalid newUserCallbackURL",
-                "INVALID_NEW_USER_CALLBACK_URL",
-            ),
-            ("Email is already verified", "EMAIL_ALREADY_VERIFIED"),
-            (
-                "Verification email isn't enabled",
-                "VERIFICATION_EMAIL_NOT_ENABLED",
-            ),
-            (
-                "Session expired. Re-authenticate to perform this action.",
-                "SESSION_EXPIRED",
-            ),
-            (
-                "Cross-site navigation login blocked. This request appears to be a CSRF attack.",
-                "CROSS_SITE_NAVIGATION_LOGIN_BLOCKED",
-            ),
-        ] {
-            assert_eq!(
-                AuthError::code_from_message(message).as_deref(),
-                Some(expected),
-                "message {message:?} must carry the upstream constant"
-            );
-        }
-    }
-
-    // ── error_payload ───────────────────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn error_payload_for_client_error() {
-        // Not an upstream message, so it goes out without a code.
-        let (status, code, message) = AuthError::bad_request("Missing field").error_payload();
-        assert_eq!(status, 400);
-        assert_eq!(code, None);
-        assert_eq!(message, "Missing field");
-
-        let (status, code, message) = AuthError::bad_request("Field is required").error_payload();
-        assert_eq!(status, 400);
-        assert_eq!(code.as_deref(), Some("MISSING_FIELD"));
-        assert_eq!(message, "Field is required");
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn error_payload_for_internal_error_hides_details() {
-        let (status, _code, message) = AuthError::internal("secret detail").error_payload();
-        assert_eq!(status, 500);
-        assert_eq!(message, "Internal server error");
-    }
-
-    // ── to_auth_response ────────────────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn to_auth_response_returns_correct_status() {
-        let resp = AuthError::bad_request("oops").to_auth_response();
-        assert_eq!(resp.status, 400);
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn to_auth_response_body_contains_code_and_message() {
-        let resp = AuthError::UserNotFound.to_auth_response();
-        assert_eq!(resp.status, 404);
-        let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap())
-            .expect("response body should be valid JSON");
-        assert_eq!(body["code"], "USER_NOT_FOUND");
-        assert_eq!(body["message"], "User not found");
-    }
-
-    // ── constructor helpers ──────────────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn constructor_helpers_produce_correct_variants() {
-        // Each helper should produce the expected Display output
-        assert_eq!(AuthError::bad_request("x").to_string(), "x");
-        assert_eq!(AuthError::forbidden("x").to_string(), "x");
-        assert_eq!(AuthError::not_found("x").to_string(), "x");
-        assert_eq!(AuthError::conflict("x").to_string(), "x");
-        assert_eq!(AuthError::not_implemented("x").to_string(), "x");
-        assert_eq!(AuthError::config("x").to_string(), "Configuration error: x");
-        assert_eq!(
-            AuthError::internal("x").to_string(),
-            "Internal server error: x"
-        );
-        assert_eq!(
-            AuthError::validation("x").to_string(),
-            "Validation error: x"
-        );
-        assert_eq!(
-            AuthError::plugin("p", "m").to_string(),
-            "Plugin error: p - m"
-        );
-    }
-
-    // ── DatabaseError ───────────────────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn database_error_display() {
-        let e = DatabaseError::Connection("timeout".into());
-        assert_eq!(e.to_string(), "Connection error: timeout");
-    }
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn database_error_converts_to_auth_error() {
-        let db_err = DatabaseError::Query("bad sql".into());
-        let auth_err: AuthError = db_err.into();
-        assert_eq!(auth_err.status_code(), 500);
-    }
-
-    // ── validation_error_response ───────────────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn validation_error_response_serializes_field_errors() {
-        let mut errors = validator::ValidationErrors::new();
-        let mut error = validator::ValidationError::new("email");
-        error.message = Some("Email is invalid".into());
-        errors.add("email", error);
-
-        let resp = validation_error_response(&errors);
-        assert_eq!(resp.status, 400);
-        let body: serde_json::Value = serde_json::from_slice(&resp.body.bytes().unwrap())
-            .expect("response body should be valid JSON");
-        assert_eq!(body["code"], "VALIDATION_ERROR");
-        assert_eq!(body["message"], "[body.email] Email is invalid");
-    }
-
-    // ── Display for fixed-message variants ──────────────────────────────
-
-    // Rust-specific surface: `AuthError` and Rust-side response/error conversion behavior are public Rust library APIs with no direct TS analogue.
-    #[test]
-    fn fixed_message_variants_display() {
-        assert_eq!(
-            AuthError::InvalidCredentials.to_string(),
-            "Invalid email or password"
-        );
-        assert_eq!(AuthError::Unauthenticated.to_string(), "Unauthorized");
-        assert_eq!(
-            AuthError::SessionNotFound.to_string(),
-            "Session not found or expired"
-        );
-        assert_eq!(
-            AuthError::Unauthorized.to_string(),
-            "Insufficient permissions"
-        );
-        assert_eq!(AuthError::UserNotFound.to_string(), "User not found");
-        assert_eq!(AuthError::RateLimited.to_string(), "Too many requests");
-    }
-}
+#[cfg(test)]
+#[path = "error/native_tests.rs"]
+mod native_tests;

@@ -96,11 +96,12 @@ fn response(
             actual.err(),
             "Native endpoint must reject the business operation",
         )?;
-        assert_eq!(error.status_code(), status);
-        error.to_auth_response()
+        assert_eq!(error.status_code()?, status);
+        ordered(&error.body_value()?, expected)?;
+        error.to_auth_response().into_http_response()?
     };
     assert_eq!(actual.status, status);
-    if native {
+    if native && status == 200 {
         ordered(&actual.body.field_value()?, expected)?;
     }
     assert_eq!(

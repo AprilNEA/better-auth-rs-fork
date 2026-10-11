@@ -158,13 +158,9 @@ fn native_error(error: AuthError) -> AuthResult<Value> {
     if let AuthError::Internal(message) = error {
         return Ok(json!({"error":{"kind":"error","message":message}}));
     }
-    let response = error.to_auth_response();
-    let body = if response.body.is_empty() {
-        Value::Null
-    } else {
-        serde_json::from_slice(&response.body.bytes()?)?
-    };
-    Ok(json!({"error":{"kind":"api","status":response.status,"body":body}}))
+    Ok(
+        json!({"error":{"kind":"api","status":error.status_code()?,"body":error.body_value()?.json()?}}),
+    )
 }
 
 #[better_auth::database_hooks()]

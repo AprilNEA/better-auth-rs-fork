@@ -103,7 +103,7 @@ async fn ordinary_update_spans_include_name_and_expression_errors_after_input_po
             "where-parse" => "update WHERE parse rejected",
             _ => "update input rejected",
         };
-        assert_eq!(error.instrumentation_message(), message);
+        assert_eq!(error.instrumentation_message()?, message);
         capture.wait_closed().await?;
         {
             let records = capture

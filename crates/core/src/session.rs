@@ -415,7 +415,7 @@ impl<S: AuthSchema> SessionManager<S> {
     ) -> AuthResult<SessionResolution<NativeSessionData>> {
         match self.resolve_native(req, read).await {
             Ok(resolved) => Ok(resolved),
-            Err(error) if error.is_api_error() => Err(error),
+            Err(error) if error.is_api_error()? => Err(error),
             Err(error) => {
                 crate::observability::logger::current().error(
                     "INTERNAL_SERVER_ERROR",

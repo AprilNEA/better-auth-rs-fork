@@ -106,7 +106,7 @@ pub(super) fn validate(req: &AuthRequest) -> AuthResult<ValidatedBody> {
         if req.path() == "/admin/has-permission" {
             message.push_str("; [body] Invalid input");
         }
-        AuthError::from(validation_error(&message))
+        validation_error(&message)
     })?;
     let mut output = Map::new();
     let mut errors = Vec::new();
@@ -156,7 +156,7 @@ pub(super) fn validate(req: &AuthRequest) -> AuthResult<ValidatedBody> {
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     match req.path() {
         "/admin/set-role" => typed::<SetRoleRequest>(output),

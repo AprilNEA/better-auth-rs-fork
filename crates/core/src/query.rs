@@ -6,7 +6,7 @@ use std::future::Future;
 use serde_json::{Map, Value};
 
 use crate::field_value::PrimitiveHint;
-use crate::{AuthResponse, AuthResult, FieldValue};
+use crate::{AuthError, AuthResult, FieldValue};
 
 /// Resolve the adapter operator before field binding, using equality for an unknown name.
 #[doc(hidden)]
@@ -88,8 +88,8 @@ fn type_name(value: &Value) -> &'static str {
     }
 }
 
-fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthResponse {
-    crate::AuthError::from_code(
+fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthError {
+    AuthError::from_code(
         400,
         "VALIDATION_ERROR",
         format!(
@@ -97,13 +97,12 @@ fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthResponse {
             type_name(value)
         ),
     )
-    .to_auth_response()
 }
 
 pub(crate) fn string_field<'a>(
     query: Option<&'a Value>,
     name: &str,
-) -> Result<Option<&'a str>, AuthResponse> {
+) -> AuthResult<Option<&'a str>> {
     let Some(query) = query else {
         return Ok(None);
     };

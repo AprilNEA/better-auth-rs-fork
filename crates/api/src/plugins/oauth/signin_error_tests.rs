@@ -2,6 +2,118 @@ use super::OAuthSignInError;
 use better_auth_core::{AuthError, AuthResponse, AuthResult, FieldMap, FieldValue, Utf16String};
 use serde_json::json;
 
+#[test]
+fn callback_reads_description_before_code_coercion_and_preserves_conversion_errors()
+-> AuthResult<()> {
+    use better_auth_core::{FieldFunction, FieldObject};
+    use std::sync::{Arc, Mutex};
+
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let message = FieldMap::from([(
+        "toString".into(),
+        FieldFunction::contextual({
+            let events = events.clone();
+            move |_, _| {
+                events
+                    .lock()
+                    .map_err(|_| AuthError::internal("OAuth trace lock poisoned"))?
+                    .push("message");
+                Ok("original description".into())
+            }
+        })
+        .into(),
+    )]);
+    let body = FieldObject::from(FieldMap::from([("message".into(), message.into())]));
+    let code = FieldMap::from([(
+        "toString".into(),
+        FieldFunction::contextual({
+            let body = body.clone();
+            let events = events.clone();
+            move |_, _| {
+                events
+                    .lock()
+                    .map_err(|_| AuthError::internal("OAuth trace lock poisoned"))?
+                    .push("code");
+                let _ = body.set("message", "changed description".into())?;
+                Ok("PROFILE_REJECTED".into())
+            }
+        })
+        .into(),
+    )]);
+    let _ = body.set("code", code.into())?;
+    let raw: FieldValue = FieldMap::from([
+        ("name".into(), "APIError".into()),
+        ("body".into(), FieldValue::Object(body.clone())),
+    ])
+    .into();
+    let result = OAuthSignInError::from(AuthError::from_thrown(raw)).redirect_parts();
+    let _ = body.delete("code")?;
+    assert_eq!(
+        result?,
+        (
+            "PROFILE_REJECTED".into(),
+            Some("original description".into())
+        )
+    );
+    assert_eq!(body.get("message")?, Some("changed description".into()));
+    assert_eq!(
+        *events
+            .lock()
+            .map_err(|_| AuthError::internal("OAuth trace lock poisoned"))?,
+        ["code", "message"]
+    );
+
+    let thrown: FieldValue = FieldMap::from([("reason".into(), "coercion failure".into())]).into();
+    let code: FieldValue = FieldMap::from([(
+        "toString".into(),
+        FieldFunction::contextual({
+            let thrown = thrown.clone();
+            move |_, _| Err(AuthError::from_thrown(thrown.clone()))
+        })
+        .into(),
+    )])
+    .into();
+    let raw = FieldMap::from([
+        ("name".into(), "APIError".into()),
+        (
+            "body".into(),
+            FieldMap::from([("code".into(), code)]).into(),
+        ),
+    ])
+    .into();
+    let result = OAuthSignInError::from(AuthError::from_thrown(raw)).redirect_parts();
+    assert!(
+        matches!(result, Err(error) if error.raw_value().is_some_and(|value| value.strict_equals(&thrown)))
+    );
+    Ok(())
+}
+
+#[test]
+fn oauth_database_catches_preserve_structural_api_errors_before_the_fallback() {
+    let raw: FieldValue = FieldMap::from([
+        ("name".into(), "APIError".into()),
+        ("body".into(), json!({"code":"DATABASE_REJECTED"}).into()),
+    ])
+    .into();
+    let mut calls = 0;
+    let result = super::api_error_or(AuthError::from_thrown(raw.clone()), |_| {
+        calls += 1;
+        OAuthSignInError::Generic("fallback".into())
+    });
+    assert_eq!(calls, 0);
+    assert!(
+        matches!(result, OAuthSignInError::Auth(error) if error.raw_value().is_some_and(|value| value.strict_equals(&raw)))
+    );
+    let result = super::api_error_or(AuthError::internal("database failed"), |error| {
+        calls += 1;
+        OAuthSignInError::Auth(error)
+    });
+    assert_eq!(calls, 1);
+    assert!(
+        matches!(result, OAuthSignInError::Auth(AuthError::Internal(message)) if message == "database failed")
+    );
+}
+
 // Upstream api/routes/callback.mjs redirects only API errors with a truthy body.code.
 #[test]
 fn callback_redirects_api_errors_with_codes() -> AuthResult<()> {
@@ -83,7 +195,9 @@ fn callback_converts_truthy_api_error_values_at_the_url_boundary() -> AuthResult
         );
         for error in [
             OAuthSignInError::from(AuthError::from(response.clone())),
-            OAuthSignInError::Endpoint(response),
+            OAuthSignInError::Auth(AuthError::from_returned_response(
+                AuthError::from(response).to_auth_response(),
+            )?),
         ] {
             assert_eq!(
                 error.redirect_parts()?,
@@ -123,10 +237,21 @@ fn callback_preserves_errors_without_codes_and_found_redirects() -> AuthResult<(
             }
         };
         let response = error.to_auth_response();
-        assert_eq!(response.status, 422);
-        assert_eq!(response.body.bytes()?.as_ref(), original_body);
         assert_eq!(
-            response.headers.get("x-error-detail").map(String::as_str),
+            response.api_error_status()?,
+            better_auth_core::SchemaValue::Typed(422)
+        );
+        assert_eq!(
+            better_auth_core::ResponseBody::Native(response.api_error_body()?)
+                .bytes()?
+                .as_ref(),
+            original_body
+        );
+        assert_eq!(
+            response
+                .api_error_headers()?
+                .get("x-error-detail")
+                .map(String::as_str),
             Some("preserved")
         );
     }
@@ -137,11 +262,17 @@ fn callback_preserves_errors_without_codes_and_found_redirects() -> AuthResult<(
         Err(error) => error,
         Ok(_) => return Err(AuthError::internal("A FOUND redirect was replaced")),
     };
-    assert!(error.is_found_redirect());
+    assert!(error.is_found_redirect().unwrap());
     let response = error.to_auth_response();
-    assert_eq!(response.status, 302);
     assert_eq!(
-        response.headers.get("location").map(String::as_str),
+        response.api_error_status()?,
+        better_auth_core::SchemaValue::Typed(302)
+    );
+    assert_eq!(
+        response
+            .api_error_headers()?
+            .get("location")
+            .map(String::as_str),
         Some("https://example.test/error"),
     );
     Ok(())

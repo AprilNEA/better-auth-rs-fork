@@ -169,7 +169,7 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
         .map(|field| json_body::invalid_type(&format!("query.{field}"), "string", None))
         .collect();
     if !missing.is_empty() {
-        return Ok(json_body::validation_error(&missing.join("; ")));
+        return Err(json_body::validation_error(&missing.join("; ")));
     }
     let provider_name = req
         .query_string("provider")?

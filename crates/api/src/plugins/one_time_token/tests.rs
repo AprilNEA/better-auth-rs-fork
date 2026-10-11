@@ -24,7 +24,7 @@ async fn expired_session_writes_cookie_and_new_session_before_rejecting_transfer
     let token = plugin.generate(&ctx, session.clone(), user).await.unwrap();
     let request = verify_request(&token);
     let error = plugin.handle_verify(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error());
+    assert!(error.is_api_error().unwrap());
     let response = error.to_auth_response();
     let response = finalize_response(&ctx, &request, response);
     assert_eq!(response.status, 400);
@@ -129,6 +129,7 @@ async fn concurrent_redemption_issues_one_cookie_and_expired_proofs_cannot_authe
             .or(second.as_ref().err())
             .unwrap()
             .is_api_error()
+            .unwrap()
     );
     let responses = [
         finalize_response(
@@ -167,7 +168,7 @@ async fn concurrent_redemption_issues_one_cookie_and_expired_proofs_cannot_authe
     let token = expired.generate(&ctx, session, user).await.unwrap();
     let request = verify_request(&token);
     let error = expired.handle_verify(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error());
+    assert!(error.is_api_error().unwrap());
     let response = error.to_auth_response();
     let response = finalize_response(&ctx, &request, response);
     assert_eq!(response.status, 400);
@@ -226,7 +227,7 @@ async fn custom_hashing_does_not_extend_token_lifetime() {
     for attempt in ["verification", "replay"] {
         let request = verify_request(&token);
         let error = plugin.handle_verify(&request, &ctx).await.unwrap_err();
-        assert!(error.is_api_error());
+        assert!(error.is_api_error().unwrap());
         let response = error.to_auth_response();
         let response = finalize_response(&ctx, &request, response);
         assert_eq!(response.status, 400, "{attempt}");

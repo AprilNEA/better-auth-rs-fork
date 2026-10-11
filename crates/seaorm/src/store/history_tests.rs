@@ -39,7 +39,7 @@ fn fixture() -> Value {
 fn owner_schema(store: &SeaOrmStore<bundled_schema::BundledSchema>) -> Value {
     match AccountOwner::validate_schema(&store.config, &store.model_fields, |_, _| false) {
         Ok(()) => Value::Null,
-        Err(error) => json!({ "error": error.instrumentation_message() }),
+        Err(error) => json!({ "error": error.instrumentation_message().unwrap() }),
     }
 }
 
@@ -158,7 +158,7 @@ async fn schema_history_sqlite_input_failure_preserves_callback_and_mutation() {
         .await
         .unwrap_err();
     assert_eq!(
-        json!({"error": error.instrumentation_message()}),
+        json!({"error": error.instrumentation_message().unwrap()}),
         expected["observations"][1]["result"]
     );
     assert_eq!(
@@ -177,7 +177,7 @@ async fn schema_history_sqlite_input_failure_preserves_callback_and_mutation() {
         .await
         .unwrap_err();
     assert_eq!(
-        json!({"error": error.instrumentation_message()}),
+        json!({"error": error.instrumentation_message().unwrap()}),
         expected["observations"][3]["result"]
     );
 }
@@ -206,7 +206,10 @@ async fn schema_history_sqlite_generator_failure_keeps_the_input_mutation() {
         })
         .await
         .unwrap_err();
-    assert_eq!(error.instrumentation_message(), "history-generator-failure");
+    assert_eq!(
+        error.instrumentation_message().unwrap(),
+        "history-generator-failure"
+    );
     assert_eq!(*calls.lock().unwrap(), [("user".to_owned(), None)]);
     assert_eq!(owner_schema(&store), Value::Null);
 }

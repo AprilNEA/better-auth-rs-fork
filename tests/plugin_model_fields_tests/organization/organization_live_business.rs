@@ -171,10 +171,14 @@ fn response(
     status: u16,
     expected: &FieldValue,
 ) -> AuthResult<()> {
-    assert_eq!(response.status, status);
-    if native {
+    if native && response.is_api_error()? {
+        assert_eq!(response.api_error_status()?, status);
+        ordered(&response.api_error_body()?, expected)?;
+    } else if native {
+        assert_eq!(response.status, status);
         ordered(&response.body.field_value()?, expected)?;
     } else {
+        assert_eq!(response.status, status);
         assert_eq!(
             response.body.bytes()?,
             required(expected.stringify()?, "Expected business JSON response")?.as_bytes()

@@ -139,7 +139,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
             .await
             {
                 Ok(action) => action,
-                Err(error) => return Err(endpoint_error(error, &internal_req)?),
+                Err(error) => return Err(before_error(error, &hook_request, context)?),
             };
             if let Some(response) =
                 apply_before_action(action, &mut internal_req, req, &mut input_patch, http)?
@@ -158,7 +158,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
             let hook_request = internal_req.with_separate_response_status();
             let action = match plugin.before_request(&hook_request, context).await {
                 Ok(action) => action,
-                Err(error) => return Err(endpoint_error(error, &internal_req)?),
+                Err(error) => return Err(before_error(error, &hook_request, context)?),
             };
             if let Some(response) =
                 apply_before_action(action, &mut internal_req, req, &mut input_patch, http)?
@@ -241,7 +241,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                             request.query.clone(),
                             handler(request.clone()),
                         );
-                        if request.is_server_only() {
+                        let result = if request.is_server_only() {
                             let mut scope = match crate::hooks::current_request_hook_context() {
                                 Some(scope) => scope,
                                 None => RequestHookContext::from_request(&request)?,
@@ -255,6 +255,15 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                             with_request_hook_context_value(scope, future).await
                         } else {
                             future.await
+                        };
+                        match result {
+                            Ok(response) => Ok(response),
+                            Err(error) => {
+                                let error = endpoint_error(error, &request)?;
+                                // Better Call's endpoint catch classifies again before the dispatch catch.
+                                let _ = error.is_api_error()?;
+                                Err(error)
+                            }
                         }
                     }
                     Err(error) => Err(error),
@@ -265,15 +274,19 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
         let endpoint_status = internal_req.take_response_status()?;
         let mut response = match result {
             Ok(mut response) => {
-                let status = endpoint_status
-                    .map_or(response.native_status(), crate::NativeResponseStatus::Value);
+                let status = endpoint_status.map_or(
+                    response.native_status(),
+                    crate::NativeResponseStatus::Present,
+                );
                 response.set_native_status(status);
                 response
             }
-            Err(error) if error.is_api_error() => {
-                let status = error.status_code();
+            Err(error) if error.is_api_error()? => {
+                let status = error.status_code()?;
+                let headers = merge_api_error_headers(&error)?;
                 let mut response = error.to_auth_response();
-                response.set_native_status(crate::NativeResponseStatus::Value(status));
+                response.set_endpoint_headers(headers);
+                response.set_native_status(crate::NativeResponseStatus::Present(status));
                 response
             }
             Err(error) => return Err(error),
@@ -292,20 +305,26 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                 hook.after(&hook_request, &mut response, context),
             )
             .await;
-            apply_after_result(result, &hook_request, &mut response)?;
-            response.set_native_status(native_status);
+            apply_after_result(result, &hook_request, &mut response, context)?;
+            response.set_native_status(native_status.clone());
         }
         for plugin in self.plugins.iter() {
             let hook_request = internal_req.with_separate_response_status();
             let result = plugin
                 .after_request(&hook_request, &mut response, context)
                 .await;
-            apply_after_result(result, &hook_request, &mut response)?;
-            response.set_native_status(native_status);
+            apply_after_result(result, &hook_request, &mut response, context)?;
+            response.set_native_status(native_status.clone());
         }
-        if response.is_api_error() && !http {
-            response.capture_error_headers(response.headers.clone());
-            Err(response.into())
+        if response.is_api_error()? && publishes_debug(context) {
+            restore_error_stack(&response.body.field_value()?)?;
+        }
+        if response.is_api_error()? && !http {
+            let captured = response.endpoint_headers_value();
+            if captured.is_truthy() {
+                response.capture_native_error_headers(captured);
+            }
+            Err(AuthError::from_returned_response(response)?)
         } else if http {
             response.into_http_response()
         } else {
@@ -313,11 +332,11 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
         }
     }
 }
-fn endpoint_error(error: AuthError, request: &AuthRequest) -> AuthResult<AuthError> {
-    if !error.is_api_error() {
+pub(crate) fn endpoint_error(error: AuthError, request: &AuthRequest) -> AuthResult<AuthError> {
+    if !error.is_api_error()? {
         return Ok(error);
     }
-    Ok(error.capture_endpoint_headers(request.take_response_headers()?))
+    Ok(error.capture_native_headers(request.take_response_headers_value()?))
 }
 
 fn apply_before_action(
@@ -364,18 +383,87 @@ fn apply_before_action(
     }
     Ok(None)
 }
-fn apply_after_result(
+fn publishes_debug<S: AuthSchema>(context: &AuthContext<S>) -> bool {
+    context.config.logger.level.unwrap_or_default() == crate::observability::LogLevel::Debug
+}
+
+fn restore_error_stack(value: &crate::FieldValue) -> AuthResult<()> {
+    if let Some(object) = value.as_object() {
+        let stack = object.get("errorStack")?.unwrap_or_default();
+        let _ = object.set("stack", stack)?;
+    }
+    Ok(())
+}
+
+fn before_error<S: AuthSchema>(
+    error: AuthError,
+    request: &AuthRequest,
+    context: &AuthContext<S>,
+) -> AuthResult<AuthError> {
+    let error = if request.take_hook_error_handled() {
+        error
+    } else {
+        endpoint_error(error, request)?
+    };
+    if error.is_api_error()?
+        && publishes_debug(context)
+        && let Some(value) = error.raw_value()
+    {
+        restore_error_stack(value)?;
+    }
+    Ok(error)
+}
+
+fn merge_api_error_headers(error: &AuthError) -> AuthResult<Option<crate::Headers>> {
+    let captured = error.captured_headers_value().unwrap_or_default();
+    let explicit =
+        if error.headers_value()?.is_truthy() && !error.headers_value()?.strict_equals(&captured) {
+            Some(crate::Headers::from_field_value(&error.headers_value()?)?)
+        } else {
+            None
+        };
+    if !captured.is_truthy() && explicit.is_none() {
+        return Ok(None);
+    }
+    let mut headers = crate::Headers::new();
+    if captured.is_truthy() {
+        for (name, value) in crate::Headers::from_field_value(&captured)? {
+            headers.append(name, value);
+        }
+    }
+    if let Some(explicit) = explicit {
+        headers.merge(explicit);
+    }
+    Ok(Some(headers))
+}
+
+fn apply_after_result<S: AuthSchema>(
     result: AuthResult<()>,
     request: &AuthRequest,
     response: &mut AuthResponse,
+    context: &AuthContext<S>,
 ) -> AuthResult<()> {
     match result {
-        Ok(()) => response.headers.merge(request.take_response_headers()?),
-        Err(error) if error.is_api_error() => {
-            response.headers.merge(request.take_response_headers()?);
-            response.replace_returned(error.to_auth_response());
+        Ok(()) => response.merge_endpoint_headers(request.take_response_headers()?),
+        Err(error) => {
+            let error = if request.take_hook_error_handled() {
+                error
+            } else {
+                endpoint_error(error, request)?
+            };
+            if !error.is_api_error()? {
+                return Err(error);
+            }
+            if publishes_debug(context)
+                && let Some(value) = error.raw_value()
+            {
+                restore_error_stack(value)?;
+            }
+            let headers = merge_api_error_headers(&error)?;
+            let mut returned = error.to_auth_response();
+            returned.set_endpoint_headers(headers);
+            response.replace_returned(returned);
         }
-        Err(error) => return Err(error),
     }
     Ok(())
 }

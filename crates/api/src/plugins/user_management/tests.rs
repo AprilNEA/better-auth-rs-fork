@@ -87,7 +87,7 @@ async fn test_change_email_same_email() {
     );
 
     let err = plugin.handle_change_email(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/update-user.test.ts :: describe("updateUser") and packages/better-auth/src/api/routes/update-user.ts; adapted to the Rust user-management plugin.
@@ -113,7 +113,7 @@ async fn test_change_email_unauthenticated() {
     );
 
     let err = plugin.handle_change_email(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 401);
+    assert_eq!(err.status_code().unwrap(), 401);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/update-user.test.ts :: describe("updateUser") and packages/better-auth/src/api/routes/update-user.ts; adapted to the Rust user-management plugin.
@@ -397,7 +397,7 @@ async fn test_delete_user_unauthenticated() {
     );
 
     let err = plugin.handle_delete_user(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 401);
+    assert_eq!(err.status_code().unwrap(), 401);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/update-user.test.ts :: describe("updateUser") and packages/better-auth/src/api/routes/update-user.ts; adapted to the Rust user-management plugin.
@@ -427,7 +427,7 @@ async fn test_delete_user_verify_invalid_token() {
         .handle_delete_user_callback(&req, &ctx)
         .await
         .unwrap_err();
-    assert_eq!(err.status_code(), 404);
+    assert_eq!(err.status_code().unwrap(), 404);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/update-user.test.ts :: describe("updateUser") and packages/better-auth/src/api/routes/update-user.ts; adapted to the Rust user-management plugin.
@@ -485,7 +485,7 @@ async fn test_delete_user_before_hook_abort() {
     );
 
     let err = plugin.handle_delete_user(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 403);
+    assert_eq!(err.status_code().unwrap(), 403);
 
     // User should still exist
     let still_exists = ctx
@@ -556,9 +556,12 @@ async fn test_on_request_disabled_change_email_rejects_after_authentication() {
 
     let error = plugin.on_request(&req, &ctx).await.unwrap_err();
     let response = error.to_auth_response();
-    assert_eq!(response.status, 400);
     assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap(),
+        response.api_error_status().unwrap(),
+        better_auth_core::SchemaValue::Typed(400)
+    );
+    assert_eq!(
+        response.api_error_body().unwrap().json().unwrap().unwrap(),
         serde_json::json!({"code":"CHANGE_EMAIL_DISABLED","message":"Change email is disabled"})
     );
 }

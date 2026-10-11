@@ -99,7 +99,12 @@ impl Fixture {
 }
 
 fn body(response: &AuthResponse) -> Value {
-    serde_json::from_slice(&response.body.bytes().unwrap()).unwrap()
+    let value = if response.is_api_error().unwrap() {
+        better_auth_core::ResponseBody::Native(response.api_error_body().unwrap())
+    } else {
+        response.body.clone()
+    };
+    serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
 #[tokio::test]
@@ -118,7 +123,7 @@ async fn admin_permission_reads_reject_null_and_deny_primitive_users_before_writ
             assert!(matches!(error, AuthError::TypeError(ref message)
                 if message == "Cannot read properties of null (reading 'id')"));
         } else {
-            assert_eq!(error.status_code(), 403);
+            assert_eq!(error.status_code().unwrap(), 403);
             assert_eq!(
                 body(&error.to_auth_response())["message"],
                 "You are not allowed to update users"
@@ -251,7 +256,7 @@ async fn admin_has_permission_uses_user_truthiness_before_request_fallback() -> 
                 json!({"permissions":{"user":["create"]}}),
             )?;
             let error = fixture.dispatch(&request, &plugin).await.unwrap_err();
-            assert_eq!(error.status_code(), 400);
+            assert_eq!(error.status_code().unwrap(), 400);
             assert_eq!(body(&error.to_auth_response())["message"], "user not found");
         }
     }
@@ -276,7 +281,7 @@ async fn admin_self_ban_compares_native_ids_without_string_coercion() -> AuthRes
         let same_id = actor_id.strict_equals(&FieldValue::from("17"));
         if same_id {
             let error = result.unwrap_err();
-            assert_eq!(error.status_code(), 400);
+            assert_eq!(error.status_code().unwrap(), 400);
             assert_eq!(
                 body(&error.to_auth_response())["message"],
                 "You cannot ban yourself"
@@ -342,7 +347,7 @@ async fn admin_impersonation_keeps_native_actor_ids_and_allows_authorized_self_t
                 assert_eq!(request.new_session()?.unwrap().session.token, session.token);
             } else {
                 let error = result.unwrap_err();
-                assert_eq!(error.status_code(), 403);
+                assert_eq!(error.status_code().unwrap(), 403);
                 assert_eq!(
                     body(&error.to_auth_response())["message"],
                     "You cannot impersonate admins"

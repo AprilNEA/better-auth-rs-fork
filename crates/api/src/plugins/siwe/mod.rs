@@ -132,11 +132,29 @@ impl SiwePlugin {
             .await
         {
             Ok(response) => Ok(response),
-            Err(cause) if cause.is_api_error() => Err(cause),
-            Err(cause) => Err(AuthResponse::json(
-                401,
-                &json!({"message":"Something went wrong. Please try again later.","error":cause.instrumentation_message(),"status":401}),
-            )?.into()),
+            Err(cause) => {
+                if cause.is_api_error()? {
+                    return Err(cause);
+                }
+                let message = if cause.raw_value().is_none() {
+                    cause.message_value()?
+                } else {
+                    "Unknown error".into()
+                };
+                Err(AuthError::try_api_error(better_auth_core::ApiErrorInit {
+                    status: "UNAUTHORIZED".into(),
+                    body: FieldMap::from([
+                        (
+                            "message".into(),
+                            "Something went wrong. Please try again later.".into(),
+                        ),
+                        ("error".into(), message),
+                        ("status".into(), 401.0.into()),
+                    ])
+                    .into(),
+                    ..Default::default()
+                })?)
+            }
         }
     }
     async fn verify_inner(

@@ -517,7 +517,7 @@ async fn test_resolve_configuration_without_default_is_an_error() {
         .build();
 
     let err = plugin.resolve_configuration(None).unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
     assert_eq!(err.to_string(), "No default api-key configuration found.");
 }
 
@@ -549,7 +549,7 @@ async fn test_create_for_organization_requires_organization_id() {
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
 
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
     assert_eq!(
         err.to_string(),
         "Organization ID is required for organization-owned API keys."

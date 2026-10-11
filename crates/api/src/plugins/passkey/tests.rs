@@ -12,6 +12,53 @@ use better_auth_core::{CreatePasskey, CreateUser, HttpMethod};
 #[path = "descriptor_tests.rs"]
 mod descriptor_tests;
 
+#[test]
+fn verification_catch_preserves_only_better_auth_instances() -> AuthResult<()> {
+    use better_auth_core::{ApiErrorClass, ApiErrorInit};
+
+    for registration in [false, true] {
+        for class in [ApiErrorClass::BetterAuth, ApiErrorClass::BetterCall] {
+            let error = AuthError::try_api_error(ApiErrorInit {
+                class,
+                status: "CONFLICT".into(),
+                body: FieldMap::from([("message".into(), "callback rejected".into())]).into(),
+                ..Default::default()
+            })?;
+            let original = error.raw_value().cloned();
+            let error = super::registration::verification_error(error, registration);
+            if class == ApiErrorClass::BetterAuth {
+                assert!(
+                    error
+                        .raw_value()
+                        .zip(original.as_ref())
+                        .is_some_and(|(value, original)| value.strict_equals(original))
+                );
+            } else {
+                assert_eq!(error.status_code()?, if registration { 500 } else { 400 });
+                assert_eq!(
+                    error.body_value()?.model_property("code")?,
+                    if registration {
+                        "FAILED_TO_VERIFY_REGISTRATION"
+                    } else {
+                        "AUTHENTICATION_FAILED"
+                    }
+                    .into()
+                );
+            }
+        }
+        let structural = AuthError::from_thrown(
+            FieldMap::from([
+                ("name".into(), "APIError".into()),
+                ("statusCode".into(), 409.0.into()),
+            ])
+            .into(),
+        );
+        let error = super::registration::verification_error(structural, registration);
+        assert_eq!(error.status_code()?, if registration { 500 } else { 400 });
+    }
+    Ok(())
+}
+
 fn passkey_plugin() -> PasskeyPlugin {
     PasskeyPlugin::new()
         .rp_id("localhost")
@@ -405,8 +452,13 @@ async fn test_delete_passkey_non_owner_is_forbidden() {
     );
 
     let err = plugin.handle_delete_passkey(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 401);
-    assert!(err.to_auth_response().body.bytes().unwrap().is_empty());
+    assert_eq!(err.status_code().unwrap(), 401);
+    assert!(
+        better_auth_core::ResponseBody::Native(err.body_value().unwrap())
+            .bytes()
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[tokio::test]
@@ -456,7 +508,7 @@ async fn test_update_passkey_non_owner_uses_ts_error_message() {
     );
 
     let err = plugin.handle_update_passkey(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 401);
+    assert_eq!(err.status_code().unwrap(), 401);
     assert_eq!(
         err.to_string(),
         "You are not allowed to register this passkey"

@@ -330,8 +330,10 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
             Err(error) => error,
             Ok(_) => return Err("A different owner changed the persisted credential".into()),
         };
-        assert_eq!(error.status_code(), 401);
-        let body = error.to_auth_response().body.bytes()?.into_owned();
+        assert_eq!(error.status_code().unwrap(), 401);
+        let body = better_auth_core::ResponseBody::Native(error.body_value()?)
+            .bytes()?
+            .into_owned();
         if let Some(expected) = expected {
             assert_eq!(serde_json::from_slice::<Value>(&body)?, expected);
         } else {

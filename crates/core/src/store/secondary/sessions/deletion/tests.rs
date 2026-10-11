@@ -342,14 +342,18 @@ async fn deletion_preserves_native_references_and_stops_before_later_mutations_o
             "invalid-list" => assert_eq!(
                 result
                     .err()
-                    .map(|error| error.instrumentation_message())
+                    .map(|error| error
+                        .instrumentation_message()
+                        .expect("fixture error message"))
                     .as_deref(),
                 Some("list.filter is not a function")
             ),
             "invalid-ttl" => assert_eq!(
                 result
                     .err()
-                    .map(|error| error.instrumentation_message())
+                    .map(|error| error
+                        .instrumentation_message()
+                        .expect("fixture error message"))
                     .as_deref(),
                 Some("expiresAt.getTime is not a function")
             ),

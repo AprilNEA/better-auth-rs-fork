@@ -186,7 +186,16 @@ fn request(url: &str) -> AuthRequest {
 fn response(result: AuthResult<AuthResponse>) -> AuthResponse {
     match result {
         Ok(response) => response,
-        Err(error) if error.is_api_error() => error.to_auth_response(),
+        Err(error)
+            if error
+                .is_api_error()
+                .expect("The fixture error must be classifiable") =>
+        {
+            error
+                .to_auth_response()
+                .into_http_response()
+                .expect("The fixture error must materialize")
+        }
         Err(error) => panic!("Unexpected OpenAPI fixture failure: {error}"),
     }
 }

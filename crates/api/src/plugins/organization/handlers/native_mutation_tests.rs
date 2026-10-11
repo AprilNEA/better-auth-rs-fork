@@ -399,11 +399,14 @@ async fn trusted_member_capacity_failure_cleans_up_native_identifiers() {
         )
         .await;
     let error = result.unwrap_err();
-    assert!(error.is_api_error());
+    assert!(error.is_api_error().unwrap());
     let response = error.to_auth_response();
-    assert_eq!(response.status, 403);
     assert_eq!(
-        response.body.json().unwrap(),
+        response.api_error_status().unwrap(),
+        better_auth_core::SchemaValue::Typed(403)
+    );
+    assert_eq!(
+        response.api_error_body().unwrap().json().unwrap(),
         Some(serde_json::json!({
             "code": "TEAM_MEMBER_LIMIT_REACHED",
             "message": "Team member limit reached"

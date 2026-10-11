@@ -125,7 +125,7 @@ async fn check<S: AuthSchema>(
             ));
         };
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message()?,
             "Unexpected error: User not found for member"
         );
     } else {

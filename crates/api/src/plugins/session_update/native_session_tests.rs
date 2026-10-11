@@ -127,7 +127,12 @@ impl Fixture {
 }
 
 fn body(response: &AuthResponse) -> Value {
-    serde_json::from_slice(&response.body.bytes().unwrap()).unwrap()
+    let value = if response.is_api_error().unwrap() {
+        better_auth_core::ResponseBody::Native(response.api_error_body().unwrap())
+    } else {
+        response.body.clone()
+    };
+    serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
 #[tokio::test]
@@ -276,13 +281,22 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
                 result?
             } else {
                 let error = result.unwrap_err();
-                assert_eq!(error.status_code(), 400);
+                assert_eq!(error.status_code().unwrap(), 400);
                 error.to_auth_response()
             };
-            assert!(response.is_api_error());
-            assert_eq!(response.api_error_status(), Some(400));
-            assert_eq!(response.native_status(), NativeResponseStatus::Value(400));
-            assert_eq!(response.status, 400);
+            assert_eq!(response.is_api_error()?, !http);
+            if http {
+                assert_eq!(
+                    response.native_status(),
+                    NativeResponseStatus::Present(better_auth_core::SchemaValue::Typed(400))
+                );
+                assert_eq!(response.status, 400);
+            } else {
+                assert_eq!(
+                    response.api_error_status()?,
+                    better_auth_core::SchemaValue::Typed(400)
+                );
+            }
             assert_eq!(body(&response), expected);
             assert!(request.new_session()?.is_none());
             assert_eq!(
@@ -506,7 +520,7 @@ async fn two_factor_primitive_users_preserve_sender_payload_and_branch_order() -
         let error = dispatch_plugin(&req, &fixture.ctx, &plugin)
             .await
             .unwrap_err();
-        assert_eq!(error.status_code(), 400);
+        assert_eq!(error.status_code().unwrap(), 400);
         assert_eq!(
             body(&error.to_auth_response())["message"],
             "Two factor isn't enabled"
@@ -565,7 +579,7 @@ async fn two_factor_native_actor_keeps_backup_code_cas_and_response_fields() -> 
                 json!({"token":fixture.session.token.typed()?,"user":{"id":17,"native":false}})
             );
         } else {
-            assert_eq!(result.unwrap_err().status_code(), 401);
+            assert_eq!(result.unwrap_err().status_code().unwrap(), 401);
         }
         let row = fixture
             .ctx
@@ -661,7 +675,8 @@ async fn consumers_read_real_many_relationships_without_a_typed_user_gate() -> A
                 .on_request(&req, &ctx)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             400
         );
         let fixture = Fixture {

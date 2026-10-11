@@ -246,7 +246,8 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
                 .handle_get(&get, &ctx)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             404
         );
         assert_eq!(
@@ -254,7 +255,8 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
                 .handle_update(&update, &ctx)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             404
         );
         assert_eq!(
@@ -262,7 +264,8 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
                 .handle_delete(&delete, &ctx)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             404
         );
         assert_eq!(list(&plugin, &ctx).await["total"], 0);
@@ -359,7 +362,7 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
                 .await,
         ] {
             let error = result.unwrap_err();
-            assert_eq!(error.status_code(), 401, "{}", sample["name"]);
+            assert_eq!(error.status_code().unwrap(), 401, "{}", sample["name"]);
             assert_eq!(
                 json_body(&error.to_auth_response())["code"],
                 "UNAUTHORIZED_SESSION"
@@ -466,7 +469,8 @@ async fn secondary_null_and_missing_references_retain_distinct_strict_owners() {
                 )
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             404
         );
     }
@@ -535,7 +539,7 @@ async fn deleting_api_keys_only_rejects_a_strict_boolean_ban() {
             .await;
         if banned == json!(true) {
             let error = response.unwrap_err();
-            assert_eq!(error.status_code(), 401);
+            assert_eq!(error.status_code().unwrap(), 401);
             assert_eq!(
                 json_body(&error.to_auth_response()),
                 json!({"code":"USER_BANNED", "message":"User is banned"})

@@ -113,8 +113,8 @@ where
         dispatcher.run(&mut input, true, context, None, handler),
     )
     .await?;
-    if response.is_api_error() {
-        Err(response.into())
+    if response.is_api_error()? {
+        Err(AuthError::from_returned_response(response)?)
     } else {
         Ok(response)
     }

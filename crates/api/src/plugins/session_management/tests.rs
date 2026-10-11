@@ -68,7 +68,10 @@ async fn storage_failure_returns_500_and_disables_http_caching() {
     ctx.session_manager()
         .finish_response(&req, &mut response)
         .unwrap();
-    assert_eq!(response.status, 500);
+    assert_eq!(
+        response.api_error_status().unwrap(),
+        better_auth_core::SchemaValue::Typed(500)
+    );
     assert_eq!(
         response.headers.get("Cache-Control").map(String::as_str),
         Some("no-store")
@@ -77,8 +80,7 @@ async fn storage_failure_returns_500_and_disables_http_caching() {
         response.headers.get("Pragma").map(String::as_str),
         Some("no-cache")
     );
-    let body: serde_json::Value =
-        serde_json::from_slice(response.body.bytes().unwrap().as_ref()).unwrap();
+    let body = response.api_error_body().unwrap().json().unwrap().unwrap();
     assert_eq!(body["code"], "FAILED_TO_GET_SESSION");
     assert_eq!(body["message"], "Failed to get session");
 }
@@ -653,7 +655,7 @@ async fn test_plugin_on_request_routing() {
         Some(b"{}".to_vec()),
     );
     let err = plugin.on_request(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 405);
+    assert_eq!(err.status_code().unwrap(), 405);
 
     // Test invalid route
     let req = test_helpers::create_auth_request_no_query(

@@ -192,7 +192,7 @@ impl Fixture {
                     outcome.error().is_some(),
                     "{outcome:?} must complete native dispatch"
                 );
-                error.to_auth_response()
+                error.to_auth_response().into_http_response()?
             }
             Err(error) => return Err(error),
         };

@@ -270,7 +270,7 @@ async fn native_values_and_http_bodies_match_the_pinned_response_contract() -> A
                     if short {
                         NativeResponseStatus::Absent
                     } else {
-                        NativeResponseStatus::Value(201)
+                        NativeResponseStatus::Present(crate::SchemaValue::Typed(201))
                     }
                 );
                 let observed = hooks.observed.lock().unwrap();
@@ -361,7 +361,10 @@ fn materialization_preserves_bun_status_and_body_construction() -> AuthResult<()
         ] {
             let native = AuthResponse::native(status, value.clone());
             same_body(&native.body, &ResponseBody::Native(value));
-            assert_eq!(native.native_status(), NativeResponseStatus::Value(status));
+            assert_eq!(
+                native.native_status(),
+                NativeResponseStatus::Present(crate::SchemaValue::Typed(status))
+            );
             assert!(native.headers.is_empty());
             let response = native.into_http_response()?;
             for response in [response.clone(), response.into_http_response()?] {
@@ -409,7 +412,10 @@ async fn invalid_response_status_preserves_native_values_and_range_errors() -> A
                 move |_| async move { Ok(output) },
             )
             .await?;
-        assert_eq!(native.native_status(), NativeResponseStatus::Value(status));
+        assert_eq!(
+            native.native_status(),
+            NativeResponseStatus::Present(crate::SchemaValue::Typed(status))
+        );
         same_body(&native.body, &ResponseBody::Native(value.clone()));
         let mut request = request;
         let error = dispatcher
@@ -422,9 +428,9 @@ async fn invalid_response_status_preserves_native_values_and_range_errors() -> A
             format!("The status provided ({status}) must be 101 or in the range of [200, 599]");
         assert!(matches!(&error, crate::AuthError::RangeError(actual) if actual == &message));
         assert_eq!(error.to_string(), message);
-        assert_eq!(error.instrumentation_message(), message);
-        assert!(!error.is_api_error());
-        assert_eq!(error.status_code(), 500);
+        assert_eq!(error.instrumentation_message()?, message);
+        assert!(!error.is_api_error()?);
+        assert_eq!(error.status_code()?, crate::SchemaValue::Typed(500));
         let response = error.to_http_response()?;
         assert_eq!(response.status, 500);
         assert!(response.headers.is_empty());

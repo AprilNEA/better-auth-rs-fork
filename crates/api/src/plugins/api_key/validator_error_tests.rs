@@ -20,6 +20,8 @@ enum Failure {
     Range,
     DataClone,
     Api(u16),
+    StructuralApi,
+    BetterCallApi,
 }
 
 impl Failure {
@@ -43,7 +45,29 @@ impl Failure {
             Self::Range => AuthError::RangeError("Invalid array length".into()),
             Self::DataClone => AuthError::DataClone,
             Self::Api(status) => AuthResponse::json(status, &api_error_body())?.into(),
+            Self::StructuralApi => AuthError::from_thrown(
+                FieldMap::from([
+                    ("name".into(), "APIError".into()),
+                    ("statusCode".into(), 409.0.into()),
+                    ("body".into(), api_error_body().into()),
+                ])
+                .into(),
+            ),
+            Self::BetterCallApi => AuthError::try_api_error(better_auth_core::ApiErrorInit {
+                status: "CONFLICT".into(),
+                body: api_error_body().into(),
+                class: better_auth_core::ApiErrorClass::BetterCall,
+                ..Default::default()
+            })?,
         })
+    }
+
+    fn api_status(self) -> Option<u16> {
+        match self {
+            Self::Api(status) => Some(status),
+            Self::StructuralApi | Self::BetterCallApi => Some(409),
+            _ => None,
+        }
     }
 }
 
@@ -177,6 +201,8 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
         Failure::DataClone,
         Failure::Api(403),
         Failure::Api(500),
+        Failure::StructuralApi,
+        Failure::BetterCallApi,
     ] {
         for scoped in [false, true] {
             let trace = Arc::new(Trace::default());
@@ -231,15 +257,18 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
                     )));
                 };
                 assert_eq!(error_pointer(&error), trace.original.load(Ordering::SeqCst));
-                if let Failure::Api(status) = failure {
+                if let Some(status) = failure.api_status() {
                     let response = error.to_auth_response();
-                    assert_eq!(response.status, status);
-                    assert_eq!(response.body.json()?, Some(api_error_body()));
+                    assert_eq!(
+                        response.api_error_status()?,
+                        better_auth_core::SchemaValue::Typed(status)
+                    );
+                    assert_eq!(response.api_error_body()?.json()?, Some(api_error_body()));
                 } else {
-                    assert!(!error.is_api_error());
+                    assert!(!error.is_api_error().unwrap());
                 }
             } else {
-                let is_api = matches!(failure, Failure::Api(_));
+                let is_api = failure.api_status().is_some();
                 assert_eq!(
                     matches!(error, ApiKeyVerificationError::Rejected(_)),
                     is_api

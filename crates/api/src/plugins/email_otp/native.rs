@@ -156,13 +156,10 @@ fn validate_query(query: Option<serde_json::Value>) -> AuthResult<Option<serde_j
 fn project(input: Option<serde_json::Value>, location: &str) -> AuthResult<serde_json::Value> {
     use crate::plugins::json_body::{invalid_type, validation_error};
     use serde_json::{Map, Value};
-    let body = input.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        AuthError::from(validation_error(&invalid_type(
-            location,
-            "object",
-            input.as_ref(),
-        )))
-    })?;
+    let body = input
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type(location, "object", input.as_ref())))?;
     let mut errors = Vec::new();
     if !body.get("email").is_some_and(Value::is_string) {
         errors.push(invalid_type(
@@ -178,7 +175,7 @@ fn project(input: Option<serde_json::Value>, location: &str) -> AuthResult<serde
         errors.push(format!("[{location}.type] Invalid option: expected one of \"email-verification\"|\"sign-in\"|\"forget-password\"|\"change-email\""));
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let projected: Map<String, Value> = body
         .iter()

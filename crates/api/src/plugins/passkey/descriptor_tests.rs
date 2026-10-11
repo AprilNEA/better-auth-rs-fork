@@ -162,7 +162,7 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
                     .await
             };
             let Some(expected_id) = expected_id else {
-                assert_eq!(response.unwrap_err().status_code(), 500);
+                assert_eq!(response.unwrap_err().status_code().unwrap(), 500);
                 continue;
             };
             let response = response.unwrap();

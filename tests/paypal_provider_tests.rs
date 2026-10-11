@@ -312,7 +312,9 @@ async fn paypal_code_account_info_and_refresh_use_the_complete_sqlite_dispatcher
             .call_endpoint(HttpMethod::Get, "/account-info", info_input())
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .into_http_response()
+            .unwrap();
         assert_eq!(error.status, 401);
         assert_eq!(
             serde_json::from_slice::<Value>(&error.body.bytes().unwrap()).unwrap(),
@@ -332,7 +334,9 @@ async fn paypal_code_account_info_and_refresh_use_the_complete_sqlite_dispatcher
         .call_endpoint(HttpMethod::Get, "/account-info", info_input())
         .await
         .unwrap_err()
-        .to_auth_response();
+        .to_auth_response()
+        .into_http_response()
+        .unwrap();
     assert_eq!(error.status, 418);
     assert_eq!(
         serde_json::from_slice::<Value>(&error.body.bytes().unwrap()).unwrap(),

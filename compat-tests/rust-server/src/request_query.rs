@@ -279,7 +279,10 @@ fn configure<S: AuthSchema>(
         .plugin(Trace(events, body))
 }
 fn wire(response: AuthResult<AuthResponse>) -> Response {
-    let response = response.unwrap_or_else(|error| error.to_auth_response());
+    let response = response
+        .unwrap_or_else(|error| error.to_auth_response())
+        .into_http_response()
+        .expect("The fixture response must materialize");
     let mut output = (
         StatusCode::from_u16(response.status).unwrap(),
         response

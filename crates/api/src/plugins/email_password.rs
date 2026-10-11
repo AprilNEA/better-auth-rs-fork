@@ -828,7 +828,7 @@ mod tests {
         let long_password = format!("A1!{}", "a".repeat(126)); // 129 chars total
         let req = create_signup_request("long@example.com", &long_password);
         let err = plugin.handle_sign_up(&req, &ctx).await.unwrap_err();
-        assert_eq!(err.status_code(), 400);
+        assert_eq!(err.status_code().unwrap(), 400);
 
         // Password of exactly 128 chars should be accepted
         let ok_password = format!("A1!{}", "a".repeat(125)); // 128 chars total
@@ -1078,7 +1078,9 @@ mod tests {
             .handle_is_username_available(&req, &ctx)
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .into_http_response()
+            .unwrap();
         assert_eq!(response.status, 422);
         let json: serde_json::Value =
             serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
@@ -1105,7 +1107,9 @@ mod tests {
             .handle_is_username_available(&req, &ctx)
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .into_http_response()
+            .unwrap();
         assert_eq!(response.status, 422);
         let json: serde_json::Value =
             serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();

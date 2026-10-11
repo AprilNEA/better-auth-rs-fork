@@ -1,8 +1,8 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth_core::{
-    AuthContext, AuthError, AuthRecordFields, AuthRequest, AuthResult, AuthSchema, CreatePasskey,
-    CreateSession, FieldMap, FieldValue, session::NativeSessionData, store::AuthTransaction,
-    wire::PasskeyView,
+    ApiErrorClass, AuthContext, AuthError, AuthRecordFields, AuthRequest, AuthResult, AuthSchema,
+    CreatePasskey, CreateSession, FieldMap, FieldValue, session::NativeSessionData,
+    store::AuthTransaction, wire::PasskeyView,
 };
 use chrono::Utc;
 use serde_json::{Map, Value};
@@ -84,8 +84,7 @@ pub(super) async fn resolve_user<S: AuthSchema>(
             PasskeyEndpoint::new(ctx, req, &Value::Null, &users),
             req.query_string("context")?,
         )
-        .await
-        .map_err(generation_error)?;
+        .await?;
     if !user.id.is_truthy()? || !user.name.is_truthy()? {
         return Err(invalid_user());
     }
@@ -99,9 +98,7 @@ pub(super) async fn resolve_extensions(
     match config {
         PasskeyExtensions::None => Ok(None),
         PasskeyExtensions::Static(value) => Ok(Some(value.clone())),
-        PasskeyExtensions::Dynamic(resolver) => {
-            resolver.extensions(ctx).await.map_err(generation_error)
-        }
+        PasskeyExtensions::Dynamic(resolver) => resolver.extensions(ctx).await,
     }
 }
 fn invalid_user() -> AuthError {
@@ -118,23 +115,8 @@ fn forbidden_user() -> AuthError {
         message: "You are not allowed to register this passkey",
     }
 }
-fn generation_error(error: AuthError) -> AuthError {
-    if error.status_code() >= 500
-        && !matches!(error, AuthError::Response(_) | AuthError::Upstream { .. })
-    {
-        better_auth_core::observability::logger::current().error(
-            "Passkey options callback failed",
-            &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
-        better_auth_core::AuthResponse::new(500).into()
-    } else {
-        error
-    }
-}
 pub(super) fn verification_error(error: AuthError, registration: bool) -> AuthError {
-    if error.status_code() >= 500
-        && !matches!(error, AuthError::Response(_) | AuthError::Upstream { .. })
-    {
+    if !error.is_api_error_instance(ApiErrorClass::BetterAuth) {
         better_auth_core::observability::logger::current().error(
             "Passkey verification failed",
             &[better_auth_core::observability::LogArgument::Error(&error)],

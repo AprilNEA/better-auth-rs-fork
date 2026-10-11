@@ -12,10 +12,7 @@ pub(crate) async fn handle_sign_out(
     req: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AuthResponse> {
-    let body = match json_body::sign_out(req) {
-        Ok(body) => body,
-        Err(response) => return Ok(response),
-    };
+    let body = json_body::sign_out(req)?;
     let Some(config) = ctx.extensions.get::<std::sync::Arc<OAuthConfig>>() else {
         return crate::plugins::session_management::handle_sign_out(req, ctx).await;
     };

@@ -91,10 +91,7 @@ impl PasskeyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match VerifyRegistrationRequest::parse(req) {
-            Ok(v) => v,
-            Err(resp) => return Ok(resp),
-        };
+        let body = VerifyRegistrationRequest::parse(req)?;
         let user = if self.config.registration.require_session {
             registration::registration_session(ctx, req, &self.config).await?
         } else {
@@ -133,10 +130,7 @@ impl PasskeyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body = match VerifyAuthenticationRequest::parse(req) {
-            Ok(v) => v,
-            Err(resp) => return Ok(resp),
-        };
+        let body = VerifyAuthenticationRequest::parse(req)?;
         let ip_address = ctx.config.advanced.ip_address.resolve(req);
         let user_agent = req.headers.get("user-agent").cloned();
         match verify_authentication_core(&body, req, &self.config, ip_address, user_agent, ctx)

@@ -261,14 +261,14 @@ async fn run(base_url: &str, input: Value) -> AuthResult<Value> {
     };
     let output = match result {
         Ok(response) => observe(response, &input, native),
-        Err(error) if error.is_api_error() => {
+        Err(error) if error.is_api_error()? => {
+            let status = error.status_code()?;
+            let body = error
+                .body_value()?
+                .json()?
+                .unwrap_or_else(|| Value::String(String::new()));
             let response = error.to_auth_response();
-            let body = if response.body.is_empty() {
-                Value::String(String::new())
-            } else {
-                serde_json::from_slice(&response.body.bytes()?)?
-            };
-            json!({"thrown":true,"status":response.status,"body":body,"location":response.headers.get("location")})
+            json!({"thrown":true,"status":status,"body":body,"location":response.api_error_headers()?.get("location")})
         }
         Err(AuthError::Internal(message))
             if message == "original failure" || message == "callback failure" =>

@@ -455,7 +455,7 @@ async fn social_profile_callback_errors_propagate_without_running_later_callback
         } else {
             matches!(error, AuthError::Internal(_))
         });
-        let actual = json!({"message":error.instrumentation_message(),"calls":*calls.lock().map_err(|_| "callback log poisoned")?});
+        let actual = json!({"message":error.instrumentation_message().unwrap(),"calls":*calls.lock().map_err(|_| "callback log poisoned")?});
         assert_eq!(
             Some(&actual),
             fixture.get("errors").and_then(|cases| cases.get(mode))

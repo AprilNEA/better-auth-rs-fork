@@ -202,10 +202,10 @@ async fn check<S: AuthSchema>(
     let (status, expected) = case.expected();
     let actual = if native {
         let error = required(result.err(), "Native endpoint must reject the operation")?;
-        assert!(error.is_api_error());
-        assert_eq!(error.status_code(), status, "{case:?}");
+        assert!(error.is_api_error()?);
+        assert_eq!(error.status_code()?, status, "{case:?}");
+        ordered(&error.body_value()?, &expected)?;
         let response = error.to_auth_response();
-        ordered(&response.body.field_value()?, &expected)?;
         response.into_http_response()?
     } else {
         result?

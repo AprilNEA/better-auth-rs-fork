@@ -385,8 +385,10 @@ fn parse_body(req: &AuthRequest) -> AuthResult<Option<serde_json::Value>> {
         return Ok(None);
     };
     let object = body.as_object().ok_or_else(|| {
-        better_auth_core::AuthError::from(crate::plugins::json_body::validation_error(
-            &crate::plugins::json_body::invalid_type("body", "object", Some(&body)),
+        crate::plugins::json_body::validation_error(&crate::plugins::json_body::invalid_type(
+            "body",
+            "object",
+            Some(&body),
         ))
     })?;
     let mut output = serde_json::Map::new();
@@ -413,7 +415,9 @@ fn parse_body(req: &AuthRequest) -> AuthResult<Option<serde_json::Value>> {
         }
     }
     if !errors.is_empty() {
-        return Err(crate::plugins::json_body::validation_error(&errors.join("; ")).into());
+        return Err(crate::plugins::json_body::validation_error(
+            &errors.join("; "),
+        ));
     }
     Ok(Some(serde_json::Value::Object(output)))
 }

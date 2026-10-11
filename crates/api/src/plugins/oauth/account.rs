@@ -36,9 +36,7 @@ pub(super) fn account_body(
     let selection =
         AccountSelection::from_value(projection.clone().unwrap_or(serde_json::Value::Null))
             .map_err(|message| {
-                AuthError::from(crate::plugins::json_body::validation_error(&format!(
-                    "[body] {message}"
-                )))
+                crate::plugins::json_body::validation_error(&format!("[body] {message}"))
             })?;
     Ok(better_auth_core::endpoint_input::ValidatedBody::new(
         projection, selection,

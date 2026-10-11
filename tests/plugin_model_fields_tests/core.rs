@@ -217,7 +217,7 @@ async fn all_declarations_precede_initialization_and_failures_keep_completed_wri
                 .err()
                 .ok_or_else(|| AuthError::internal("Expected initialization failure"))?;
             assert!(matches!(&error, AuthError::BadRequest(_)));
-            assert_eq!(error.instrumentation_message(), "initialization stopped");
+            assert_eq!(error.instrumentation_message()?, "initialization stopped");
         } else {
             let auth = result?;
             expected.push("init:last");

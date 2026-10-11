@@ -837,7 +837,8 @@ mod tests {
             handle_team_request(&active, &ctx, &config)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             400
         );
         let active = create_auth_json_request_no_query(
@@ -868,7 +869,8 @@ mod tests {
             handle_team_request(&remove, &ctx, &config)
                 .await
                 .unwrap_err()
-                .status_code(),
+                .status_code()
+                .unwrap(),
             403
         );
     }

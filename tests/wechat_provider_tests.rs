@@ -257,7 +257,9 @@ async fn wechat_login_saved_account_info_and_refresh_use_normal_sqlite_lifecycle
         )
         .await
         .unwrap_err()
-        .to_auth_response();
+        .to_auth_response()
+        .into_http_response()
+        .unwrap();
     assert_eq!(info.status, 401);
     assert_eq!(
         serde_json::from_slice::<Value>(&info.body.bytes().unwrap()).unwrap(),

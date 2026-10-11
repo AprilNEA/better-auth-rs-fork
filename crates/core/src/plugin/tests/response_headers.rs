@@ -51,10 +51,16 @@ struct Hooks {
 }
 
 impl Hooks {
-    fn observe(&self, phase: &str, response: &AuthResponse) {
+    fn observe(&self, phase: &str, response: &AuthResponse) -> AuthResult<()> {
+        let body = if response.is_api_error()? {
+            response.api_error_body()?.json()?
+        } else {
+            response.body.json()?
+        };
         self.events.lock().unwrap().push(json!({
-            "phase":phase,"headers":headers(&response.headers),"body":response.body.json().unwrap(),
+            "phase":phase,"headers":headers(&response.headers),"body":body,
         }));
+        Ok(())
     }
 }
 
@@ -87,7 +93,7 @@ impl AfterEndpointHook<S> for Hooks {
         returned: &mut AuthResponse,
         _: &AuthContext<S>,
     ) -> AuthResult<()> {
-        self.observe("after", returned);
+        self.observe("after", returned)?;
         request.set_response_header("x-after", "1")?;
         match self.mode {
             "replace" => returned
@@ -124,8 +130,7 @@ impl AuthPlugin<S> for Hooks {
         response: &mut AuthResponse,
         _: &AuthContext<S>,
     ) -> AuthResult<()> {
-        self.observe("observer", response);
-        Ok(())
+        self.observe("observer", response)
     }
 }
 
@@ -190,14 +195,18 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                     Ok(value) => value,
                     Err(error) => error.to_auth_response(),
                 };
-                assert_eq!(returned.status, if failed { 400 } else { 200 });
+                if http {
+                    assert_eq!(returned.status, if failed { 400 } else { 200 });
+                } else if failed {
+                    assert_eq!(returned.api_error_status()?, crate::SchemaValue::Typed(400));
+                }
                 if !failed {
                     assert_eq!(
                         returned.native_status(),
                         if mode == "before" {
                             crate::NativeResponseStatus::Absent
                         } else {
-                            crate::NativeResponseStatus::Undefined
+                            crate::NativeResponseStatus::Present(crate::SchemaValue::Undefined)
                         }
                     );
                 }
@@ -206,7 +215,12 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                 } else {
                     json!({"phase": match mode { "before" => "before", "replace" | "replace-json" => "after", _ => "endpoint" }})
                 };
-                assert_eq!(returned.body.json()?, Some(expected_body.clone()));
+                let body = if failed && !http {
+                    returned.api_error_body()?.json()?
+                } else {
+                    returned.body.json()?
+                };
+                assert_eq!(body, Some(expected_body.clone()));
                 let mut expected_headers = BTreeMap::new();
                 if let Some(value) = content_type {
                     let _ = expected_headers.insert("content-type".into(), value.into());
@@ -228,8 +242,17 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                     let _ =
                         expected_headers.insert("content-type".into(), "application/json".into());
                 }
+                let actual_headers = if failed && !http {
+                    if mode == "before-error" {
+                        returned.api_error_headers()?
+                    } else {
+                        returned.captured_headers()?.unwrap()
+                    }
+                } else {
+                    returned.headers.clone()
+                };
                 assert_eq!(
-                    headers(&returned.headers),
+                    headers(&actual_headers),
                     expected_headers,
                     "{mode} {content_type:?} {http}"
                 );
@@ -265,13 +288,13 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                     {
                         let _ = explicit.insert("content-type".into(), value.into());
                     }
-                    assert_eq!(headers(returned.api_error_headers().unwrap()), explicit);
+                    assert_eq!(headers(&returned.api_error_headers()?), explicit);
                     let captured = if mode == "before-error" {
                         BTreeMap::from([("x-before".to_owned(), "1".to_owned())])
                     } else {
                         native_headers
                     };
-                    assert_eq!(headers(returned.captured_headers().unwrap()), captured);
+                    assert_eq!(headers(&returned.captured_headers()?.unwrap()), captured);
                 }
                 let output = returned
                     .into_http_response()?
@@ -366,16 +389,25 @@ async fn json_http_output_strips_request_headers_but_native_output_preserves_the
             };
             assert_eq!(result.is_err(), failed && !http);
             let returned = result.unwrap_or_else(crate::AuthError::to_auth_response);
-            assert_eq!(returned.body.json()?, Some(body));
+            let returned_body = if failed && !http {
+                returned.api_error_body()?.json()?
+            } else {
+                returned.body.json()?
+            };
+            assert_eq!(returned_body, Some(body));
+            let returned_headers = if failed && !http {
+                returned.captured_headers()?.unwrap()
+            } else {
+                returned.headers.clone()
+            };
             assert_eq!(
-                returned
-                    .headers
+                returned_headers
                     .get_all("set-cookie")
                     .map(String::as_str)
                     .collect::<Vec<_>>(),
                 ["first=1", "second=2"]
             );
-            let mut actual = headers(&returned.headers);
+            let mut actual = headers(&returned_headers);
             let _ = actual.remove("set-cookie");
             if http {
                 supplied.retain(|name, _| !request_headers.contains(&name.as_str()));
@@ -546,7 +578,7 @@ async fn explicit_responses_keep_owned_headers_separate_until_http_materializati
                     if mode == "before" {
                         crate::NativeResponseStatus::Absent
                     } else {
-                        crate::NativeResponseStatus::Undefined
+                        crate::NativeResponseStatus::Present(crate::SchemaValue::Undefined)
                     }
                 );
                 assert_eq!(returned.body.bytes()?.as_ref(), b"explicit body");

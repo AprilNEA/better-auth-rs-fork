@@ -217,7 +217,7 @@ async fn check(database: DatabaseConnection, backend: &str) -> TestResult {
                     assert_eq!(*events.lock().unwrap(), expected_events, "{label}");
                     if failed {
                         assert_eq!(
-                            result.unwrap_err().instrumentation_message(),
+                            result.unwrap_err().instrumentation_message()?,
                             "raw-column-stop",
                             "{label}"
                         );

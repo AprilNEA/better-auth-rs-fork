@@ -33,7 +33,9 @@ fn fixture() -> JsonValue {
 fn owner_schema(store: &EphemeralStore) -> JsonValue {
     match AccountOwner::validate_schema(&store.config, &store.model_fields, |_, _| false) {
         Ok(()) => JsonValue::Null,
-        Err(error) => json!({ "error": error.instrumentation_message() }),
+        Err(error) => {
+            json!({ "error": error.instrumentation_message().expect("fixture error message") })
+        }
     }
 }
 
@@ -158,7 +160,7 @@ async fn schema_history_memory_input_failure_preserves_callback_and_mutation() {
         .await
         .unwrap_err();
     assert_eq!(
-        json!({"error": error.instrumentation_message()}),
+        json!({"error": error.instrumentation_message().expect("fixture error message")}),
         expected["observations"][1]["result"]
     );
     assert_eq!(
@@ -183,7 +185,7 @@ async fn schema_history_memory_input_failure_preserves_callback_and_mutation() {
         .await
         .unwrap_err();
     assert_eq!(
-        json!({"error": error.instrumentation_message()}),
+        json!({"error": error.instrumentation_message().expect("fixture error message")}),
         expected["observations"][3]["result"]
     );
 }

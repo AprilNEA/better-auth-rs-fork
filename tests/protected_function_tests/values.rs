@@ -184,7 +184,7 @@ fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult
                 Err(error) => {
                     assert!(matches!(error, AuthError::Internal(_)));
                     assert_eq!(
-                        error.instrumentation_message(),
+                        error.instrumentation_message()?,
                         expected["error"]["message"]
                     );
                     assert_eq!(expected["error"]["name"], "Error");
@@ -215,7 +215,7 @@ fn function_handles_preserve_identity_and_require_explicit_invocation() -> AuthR
     assert_eq!(
         better_auth_core::utils::symmetric::decrypt_field("function-type-diagnostic", &alias)
             .unwrap_err()
-            .instrumentation_message(),
+            .instrumentation_message()?,
         "hex string expected, got function"
     );
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 0);
@@ -291,7 +291,7 @@ fn json_and_recursive_clone_boundaries_preserve_captured_function_behavior() -> 
         assert!(matches!(result, Err(AuthError::DataClone)));
         let error = result.unwrap_err();
         assert_eq!(
-            error.instrumentation_message(),
+            error.instrumentation_message()?,
             operation(case, "direct:public-output")["error"]["message"]
         );
     }

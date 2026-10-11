@@ -5,13 +5,10 @@ use serde_json::{Map, Value};
 
 fn parse_reset(req: &AuthRequest) -> AuthResult<(ResetPasswordRequest, Value)> {
     let body = req.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let mut errors = Vec::new();
     let mut output = Map::new();
     for (name, required) in [("newPassword", true), ("token", false)] {
@@ -24,7 +21,7 @@ fn parse_reset(req: &AuthRequest) -> AuthResult<(ResetPasswordRequest, Value)> {
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let projection = Value::Object(output);
     Ok((serde_json::from_value(projection.clone())?, projection))
@@ -50,13 +47,10 @@ fn request_reset_input(
 
 fn change_input(req: &AuthRequest) -> AuthResult<(super::types::ChangePasswordRequest, Value)> {
     let body = req.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let mut errors = Vec::new();
     let mut output = Map::new();
     for (name, expected, required) in [
@@ -73,7 +67,7 @@ fn change_input(req: &AuthRequest) -> AuthResult<(super::types::ChangePasswordRe
         }
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let projection = Value::Object(output);
     Ok((serde_json::from_value(projection.clone())?, projection))
@@ -81,20 +75,16 @@ fn change_input(req: &AuthRequest) -> AuthResult<(super::types::ChangePasswordRe
 
 fn verify_input(req: &AuthRequest) -> AuthResult<(super::types::VerifyPasswordRequest, Value)> {
     let body = req.input_body()?;
-    let object = body.as_ref().and_then(Value::as_object).ok_or_else(|| {
-        better_auth_core::AuthError::from(validation_error(&invalid_type(
-            "body",
-            "object",
-            body.as_ref(),
-        )))
-    })?;
+    let object = body
+        .as_ref()
+        .and_then(Value::as_object)
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", body.as_ref())))?;
     let Some(Value::String(password)) = object.get("password") else {
         return Err(validation_error(&invalid_type(
             "body.password",
             "string",
             object.get("password"),
-        ))
-        .into());
+        )));
     };
     Ok((
         super::types::VerifyPasswordRequest {

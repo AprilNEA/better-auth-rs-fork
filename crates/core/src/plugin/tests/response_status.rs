@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 
 use crate::{
-    AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute, BeforeRequestAction,
-    HttpMethod, NativeResponseStatus,
+    AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+    BeforeRequestAction, HttpMethod, NativeResponseStatus,
     endpoint_dispatch::EndpointDispatcher,
     observability::{AfterEndpointHook, BeforeEndpointHook, EndpointHooks},
     store::{EphemeralStore, StatelessSchema as S},
@@ -30,23 +30,24 @@ fn returned(kind: Output, phase: &str, error_status: u16) -> AuthResult<AuthResp
         Output::Json => AuthResponse::json(None, &json!({"phase":phase})),
         Output::Response => Ok(AuthResponse::text(207, phase)),
         Output::ReturnError | Output::ThrowError => {
-            let error = AuthResponse::json(
+            let error = AuthError::from(AuthResponse::json(
                 error_status,
                 &json!({"code":"STATUS_ERROR", "message":phase}),
-            )?
-            .into_api_error();
+            )?);
             if kind == Output::ThrowError {
-                Err(error.into())
+                Err(error)
             } else {
-                Ok(error)
+                Ok(error.to_auth_response())
             }
         }
     }
 }
 
 fn observation(response: &AuthResponse) -> AuthResult<Value> {
-    if let Some(status) = response.api_error_status() {
-        Ok(json!({"kind":"error", "status":status, "body":response.body.json()?}))
+    if response.is_api_error()? {
+        Ok(
+            json!({"kind":"error", "status":response.api_error_status()?, "body":response.api_error_body()?.json()?}),
+        )
     } else if response.is_json() {
         Ok(json!({"kind":"json", "body":response.body.json()?}))
     } else {
@@ -66,7 +67,7 @@ fn expected_observation(kind: Output, phase: &str, error_status: u16) -> Value {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Case {
     name: &'static str,
     before: Option<Output>,
@@ -146,17 +147,26 @@ impl AuthPlugin<S> for Hooks {
 
 #[tokio::test]
 async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> AuthResult<()> {
-    use NativeResponseStatus::{Absent, Undefined, Value as Status};
+    use crate::SchemaValue::{Typed, Undefined};
+    use NativeResponseStatus::{Absent, Present};
     use Output::{Json, Response, ReturnError, ThrowError};
     let cases = [
-        ("default-json", None, Json, None, None, Undefined, 200),
+        (
+            "default-json",
+            None,
+            Json,
+            None,
+            None,
+            Present(Undefined),
+            200,
+        ),
         (
             "set-200-json",
             None,
             Json,
             Some(200),
             None,
-            Status(200),
+            Present(Typed(200)),
             200,
         ),
         (
@@ -165,7 +175,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             Some(201),
             None,
-            Status(201),
+            Present(Typed(201)),
             201,
         ),
         (
@@ -174,7 +184,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Response,
             None,
             None,
-            Undefined,
+            Present(Undefined),
             207,
         ),
         (
@@ -183,7 +193,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Response,
             Some(201),
             None,
-            Status(201),
+            Present(Typed(201)),
             207,
         ),
         (
@@ -192,7 +202,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ThrowError,
             None,
             None,
-            Status(400),
+            Present(Typed(400)),
             400,
         ),
         (
@@ -201,7 +211,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ThrowError,
             Some(201),
             None,
-            Status(400),
+            Present(Typed(400)),
             400,
         ),
         (
@@ -210,7 +220,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ReturnError,
             None,
             None,
-            Undefined,
+            Present(Undefined),
             400,
         ),
         (
@@ -219,7 +229,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ReturnError,
             Some(201),
             None,
-            Status(201),
+            Present(Typed(201)),
             201,
         ),
         (
@@ -228,7 +238,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             Some(201),
             Some(Json),
-            Status(201),
+            Present(Typed(201)),
             201,
         ),
         (
@@ -237,7 +247,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             Some(201),
             Some(Response),
-            Status(201),
+            Present(Typed(201)),
             207,
         ),
         (
@@ -246,7 +256,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             Some(201),
             Some(ReturnError),
-            Status(201),
+            Present(Typed(201)),
             201,
         ),
         (
@@ -255,7 +265,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             Some(201),
             Some(ThrowError),
-            Status(201),
+            Present(Typed(201)),
             201,
         ),
         (
@@ -264,7 +274,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ThrowError,
             None,
             Some(Json),
-            Status(400),
+            Present(Typed(400)),
             400,
         ),
         (
@@ -273,7 +283,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ThrowError,
             None,
             Some(Response),
-            Status(400),
+            Present(Typed(400)),
             207,
         ),
         (
@@ -282,7 +292,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ThrowError,
             None,
             Some(ThrowError),
-            Status(400),
+            Present(Typed(400)),
             400,
         ),
         (
@@ -291,7 +301,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Response,
             None,
             Some(Json),
-            Undefined,
+            Present(Undefined),
             200,
         ),
         (
@@ -300,7 +310,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             Json,
             None,
             Some(ThrowError),
-            Undefined,
+            Present(Undefined),
             409,
         ),
         (
@@ -309,7 +319,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             ReturnError,
             None,
             Some(Json),
-            Undefined,
+            Present(Undefined),
             200,
         ),
         (
@@ -363,7 +373,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
         };
         for http in [false, true] {
             let hooks = Hooks {
-                case,
+                case: case.clone(),
                 events: Default::default(),
                 retained_before: Default::default(),
             };
@@ -402,38 +412,6 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             let should_throw =
                 case.before == Some(ThrowError) || (!http && case.before.is_none() && error);
             assert_eq!(result.is_err(), should_throw, "{} HTTP={http}", case.name);
-            let response = match result {
-                Ok(response) => response,
-                Err(error) => {
-                    let error_status = if case.before.is_some() {
-                        418
-                    } else if case.after.is_some() {
-                        409
-                    } else {
-                        400
-                    };
-                    assert_eq!(
-                        error.status_code(),
-                        error_status,
-                        "{} native APIError",
-                        case.name
-                    );
-                    error.to_auth_response()
-                }
-            };
-            assert_eq!(
-                response.status, case.http,
-                "{} effective HTTP status",
-                case.name
-            );
-            if case.before != Some(ThrowError) {
-                assert_eq!(
-                    response.native_status(),
-                    case.native,
-                    "{} native status",
-                    case.name
-                );
-            }
             let phase = if case.before.is_some() {
                 "before"
             } else if case.after.is_some() {
@@ -441,20 +419,60 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             } else {
                 "endpoint"
             };
-            if final_kind == Response {
-                assert_eq!(response.body.bytes()?.as_ref(), phase.as_bytes());
+            let error_status = if case.before.is_some() {
+                418
+            } else if case.after.is_some() {
+                409
             } else {
-                let expected_body = if error {
-                    json!({"code":"STATUS_ERROR", "message":phase})
-                } else {
-                    json!({"phase":phase})
-                };
-                assert_eq!(
-                    response.body.json()?,
-                    Some(expected_body),
-                    "{} body",
-                    case.name
-                );
+                400
+            };
+            let expected_body = if error {
+                json!({"code":"STATUS_ERROR", "message":phase})
+            } else {
+                json!({"phase":phase})
+            };
+            match result {
+                Err(error) => {
+                    assert_eq!(
+                        error.status_code()?,
+                        Typed(error_status),
+                        "{} native APIError",
+                        case.name
+                    );
+                    assert_eq!(
+                        error.body_value()?.json()?,
+                        Some(expected_body),
+                        "{} thrown body",
+                        case.name
+                    );
+                }
+                Ok(response) if http => {
+                    assert_eq!(response.status, case.http, "{} HTTP status", case.name);
+                    if final_kind == Response {
+                        assert_eq!(response.body.bytes()?.as_ref(), phase.as_bytes());
+                    } else {
+                        assert_eq!(
+                            response.body.json()?,
+                            Some(expected_body),
+                            "{} HTTP body",
+                            case.name
+                        );
+                    }
+                }
+                Ok(response) => {
+                    assert_eq!(
+                        response.native_status(),
+                        case.native,
+                        "{} native status",
+                        case.name
+                    );
+                    assert_eq!(
+                        observation(&response)?,
+                        expected_observation(final_kind, phase, error_status),
+                        "{} native response",
+                        case.name
+                    );
+                }
             }
             let expected_events = if case.before.is_some() {
                 Vec::new()

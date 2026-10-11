@@ -101,7 +101,12 @@ fn create_auth_request(
 }
 
 fn json_body(response: &AuthResponse) -> serde_json::Value {
-    serde_json::from_slice(&response.body.bytes().unwrap()).unwrap()
+    let value = if response.is_api_error().unwrap() {
+        better_auth_core::ResponseBody::Native(response.api_error_body().unwrap())
+    } else {
+        response.body.clone()
+    };
+    serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
 /// Test helper: verify a key and return the same JSON shape the old HTTP
@@ -287,7 +292,7 @@ async fn test_get_update_delete_return_404_for_non_owner() {
         Some(get_query),
     );
     let get_err = plugin.handle_get(&get_req, &ctx).await.unwrap_err();
-    assert_eq!(get_err.status_code(), 404);
+    assert_eq!(get_err.status_code().unwrap(), 404);
 
     let update_req = create_auth_request(
         HttpMethod::Post,
@@ -297,7 +302,7 @@ async fn test_get_update_delete_return_404_for_non_owner() {
         None,
     );
     let update_err = plugin.handle_update(&update_req, &ctx).await.unwrap_err();
-    assert_eq!(update_err.status_code(), 404);
+    assert_eq!(update_err.status_code().unwrap(), 404);
 
     let delete_req = create_auth_request(
         HttpMethod::Post,
@@ -307,7 +312,7 @@ async fn test_get_update_delete_return_404_for_non_owner() {
         None,
     );
     let delete_err = plugin.handle_delete(&delete_req, &ctx).await.unwrap_err();
-    assert_eq!(delete_err.status_code(), 404);
+    assert_eq!(delete_err.status_code().unwrap(), 404);
 }
 
 // Upstream reference: packages/better-auth/src/plugins/api-key/api-key.test.ts :: describe("api-key"); adapted to the Rust API key plugin handlers.
@@ -782,9 +787,11 @@ async fn native_schema_rejects_nonfinite_numbers_before_storage() {
             )
             .await;
         let response = result.unwrap_err().to_auth_response();
-        assert_eq!(response.status, 400);
-        let body: serde_json::Value =
-            serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+        assert_eq!(
+            response.api_error_status().unwrap(),
+            better_auth_core::SchemaValue::Typed(400)
+        );
+        let body = response.api_error_body().unwrap().json().unwrap().unwrap();
         assert_eq!(
             body["message"],
             format!(

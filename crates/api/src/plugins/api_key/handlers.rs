@@ -203,8 +203,7 @@ pub(super) async fn create_key_for_user(
                     .filter(|prefix| !prefix.is_empty())
                     .or(config.prefix.as_deref()),
             )
-            .await
-            .map_err(|error| super::callbacks::callback_error(error, request))?;
+            .await?;
         let hash = if config.disable_key_hashing {
             key.clone()
         } else {
@@ -234,8 +233,7 @@ pub(super) async fn create_key_for_user(
                         &callback_body,
                     ),
                 )
-                .await
-                .map_err(|error| super::callbacks::callback_error(error, request))?,
+                .await?,
         )
     } else {
         None

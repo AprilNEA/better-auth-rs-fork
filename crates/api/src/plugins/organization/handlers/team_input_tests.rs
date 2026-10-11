@@ -116,9 +116,12 @@ async fn invalid_team_input_precedes_policies_and_preserves_null_errors() {
             .await
             .unwrap_err()
             .to_auth_response();
-        assert_eq!(response.status, 400);
         assert_eq!(
-            serde_json::from_slice::<Value>(&response.body.bytes().unwrap()).unwrap(),
+            response.api_error_status().unwrap(),
+            better_auth_core::SchemaValue::Typed(400)
+        );
+        assert_eq!(
+            response.api_error_body().unwrap().json().unwrap().unwrap(),
             json!({
                 "code":"VALIDATION_ERROR",
                 "message":format!("[body.{field}] Invalid input: expected string, received {received}")
@@ -161,9 +164,12 @@ async fn invalid_team_input_precedes_policies_and_preserves_null_errors() {
                 .await
                 .unwrap_err()
                 .to_auth_response();
-            assert_eq!(response.status, 400);
             assert_eq!(
-                serde_json::from_slice::<Value>(&response.body.bytes().unwrap()).unwrap(),
+                response.api_error_status().unwrap(),
+                better_auth_core::SchemaValue::Typed(400)
+            );
+            assert_eq!(
+                response.api_error_body().unwrap().json().unwrap().unwrap(),
                 json!({
                     "code":"VALIDATION_ERROR",
                     "message":format!("[body.data.{field}] Invalid input: expected string, received null")

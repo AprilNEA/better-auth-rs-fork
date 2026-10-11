@@ -66,7 +66,9 @@ async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() {
                 },
             )
             .await
-            .unwrap_or_else(|error| error.to_auth_response());
+            .unwrap_or_else(|error| error.to_auth_response())
+            .into_http_response()
+            .unwrap();
         assert_eq!(response.status, status);
         if let Some(message) = message {
             let body: Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();

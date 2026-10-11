@@ -145,12 +145,13 @@ async fn polling_truthiness_contract<S: AuthSchema>(
             .await;
             let remaining = auth.store().get_device_code_by_device_code(&token).await?;
             if future && blocks_future {
-                let response =
-                    required(result.err(), "A future poll must be throttled")?.to_auth_response();
-                assert_eq!(response.status, 400, "{name}");
+                let error = required(result.err(), "A future poll must be throttled")?;
+                assert_eq!(error.status_code()?, 400, "{name}");
                 assert_eq!(
-                    serde_json::from_slice::<Value>(&response.body.bytes()?)?,
-                    json!({"error": "slow_down", "error_description": "Polling too frequently"})
+                    error.body_value()?.json()?,
+                    Some(
+                        json!({"error": "slow_down", "error_description": "Polling too frequently"})
+                    )
                 );
                 assert_eq!(
                     *trace_lock(&events)?,

@@ -215,7 +215,7 @@ async fn validation_errors_run_after_but_ordinary_errors_do_not() -> AuthResult<
         .await
         .err()
         .ok_or_else(|| AuthError::internal("patched invalid body must fail before generation"))?;
-    assert_eq!(error.status_code(), 400);
+    assert_eq!(error.status_code()?, 400);
     assert_eq!(hooks.events()?.len(), 2);
     hooks.mode("invalid")?;
     assert_eq!(
@@ -224,7 +224,7 @@ async fn validation_errors_run_after_but_ordinary_errors_do_not() -> AuthResult<
             .await
             .err()
             .ok_or_else(|| AuthError::internal("invalid JWT body must fail"))?
-            .status_code(),
+            .status_code()?,
         400
     );
     assert_eq!(hooks.events()?.len(), 2);

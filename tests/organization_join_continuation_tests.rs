@@ -375,13 +375,17 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + Clone + 'static>(store: T, 
         Ok(rows) => json!({"rows":rows.into_iter().map(|(_, row)|row).collect::<Vec<_>>()}),
         Err(error) => {
             assert!(matches!(error, AuthError::Response(_)));
+            assert_eq!(error.status_code().unwrap(), 400);
             let response = error.to_auth_response();
-            assert_eq!(response.status, 400);
             assert_eq!(
-                response.headers.get("x-ordinary-error").map(String::as_str),
+                response
+                    .api_error_headers()
+                    .unwrap()
+                    .get("x-ordinary-error")
+                    .map(String::as_str),
                 Some("original")
             );
-            let body: Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+            let body: Value = response.api_error_body().unwrap().json().unwrap().unwrap();
             json!({"error":{"status":"BAD_REQUEST","code":body["code"],"message":body["message"]}})
         }
     };

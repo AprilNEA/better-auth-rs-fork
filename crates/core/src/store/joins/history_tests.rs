@@ -133,7 +133,7 @@ fn assert_join(
         }
         Err(error) => {
             assert!(observation.events.is_empty());
-            json!({ "error": error.instrumentation_message() })
+            json!({ "error": error.instrumentation_message().expect("fixture error message") })
         }
     };
     assert_eq!(
@@ -186,7 +186,7 @@ fn schema_history_boundary_references_match_pinned_capture() {
                         .unwrap();
                     let error = resolve_field("user", &fields, "missingUserField").unwrap_err();
                     assert_eq!(
-                        json!({ "error": error.instrumentation_message() }),
+                        json!({ "error": error.instrumentation_message().expect("fixture error message") }),
                         observation.result
                     );
                     assert!(observation.events.is_empty());

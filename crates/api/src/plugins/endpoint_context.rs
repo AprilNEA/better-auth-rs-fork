@@ -72,7 +72,10 @@ impl<'a, S: AuthSchema> EndpointContext<'a, S> {
     }
 
     /// Set the native endpoint status. Before and after hook statuses do not propagate.
-    pub fn set_status(&self, status: u16) -> AuthResult<()> {
+    pub fn set_status(
+        &self,
+        status: impl Into<better_auth_core::SchemaValue<u16>>,
+    ) -> AuthResult<()> {
         self.input_request
             .ok_or_else(|| {
                 better_auth_core::AuthError::internal("Endpoint response is unavailable")

@@ -28,7 +28,7 @@ pub async fn handle_http_error<S: AuthSchema>(
     error: AuthError,
     context: &AuthContext<S>,
 ) -> AuthResult<AuthResponse> {
-    if error.is_found_redirect() {
+    if error.is_found_redirect()? {
         return error.to_auth_response().into_http_response();
     }
     if context.config.api_error.throw_errors() {
@@ -52,7 +52,7 @@ pub async fn handle_http_error<S: AuthSchema>(
                 }
             }
         }
-        if !error.is_api_error() {
+        if !error.is_api_error()? {
             // The callback replaces instance logging; the outer router still reports runtime errors.
             crate::observability::LoggerConfig::default().error(
                 "Authentication request failed",
@@ -60,13 +60,14 @@ pub async fn handle_http_error<S: AuthSchema>(
             );
             return Ok(AuthResponse::new(500));
         }
+        return error.to_auth_response().into_http_response();
     }
     error.to_http_response()
 }
 
 fn rethrow(error: AuthError) -> AuthResult<AuthResponse> {
     // The outer HTTP router still serializes thrown API errors, including callback replacements.
-    if error.is_api_error() {
+    if error.is_api_error()? {
         error.to_auth_response().into_http_response()
     } else {
         Err(error)

@@ -154,7 +154,7 @@ async fn native_matching_stays_exact_and_url_less_http_keeps_base_relative_suppo
             if status == 404 {
                 let error = result.expect_err("an unmatched native endpoint returns an API error");
                 assert!(matches!(error, AuthError::Response(_)));
-                assert_eq!(error.status_code(), status);
+                assert_eq!(error.status_code().unwrap(), status);
             } else {
                 assert_eq!(result.unwrap().status, status);
             }

@@ -214,18 +214,23 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
             .await;
             let user = match creation {
                 Ok(user) => user,
-                Err(error) if error.is_api_error() => {
-                    if protect_enumeration && error.status_code() == 403 {
-                        return synthetic_response(
-                            &signup_body,
-                            &synthetic_create,
-                            &signup_config,
-                            &admission_context,
-                        );
-                    }
-                    return Err(error);
-                }
                 Err(error) => {
+                    if error.is_api_error()? {
+                        if error
+                            .status_code()?
+                            .field_value()
+                            .strict_equals(&403.0.into())
+                            && protect_enumeration
+                        {
+                            return synthetic_response(
+                                &signup_body,
+                                &synthetic_create,
+                                &signup_config,
+                                &admission_context,
+                            );
+                        }
+                        return Err(error);
+                    }
                     admission_context.config.logger.error(
                         "Failed to create user",
                         &[better_auth_core::observability::LogArgument::Error(&error)],

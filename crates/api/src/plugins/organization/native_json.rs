@@ -79,13 +79,13 @@ mod tests {
                 Some(f64::INFINITY),
             );
             let error = parsed_metadata("invalid".into(), create).unwrap_err();
-            assert!(!error.is_api_error());
+            assert!(!error.is_api_error()?);
         }
         assert_eq!(permission(&SchemaValue::from_field(raw))?, expected);
         assert!(
             !permission(&SchemaValue::from_field("invalid".into()))
                 .unwrap_err()
-                .is_api_error()
+                .is_api_error()?
         );
         Ok(())
     }

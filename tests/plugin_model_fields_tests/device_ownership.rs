@@ -293,12 +293,12 @@ async fn contract<S: AuthSchema>(
     let (result, error) = match result {
         Ok(value) => (value, Value::Null),
         Err(error @ AuthError::Response(_)) => {
-            let response = error.to_auth_response();
-            assert_eq!(response.status, 400);
-            let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
+            let status = error.status_code()?;
+            assert_eq!(status, 400);
+            let body = error.body_value()?.json()?;
             (
                 Value::Null,
-                json!({"status": "BAD_REQUEST", "statusCode": response.status, "body": body}),
+                json!({"status": "BAD_REQUEST", "statusCode": status, "body": body}),
             )
         }
         Err(error) => return Err(error),

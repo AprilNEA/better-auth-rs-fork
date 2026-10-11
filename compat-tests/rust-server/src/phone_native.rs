@@ -299,9 +299,8 @@ async fn control<S: AuthSchema>(
     };
     let result = match result {
         Ok(status) => json!({"result":{"status":status}}),
-        Err(error) if error.is_api_error() => {
-            let response = error.to_auth_response();
-            json!({"error":{"status":response.status,"body":serde_json::from_slice::<Value>(&response.body.bytes()?)?}})
+        Err(error) if error.is_api_error()? => {
+            json!({"error":{"status":error.status_code()?,"body":error.body_value()?.json()?}})
         }
         Err(AuthError::Internal(message)) => json!({"error":{"ordinary":true,"message":message}}),
         Err(error) => return Err(error),

@@ -285,7 +285,7 @@ async fn contract<S: AuthSchema>(
                 assert!(matches!(error, AuthError::Config(_)), "{error:?}");
                 let expected_error = expected.get("error").ok_or("Missing captured error")?;
                 assert_eq!(
-                    error.instrumentation_message(),
+                    error.instrumentation_message()?,
                     expected_error
                         .get("message")
                         .and_then(Value::as_str)

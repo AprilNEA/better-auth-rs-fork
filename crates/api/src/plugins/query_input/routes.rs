@@ -183,8 +183,7 @@ pub(crate) fn organization_role(query: Option<Value>) -> AuthResult<Option<Value
         return Err(validation_error(&format!(
             "{}; [query] Invalid input",
             invalid_type("query", "object", Some(&query))
-        ))
-        .into());
+        )));
     };
     let mut output = Map::new();
     let mut errors = Vec::new();
@@ -222,17 +221,17 @@ pub(crate) fn organization_role(query: Option<Value>) -> AuthResult<Option<Value
 
 pub(crate) fn account_selection(query: Option<Value>) -> AuthResult<Option<Value>> {
     let Some(Value::Object(input)) = query.as_ref() else {
-        return Err(validation_error("[query] Invalid input").into());
+        return Err(validation_error("[query] Invalid input"));
     };
     if input.get("userId").is_some_and(|value| !value.is_string()) {
-        return Err(validation_error("[query] Invalid input").into());
+        return Err(validation_error("[query] Invalid input"));
     }
     let id = input.get("accountId").is_some_and(Value::is_string);
     let cookie = input.get("useAccountCookie") == Some(&Value::Bool(true));
     let field = match (id, cookie) {
         (true, false) => "accountId",
         (false, true) => "useAccountCookie",
-        _ => return Err(validation_error("[query] Invalid input").into()),
+        _ => return Err(validation_error("[query] Invalid input")),
     };
     let unknown = input
         .keys()
@@ -244,8 +243,7 @@ pub(crate) fn account_selection(query: Option<Value>) -> AuthResult<Option<Value
             "[query] Unrecognized key{}: {}",
             if unknown.len() == 1 { "" } else { "s" },
             unknown.join(", ")
-        ))
-        .into());
+        )));
     }
     Ok(query)
 }

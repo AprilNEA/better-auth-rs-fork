@@ -398,7 +398,7 @@ async fn check<S: AuthSchema>(
             })?;
             assert!(matches!(&error, AuthError::Config(_)));
             assert_eq!(
-                error.instrumentation_message(),
+                error.instrumentation_message()?,
                 "No foreign key found for model team and base model teamMember while performing join operation."
             );
             assert_eq!(events.take()?, []);

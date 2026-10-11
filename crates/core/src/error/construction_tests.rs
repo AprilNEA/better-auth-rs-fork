@@ -6,10 +6,10 @@ use crate::{AuthResponse, FieldMap, FieldValue};
     reason = "The contract compares native property order and complete HTTP bytes"
 )]
 fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthResult<FieldValue> {
-    assert_eq!(error.status_code(), status);
-    assert!(error.is_api_error());
+    assert_eq!(error.status_code()?, status);
+    assert!(error.is_api_error()?);
+    let body = error.body_value()?;
     let response = error.to_auth_response();
-    let body = response.body.field_value()?;
     let fields = body
         .as_object()
         .map(|body| body.snapshot_fields())
@@ -130,9 +130,9 @@ fn field_input_retains_its_variant_until_response_conversion() -> AuthResult<()>
         }
     ));
     assert_eq!(
-        error.error_payload(),
+        error.error_payload()?,
         (
-            400,
+            SchemaValue::Typed(400),
             Some("CUSTOM_FIELD_FAILURE".into()),
             "field rejected".into()
         )

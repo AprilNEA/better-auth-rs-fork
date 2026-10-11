@@ -343,13 +343,16 @@ async fn check_case(fixture: &JsonValue) -> AuthResult<()> {
         }
         Err(error) => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
+            assert_eq!(error.status_code()?, 400);
             let response = error.to_auth_response();
-            assert_eq!(response.status, 400);
             assert_eq!(
-                response.headers.get("x-ordinary-error").map(String::as_str),
+                response
+                    .api_error_headers()?
+                    .get("x-ordinary-error")
+                    .map(String::as_str),
                 Some("original")
             );
-            let body: JsonValue = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+            let body: JsonValue = response.api_error_body()?.json()?.unwrap();
             assert_eq!(
                 json!({"status":"BAD_REQUEST","code":body["code"],"message":body["message"]}),
                 fixture["error"]

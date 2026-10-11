@@ -342,7 +342,9 @@ async fn check<S: AuthSchema>(
         }
     } else if let Some(expected) = case.business_error() {
         let response = if native {
-            required(result.err(), "Native route must reject the Team")?.to_auth_response()
+            required(result.err(), "Native route must reject the Team")?
+                .to_auth_response()
+                .into_http_response()?
         } else {
             result?
         };

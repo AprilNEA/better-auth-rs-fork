@@ -51,7 +51,7 @@ pub(super) fn validate_numbers(
     use Field::*;
     let body = input
         .and_then(Value::as_object)
-        .ok_or_else(|| AuthError::from(validation_error(&invalid_type("body", "object", input))))?;
+        .ok_or_else(|| validation_error(&invalid_type("body", "object", input)))?;
     // Tuple flags describe required and nullable fields, in the declared Zod order.
     let fields: &[Spec] = match path {
         "/api-key/create" => &[
@@ -185,7 +185,7 @@ pub(super) fn validate_numbers(
         let _ = output.insert(name.into(), value.clone());
     }
     if !errors.is_empty() {
-        return Err(validation_error(&errors.join("; ")).into());
+        return Err(validation_error(&errors.join("; ")));
     }
     let output = Value::Object(output);
     match path {

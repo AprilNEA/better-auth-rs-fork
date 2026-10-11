@@ -59,7 +59,12 @@ fn make_request(
 }
 
 fn json_body(resp: &AuthResponse) -> serde_json::Value {
-    serde_json::from_slice(&resp.body.bytes().unwrap()).unwrap()
+    let value = if resp.is_api_error().unwrap() {
+        better_auth_core::ResponseBody::Native(resp.api_error_body().unwrap())
+    } else {
+        resp.body.clone()
+    };
+    serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
 fn set_cookie_value(resp: &AuthResponse, name: &str) -> Option<String> {
@@ -402,7 +407,10 @@ async fn test_stop_impersonating_without_impersonated_session_returns_bad_reques
     );
     let err = plugin.on_request(&req, &ctx).await.unwrap_err();
     let response = err.to_auth_response();
-    assert_eq!(response.status, 400);
+    assert_eq!(
+        response.api_error_status().unwrap(),
+        better_auth_core::SchemaValue::Typed(400)
+    );
     assert_eq!(
         json_body(&response),
         serde_json::json!({

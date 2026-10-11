@@ -282,9 +282,12 @@ async fn deletion_callback_consumes_mismatched_native_tokens_without_deleting() 
         let error = dispatch_plugin(&req, &fixture.ctx, &plugin)
             .await
             .unwrap_err();
-        assert_eq!(error.status_code(), 404);
+        assert_eq!(error.status_code().unwrap(), 404);
         let response = error.to_auth_response();
-        assert_eq!(response.body.json()?.unwrap()["message"], "Invalid token");
+        assert_eq!(
+            response.api_error_body()?.json()?.unwrap()["message"],
+            "Invalid token"
+        );
         assert!(trace.0.lock().unwrap().is_empty());
         assert!(
             fixture

@@ -326,7 +326,7 @@ async fn observe<S: AuthSchema>(
     .await;
     let result = match result {
         Ok(value) => value,
-        Err(error) => json!({ "error": error.instrumentation_message() }),
+        Err(error) => json!({ "error": error.instrumentation_message()? }),
     };
     let observed = events.take();
     let invalid = matches!(

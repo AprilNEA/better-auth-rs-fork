@@ -406,7 +406,9 @@ fn array_clone_failures_stop_later_indices_and_preserve_original_storage() -> Au
             } else {
                 assert!(matches!(error, AuthError::DataClone));
                 assert_eq!(
-                    error.instrumentation_message(),
+                    error
+                        .instrumentation_message()
+                        .expect("fixture error message"),
                     "The object can not be cloned."
                 );
             }

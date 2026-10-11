@@ -49,7 +49,7 @@ async fn check<S: AuthSchema>(
         return Err(AuthError::internal("duplicate identity lookup must fail"));
     };
     assert_eq!(
-        error.instrumentation_message(),
+        error.instrumentation_message()?,
         "Multiple accounts match the same accountId for provider \"provider\\\"quoted\". Resolve duplicate account identities before continuing."
     );
     assert_eq!(projections.load(Ordering::SeqCst), 2);
@@ -62,7 +62,7 @@ async fn check<S: AuthSchema>(
         let Err(error) = store.get_account(provider, "subject").await else {
             return Err(AuthError::internal("output projection must fail"));
         };
-        assert_eq!(error.instrumentation_message(), message);
+        assert_eq!(error.instrumentation_message()?, message);
         assert_eq!(projections.load(Ordering::SeqCst), 2);
     }
     Ok(())

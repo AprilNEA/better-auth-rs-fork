@@ -404,7 +404,7 @@ async fn validate_permissions(
     if missing.is_empty() {
         return Ok(None);
     }
-    let (status, code, message) = role_error(action).error_payload();
+    let (status, code, message) = role_error(action).error_payload()?;
     Ok(Some(AuthResponse::json(
         status,
         &json!({"code":code,"message":message,"missingPermissions":missing}),
@@ -940,7 +940,7 @@ mod tests {
                 .await
                 .unwrap_err();
         assert_eq!(
-            duplicate.error_payload().1.as_deref(),
+            duplicate.error_payload().unwrap().1.as_deref(),
             Some("ROLE_NAME_IS_ALREADY_TAKEN")
         );
     }

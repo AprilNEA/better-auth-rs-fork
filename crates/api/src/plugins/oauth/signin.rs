@@ -63,7 +63,6 @@ pub(super) enum OAuthSignInError {
     Generic(String),
     Banned(String),
     Admission(crate::plugins::user_admission::UserValidationRejection),
-    Endpoint(AuthResponse),
 }
 
 impl OAuthSignInError {
@@ -82,7 +81,6 @@ impl OAuthSignInError {
             )?,
             Self::Banned(message) => AuthError::banned_user(message).to_auth_response(),
             Self::Admission(error) => error.into_auth_error().to_auth_response(),
-            Self::Endpoint(response) => response,
         })
     }
 
@@ -98,46 +96,25 @@ impl OAuthSignInError {
                 let message = error.message().to_owned();
                 (error.error, (!message.is_empty()).then_some(message))
             }
-            Self::Endpoint(response) => return api_error_redirect_parts(response.into()),
         })
     }
 }
 
 fn api_error_redirect_parts(error: AuthError) -> AuthResult<(String, Option<String>)> {
-    if !error.is_api_error() || error.is_found_redirect() {
+    if !error.is_api_error()? {
         return Err(error);
     }
-    if !matches!(error, AuthError::Response(_)) {
-        let (_, code, message) = error.error_payload();
-        return match code.filter(|code| !code.is_empty()) {
-            Some(code) => Ok((code, (!message.is_empty()).then_some(message))),
-            None => Err(error),
-        };
+    let body = error.body_value()?;
+    if body.is_null() || body.is_undefined() || !body.model_property("code")?.is_truthy() {
+        return Err(error);
     }
-    let response = error.to_auth_response();
-    // A custom response without an error code must retain its original body and headers.
-    let body = match response.body.field_value() {
-        Ok(body) => body,
-        _ => return Err(response.into()),
-    };
-    let Some(code) = body
-        .as_object()
-        .map(|body| body.get("code"))
-        .transpose()?
-        .flatten()
-        .filter(|code| code.is_truthy())
-    else {
-        return Err(response.into());
-    };
+    let code = error.body_value()?.model_property("code")?;
+    let message = error.body_value()?.model_property("message")?;
     // URLSearchParams converts JavaScript strings to USVString at the URL boundary.
     let code = String::from_utf16_lossy(code.display_utf16()?.as_utf16());
-    let description = body
-        .as_object()
-        .map(|body| body.get("message"))
-        .transpose()?
-        .flatten()
-        .filter(|message| message.is_truthy())
-        .map(|value| value.display_utf16())
+    let description = message
+        .is_truthy()
+        .then(|| message.display_utf16())
         .transpose()?;
     Ok((
         code,
@@ -163,6 +140,17 @@ impl From<SessionIssueError> for OAuthSignInError {
             SessionIssueError::Auth(error) => Self::Auth(error),
             SessionIssueError::Banned { message } => Self::Banned(message),
         }
+    }
+}
+
+fn api_error_or(
+    error: AuthError,
+    fallback: impl FnOnce(AuthError) -> OAuthSignInError,
+) -> OAuthSignInError {
+    match error.is_api_error() {
+        Ok(true) => OAuthSignInError::Auth(error),
+        Ok(false) => fallback(error),
+        Err(error) => OAuthSignInError::Auth(error),
     }
 }
 
@@ -251,7 +239,7 @@ pub(super) async fn process_oauth_sign_in(
                 .database
                 .get_user_with_accounts(&provider_email.to_lowercase())
                 .await
-                .map_err(|error| account_query_error(error, ctx))?;
+                .map_err(|error| api_error_or(error, |error| account_query_error(error, ctx)))?;
             match existing {
                 Some(existing) => {
                     let better_auth_core::store::JoinValue::Many(accounts) = existing.accounts
@@ -511,7 +499,15 @@ pub(super) async fn process_oauth_sign_in(
                 ..Default::default()
             })
             .await
-            .map_err(|_| "unable to link account".to_string())?
+            .map_err(|error| {
+                api_error_or(error, |error| {
+                    ctx.config.logger.error(
+                        "Unable to link account",
+                        &[better_auth_core::observability::LogArgument::Error(&error)],
+                    );
+                    OAuthSignInError::Generic("unable to link account".to_owned())
+                })
+            })?
             .ok_or_else(|| "unable to link account".to_string())?;
 
         if email_verified
@@ -680,9 +676,14 @@ pub(super) async fn process_oauth_sign_in(
             })
         })
         .await
-        .map_err(|error| match error {
-            AuthError::Response(_) => OAuthSignInError::Endpoint(error.to_auth_response()),
-            _ => OAuthSignInError::Generic("unable to create user".to_owned()),
+        .map_err(|error| {
+            api_error_or(error, |error| {
+                ctx.config.logger.error(
+                    "Unable to create OAuth user",
+                    &[better_auth_core::observability::LogArgument::Error(&error)],
+                );
+                OAuthSignInError::Generic("unable to create user".to_owned())
+            })
         })?;
         let (created_user, created_account) = outcome;
 
@@ -794,7 +795,6 @@ pub(crate) async fn sign_in_verified_profile(
         OAuthSignInError::Generic(message) => AuthError::authentication_failed(message),
         OAuthSignInError::Banned(message) => AuthError::banned_user(message),
         OAuthSignInError::Admission(error) => error.into_auth_error(),
-        OAuthSignInError::Endpoint(response) => response.into(),
     })?;
     ctx.session_manager()
         .set_native_session_cookie(req, outcome.issued.clone(), None)

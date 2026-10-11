@@ -52,8 +52,9 @@ pub struct AuthRequest {
     /// Session authenticated by a trusted plugin hook for the current request.
     pub(crate) virtual_session: Option<crate::wire::SessionView>,
     /// Cookie updates from session middleware, shared by normalized request clones.
-    response_headers: std::sync::Arc<std::sync::Mutex<Headers>>,
-    response_status: std::sync::Arc<std::sync::Mutex<Option<u16>>>,
+    response_headers: std::sync::Arc<std::sync::Mutex<request_headers::ResponseHeaders>>,
+    response_status: std::sync::Arc<std::sync::Mutex<Option<crate::SchemaValue<u16>>>>,
+    hook_error_handled: std::sync::Arc<std::sync::atomic::AtomicBool>,
     server_only: bool,
     server_context: std::sync::Arc<std::sync::Mutex<crate::FieldMap>>,
     headers_present: bool,
@@ -92,21 +93,22 @@ impl RequestMeta {
 /// Authentication response wrapper
 #[derive(Debug, Clone)]
 pub struct AuthResponse {
-    /// Effective HTTP status. Assigning this field does not record an endpoint `setStatus` call.
+    /// Materialized HTTP status. Native dispatch uses `native_status()` until HTTP conversion.
     pub status: u16,
+    /// Materialized response text. HTTP transports retain their own protocol restrictions.
+    pub status_text: crate::Utf16String,
     /// Endpoint headers during native dispatch, or merged headers after HTTP materialization.
     pub headers: Headers,
     pub body: crate::ResponseBody,
     origin: ResponseOrigin,
     metadata: Option<Box<ResponseMetadata>>,
     native_status: NativeResponseStatus,
-    api_error_status: Option<u16>,
 }
 
 #[derive(Debug, Clone, Default)]
 struct ResponseMetadata {
-    error_headers: Option<Headers>,
-    captured_headers: Option<Headers>,
+    captured_headers: Option<crate::FieldValue>,
+    init_headers_present: Option<bool>,
     explicit_response_headers: Option<Headers>,
 }
 
@@ -119,23 +121,47 @@ enum ResponseOrigin {
 }
 
 /// Status property returned by native endpoint dispatch with `returnStatus` enabled.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NativeResponseStatus {
     /// A before hook returned before the endpoint created a status property.
     Absent,
-    /// The endpoint returned an own `status: undefined` property.
-    Undefined,
-    /// The endpoint set a status, or dispatch caught an endpoint API error.
-    Value(u16),
+    /// The endpoint returned an own status property, including undefined or a dynamic value.
+    Present(crate::SchemaValue<u16>),
 }
 
 impl NativeResponseStatus {
-    /// Read an explicit status without collapsing property presence in the enum.
-    pub fn value(self) -> Option<u16> {
+    /// Read the own status property, retaining undefined and dynamic values.
+    pub fn value(&self) -> Option<crate::SchemaValue<u16>> {
         match self {
-            Self::Value(value) => Some(value),
-            Self::Absent | Self::Undefined => None,
+            Self::Absent => None,
+            Self::Present(value) => Some(value.clone()),
         }
+    }
+
+    /// Retain the native status value without invoking conversion or collapsing null.
+    pub fn field_value(&self) -> crate::FieldValue {
+        match self {
+            Self::Absent => crate::FieldValue::Undefined,
+            Self::Present(value) => value.field_value(),
+        }
+    }
+}
+
+impl From<Option<u16>> for NativeResponseStatus {
+    fn from(value: Option<u16>) -> Self {
+        Self::Present(value.map_or(crate::SchemaValue::Undefined, crate::SchemaValue::Typed))
+    }
+}
+
+impl From<u16> for NativeResponseStatus {
+    fn from(value: u16) -> Self {
+        Self::Present(value.into())
+    }
+}
+
+impl From<crate::SchemaValue<u16>> for NativeResponseStatus {
+    fn from(value: crate::SchemaValue<u16>) -> Self {
+        Self::Present(value)
     }
 }
 
@@ -512,6 +538,7 @@ impl AuthRequest {
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
+            hook_error_handled: Default::default(),
             server_only: false,
             server_context: Default::default(),
             headers_present: true,
@@ -544,6 +571,7 @@ impl AuthRequest {
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
+            hook_error_handled: Default::default(),
             server_only: false,
             server_context: Default::default(),
             headers_present: true,
@@ -553,7 +581,7 @@ impl AuthRequest {
     }
 
     /// Read a scalar query field without collapsing arrays or null into omission.
-    pub fn query_string(&self, name: &str) -> Result<Option<&str>, AuthResponse> {
+    pub fn query_string(&self, name: &str) -> crate::AuthResult<Option<&str>> {
         crate::query::string_field(self.query.as_ref(), name)
     }
 
@@ -767,6 +795,7 @@ impl AuthRequest {
         Self {
             response_headers: Default::default(),
             response_status: Default::default(),
+            hook_error_handled: Default::default(),
             ..self.clone()
         }
     }
@@ -774,69 +803,37 @@ impl AuthRequest {
     pub(crate) fn with_separate_response_status(&self) -> Self {
         Self {
             response_status: Default::default(),
+            hook_error_handled: Default::default(),
             ..self.clone()
         }
     }
 
-    /// Queue a response header from request-scoped authentication middleware.
-    pub fn set_response_header(
-        &self,
-        name: &str,
-        value: impl Into<String>,
-    ) -> crate::AuthResult<()> {
-        let _ = self
-            .response_headers
-            .lock()
-            .map_err(|_| crate::AuthError::internal("Session response headers lock poisoned"))?
-            .insert(name, value.into());
-        Ok(())
+    pub(crate) fn mark_hook_error_handled(&self) {
+        self.hook_error_handled
+            .store(true, std::sync::atomic::Ordering::Release);
     }
 
-    /// Append a response header without replacing earlier values.
-    pub fn append_response_header(&self, name: &str, value: String) -> crate::AuthResult<()> {
-        self.response_headers
-            .lock()
-            .map_err(|_| crate::AuthError::internal("Session response headers lock poisoned"))?
-            .append(name, value);
-        Ok(())
-    }
-
-    pub(crate) fn has_response_cookie(&self, name: &str) -> crate::AuthResult<bool> {
-        Ok(self
-            .response_headers
-            .lock()
-            .map_err(|_| crate::AuthError::internal("Session response headers lock poisoned"))?
-            .has_set_cookie(name))
-    }
-
-    pub(crate) fn remove_response_cookie(&self, name: &str) -> crate::AuthResult<()> {
-        self.response_headers
-            .lock()
-            .map_err(|_| crate::AuthError::internal("Session response headers lock poisoned"))?
-            .remove_set_cookie(name);
-        Ok(())
-    }
-
-    /// Drain response headers queued by authentication middleware.
-    pub fn take_response_headers(&self) -> crate::AuthResult<Headers> {
-        let mut headers = self
-            .response_headers
-            .lock()
-            .map_err(|_| crate::AuthError::internal("Session response headers lock poisoned"))?;
-        Ok(std::mem::take(&mut *headers))
+    pub(crate) fn take_hook_error_handled(&self) -> bool {
+        self.hook_error_handled
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
     }
 
     /// Set the active endpoint's native status. Hook statuses remain local to that hook.
-    pub fn set_response_status(&self, status: u16) -> crate::AuthResult<()> {
+    pub fn set_response_status(
+        &self,
+        status: impl Into<crate::SchemaValue<u16>>,
+    ) -> crate::AuthResult<()> {
         *self
             .response_status
             .lock()
             .map_err(|_| crate::AuthError::internal("Endpoint response status lock poisoned"))? =
-            Some(status);
+            Some(status.into());
         Ok(())
     }
 
-    pub(crate) fn take_response_status(&self) -> crate::AuthResult<Option<u16>> {
+    pub(crate) fn take_response_status(
+        &self,
+    ) -> crate::AuthResult<Option<crate::SchemaValue<u16>>> {
         Ok(self
             .response_status
             .lock()
@@ -858,6 +855,7 @@ impl AuthRequest {
     }
 }
 
+mod request_headers;
 mod response;
 
 #[derive(Debug, Deserialize, Validate)]

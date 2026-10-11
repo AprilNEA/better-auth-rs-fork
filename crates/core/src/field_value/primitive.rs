@@ -9,6 +9,23 @@ pub(crate) enum PrimitiveHint {
 }
 
 impl FieldValue {
+    /// Call the receiver's `toString` method without applying ToPrimitive fallback.
+    pub(crate) fn call_to_string(&self) -> AuthResult<Self> {
+        if let Self::Object(fields) = self {
+            return match fields.get("toString")? {
+                Some(Self::Function(method)) => method.call_with(self, &[]),
+                None => Ok("[object Object]".into()),
+                Some(_) => Err(AuthError::type_error(
+                    "data.status.toString is not a function",
+                )),
+            };
+        }
+        if self.is_null() || self.is_undefined() {
+            return self.model_property("toString");
+        }
+        Ok(self.display_utf16()?.into())
+    }
+
     pub(crate) fn primitive(&self, hint: PrimitiveHint) -> AuthResult<Self> {
         let Self::Object(fields) = self else {
             return match self {

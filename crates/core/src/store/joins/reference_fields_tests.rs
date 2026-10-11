@@ -136,7 +136,7 @@ fn selected_reference_fields_match_upstream() -> Result<(), Box<dyn std::error::
                     case.events.is_empty(),
                     "Reference errors must precede reads and callbacks"
                 );
-                json!({"error": error.instrumentation_message()})
+                json!({"error": error.instrumentation_message().expect("fixture error message")})
             }
         };
         assert_eq!(actual, case.result, "{} {operation}", case.name);

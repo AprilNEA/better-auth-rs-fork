@@ -42,11 +42,18 @@ fn observe(response: AuthResponse, thrown: bool) -> Value {
     value
 }
 
-fn observe_error(error: AuthError) -> Value {
+fn observe_error(error: AuthError) -> AuthResult<Value> {
     let response = error.to_auth_response();
-    let explicit = observed_headers(response.api_error_headers().unwrap_or(&response.headers));
-    let captured = response.captured_headers().map(observed_headers);
-    let mut output = observe(response, true);
+    let explicit = observed_headers(&response.api_error_headers()?);
+    let captured = response.captured_headers()?.as_ref().map(observed_headers);
+    let mut output = explicit.clone();
+    output["thrown"] = true.into();
+    output["status"] = json!(response.api_error_status()?);
+    output["body"] = response
+        .api_error_body()?
+        .stringify()?
+        .unwrap_or_default()
+        .into();
     if let Some(captured) = &captured {
         output
             .as_object_mut()
@@ -55,7 +62,7 @@ fn observe_error(error: AuthError) -> Value {
     }
     output["errorHeaders"] = explicit;
     output["contextHeaders"] = captured.unwrap_or(Value::Null);
-    output
+    Ok(output)
 }
 
 impl Fixture {
@@ -178,11 +185,11 @@ impl AuthPlugin<StatelessSchema> for Fixture {
         if self.later {
             let mut value = observed_headers(&response.headers);
             value["hook"] = "after-later".into();
-            value["apiError"] = response.is_api_error().into();
+            value["apiError"] = response.is_api_error()?.into();
             self.record(value);
             request.set_response_header("x-later-hook", "ran".to_owned())?;
         } else {
-            self.record(json!({"hook":"after-first","apiError":response.is_api_error()}));
+            self.record(json!({"hook":"after-first","apiError":response.is_api_error()?}));
             if self.input["phase"] == "after" {
                 Self::mutate(request, "after")?;
                 if self.input["mode"] == "response" {
@@ -253,7 +260,7 @@ pub fn router(base_url: &str) -> Router {
                         Err(AuthError::Internal(message)) => {
                             json!({"thrown":true,"message":message})
                         }
-                        Err(error) if error.is_api_error() => observe_error(error),
+                        Err(error) if error.is_api_error()? => observe_error(error)?,
                         Err(error) => return Err(error),
                     };
                     let persisted = auth

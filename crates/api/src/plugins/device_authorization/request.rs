@@ -61,7 +61,7 @@ fn finish<T: DeserializeOwned + Serialize + Send + Sync + 'static>(
         return Err(if code {
             super::device_error_response(400, "invalid_request", &message)?.into()
         } else {
-            json_body::validation_error(&message).into()
+            json_body::validation_error(&message)
         });
     }
     let projection = Value::Object(output);

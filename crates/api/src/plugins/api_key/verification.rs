@@ -133,14 +133,23 @@ impl ApiKeyVerificationError {
     /// Render the server-only endpoint's upstream response while retaining typed errors until this boundary.
     pub fn into_response(self) -> AuthResult<AuthResponse> {
         let error = match self {
-            Self::Endpoint(error) => return Ok(error.to_auth_response()),
+            Self::Endpoint(error) => return Err(error),
             Self::Rejected(error) => {
-                let body = error.to_auth_response().body.field_value()?;
-                return Ok(AuthResponse::native(
+                let mut body = error.body_value()?.enumerable_fields()?;
+                for name in ["message", "code"] {
+                    let value = error.body_value()?;
+                    let value = if value.is_null() || value.is_undefined() {
+                        better_auth_core::FieldValue::Undefined
+                    } else {
+                        value.model_property(name)?
+                    };
+                    let _ = body.insert(name.into(), value);
+                }
+                return Ok(AuthResponse::json_value(
                     None,
                     better_auth_core::FieldMap::from([
                         ("valid".into(), false.into()),
-                        ("error".into(), body),
+                        ("error".into(), body.into()),
                         ("key".into(), better_auth_core::FieldValue::Null),
                     ])
                     .into(),
@@ -160,11 +169,7 @@ impl ApiKeyVerificationError {
 
 impl From<AuthError> for ApiKeyVerificationError {
     fn from(error: AuthError) -> Self {
-        if error.is_api_error() {
-            Self::Rejected(error)
-        } else {
-            Self::Internal(error)
-        }
+        Self::Internal(error)
     }
 }
 
@@ -221,11 +226,13 @@ impl ApiKeyPlugin {
                 ApiKeyValidationError::invalid_constant(ApiKeyErrorCode::KeyNotFound),
             ));
         }
-        let key = self
+        let result = self
             .validate_api_key(input, ctx, endpoint, input.config_id.is_none())
-            .await
-            .inspect_err(|error| {
-                let cause: &(dyn std::error::Error + Send + Sync + 'static) = match error {
+            .await;
+        let key = match result {
+            Ok(key) => key,
+            Err(error) => {
+                let cause: &(dyn std::error::Error + Send + Sync + 'static) = match &error {
                     ApiKeyVerificationError::Rejected(error)
                     | ApiKeyVerificationError::Internal(error)
                     | ApiKeyVerificationError::Endpoint(error) => error,
@@ -235,7 +242,21 @@ impl ApiKeyPlugin {
                     "Failed to validate API key:",
                     &[better_auth_core::observability::LogArgument::Error(cause)],
                 );
-            })?;
+                return Err(match error {
+                    ApiKeyVerificationError::Internal(error) => {
+                        if error
+                            .is_api_error()
+                            .map_err(ApiKeyVerificationError::Endpoint)?
+                        {
+                            ApiKeyVerificationError::Rejected(error)
+                        } else {
+                            ApiKeyVerificationError::Internal(error)
+                        }
+                    }
+                    error => error,
+                });
+            }
+        };
         let config = self
             .resolve_configuration(key.config_id.as_str())
             .map_err(ApiKeyVerificationError::Endpoint)?;
@@ -343,18 +364,13 @@ impl ApiKeyPlugin {
                             .collect(),
                     )
                 }
-                Some(body) => crate::plugins::json_body::decode(body).map_err(AuthError::from)?,
+                Some(body) => crate::plugins::json_body::decode(body)?,
                 None => serde_json::Value::Null,
             }
         };
         let endpoint = ApiKeyEndpoint::new(ctx, Some(req), Some(req.path()), &body);
-        let (session, user) = match self.authenticate_api_key(endpoint, ctx).await {
-            Ok(Some(session)) => session,
-            Ok(None) => return Ok(None),
-            Err(error @ AuthError::Response(_)) => {
-                return Ok(Some(BeforeRequestAction::Respond(error.to_auth_response())));
-            }
-            Err(error) => return Err(error),
+        let Some((session, user)) = self.authenticate_api_key(endpoint, ctx).await? else {
+            return Ok(None);
         };
         // Upstream answers this path in its hook before the route method gate.
         if req.path() == "/get-session" {
@@ -430,10 +446,7 @@ impl ApiKeyPlugin {
                     path: endpoint.path.or(Some("/")),
                     ..endpoint
                 };
-                let Some((config, key)) = self
-                    .find_session_key(endpoint)
-                    .map_err(|error| super::callbacks::callback_error(error, endpoint.request))?
-                else {
+                let Some((config, key)) = self.find_session_key(endpoint)? else {
                     return Err(AuthError::internal(
                         "API key getter stopped matching during hook execution",
                     ));
@@ -446,9 +459,7 @@ impl ApiKeyPlugin {
                     .into());
                 }
                 if let Some(validator) = &config.custom_api_key_validator
-                    && !validator.validate(&key, endpoint).await.map_err(|error| {
-                        super::callbacks::callback_error(error, endpoint.request)
-                    })?
+                    && !validator.validate(&key, endpoint).await?
                 {
                     return Err(AuthResponse::json(
                         403,

@@ -725,7 +725,7 @@ async fn test_change_email_verification_does_not_fire_after_hook_when_update_fai
         test_helpers::create_auth_request(HttpMethod::Get, "/verify-email", None, None, query);
     let err = plugin.handle_verify_email(&req, &ctx).await.unwrap_err();
 
-    assert_ne!(err.status_code(), 200);
+    assert_ne!(err.status_code().unwrap(), 200);
     assert_eq!(after_count.load(Ordering::Relaxed), 0);
 
     let source_user = ctx
@@ -768,7 +768,7 @@ async fn test_verify_email_before_hook_error_aborts() {
     let req =
         test_helpers::create_auth_request(HttpMethod::Get, "/verify-email", None, None, query);
     let err = plugin.handle_verify_email(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 403);
+    assert_eq!(err.status_code().unwrap(), 403);
 
     // User should still be unverified
     let u = ctx
@@ -1041,7 +1041,9 @@ async fn test_verify_email_errors_preserve_status_codes_redirect_queries_and_fra
             let response = match plugin.handle_verify_email(&request, &ctx).await {
                 Ok(response) => response,
                 Err(error) => error.to_auth_response(),
-            };
+            }
+            .into_http_response()
+            .unwrap();
             assert!(response.headers.get_all("set-cookie").next().is_none());
             if callback == Some("/verified?source=mail#done") {
                 assert_eq!(response.status, 302);
@@ -1075,7 +1077,7 @@ async fn test_verify_email_missing_token() {
         HashMap::new(),
     );
     let err = plugin.handle_verify_email(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // ------------------------------------------------------------------
@@ -1165,7 +1167,7 @@ async fn test_send_verification_email_already_verified_returns_error() {
         .handle_send_verification_email(&req, &ctx)
         .await
         .unwrap_err();
-    assert_eq!(err.status_code(), 400);
+    assert_eq!(err.status_code().unwrap(), 400);
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/email-verification.test.ts :: describe("Email Verification") and packages/better-auth/src/api/routes/email-verification.ts; adapted to the Rust email verification plugin.

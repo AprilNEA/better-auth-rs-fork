@@ -29,25 +29,7 @@ impl BannedUserMessage {
     pub(crate) async fn resolve(&self, user: &UserView) -> AuthResult<String> {
         match self {
             Self::Text(message) => Ok(message.clone()),
-            Self::Callback(callback) => callback(user).await.map_err(|error| {
-                if better_auth_core::hooks::current_request_hook_context()
-                    .is_some_and(|ctx| ctx.is_http)
-                    && error.status_code() == 500
-                    && !matches!(
-                        error,
-                        better_auth_core::AuthError::Response(_)
-                            | better_auth_core::AuthError::Upstream { .. }
-                    )
-                {
-                    better_auth_core::observability::logger::current().error(
-                        "Admin banned-user message callback failed",
-                        &[better_auth_core::observability::LogArgument::Error(&error)],
-                    );
-                    better_auth_core::AuthResponse::new(500).into()
-                } else {
-                    error
-                }
-            }),
+            Self::Callback(callback) => callback(user).await,
         }
     }
 }

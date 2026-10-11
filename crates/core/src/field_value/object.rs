@@ -23,6 +23,9 @@ enum ObjectStorage {
 
 pub(crate) trait FieldObjectSource: Send + Sync {
     fn own_keys(&self) -> AuthResult<Vec<String>>;
+    fn has_property(&self, name: &str) -> AuthResult<bool> {
+        Ok(self.own_keys()?.iter().any(|key| key == name))
+    }
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>>;
     fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>>;
     fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>>;
@@ -144,6 +147,18 @@ impl FieldObject {
         }
     }
 
+    /// Check property presence without evaluating the property value.
+    /// Sources with prototype properties must provide their own presence check.
+    pub fn has_property(&self, name: &str) -> AuthResult<bool> {
+        match &self.0 {
+            ObjectStorage::Owned(fields) => Ok(fields
+                .lock()
+                .map_err(|_| AuthError::internal("Field object lock poisoned"))?
+                .contains_key(name)),
+            ObjectStorage::Live(source) => source.has_property(name),
+        }
+    }
+
     /// Assign one own property and return its previous value. Cloned handles observe the assignment.
     /// Existing properties keep their position; a new property is appended.
     pub fn set(
@@ -206,6 +221,12 @@ impl FieldObject {
 impl From<FieldMap> for FieldObject {
     fn from(fields: FieldMap) -> Self {
         Self(ObjectStorage::Owned(Arc::new(Mutex::new(fields))))
+    }
+}
+
+impl From<FieldObject> for FieldValue {
+    fn from(value: FieldObject) -> Self {
+        Self::Object(value)
     }
 }
 

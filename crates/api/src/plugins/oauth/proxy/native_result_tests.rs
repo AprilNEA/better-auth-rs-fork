@@ -516,9 +516,12 @@ async fn native_api_error_body_url_is_not_an_error_object_url() -> AuthResult<()
     plugin()
         .after_request(&request(), &mut response, &fixture.context)
         .await?;
-    assert!(response.is_api_error());
-    assert_eq!(response.api_error_status(), Some(400));
-    assert!(response.body.field_value()?.strict_equals(&original));
+    assert!(response.is_api_error().unwrap());
+    assert_eq!(
+        response.api_error_status()?,
+        better_auth_core::SchemaValue::Typed(400)
+    );
+    assert!(response.api_error_body()?.strict_equals(&original));
     assert_eq!(fixture.reads.load(Ordering::SeqCst), 0);
     assert_eq!(
         fixture.store.storage_rows(EntityRole::Verification)?,
