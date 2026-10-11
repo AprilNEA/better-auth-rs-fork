@@ -43,6 +43,7 @@ field!(f64, Number);
 field!(FieldDate, Date);
 field!(crate::FieldFunction, Function);
 field!(crate::FieldObject, Object);
+field!(crate::FieldArray, Array);
 
 impl SchemaField for chrono::DateTime<chrono::Utc> {
     fn from_field(value: FieldValue) -> Result<Self, FieldValue> {
@@ -120,9 +121,11 @@ impl<T: SchemaField> SchemaField for Vec<T> {
         let FieldValue::Array(values) = &value else {
             return Err(value);
         };
+        let Some(values) = values.owned_values() else {
+            return Err(value);
+        };
         values
-            .iter()
-            .cloned()
+            .into_iter()
             .map(T::from_field)
             .collect::<Result<_, _>>()
             .map_err(|_| value)
@@ -200,9 +203,9 @@ mod json_tests {
         let value = FieldValue::from(source.clone());
         let fields = value.as_object().unwrap().snapshot_fields()?;
         let values = fields["values"].as_array().unwrap();
-        assert!(values[0].as_f64().unwrap().is_sign_negative());
-        assert_eq!(values[1].as_f64(), Some(f64::MAX));
-        assert_eq!(values[2].as_f64(), Some(-f64::MAX));
+        assert!(values.get(0)?.unwrap().as_f64().unwrap().is_sign_negative());
+        assert_eq!(values.get(1)?.unwrap().as_f64(), Some(f64::MAX));
+        assert_eq!(values.get(2)?.unwrap().as_f64(), Some(-f64::MAX));
         assert_eq!(source.clone().into_field(), value);
         let mut json_expected = source;
         json_expected["values"][0] = serde_json::json!(0);

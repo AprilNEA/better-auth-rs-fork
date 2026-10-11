@@ -5,8 +5,8 @@ pub(super) fn snapshot_tree(value: &FieldValue) -> AuthResult<FieldValue> {
     fn plain_tree(value: &FieldValue) -> AuthResult<FieldValue> {
         Ok(match value {
             FieldValue::Array(values) => values
-                .iter()
-                .map(plain_tree)
+                .iter()?
+                .map(|value| plain_tree(&value?))
                 .collect::<AuthResult<Vec<_>>>()?
                 .into(),
             FieldValue::Object(object) => object

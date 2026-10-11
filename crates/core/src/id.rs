@@ -209,12 +209,7 @@ fn serial_reference(value: crate::FieldValue, query: bool) -> AuthResult<crate::
         }
     };
     match value {
-        crate::FieldValue::Array(values) => values
-            .iter()
-            .cloned()
-            .map(convert)
-            .collect::<AuthResult<Vec<_>>>()
-            .map(Into::into),
+        crate::FieldValue::Array(values) => values.map(convert).map(crate::FieldValue::from),
         value => convert(value),
     }
 }

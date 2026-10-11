@@ -16,9 +16,12 @@ pub(super) fn observe(value: &FieldValue) -> AuthResult<Value> {
             "type":"number",
             "value": if number.is_nan() { "NaN" } else if number.is_sign_positive() { "Infinity" } else { "-Infinity" },
         }),
-        FieldValue::Array(values) => {
-            Value::Array(values.iter().map(observe).collect::<AuthResult<_>>()?)
-        }
+        FieldValue::Array(values) => Value::Array(
+            values
+                .iter()?
+                .map(|value| observe(&value?))
+                .collect::<AuthResult<_>>()?,
+        ),
         FieldValue::Object(fields) => Value::Object(
             fields
                 .snapshot_fields()?

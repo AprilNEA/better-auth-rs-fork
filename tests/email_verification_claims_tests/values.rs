@@ -15,7 +15,10 @@ pub(super) fn observe(value: &FieldValue) -> AuthResult<Value> {
             Err(_) => json!({ "type": "utf16", "units": value.as_utf16() }),
         }),
         FieldValue::Array(values) => Ok(Value::Array(
-            values.iter().map(observe).collect::<AuthResult<_>>()?,
+            values
+                .iter()?
+                .map(|value| observe(&value?))
+                .collect::<AuthResult<_>>()?,
         )),
         FieldValue::Object(fields) => Ok(Value::Object(
             fields

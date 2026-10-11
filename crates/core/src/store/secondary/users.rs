@@ -68,7 +68,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             .as_array()
             .ok_or_else(|| AuthError::internal("Cached user session index must be an array"))?;
         let mut tokens = Vec::new();
-        for reference in references {
+        for reference in references.iter()? {
+            let reference = reference?;
             if reference.is_null() {
                 return Err(AuthError::internal(
                     "Cached user session index entry cannot be null",

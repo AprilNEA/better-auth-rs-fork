@@ -26,9 +26,10 @@ pub(crate) fn matches(
 ) -> AuthResult<bool> {
     let insensitive = mode == WhereMode::Insensitive
         && (expected.is_string()
-            || expected
-                .as_array()
-                .is_some_and(|values| values.iter().all(Value::is_string)));
+            || match expected.as_array() {
+                Some(values) => values.every(|value| Ok(value.is_string()))?,
+                None => false,
+            });
     match operator {
         WhereOperator::Eq if expected.is_null() => {
             Ok(actual.is_none_or(|value| value.is_null() || value.is_undefined()))
@@ -39,9 +40,13 @@ pub(crate) fn matches(
             let values = expected
                 .as_array()
                 .ok_or_else(|| AuthError::internal("Value must be an array"))?;
-            let present = values
-                .iter()
-                .any(|value| includes(actual, value, insensitive));
+            let mut present = false;
+            for value in values.iter()? {
+                if includes(actual, &value?, insensitive) {
+                    present = true;
+                    break;
+                }
+            }
             Ok(if operator == WhereOperator::In {
                 present
             } else {
@@ -114,7 +119,7 @@ fn pattern(
         match actual {
             None | Some(Value::Undefined | Value::Null) => return Ok(false),
             Some(Value::Array(values)) => {
-                return Ok(values.iter().any(|value| value.same_value_zero(expected)));
+                return values.includes(expected);
             }
             _ => {}
         }

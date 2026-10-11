@@ -45,19 +45,21 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 .filter(FieldValue::is_truthy)
             {
                 let current = safe_parse_field(&current)?;
+                let empty = crate::FieldArray::new();
                 let list = if current.is_truthy() {
                     current
                         .as_array()
                         .ok_or_else(|| AuthError::internal("list.filter is not a function"))?
                 } else {
-                    &[]
+                    &empty
                 };
                 let now = self.now();
                 let mut filtered = Vec::new();
-                for session in list {
-                    let expires_at = crate::query::field_number(&property(session, "expiresAt")?)?;
+                for session in list.iter()? {
+                    let session = session?;
+                    let expires_at = crate::query::field_number(&property(&session, "expiresAt")?)?;
                     if expires_at > now.timestamp_millis() as f64
-                        && !property(session, "token")?.strict_equals(token)
+                        && !property(&session, "token")?.strict_equals(token)
                     {
                         filtered.push((session.clone(), expires_at));
                     }

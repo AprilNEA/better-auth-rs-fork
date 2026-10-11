@@ -412,8 +412,8 @@ fn assert_ordered(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> 
             assert_ordered(required(actual.get(name), "Expected ordered field")?, value)?;
         }
     } else if let (Some(actual), Some(expected)) = (actual.as_array(), expected.as_array()) {
-        for (actual, expected) in actual.iter().zip(expected) {
-            assert_ordered(actual, expected)?;
+        for (actual, expected) in actual.iter()?.zip(expected.iter()?) {
+            assert_ordered(&actual?, &expected?)?;
         }
     }
     Ok(())

@@ -10,6 +10,9 @@ use std::{
     sync::Arc,
 };
 
+mod array;
+pub(crate) use array::{ArrayIdentity, FieldArraySource};
+pub use array::{FieldArray, FieldArrayIter};
 mod function;
 pub use function::FieldFunction;
 mod object;
@@ -17,7 +20,7 @@ pub use object::FieldObject;
 pub(crate) use object::{FieldObjectSource, ObjectIdentity};
 mod structured_clone;
 pub use structured_clone::StructuredCloneContext;
-pub(crate) use structured_clone::{ObjectCloneSeed, publish_clone};
+pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, publish_clone};
 mod primitive;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
@@ -216,7 +219,7 @@ pub enum FieldValue {
     String(String),
     Utf16String(crate::Utf16String),
     Date(FieldDate),
-    Array(Arc<[FieldValue]>),
+    Array(FieldArray),
     Object(FieldObject),
     Function(FieldFunction),
 }
@@ -290,7 +293,7 @@ impl FieldValue {
         }
     }
 
-    pub fn as_array(&self) -> Option<&[Self]> {
+    pub fn as_array(&self) -> Option<&FieldArray> {
         match self {
             Self::Array(value) => Some(value),
             _ => None,
@@ -328,11 +331,15 @@ impl FieldValue {
     pub fn enumerable_fields(&self) -> AuthResult<FieldMap> {
         Ok(match self {
             Self::Object(fields) => fields.snapshot_fields()?,
-            Self::Array(values) => values
-                .iter()
-                .enumerate()
-                .map(|(index, value)| (index.to_string(), value.clone()))
-                .collect(),
+            Self::Array(values) => {
+                let mut fields = FieldMap::new();
+                for index in values.own_indices()? {
+                    if let Some(value) = values.get(index)? {
+                        let _ = fields.insert(index.to_string(), value);
+                    }
+                }
+                fields
+            }
             Self::String(value) => string_fields(value.encode_utf16()),
             Self::Utf16String(value) => string_fields(value.as_utf16().iter().copied()),
             _ => FieldMap::new(),
@@ -364,7 +371,7 @@ impl FieldValue {
                 left.encode_utf16().eq(right.as_utf16().iter().copied())
             }
             (Self::Date(left), Self::Date(right)) => left.same_object(right),
-            (Self::Array(left), Self::Array(right)) => Arc::ptr_eq(left, right),
+            (Self::Array(left), Self::Array(right)) => left.same_array(right),
             (Self::Object(left), Self::Object(right)) => left.same_object(right),
             (Self::Function(left), Self::Function(right)) => left == right,
             _ => false,
@@ -390,7 +397,7 @@ impl FieldValue {
 
     fn json_with_active(
         &self,
-        active: &mut HashSet<ObjectIdentity>,
+        active: &mut HashSet<ContainerIdentity>,
     ) -> AuthResult<Option<JsonValue>> {
         Ok(Some(match self {
             Self::Undefined | Self::Function(_) => return Ok(None),
@@ -406,18 +413,26 @@ impl FieldValue {
             Self::Date(value) => value
                 .iso_string()?
                 .map_or(JsonValue::Null, JsonValue::String),
-            Self::Array(values) => JsonValue::Array(
-                values
-                    .iter()
+            Self::Array(values) => {
+                let identity = ContainerIdentity::Array(values.identity());
+                if !active.insert(identity) {
+                    return Err(AuthError::type_error(
+                        "Converting circular structure to JSON",
+                    ));
+                }
+                let output = values
+                    .iter()?
                     .map(|value| {
-                        value
+                        value?
                             .json_with_active(active)
                             .map(|value| value.unwrap_or(JsonValue::Null))
                     })
-                    .collect::<AuthResult<_>>()?,
-            ),
+                    .collect::<AuthResult<_>>()?;
+                let _ = active.remove(&identity);
+                JsonValue::Array(output)
+            }
             Self::Object(values) => {
-                let identity = values.identity();
+                let identity = ContainerIdentity::Object(values.identity());
                 if !active.insert(identity) {
                     return Err(AuthError::type_error(
                         "Converting circular structure to JSON",
@@ -441,13 +456,13 @@ impl FieldValue {
         self.contains_live_object_with_seen(&mut HashSet::new())
     }
 
-    fn contains_live_object_with_seen(&self, seen: &mut HashSet<ObjectIdentity>) -> bool {
+    fn contains_live_object_with_seen(&self, seen: &mut HashSet<ContainerIdentity>) -> bool {
         match self {
             Self::Object(object) => {
                 if object.is_live() {
                     return true;
                 }
-                if !seen.insert(object.identity()) {
+                if !seen.insert(ContainerIdentity::Object(object.identity())) {
                     return false;
                 }
                 // An inaccessible owned map cannot be decoded as an ordinary JSON value.
@@ -457,9 +472,19 @@ impl FieldValue {
                         .any(|value| value.contains_live_object_with_seen(seen))
                 })
             }
-            Self::Array(values) => values
-                .iter()
-                .any(|value| value.contains_live_object_with_seen(seen)),
+            Self::Array(values) => {
+                if values.is_live() {
+                    return true;
+                }
+                if !seen.insert(ContainerIdentity::Array(values.identity())) {
+                    return false;
+                }
+                values.owned_values().is_none_or(|values| {
+                    values
+                        .iter()
+                        .any(|value| value.contains_live_object_with_seen(seen))
+                })
+            }
             _ => false,
         }
     }
@@ -542,6 +567,12 @@ impl From<Vec<FieldValue>> for FieldValue {
     }
 }
 
+impl From<FieldArray> for FieldValue {
+    fn from(value: FieldArray) -> Self {
+        Self::Array(value)
+    }
+}
+
 impl From<FieldMap> for FieldValue {
     fn from(value: FieldMap) -> Self {
         Self::Object(value.into())
@@ -556,6 +587,13 @@ mod tests;
 impl FieldValue {
     /// Apply JavaScript string conversion while retaining unpaired UTF-16 code units.
     pub fn display_utf16(&self) -> AuthResult<crate::Utf16String> {
+        self.display_utf16_with_active(&mut HashSet::new())
+    }
+
+    fn display_utf16_with_active(
+        &self,
+        active: &mut HashSet<ArrayIdentity>,
+    ) -> AuthResult<crate::Utf16String> {
         Ok(match self {
             Self::Undefined => "undefined".into(),
             Self::Null => "null".into(),
@@ -569,7 +607,9 @@ impl FieldValue {
                     "JavaScript function source is unavailable for this Rust field callback",
                 ));
             }
-            Self::Object(_) => self.primitive(PrimitiveHint::String)?.display_utf16()?,
+            Self::Object(_) => self
+                .primitive(PrimitiveHint::String)?
+                .display_utf16_with_active(active)?,
             Self::Date(value) => match value.to_datetime()? {
                 Some(value) => value
                     .with_timezone(&chrono::Local)
@@ -579,15 +619,22 @@ impl FieldValue {
                 None => "Invalid Date".into(),
             },
             Self::Array(values) => {
+                let identity = values.identity();
+                if !active.insert(identity) {
+                    return Ok("".into());
+                }
                 let mut units = Vec::new();
-                for (index, value) in values.iter().enumerate() {
+                for (index, value) in values.iter()?.enumerate() {
+                    let value = value?;
                     if index != 0 {
                         units.push(u16::from(b','));
                     }
                     if !value.is_undefined() && !value.is_null() {
-                        units.extend_from_slice(value.display_utf16()?.as_utf16());
+                        units
+                            .extend_from_slice(value.display_utf16_with_active(active)?.as_utf16());
                     }
                 }
+                let _ = active.remove(&identity);
                 crate::Utf16String::from_units(units)
             }
         })
@@ -624,4 +671,10 @@ fn json_number(value: &serde_json::Number) -> f64 {
             f64::INFINITY
         }
     })
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub(crate) enum ContainerIdentity {
+    Array(ArrayIdentity),
+    Object(ObjectIdentity),
 }

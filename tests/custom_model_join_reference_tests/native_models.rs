@@ -11,10 +11,10 @@ pub(super) fn key_order(value: &FieldValue) -> AuthResult<Value> {
             object.snapshot_fields()?.into_iter().collect::<Vec<_>>()
         } else if let Some(array) = value.as_array() {
             array
-                .iter()
+                .iter()?
                 .enumerate()
-                .map(|(index, value)| (index.to_string(), value.clone()))
-                .collect()
+                .map(|(index, value)| Ok((index.to_string(), value?)))
+                .collect::<AuthResult<_>>()?
         } else {
             return Ok(());
         };

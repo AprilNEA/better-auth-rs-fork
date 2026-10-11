@@ -177,7 +177,9 @@ mod tests {
         let members = output.model_property("members")?;
         let member = members
             .as_array()
-            .and_then(|rows| rows.first())
+            .map(|rows| rows.first())
+            .transpose()?
+            .flatten()
             .ok_or_else(|| AuthError::internal("Expected public member"))?;
         let user = member.model_property("user")?;
         assert!(user.model_property("name")?.strict_equals(&callback));

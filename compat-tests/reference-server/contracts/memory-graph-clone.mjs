@@ -172,7 +172,7 @@ test("Memory transaction keeps a User field reference to a later API Key table",
   expect(owner.name).toBe(target);
 });
 
-for (const shape of ["row", "object-array"]) {
+for (const shape of ["row", "object-array", "table"]) {
   test(`Memory ${shape} cycle reaches transaction work and fails only at JSON commit`, async () => {
     const events = [];
     const { memory, adapter } = await fixture(events);
@@ -180,7 +180,7 @@ for (const shape of ["row", "object-array"]) {
     const expectedTarget = key("target", 5);
     for (const row of [target, expectedTarget]) {
       if (shape === "row") row.name = row;
-      else {
+      else if (shape === "object-array") {
         const graph = { label: "graph", nodes: [] };
         graph.nodes.push(graph);
         row.name = graph;
@@ -191,6 +191,10 @@ for (const shape of ["row", "object-array"]) {
     const capturedKeys = memory.apikey;
     capturedUsers.push(owner);
     capturedKeys.push(target);
+    if (shape === "table") {
+      target.name = capturedKeys;
+      expectedTarget.name = [expectedTarget];
+    }
     let expectedFailure;
     try { JSON.stringify(target); } catch (error) { expectedFailure = error; }
     expect(expectedFailure).toBeInstanceOf(TypeError);
@@ -203,6 +207,7 @@ for (const shape of ["row", "object-array"]) {
         const selected = await current.findOne({ model: "apikey", where: where("target") });
         expect(selected.name).not.toBe(target.name);
         if (shape === "row") expect(selected.name.name).toBe(selected.name);
+        else if (shape === "table") expect(selected.name[0].name).toBe(selected.name);
         else expect(selected.name.nodes[0]).toBe(selected.name);
         events.push("graph:verified");
         callbackValue = await decrement(current);
@@ -224,11 +229,13 @@ for (const shape of ["row", "object-array"]) {
       "transaction:enter", "output:apikey.name", "graph:verified", "output:apikey.name",
       "input:user.name", "output:user.name", "transaction:return",
     ]);
-    assert.deepStrictEqual(memory, database([user("Published")], [expectedTarget]));
+    const expectedKeys = shape === "table" ? expectedTarget.name : [expectedTarget];
+    assert.deepStrictEqual(memory, database([user("Published")], expectedKeys));
     assert.deepStrictEqual(capturedUsers, [user()]);
-    assert.deepStrictEqual(capturedKeys, [expectedTarget]);
+    assert.deepStrictEqual(capturedKeys, expectedKeys);
     const expectedClone = key("target", 4);
     if (shape === "row") expectedClone.name = expectedClone;
+    else if (shape === "table") expectedClone.name = [expectedClone];
     else {
       const graph = { label: "graph", nodes: [] };
       graph.nodes.push(graph);
@@ -245,6 +252,10 @@ for (const shape of ["row", "object-array"]) {
       expect(target.name).toBe(target);
       expect(callbackValue.name.name).toBe(callbackValue.name);
       expect(callbackValue.name).not.toBe(callbackValue);
+    } else if (shape === "table") {
+      expect(target.name).toBe(capturedKeys);
+      expect(callbackValue.name[0].name).toBe(callbackValue.name);
+      expect(callbackValue.name[0]).not.toBe(callbackValue);
     } else {
       expect(target.name.nodes[0]).toBe(target.name);
       expect(callbackValue.name.nodes[0]).toBe(callbackValue.name);
@@ -252,6 +263,8 @@ for (const shape of ["row", "object-array"]) {
     }
   });
 }
+
+export { database, date, decrement, fixture, key, user, where };
 
 for (const failAt of [1, 2]) {
   for (const mode of ["function", "throw"]) {

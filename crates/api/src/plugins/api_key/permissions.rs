@@ -77,7 +77,7 @@ impl AllowedActions {
         match self {
             Self::Value(FieldValue::Array(values)) => {
                 let action = FieldValue::from(action);
-                Ok(values.iter().any(|value| value.same_value_zero(&action)))
+                values.includes(&action)
             }
             Self::StringPrototype => Ok(action.is_empty()),
             Self::Value(value) => {
@@ -103,13 +103,10 @@ fn property(permissions: &FieldValue, name: &str) -> AuthResult<Option<AllowedAc
         }
         FieldValue::Array(values) => {
             if name == "length" {
-                return Ok(Some(AllowedActions::Value((values.len() as f64).into())));
+                return Ok(Some(AllowedActions::Value((values.len()? as f64).into())));
             }
             if let Some(index) = array_index(name) {
-                return Ok(values
-                    .get(index as usize)
-                    .cloned()
-                    .map(AllowedActions::Value));
+                return Ok(values.get(index as usize)?.map(AllowedActions::Value));
             }
         }
         FieldValue::String(_) | FieldValue::Utf16String(_) => {

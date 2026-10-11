@@ -5,7 +5,9 @@
     reason = "Graph indices originate from the node table; source, node, and value tables retain identical lengths."
 )]
 
-use super::{FieldDate, FieldMap, FieldObject, FieldValue, ObjectIdentity};
+use super::{
+    ArrayIdentity, FieldArray, FieldDate, FieldMap, FieldObject, FieldValue, ObjectIdentity,
+};
 use crate::{AuthError, AuthResult};
 use std::any::Any;
 use std::collections::HashMap;
@@ -27,6 +29,13 @@ pub(crate) fn publish_clone<T>(target: &std::sync::Mutex<T>, value: T) {
 
 type Publish = Box<dyn FnOnce() + Send + Sync>;
 type Prepare = Box<dyn FnOnce(FieldMap, Vec<FieldValue>) -> AuthResult<Publish>>;
+type PrepareArray = Box<dyn FnOnce(usize, Vec<(usize, FieldValue)>) -> AuthResult<Publish>>;
+
+pub(crate) struct ArrayCloneSeed {
+    pub(crate) array: FieldArray,
+    pub(crate) prepare: PrepareArray,
+}
+
 type NativeRecord = Arc<dyn Any + Send + Sync>;
 
 /// A fresh object retains its native record shape until every graph conversion succeeds.
@@ -40,7 +49,7 @@ pub(crate) struct ObjectCloneSeed {
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 enum Identity {
     Date(usize),
-    Array(usize),
+    Array(ArrayIdentity),
     Object(ObjectIdentity),
 }
 
@@ -48,6 +57,7 @@ struct CloneEntry {
     _source: FieldValue,
     value: FieldValue,
     original_record: Option<NativeRecord>,
+    original_elements: Option<Vec<FieldValue>>,
 }
 
 type Copies = Vec<(Identity, CloneEntry)>;
@@ -127,6 +137,24 @@ impl StructuredCloneContext {
         self.clone_value(&value.clone().into_field())?.decode()
     }
 
+    pub(crate) fn clone_array(
+        &mut self,
+        array: &FieldArray,
+    ) -> AuthResult<(FieldArray, Vec<FieldValue>)> {
+        let value = self.clone_value(&FieldValue::Array(array.clone()))?;
+        let original = self
+            .copies
+            .get(&Identity::Array(array.identity()))
+            .and_then(|copy| copy.original_elements.clone())
+            .ok_or_else(|| {
+                AuthError::internal("Structured clone lost its original array elements")
+            })?;
+        let FieldValue::Array(copied) = value else {
+            return Err(AuthError::internal("Structured clone lost its array type"));
+        };
+        Ok((copied, original))
+    }
+
     pub(crate) fn clone_record<T: Clone + 'static>(
         &mut self,
         value: &FieldValue,
@@ -159,7 +187,11 @@ impl Edge {
 enum Node {
     Pending,
     Date(FieldDate),
-    Array(Vec<Edge>),
+    Array {
+        seed: ArrayCloneSeed,
+        length: usize,
+        entries: Vec<(usize, FieldValue, Edge)>,
+    },
     Object {
         seed: ObjectCloneSeed,
         fields: Vec<(String, Edge)>,
@@ -188,7 +220,7 @@ impl<'a> Graph<'a> {
         let identity = match value {
             FieldValue::Function(_) => return Err(AuthError::DataClone),
             FieldValue::Date(date) => Identity::Date(Arc::as_ptr(&date.0) as usize),
-            FieldValue::Array(array) => Identity::Array(Arc::as_ptr(array) as *const () as usize),
+            FieldValue::Array(array) => Identity::Array(array.identity()),
             FieldValue::Object(object) => Identity::Object(object.identity()),
             value => return Ok(Edge::Value(value.clone())),
         };
@@ -204,12 +236,22 @@ impl<'a> Graph<'a> {
         self.nodes.push(Node::Pending);
         let node = match value {
             FieldValue::Date(date) => Node::Date(FieldDate(Arc::new(*date.0))),
-            FieldValue::Array(array) => Node::Array(
-                array
-                    .iter()
-                    .map(|value| self.visit(value))
-                    .collect::<AuthResult<_>>()?,
-            ),
+            FieldValue::Array(array) => {
+                let seed = array.clone_seed()?;
+                let length = array.len()?;
+                let mut entries = Vec::new();
+                for index in array.own_indices()? {
+                    if let Some(value) = array.get(index)? {
+                        let edge = self.visit(&value)?;
+                        entries.push((index, value, edge));
+                    }
+                }
+                Node::Array {
+                    seed,
+                    length,
+                    entries,
+                }
+            }
             FieldValue::Object(object) => {
                 let mut seed = object.clone_seed()?;
                 let mut fields = Vec::new();
@@ -239,46 +281,58 @@ impl<'a> Graph<'a> {
     }
 
     fn materialize(self) -> AuthResult<(Vec<FieldValue>, Copies, Vec<Publish>)> {
-        let mut values: Vec<Option<FieldValue>> = self
+        let values = self
             .nodes
             .iter()
             .map(|node| match node {
                 Node::Date(date) => Some(date.clone().into()),
                 Node::Object { seed, .. } => Some(FieldValue::Object(seed.object.clone())),
-                Node::Array(_) | Node::Pending => None,
+                Node::Array { seed, .. } => Some(FieldValue::Array(seed.array.clone())),
+                Node::Pending => None,
             })
-            .collect();
-        for index in 0..self.nodes.len() {
-            let _ = materialize_array(index, &self.nodes, &mut values)?;
-        }
-        let values = values
-            .into_iter()
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| {
                 AuthError::internal("Structured clone graph contains an unfinished node")
             })?;
-        let originals: Vec<_> = self
+        let originals = self
             .nodes
             .iter()
             .map(|node| match node {
-                Node::Object { seed, .. } => seed.original_record.clone(),
-                _ => None,
+                Node::Object { seed, .. } => (seed.original_record.clone(), None),
+                Node::Array { entries, .. } => (
+                    None,
+                    Some(entries.iter().map(|(_, value, _)| value.clone()).collect()),
+                ),
+                _ => (None, None),
             })
-            .collect();
+            .collect::<Vec<_>>();
         let mut publish = Vec::new();
         for node in self.nodes {
-            if let Node::Object {
-                seed,
-                fields,
-                state,
-            } = node
-            {
-                let fields = fields
-                    .into_iter()
-                    .map(|(name, edge)| (name, edge.resolve(&values)))
-                    .collect();
-                let state = state.iter().map(|edge| edge.resolve(&values)).collect();
-                publish.push((seed.prepare)(fields, state)?);
+            match node {
+                Node::Object {
+                    seed,
+                    fields,
+                    state,
+                } => {
+                    let fields = fields
+                        .into_iter()
+                        .map(|(name, edge)| (name, edge.resolve(&values)))
+                        .collect();
+                    let state = state.iter().map(|edge| edge.resolve(&values)).collect();
+                    publish.push((seed.prepare)(fields, state)?);
+                }
+                Node::Array {
+                    seed,
+                    length,
+                    entries,
+                } => {
+                    let entries = entries
+                        .into_iter()
+                        .map(|(index, _, edge)| (index, edge.resolve(&values)))
+                        .collect();
+                    publish.push((seed.prepare)(length, entries)?);
+                }
+                _ => {}
             }
         }
         let copies = self
@@ -286,45 +340,22 @@ impl<'a> Graph<'a> {
             .into_iter()
             .zip(values.iter().cloned())
             .zip(originals)
-            .map(|(((identity, source), value), original_record)| {
-                (
-                    identity,
-                    CloneEntry {
-                        _source: source,
-                        value,
-                        original_record,
-                    },
-                )
-            })
+            .map(
+                |(((identity, source), value), (original_record, original_elements))| {
+                    (
+                        identity,
+                        CloneEntry {
+                            _source: source,
+                            value,
+                            original_record,
+                            original_elements,
+                        },
+                    )
+                },
+            )
             .collect();
         Ok((values, copies, publish))
     }
-}
-
-fn materialize_array(
-    index: usize,
-    nodes: &[Node],
-    values: &mut [Option<FieldValue>],
-) -> AuthResult<FieldValue> {
-    if let Some(value) = &values[index] {
-        return Ok(value.clone());
-    }
-    let Node::Array(edges) = &nodes[index] else {
-        return Err(AuthError::internal(
-            "Structured clone graph contains an unfinished node",
-        ));
-    };
-    // Immutable arrays cannot form a cycle without an object, whose placeholder already exists.
-    let array = edges
-        .iter()
-        .map(|edge| match edge {
-            Edge::Value(value) => Ok(value.clone()),
-            Edge::Node(index) => materialize_array(*index, nodes, values),
-        })
-        .collect::<AuthResult<Vec<_>>>()?;
-    let value = FieldValue::from(array);
-    values[index] = Some(value.clone());
-    Ok(value)
 }
 
 #[cfg(test)]

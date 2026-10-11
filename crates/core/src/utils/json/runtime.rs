@@ -98,18 +98,26 @@ fn revive(
 fn revive_with_active(
     value: FieldValue,
     parse_date: &impl Fn(&str) -> Option<FieldDate>,
-    active: &mut std::collections::HashSet<crate::field_value::ObjectIdentity>,
+    active: &mut std::collections::HashSet<crate::field_value::ContainerIdentity>,
 ) -> AuthResult<FieldValue> {
     Ok(match value {
         FieldValue::String(text) => parse_date(&text).map_or_else(|| text.into(), Into::into),
-        FieldValue::Array(values) => values
-            .iter()
-            .cloned()
-            .map(|value| revive_with_active(value, parse_date, active))
-            .collect::<AuthResult<Vec<_>>>()?
-            .into(),
+        FieldValue::Array(values) => {
+            let identity = crate::field_value::ContainerIdentity::Array(values.identity());
+            if !active.insert(identity) {
+                return Err(AuthError::internal(
+                    "JSON date revival of cyclic field arrays is not supported",
+                ));
+            }
+            let copied = values
+                .iter()?
+                .map(|value| revive_with_active(value?, parse_date, active))
+                .collect::<AuthResult<Vec<_>>>()?;
+            let _ = active.remove(&identity);
+            copied.into()
+        }
         FieldValue::Object(values) => {
-            let identity = values.identity();
+            let identity = crate::field_value::ContainerIdentity::Object(values.identity());
             if !active.insert(identity) {
                 return Err(AuthError::internal(
                     "JSON date revival of cyclic field objects is not supported",

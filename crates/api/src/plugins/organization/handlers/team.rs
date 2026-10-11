@@ -793,7 +793,13 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(
-            full.model_property("teams").unwrap().as_array().unwrap()[0]
+            full.model_property("teams")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .unwrap()
                 .model_property("memberCount")
                 .unwrap()
                 .as_f64(),

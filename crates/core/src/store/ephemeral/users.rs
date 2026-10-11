@@ -330,7 +330,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
                 Ok(crate::query::paginate_memory(
                     op.capture_table(EntityRole::User)?.select_refs(|user| {
                         let actual = user.field("id")?.unwrap_or_default();
-                        Ok(ids.iter().any(|id| actual.same_value_zero(id)))
+                        ids.includes(&actual)
                     })?,
                     Some(limit),
                     None,

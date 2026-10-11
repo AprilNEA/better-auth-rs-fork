@@ -27,8 +27,8 @@ fn native(value: &FieldValue) -> AuthResult<Value> {
         }
         FieldValue::Date(value) => json!({"date": value.milliseconds()}),
         FieldValue::Array(values) => values
-            .iter()
-            .map(native)
+            .iter()?
+            .map(|value| native(&value?))
             .collect::<AuthResult<Vec<_>>>()?
             .into(),
         FieldValue::Object(fields) => fields

@@ -352,8 +352,8 @@ fn assert_fields(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> {
             }
         }
         FieldValue::Array(expected) => {
-            for (actual, expected) in actual.as_array().unwrap().iter().zip(expected.iter()) {
-                assert_fields(actual, expected)?;
+            for (actual, expected) in actual.as_array().unwrap().iter()?.zip(expected.iter()?) {
+                assert_fields(&actual?, &expected?)?;
             }
         }
         _ => {}

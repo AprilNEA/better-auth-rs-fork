@@ -17,6 +17,8 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
+mod arrays;
+
 type Events = Arc<Mutex<Vec<String>>>;
 
 fn required<T>(value: Option<T>) -> AuthResult<T> {
@@ -134,12 +136,25 @@ fn check_raw(
     expected_users: &[FieldMap],
     expected_keys: &[FieldMap],
 ) -> AuthResult<()> {
+    check_raw_accounts(store, expected_users, expected_keys, &[])
+}
+
+fn check_raw_accounts(
+    store: &EphemeralStore,
+    expected_users: &[FieldMap],
+    expected_keys: &[FieldMap],
+    expected_accounts: &[FieldMap],
+) -> AuthResult<()> {
     let state = store.operation(|op| op.capture_state())?;
     assert_eq!(state.users.snapshot()?, expected_users);
     assert_eq!(state.api_keys.snapshot()?, expected_keys);
+    assert_eq!(state.accounts.snapshot()?, expected_accounts);
+    check_empty_tables(&state)
+}
+
+fn check_empty_tables(state: &super::State) -> AuthResult<()> {
     for table in [
         &state.sessions,
-        &state.accounts,
         &state.verifications,
         &state.organizations,
         &state.members,
@@ -345,54 +360,84 @@ async fn user_field_reference_reuses_a_later_top_level_key_table() -> AuthResult
     Ok(())
 }
 
-fn cyclic_name(row: &FieldValue, row_cycle: bool) -> AuthResult<FieldValue> {
-    if row_cycle {
-        Ok(row.clone())
-    } else {
-        let graph: FieldValue = FieldMap::from([("label".into(), "graph".into())]).into();
-        let _ = required(graph.as_object())?.set("nodes", vec![graph.clone()].into())?;
-        Ok(graph)
+#[derive(Clone, Copy)]
+enum CycleShape {
+    Row,
+    ObjectArray,
+    Table,
+}
+
+fn cyclic_name(
+    row: &FieldValue,
+    table: &TableRef<FieldMap>,
+    shape: CycleShape,
+) -> AuthResult<FieldValue> {
+    match shape {
+        CycleShape::Row => Ok(row.clone()),
+        CycleShape::Table => Ok(table.array().into()),
+        CycleShape::ObjectArray => {
+            let graph: FieldValue = FieldMap::from([("label".into(), "graph".into())]).into();
+            let _ = required(graph.as_object())?.set("nodes", vec![graph.clone()].into())?;
+            Ok(graph)
+        }
     }
 }
 
-fn check_cycle(name: &FieldValue, row_cycle: bool, remaining: f64) -> AuthResult<()> {
-    let object = required(name.as_object())?;
-    let back = if row_cycle {
-        assert_eq!(
-            object.snapshot_fields()?,
-            named(key("target", remaining), name.clone())
-        );
-        required(object.get("name")?)?
-    } else {
-        assert_eq!(
-            object.snapshot_fields()?,
-            [
-                ("label".into(), "graph".into()),
-                ("nodes".into(), vec![name.clone()].into()),
-            ]
-            .into()
-        );
-        required(required(object.get("nodes")?)?.as_array())?[0].clone()
+fn check_cycle(name: &FieldValue, shape: CycleShape, remaining: f64) -> AuthResult<()> {
+    let row = match shape {
+        CycleShape::Table => {
+            let array = required(name.as_array())?;
+            assert_eq!(array.len()?, 1);
+            assert_eq!(array.own_indices()?, [0]);
+            required(array.first()?)?
+        }
+        _ => name.clone(),
+    };
+    let object = required(row.as_object())?;
+    let back = match shape {
+        CycleShape::Row | CycleShape::Table => {
+            assert_eq!(
+                object.snapshot_fields()?,
+                named(key("target", remaining), name.clone())
+            );
+            required(object.get("name")?)?
+        }
+        CycleShape::ObjectArray => {
+            assert_eq!(
+                object.snapshot_fields()?,
+                [
+                    ("label".into(), "graph".into()),
+                    ("nodes".into(), vec![name.clone()].into()),
+                ]
+                .into()
+            );
+            required(required(required(object.get("nodes")?)?.as_array())?.get(0)?)?
+        }
     };
     assert!(back.strict_equals(name));
     Ok(())
 }
 
-fn unlink(name: &FieldValue, row_cycle: bool) -> AuthResult<()> {
-    let _ = required(name.as_object())?.delete(if row_cycle { "name" } else { "nodes" })?;
+fn unlink(name: &FieldValue, shape: CycleShape) -> AuthResult<()> {
+    let (row, field) = match shape {
+        CycleShape::Row => (name.clone(), "name"),
+        CycleShape::ObjectArray => (name.clone(), "nodes"),
+        CycleShape::Table => (required(required(name.as_array())?.first()?)?, "name"),
+    };
+    let _ = required(row.as_object())?.delete(field)?;
     Ok(())
 }
 
 #[tokio::test]
 async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_json_failure()
 -> AuthResult<()> {
-    for row_cycle in [true, false] {
+    for shape in [CycleShape::Row, CycleShape::ObjectArray, CycleShape::Table] {
         let trace = Events::default();
         let store = fixture(&trace);
         let captured_keys = keys(&store)?;
         let captured_users = users(&store)?;
         let target = captured_keys.push(key("target", 5.0))?;
-        let live_name = cyclic_name(&target.field_value(), row_cycle)?;
+        let live_name = cyclic_name(&target.field_value(), &captured_keys, shape)?;
         let _ = target.set_field("name".into(), live_name.clone())?;
         let owner = captured_users.push(user("Before".into()))?;
         let expected_failure = required(target.field_value().stringify().err())?;
@@ -401,7 +446,7 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
         record(&trace, "transaction:enter")?;
         let selected = required(tx.get_api_key_record(&"target".to_owned().into()).await?)?;
         assert!(!selected["name"].strict_equals(&live_name));
-        check_cycle(&selected["name"], row_cycle, 5.0)?;
+        check_cycle(&selected["name"], shape, 5.0)?;
         record(&trace, "graph:verified")?;
         let callback_value = decrement(&tx).await?;
         let changed_user = tx
@@ -451,10 +496,10 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
         assert!(required(keys(&store)?.row_at(0)?)?.same_row(&target));
         assert!(!callback_value["name"].strict_equals(&live_name));
         assert!(!callback_value["createdAt"].strict_equals(&required(target.field("createdAt")?)?));
-        check_cycle(&live_name, row_cycle, 5.0)?;
-        check_cycle(&callback_value["name"], row_cycle, 4.0)?;
+        check_cycle(&live_name, shape, 5.0)?;
+        check_cycle(&callback_value["name"], shape, 4.0)?;
         for name in [&live_name, &base_name, &callback_value["name"]] {
-            unlink(name, row_cycle)?;
+            unlink(name, shape)?;
         }
     }
     Ok(())

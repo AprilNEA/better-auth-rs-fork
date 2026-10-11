@@ -596,8 +596,8 @@ fn shape_invitation_output(
     }
     fn shape_list(value: &better_auth_core::FieldValue) -> AuthResult<()> {
         if let Some(invitations) = value.as_array() {
-            for invitation in invitations {
-                shape(invitation)?;
+            for invitation in invitations.iter()? {
+                shape(&invitation?)?;
             }
         }
         Ok(())

@@ -164,8 +164,11 @@ fn assert_native_nan(row: &DeviceCode, field: &str) {
     let number = if field == "runtime" {
         let object = value
             .as_array()
-            .and_then(|array| array.first())
-            .and_then(FieldValue::as_object)
+            .map(|array| array.first())
+            .transpose()
+            .expect("native array read")
+            .flatten()
+            .and_then(|value| value.as_object().cloned())
             .expect("nested native object");
         assert_eq!(
             object.get("optional").expect("nested property read"),

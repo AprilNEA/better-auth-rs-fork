@@ -355,23 +355,24 @@ async fn validate_permissions(
     }
     let mut missing = Vec::new();
     for (resource, actions) in &permission {
-        let actions = match actions {
-            FieldValue::Array(actions) => actions.to_vec(),
-            FieldValue::String(actions) => actions
-                .chars()
-                .map(|value| FieldValue::from(value.to_string()))
-                .collect(),
-            FieldValue::Utf16String(actions) => {
-                char::decode_utf16(actions.as_utf16().iter().copied())
-                    .map(|character| match character {
+        let actions: Box<dyn Iterator<Item = AuthResult<FieldValue>> + Send + '_> = match actions {
+            FieldValue::Array(actions) => Box::new(actions.iter()?),
+            FieldValue::String(actions) => Box::new(
+                actions
+                    .chars()
+                    .map(|value| Ok(FieldValue::from(value.to_string()))),
+            ),
+            FieldValue::Utf16String(actions) => Box::new(
+                char::decode_utf16(actions.as_utf16().iter().copied()).map(|character| {
+                    Ok(match character {
                         Ok(character) => FieldValue::from(character.to_string()),
                         Err(error) => better_auth_core::Utf16String::from_units(vec![
                             error.unpaired_surrogate(),
                         ])
                         .into(),
                     })
-                    .collect()
-            }
+                }),
+            ),
             _ => {
                 return Err(AuthError::internal(
                     "Role permission actions are not iterable",
@@ -379,6 +380,7 @@ async fn validate_permissions(
             }
         };
         for requested in actions {
+            let requested = requested?;
             let allowed = if let Some(requested) = requested.as_str() {
                 check_permission(
                     member_role,

@@ -122,7 +122,7 @@ impl UsernameConfig {
             }
             FieldValue::String(value) => value.encode_utf16().count() as f64,
             FieldValue::Utf16String(value) => value.as_utf16().len() as f64,
-            FieldValue::Array(value) => value.len() as f64,
+            FieldValue::Array(value) => value.len()? as f64,
             value => better_auth_core::query::field_number(
                 &value
                     .as_object()

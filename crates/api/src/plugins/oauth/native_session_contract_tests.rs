@@ -98,8 +98,8 @@ fn native(value: &FieldValue) -> AuthResult<FieldValue> {
             ),
         ]),
         FieldValue::Array(values) => values
-            .iter()
-            .map(native)
+            .iter()?
+            .map(|value| native(&value?))
             .collect::<AuthResult<Vec<_>>>()?
             .into(),
         FieldValue::Object(fields) => fields
@@ -640,8 +640,8 @@ impl Normalize {
                 value.into()
             }
             FieldValue::Array(values) => values
-                .iter()
-                .map(|value| self.value(value))
+                .iter()?
+                .map(|value| self.value(&value?))
                 .collect::<AuthResult<Vec<_>>>()?
                 .into(),
             FieldValue::Object(fields) => fields

@@ -159,18 +159,12 @@ pub(super) fn remaining_backup_codes(
         }));
     };
     let code = FieldValue::from(code);
-    if !codes
-        .iter()
-        .any(|candidate| candidate.same_value_zero(&code))
-    {
+    if !codes.includes(&code)? {
         return Ok(None);
     }
     Ok(Some(
         codes
-            .iter()
-            .filter(|candidate| !candidate.strict_equals(&code))
-            .cloned()
-            .collect::<Vec<_>>()
+            .filter(|candidate| Ok(!candidate.strict_equals(&code)))?
             .into(),
     ))
 }

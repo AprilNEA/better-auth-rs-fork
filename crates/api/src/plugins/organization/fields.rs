@@ -10,12 +10,17 @@ pub(super) fn shape_native_session_teams(
     enabled: bool,
 ) -> better_auth_core::AuthResult<()> {
     use better_auth_core::FieldValue;
-    use std::sync::Arc;
     match value {
         FieldValue::Array(values) => {
-            for value in Arc::make_mut(values) {
-                shape_native_session_teams(value, enabled)?;
-            }
+            *values = values
+                .iter()?
+                .map(|value| {
+                    let mut value = value?;
+                    shape_native_session_teams(&mut value, enabled)?;
+                    Ok(value)
+                })
+                .collect::<AuthResult<Vec<_>>>()?
+                .into();
         }
         FieldValue::Object(object) => {
             let mut fields = object.snapshot_fields()?;
@@ -193,7 +198,6 @@ pub(super) fn filter_native_response(
     fields: &OrganizationFields,
 ) -> better_auth_core::AuthResult<()> {
     use better_auth_core::FieldValue;
-    use std::sync::Arc;
     fn filter(
         value: &mut FieldValue,
         schema: &better_auth_core::user_fields::UserConfig,
@@ -212,9 +216,15 @@ pub(super) fn filter_native_response(
                 *object = fields.into();
             }
             FieldValue::Array(values) => {
-                for value in Arc::make_mut(values) {
-                    filter(value, schema, team)?;
-                }
+                *values = values
+                    .iter()?
+                    .map(|value| {
+                        let mut value = value?;
+                        filter(&mut value, schema, team)?;
+                        Ok(value)
+                    })
+                    .collect::<AuthResult<Vec<_>>>()?
+                    .into();
             }
             _ => {}
         }

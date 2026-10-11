@@ -216,14 +216,16 @@ pub(super) fn relation(target: Target, rows: &[FieldMap]) -> FieldValue {
     }
 }
 
-pub(super) fn first(target: Target, value: &FieldValue) -> AuthResult<&FieldValue> {
+pub(super) fn first(target: Target, value: &FieldValue) -> AuthResult<FieldValue> {
     if target.many() {
         value
             .as_array()
-            .and_then(|rows| rows.first())
+            .map(|rows| rows.first())
+            .transpose()?
+            .flatten()
             .ok_or_else(|| AuthError::internal("Expected relation child"))
     } else {
-        Ok(value)
+        Ok(value.clone())
     }
 }
 

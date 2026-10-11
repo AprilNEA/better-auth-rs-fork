@@ -280,10 +280,10 @@ fn key_order(value: &FieldValue, path: &[String]) -> AuthResult<Vec<Value>> {
     let entries: Vec<_> = match value {
         FieldValue::Object(fields) => fields.snapshot_fields()?.into_iter().collect(),
         FieldValue::Array(values) => values
-            .iter()
+            .iter()?
             .enumerate()
-            .map(|(index, value)| (index.to_string(), value.clone()))
-            .collect(),
+            .map(|(index, value)| Ok((index.to_string(), value?)))
+            .collect::<AuthResult<_>>()?,
         _ => return Ok(Vec::new()),
     };
     let mut result = vec![json!({

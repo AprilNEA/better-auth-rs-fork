@@ -159,12 +159,11 @@ fn field_value(
             value.is_some_and(|value| value.is_null() || value.is_string())
         }
         BaseField::Boolean => value.is_some_and(|value| matches!(value, FieldValue::Bool(_))),
-        BaseField::Roles => value.is_some_and(|value| {
-            value.is_string()
-                || value
-                    .as_array()
-                    .is_some_and(|values| values.iter().all(FieldValue::is_string))
-        }),
+        BaseField::Roles => match value {
+            Some(value) if value.is_string() => true,
+            Some(FieldValue::Array(values)) => values.every(|value| Ok(value.is_string()))?,
+            _ => false,
+        },
         BaseField::Record | BaseField::Permissions => value.is_some_and(FieldValue::is_object),
     };
     if !valid {
@@ -186,12 +185,13 @@ fn field_value(
         for (key, value) in &values.snapshot_fields()? {
             let path = format!("{location}.{key}");
             if let Some(values) = value.as_array() {
-                for (index, value) in values.iter().enumerate() {
+                for (index, value) in values.iter()?.enumerate() {
+                    let value = value?;
                     if !value.is_string() {
                         errors.push(native_invalid_type(
                             &format!("{path}.{index}"),
                             "string",
-                            Some(value),
+                            Some(&value),
                         ));
                     }
                 }
@@ -251,7 +251,7 @@ fn has_team_length(value: &FieldValue) -> AuthResult<bool> {
         FieldValue::Undefined | FieldValue::Null => {
             Err(better_auth_core::AuthResponse::new(500).into())
         }
-        FieldValue::Array(values) => Ok(!values.is_empty()),
+        FieldValue::Array(values) => Ok(!values.is_empty()?),
         FieldValue::String(value) => Ok(!value.is_empty()),
         FieldValue::Utf16String(value) => Ok(!value.as_utf16().is_empty()),
         FieldValue::Object(value) => {
@@ -270,7 +270,7 @@ pub(super) fn invitation_team_alias(
         return Ok(SchemaValue::Undefined);
     }
     Ok(SchemaValue::from_field(match value {
-        FieldValue::Array(values) => values.first().cloned().unwrap_or_default(),
+        FieldValue::Array(values) => values.first()?.unwrap_or_default(),
         FieldValue::Object(values) => values.get("0")?.unwrap_or_default(),
         _ => FieldValue::Undefined,
     }))

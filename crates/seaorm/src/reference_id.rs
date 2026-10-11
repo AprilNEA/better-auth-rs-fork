@@ -70,12 +70,7 @@ fn serial_reference(
         }
     };
     match value {
-        FieldValue::Array(values) => values
-            .iter()
-            .cloned()
-            .map(convert)
-            .collect::<better_auth_core::AuthResult<Vec<_>>>()
-            .map(FieldValue::from),
+        FieldValue::Array(values) => values.map(convert).map(FieldValue::from),
         value => convert(value),
     }
 }

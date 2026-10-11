@@ -50,8 +50,8 @@ impl CustomSessionInput {
             ResponseBody::Native(FieldValue::Null | FieldValue::Undefined) => Ok(None),
             ResponseBody::Empty => Ok(None),
             ResponseBody::Native(FieldValue::Array(values)) => values
-                .iter()
-                .map(Self::from_field_value)
+                .iter()?
+                .map(|value| Self::from_field_value(&value?))
                 .collect::<AuthResult<_>>()
                 .map(Some),
             ResponseBody::Native(_) => Err(better_auth_core::AuthError::internal(

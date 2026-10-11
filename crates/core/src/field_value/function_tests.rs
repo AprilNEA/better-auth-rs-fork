@@ -53,7 +53,7 @@ fn contextual_calls_preserve_handles_and_expose_callback_mutations() -> AuthResu
         return Err(AuthError::internal("Expected the original array result"));
     };
     let child = returned
-        .first()
+        .first()?
         .ok_or_else(|| AuthError::internal("Expected the original array child"))?;
     assert_eq!(child.model_property("visited")?, true.into());
     Ok(())

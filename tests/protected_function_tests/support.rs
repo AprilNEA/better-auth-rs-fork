@@ -42,8 +42,8 @@ pub(super) fn observe(
         FieldValue::Date(_) => json!({"type": "date", "value": value.json()?.unwrap()}),
         FieldValue::Array(values) => Value::Array(
             values
-                .iter()
-                .map(|value| observe(value, default, returned))
+                .iter()?
+                .map(|value| observe(&value?, default, returned))
                 .collect::<AuthResult<_>>()?,
         ),
         FieldValue::Object(fields) => Value::Object(

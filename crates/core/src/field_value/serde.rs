@@ -18,7 +18,7 @@ impl Serialize for Json<'_> {
 
 #[derive(Default)]
 struct JsonState {
-    active: RefCell<HashSet<super::ObjectIdentity>>,
+    active: RefCell<HashSet<super::ContainerIdentity>>,
     source_error: RefCell<Option<AuthError>>,
 }
 
@@ -66,14 +66,29 @@ impl Serialize for JsonNode<'_> {
                 .serialize(serializer),
             FieldValue::Array(values) => {
                 use ::serde::ser::SerializeSeq;
-                let mut sequence = serializer.serialize_seq(Some(values.len()))?;
-                for value in values.iter() {
-                    sequence.serialize_element(&JsonNode(value, self.1))?;
+                let identity = super::ContainerIdentity::Array(values.identity());
+                if !self.1.active.borrow_mut().insert(identity) {
+                    return Err(self.1.error(AuthError::type_error(
+                        "Converting circular structure to JSON",
+                    )));
                 }
-                sequence.end()
+                let result = (|| {
+                    let length = values.len().map_err(|error| self.1.error(error))?;
+                    let mut sequence = serializer.serialize_seq(Some(length))?;
+                    for index in 0..length {
+                        let value = values
+                            .get(index)
+                            .map_err(|error| self.1.error(error))?
+                            .unwrap_or_default();
+                        sequence.serialize_element(&JsonNode(&value, self.1))?;
+                    }
+                    sequence.end()
+                })();
+                let _ = self.1.active.borrow_mut().remove(&identity);
+                result
             }
             FieldValue::Object(object) => {
-                let identity = object.identity();
+                let identity = super::ContainerIdentity::Object(object.identity());
                 if !self.1.active.borrow_mut().insert(identity) {
                     return Err(self.1.error(AuthError::type_error(
                         "Converting circular structure to JSON",

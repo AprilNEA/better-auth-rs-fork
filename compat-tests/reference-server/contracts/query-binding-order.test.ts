@@ -11,6 +11,7 @@ import "./plugin-selector-binding.mjs";
 import "./predicate-case-mode.mjs";
 import "./memory-operation-reentry.mjs";
 import "./memory-graph-clone.mjs";
+import "./memory-array-clone.mjs";
 import "./runtime-json-getters.mjs";
 import "./direct-map-json-order.mjs";
 import "./cookie-cache-json-errors.mjs";

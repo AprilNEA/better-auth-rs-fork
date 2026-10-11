@@ -228,9 +228,9 @@ async fn serial_user_joins_keep_numeric_bindings_in_both_modes() -> AuthResult<(
         let details = details.into_public_value(&store.organization_fields()?)?;
         let members = details.model_property("members")?;
         let members = required(members.as_array())?;
-        assert_eq!(members.len(), 1);
+        assert_eq!(members.len()?, 1);
         assert_eq!(
-            required(members.first())?
+            required(members.first()?)?
                 .model_property("user")?
                 .model_property("id")?,
             Value::from("1")

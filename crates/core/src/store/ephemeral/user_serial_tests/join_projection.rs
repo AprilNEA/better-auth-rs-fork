@@ -166,8 +166,8 @@ async fn member_joins_and_full_details_resolve_users_at_their_projection_stage()
         let details = details.into_public_value(&store.organization_fields()?)?;
         let members = details.model_property("members")?;
         let members = required(members.as_array())?;
-        assert_eq!(members.len(), 1);
-        let member = required(members.first())?;
+        assert_eq!(members.len()?, 1);
+        let member = required(members.first()?)?;
         assert_eq!(member.model_property("userId")?, Value::from("2"));
         assert_eq!(
             member.model_property("user")?.model_property("id")?,

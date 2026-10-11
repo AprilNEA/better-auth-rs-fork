@@ -87,12 +87,13 @@ impl AfterEndpointHook<StatelessSchema> for AfterHook {
             });
         let _ = response.headers.insert("x-after-hook", "observed");
         if self.replace_list && request.path() == LIST_PATH {
-            let FieldValue::Array(mut sessions) = returned else {
+            let FieldValue::Array(sessions) = returned else {
                 return Err(AuthError::internal(
                     "Expected a device session list to replace",
                 ));
             };
-            let Some(FieldValue::Object(session)) = Arc::make_mut(&mut sessions).first_mut() else {
+            let mut sessions = sessions.snapshot()?;
+            let Some(FieldValue::Object(session)) = sessions.first_mut() else {
                 return Err(AuthError::internal("Expected a device session to replace"));
             };
             let mut fields = session.snapshot_fields()?;
@@ -105,7 +106,7 @@ impl AfterEndpointHook<StatelessSchema> for AfterHook {
             let _ = user_fields.remove("loneSurrogate");
             *user = user_fields.into();
             *session = fields.into();
-            let mut value = FieldValue::Array(sessions)
+            let mut value = FieldValue::from(sessions)
                 .json()?
                 .ok_or_else(|| AuthError::internal("Expected a JSON session list"))?;
             let user = value
@@ -293,12 +294,11 @@ async fn check_native_fields(path: &str) {
             .unwrap();
         let after_user = returned
             .as_array()
-            .and_then(|sessions| sessions.first())
-            .and_then(FieldValue::as_object)
-            .map(|session| session.get("user"))
-            .transpose()
             .unwrap()
-            .flatten()
+            .first()
+            .unwrap()
+            .unwrap()
+            .model_property("user")
             .unwrap();
         // parseUserOutput clones the source; the later custom callback reuses that public result.
         assert!(user.strict_equals(&after_user));

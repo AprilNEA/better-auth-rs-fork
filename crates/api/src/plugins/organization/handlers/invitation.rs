@@ -215,12 +215,13 @@ pub(crate) async fn invite_member_core(
             let requested = raw
                 .as_array()
                 .ok_or_else(|| AuthError::from(AuthResponse::new(500)))?;
-            for team_id in requested {
+            for team_id in requested.iter()? {
+                let team_id = team_id?;
                 let reserved = match team_id {
                     better_auth_core::FieldValue::String(id) => id.contains(','),
-                    better_auth_core::FieldValue::Array(ids) => ids
-                        .iter()
-                        .any(|id| id.strict_equals(&better_auth_core::FieldValue::from(","))),
+                    better_auth_core::FieldValue::Array(ids) => {
+                        ids.includes(&better_auth_core::FieldValue::from(","))?
+                    }
                     _ => return Err(AuthResponse::new(500).into()),
                 };
                 if reserved {
@@ -229,10 +230,11 @@ pub(crate) async fn invite_member_core(
                     ));
                 }
             }
-            for team_id in requested {
+            for team_id in requested.iter()? {
+                let team_id = team_id?;
                 let _ = ctx
                     .database
-                    .get_team_details_value(team_id, Some(&org_id), false)
+                    .get_team_details_value(&team_id, Some(&org_id), false)
                     .await?
                     .ok_or_else(|| AuthError::bad_request("Team not found"))?
                     .into_public_parts(&config.schema.team)?;
@@ -240,10 +242,11 @@ pub(crate) async fn invite_member_core(
             if config.teams.maximum_members_per_team.is_some()
                 || config.teams.maximum_members_per_team_callback.is_some()
             {
-                for team_id in requested {
+                for team_id in requested.iter()? {
+                    let team_id = team_id?;
                     let team = ctx
                         .database
-                        .get_team_details_value(team_id, Some(&org_id), true)
+                        .get_team_details_value(&team_id, Some(&org_id), true)
                         .await?
                         .ok_or_else(|| AuthError::bad_request("Team not found"))?;
                     let (_, members) = team.into_public_parts(&config.schema.team)?;
@@ -253,7 +256,7 @@ pub(crate) async fn invite_member_core(
                     let limit = config
                         .team_member_limit(OrganizationTeamMemberLimit {
                             organization_id: &org_id,
-                            team_id,
+                            team_id: &team_id,
                             session: OrganizationSession {
                                 user: &session.user,
                                 session: &session.session,

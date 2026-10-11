@@ -323,7 +323,9 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
                 if native {
                     let raw_child = raw
                         .as_array()
-                        .and_then(|rows| rows.first())
+                        .map(|rows| rows.first())
+                        .transpose()?
+                        .flatten()
                         .ok_or_else(|| AuthError::internal("Expected raw membership"))?;
                     assert!(
                         child
@@ -426,9 +428,9 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                     let rows = value
                         .as_array()
                         .ok_or_else(|| AuthError::internal("Expected raw member page"))?;
-                    assert_eq!(rows.len(), 1);
+                    assert_eq!(rows.len()?, 1);
                     assert_eq!(
-                        rows.first()
+                        rows.first()?
                             .ok_or_else(|| AuthError::internal("Expected raw member"))?
                             .model_property("org_ref")?,
                         Value::from("route-a")
@@ -566,9 +568,9 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
             let rows = rows
                 .as_array()
                 .ok_or_else(|| AuthError::internal("Expected relation page"))?;
-            assert_eq!(rows.len(), 1);
+            assert_eq!(rows.len()?, 1);
             assert_eq!(
-                rows.first()
+                rows.first()?
                     .ok_or_else(|| AuthError::internal("Expected relation row"))?
                     .model_property("id")?,
                 Value::from(format!("{prefix}-{suffix}"))

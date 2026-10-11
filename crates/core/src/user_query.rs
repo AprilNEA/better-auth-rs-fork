@@ -110,9 +110,9 @@ fn compare_date(lhs: FieldDate, rhs: FieldDate, operator: &str) -> bool {
     }
 }
 
-fn matches_filter(user: &UserView, params: &ListUsersParams) -> bool {
+fn matches_filter(user: &UserView, params: &ListUsersParams) -> AuthResult<bool> {
     let Some(filter_value) = params.filter_value.as_ref() else {
-        return true;
+        return Ok(true);
     };
     let field = params
         .filter_field
@@ -145,15 +145,21 @@ fn match_filter(
     filter_value: &Value,
     operator: &str,
     matches: impl Fn(&Value, &str) -> bool,
-) -> bool {
+) -> AuthResult<bool> {
     if matches!(operator, "in" | "not_in") {
         let Some(values) = filter_value.as_array() else {
-            return false;
+            return Ok(false);
         };
-        let present = values.iter().any(|expected| matches(expected, "eq"));
-        return if operator == "in" { present } else { !present };
+        let mut present = false;
+        for expected in values.iter()? {
+            if matches(&expected?, "eq") {
+                present = true;
+                break;
+            }
+        }
+        return Ok(if operator == "in" { present } else { !present });
     }
-    matches(filter_value, operator)
+    Ok(matches(filter_value, operator))
 }
 
 pub(crate) fn declared_field<'a>(
@@ -194,14 +200,20 @@ pub fn bind_filter(field: &UserFieldConfig, value: &Value) -> AuthResult<Value> 
                 .map_or_else(|| Ok(Value::String(value.clone())), Ok)
         }
         (UserFieldType::Number, Value::Array(values)) => {
-            let numbers = values
-                .iter()
-                .map(|value| {
-                    value
-                        .as_str()
-                        .and_then(crate::organization_fields::numeric_filter)
-                })
-                .collect::<Option<Vec<_>>>();
+            let mut numbers = Some(Vec::new());
+            for value in values.iter()? {
+                if let Some(number) = value?
+                    .as_str()
+                    .and_then(crate::organization_fields::numeric_filter)
+                {
+                    if let Some(numbers) = &mut numbers {
+                        numbers.push(number);
+                    }
+                } else {
+                    numbers = None;
+                    break;
+                }
+            }
             match numbers {
                 Some(numbers) => Ok(numbers
                     .into_iter()
@@ -291,31 +303,33 @@ fn matches_record(
     (user, raw): (&UserView, &FieldMap),
     params: &ListUsersParams,
     filter: &Option<(&str, &UserFieldConfig, Value)>,
-) -> bool {
-    matches_search(user, params)
-        && match filter {
-            Some((name, field, value)) => {
-                let operator = params.filter_operator.as_deref().unwrap_or("eq");
-                let actual = raw.get(*name);
-                if matches!(
-                    field.field_type,
-                    UserFieldType::String | UserFieldType::Boolean | UserFieldType::Number
-                ) && field.references.is_none()
-                    && value.is_null()
-                    && matches!(operator, "eq" | "ne")
-                {
-                    match operator {
-                        "eq" => actual.is_none_or(|value| value.is_null() || value.is_undefined()),
-                        _ => !matches!(actual, Some(Value::Null)),
-                    }
-                } else {
-                    match_filter(value, operator, |expected, operator| {
-                        matches_value(actual, expected, operator)
-                    })
-                }
+) -> AuthResult<bool> {
+    if !matches_search(user, params) {
+        return Ok(false);
+    }
+    match filter {
+        Some((name, field, value)) => {
+            let operator = params.filter_operator.as_deref().unwrap_or("eq");
+            let actual = raw.get(*name);
+            if matches!(
+                field.field_type,
+                UserFieldType::String | UserFieldType::Boolean | UserFieldType::Number
+            ) && field.references.is_none()
+                && value.is_null()
+                && matches!(operator, "eq" | "ne")
+            {
+                Ok(match operator {
+                    "eq" => actual.is_none_or(|value| value.is_null() || value.is_undefined()),
+                    _ => !matches!(actual, Some(Value::Null)),
+                })
+            } else {
+                match_filter(value, operator, |expected, operator| {
+                    matches_value(actual, expected, operator)
+                })
             }
-            None => matches_filter(user, params),
         }
+        None => matches_filter(user, params),
+    }
 }
 
 fn compare_values(left: Option<&Value>, right: Option<&Value>, direction: &str) -> Ordering {
@@ -648,23 +662,28 @@ impl<'a> PreparedUserQuery<'a> {
         &self,
         users: impl IntoIterator<Item = &'r T>,
         record: impl Fn(&T) -> (&UserView, &FieldMap),
-    ) -> usize {
-        users
-            .into_iter()
-            .filter(|user| matches_record(record(user), self.params, &self.filter))
-            .count()
+    ) -> AuthResult<usize> {
+        users.into_iter().try_fold(0, |count, user| {
+            Ok(count + usize::from(matches_record(record(user), self.params, &self.filter)?))
+        })
     }
 
     /// Select original rows, validating sort only when filtered rows require comparison.
     /// SQL adapters must also call `validate_sort` before their database read.
     pub fn select<T>(
         &self,
-        mut users: Vec<T>,
+        users: Vec<T>,
         record: impl Fn(&T) -> (&UserView, &FieldMap),
     ) -> AuthResult<(Vec<T>, usize)> {
         let params = self.params;
         let fields = self.fields;
-        users.retain(|user| matches_record(record(user), params, &self.filter));
+        let mut selected = Vec::new();
+        for user in users {
+            if matches_record(record(&user), params, &self.filter)? {
+                selected.push(user);
+            }
+        }
+        let mut users = selected;
         if users.len() > 1 {
             self.validate_sort()?;
         }
@@ -722,7 +741,7 @@ pub fn count_users<'a, T: 'a>(
     fields: &UserConfig,
     record: impl Fn(&T) -> (&UserView, &FieldMap),
 ) -> AuthResult<usize> {
-    Ok(PreparedUserQuery::new(params, fields)?.count(users, record))
+    PreparedUserQuery::new(params, fields)?.count(users, record)
 }
 
 /// Select raw user records while retaining each adapter's original row association.

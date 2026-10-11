@@ -257,3 +257,82 @@ fn transaction_plans_preserve_rebound_rows_without_repeating_callbacks() -> Auth
     assert_eq!(*events.lock().unwrap(), ["base", "working"]);
     Ok(())
 }
+
+#[test]
+fn table_arrays_share_clone_identity_keep_first_origins_and_observe_later_appends() -> AuthResult<()>
+{
+    let table = TableRef::new(MemoryGate::default());
+    let array = table.array();
+    let source = table.push(row("before"))?;
+    let _ = source.set_field("table".into(), array.clone().into())?;
+    assert_eq!(array.len()?, 1);
+    assert!(
+        array
+            .get(0)?
+            .is_some_and(|value| value.strict_equals(&source.field_value()))
+    );
+
+    let mut context = StructuredCloneContext::deferred();
+    let fields = context.clone_map(
+        &[
+            ("first".into(), array.clone().into()),
+            ("second".into(), table.array().into()),
+        ]
+        .into(),
+    )?;
+    let retained = fields
+        .get("first")
+        .and_then(FieldValue::as_array)
+        .ok_or_else(|| AuthError::internal("Missing first array alias"))?;
+    let other = fields
+        .get("second")
+        .and_then(FieldValue::as_array)
+        .ok_or_else(|| AuthError::internal("Missing second array alias"))?;
+    assert!(retained.same_array(other));
+    assert!(!retained.same_array(&array));
+    let _ = source.set_field("id".into(), "after-first-visit".into())?;
+    let mut originals = Vec::new();
+    let copied = table.deep_clone_with(&mut context, |original, target, before| {
+        originals.push((original, target, before));
+    })?;
+    assert!(copied.array().same_array(retained));
+    assert_eq!(originals.len(), 1);
+    let (original, target, before) = originals
+        .first()
+        .ok_or_else(|| AuthError::internal("Missing cloned row origin"))?;
+    assert!(original.same_row(&source));
+    assert_eq!(
+        before,
+        &[
+            ("id".into(), "before".into()),
+            ("table".into(), array.clone().into())
+        ]
+        .into()
+    );
+    assert_eq!(retained.len()?, 0);
+    context.publish();
+    assert_eq!(retained.len()?, 1);
+    assert!(
+        retained
+            .get(0)?
+            .is_some_and(|value| value.strict_equals(&target.field_value()))
+    );
+    assert!(
+        target
+            .field("table")?
+            .is_some_and(|value| value.strict_equals(&retained.clone().into()))
+    );
+    assert_eq!(target.field("id")?, Some("before".into()));
+    let appended = copied.push(row("appended"))?;
+    assert_eq!(retained.len()?, 2);
+    assert!(
+        retained
+            .get(1)?
+            .is_some_and(|value| value.strict_equals(&appended.field_value()))
+    );
+    assert_eq!(array.len()?, 1);
+    assert_eq!(source.field("id")?, Some("after-first-visit".into()));
+    let _ = source.delete_field("table")?;
+    let _ = target.delete_field("table")?;
+    Ok(())
+}

@@ -42,12 +42,13 @@ pub(in crate::plugins::api_key) fn property(
                 "Cannot read properties of {kind} (reading '{name}')"
             )));
         }
-        FieldValue::Array(values) if name == "length" => (values.len() as f64).into(),
+        FieldValue::Array(values) if name == "length" => (values.len()? as f64).into(),
         FieldValue::Array(values) => name
             .parse::<usize>()
             .ok()
-            .and_then(|index| values.get(index))
-            .cloned()
+            .map(|index| values.get(index))
+            .transpose()?
+            .flatten()
             .unwrap_or_default(),
         FieldValue::Object(fields) => fields.get(name)?.unwrap_or_default(),
         value => match field_string_units(value) {
@@ -97,16 +98,16 @@ pub(super) fn items(value: &FieldValue) -> AuthResult<Items> {
 
 fn next(value: FieldValue, id: &FieldValue, insert: bool) -> AuthResult<FieldValue> {
     if let FieldValue::Array(values) = &value {
-        if insert && values.iter().any(|value| value.same_value_zero(id)) {
+        if insert && values.includes(id)? {
             return Ok(value);
         }
-        let mut values = values.to_vec();
-        if insert {
+        return if insert {
+            let mut values = values.snapshot()?;
             values.push(id.clone());
+            Ok(values.into())
         } else {
-            values.retain(|value| !value.strict_equals(id));
-        }
-        return Ok(values.into());
+            Ok(values.filter(|value| Ok(!value.strict_equals(id)))?.into())
+        };
     }
     if insert && let Some(units) = field_string_units(&value) {
         let needle = id.display_utf16()?;

@@ -97,8 +97,8 @@ fn observe(value: &FieldValue, shift: i64) -> AuthResult<Value> {
         }
         FieldValue::Array(values) => Value::Array(
             values
-                .iter()
-                .map(|value| observe(value, shift))
+                .iter()?
+                .map(|value| observe(&value?, shift))
                 .collect::<AuthResult<_>>()?,
         ),
         FieldValue::Object(fields) => Value::Object(
@@ -518,14 +518,16 @@ async fn check(case: &Value) -> AuthResult<()> {
     );
     let before = revive(&case["before"], clock.shift)?;
     let fields = before.as_object().unwrap().snapshot_fields()?;
-    for row in fields.get("user").unwrap().as_array().unwrap().iter() {
+    for row in fields.get("user").unwrap().as_array().unwrap().iter()? {
+        let row = row?;
         let _ = context
             .database
             .create_user_fields_optional(row.as_object().unwrap().snapshot_fields()?)
             .await?
             .unwrap();
     }
-    for row in fields.get("session").unwrap().as_array().unwrap().iter() {
+    for row in fields.get("session").unwrap().as_array().unwrap().iter()? {
+        let row = row?;
         create_session(
             &context,
             &hooks,

@@ -174,8 +174,9 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let Some(values) = value.as_array() else {
             return Ok(Vec::new());
         };
-        let mut references = Vec::with_capacity(values.len());
-        for value in values {
+        let mut references = Vec::with_capacity(values.len()?);
+        for value in values.iter()? {
+            let value = value?;
             let Some(fields) = value.as_object() else {
                 return Ok(Vec::new());
             };

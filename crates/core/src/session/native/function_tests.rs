@@ -40,7 +40,14 @@ fn hidden_native_user_function_rejects_public_clone_before_filtering() -> AuthRe
         Err(AuthError::DataClone)
     ));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
-    assert!(data.user_field("hidden")?.as_array().unwrap()[0].strict_equals(&function));
+    assert!(
+        data.user_field("hidden")?
+            .as_array()
+            .unwrap()
+            .get(0)?
+            .unwrap()
+            .strict_equals(&function)
+    );
     Ok(())
 }
 

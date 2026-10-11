@@ -191,14 +191,15 @@ impl UserFieldConfig {
                 } else {
                     "number"
                 };
-                for (index, value) in values.iter().enumerate() {
-                    if type_name(Some(value)) != item_type
+                for (index, value) in values.iter()?.enumerate() {
+                    let value = value?;
+                    if type_name(Some(&value)) != item_type
                         || matches!(value, Value::Number(number) if !number.is_finite())
                     {
                         errors.push(invalid_type(
                             &format!("{location}.{index}"),
                             item_type,
-                            Some(value),
+                            Some(&value),
                         ));
                     }
                 }
@@ -226,21 +227,26 @@ impl UserFieldConfig {
 
 fn json_input(
     value: &Value,
-    active: &mut std::collections::HashSet<crate::field_value::ObjectIdentity>,
+    active: &mut std::collections::HashSet<crate::field_value::ContainerIdentity>,
 ) -> AuthResult<bool> {
     Ok(match value {
         Value::Null | Value::Bool(_) | Value::String(_) | Value::Utf16String(_) => true,
         Value::Number(value) => value.is_finite(),
         Value::Array(values) => {
-            for value in values.iter() {
-                if !json_input(value, active)? {
+            let identity = crate::field_value::ContainerIdentity::Array(values.identity());
+            if !active.insert(identity) {
+                return Ok(false);
+            }
+            for value in values.iter()? {
+                if !json_input(&value?, active)? {
                     return Ok(false);
                 }
             }
+            let _ = active.remove(&identity);
             true
         }
         Value::Object(values) => {
-            let identity = values.identity();
+            let identity = crate::field_value::ContainerIdentity::Object(values.identity());
             if !active.insert(identity) {
                 return Ok(false);
             }

@@ -83,9 +83,12 @@ pub(super) fn observe(value: &FieldValue) -> AuthResult<Value> {
         FieldValue::Number(value) if !value.is_finite() => {
             json!({"type":"number", "value":crate::schema_value::number_string(*value)})
         }
-        FieldValue::Array(values) => {
-            Value::Array(values.iter().map(observe).collect::<AuthResult<_>>()?)
-        }
+        FieldValue::Array(values) => Value::Array(
+            values
+                .iter()?
+                .map(|value| observe(&value?))
+                .collect::<AuthResult<_>>()?,
+        ),
         FieldValue::Object(values) => Value::Object(
             values
                 .snapshot_fields()?

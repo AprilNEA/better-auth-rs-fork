@@ -55,7 +55,7 @@ fn joined(many: bool, rows: &[FieldMap]) -> FieldValue {
             .collect::<Vec<_>>()
             .into()
     } else {
-        rows.first()
+        rows.first()?
             .cloned()
             .map_or(FieldValue::Null, FieldValue::from)
     }
@@ -223,8 +223,9 @@ async fn check(
                     Some(if many {
                         value
                             .as_array()
-                            .and_then(|rows| rows.first())
-                            .cloned()
+                            .map(|rows| rows.first())
+                            .transpose()?
+                            .flatten()
                             .ok_or_else(|| AuthError::internal("Expected selected child"))?
                     } else {
                         value.clone()
@@ -266,10 +267,12 @@ async fn check(
                         let current = if many {
                             value
                                 .as_array()
-                                .and_then(|rows| rows.first())
+                                .map(|rows| rows.first())
+                                .transpose()?
+                                .flatten()
                                 .ok_or_else(|| AuthError::internal("Expected retained child"))?
                         } else {
-                            &value
+                            value.clone()
                         };
                         assert!(current.strict_equals(&child));
                     }
@@ -396,16 +399,23 @@ async fn check(
             let (raw_child, projected_child) = if many {
                 assert!(!projected.strict_equals(&held));
                 (
-                    held.as_array().and_then(|rows| rows.first()),
-                    projected.as_array().and_then(|rows| rows.first()),
+                    held.as_array()
+                        .map(|rows| rows.first())
+                        .transpose()?
+                        .flatten(),
+                    projected
+                        .as_array()
+                        .map(|rows| rows.first())
+                        .transpose()?
+                        .flatten(),
                 )
             } else {
-                (Some(&held), Some(projected))
+                (Some(held.clone()), Some(projected.clone()))
             };
             let raw_child = raw_child.ok_or_else(|| AuthError::internal("Expected raw child"))?;
             let projected_child =
                 projected_child.ok_or_else(|| AuthError::internal("Expected projected child"))?;
-            assert!(!projected_child.strict_equals(raw_child));
+            assert!(!projected_child.strict_equals(&raw_child));
             assert!(
                 projected_child
                     .model_property("createdAt")?

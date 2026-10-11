@@ -167,14 +167,13 @@ fn driver_parameter(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleE
         FieldValue::Utf16String(value) => Value::String(Some(utf16_string(&value, backend))),
         FieldValue::Array(values) if backend == DbBackend::MySql => {
             let parameters = values
-                .iter()
-                .cloned()
+                .iter()?
                 .map(|value| {
+                    let value = value?;
                     if let FieldValue::Array(nested) = value {
                         nested
-                            .iter()
-                            .cloned()
-                            .map(|value| driver_parameter(value, backend))
+                            .iter()?
+                            .map(|value| driver_parameter(value?, backend))
                             .collect::<AuthResult<Vec<_>>>()
                             .map(SimpleExpr::Tuple)
                     } else {
@@ -224,15 +223,16 @@ fn postgres_parameter(value: &FieldValue) -> AuthResult<Option<String>> {
         FieldValue::Date(date) => Some(postgres_date(date)?),
         FieldValue::Array(values) => {
             let mut text = String::from("{");
-            for (index, value) in values.iter().enumerate() {
+            for (index, value) in values.iter()?.enumerate() {
+                let value = value?;
                 if index != 0 {
                     text.push(',');
                 }
                 if matches!(value, FieldValue::Array(_)) {
-                    text.push_str(&postgres_parameter(value)?.ok_or_else(|| {
+                    text.push_str(&postgres_parameter(&value)?.ok_or_else(|| {
                         AuthError::internal("PostgreSQL array encoding lost a nested array")
                     })?);
-                } else if let Some(value) = postgres_parameter(value)? {
+                } else if let Some(value) = postgres_parameter(&value)? {
                     text.push('"');
                     text.push_str(&value.replace('\\', "\\\\").replace('"', "\\\""));
                     text.push('"');

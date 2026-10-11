@@ -414,7 +414,11 @@ async fn check<S: AuthSchema>(
             )?;
             Some(
                 required(
-                    members.as_array().and_then(|members| members.first()),
+                    members
+                        .as_array()
+                        .map(|members| members.first())
+                        .transpose()?
+                        .flatten(),
                     "Expected first Member",
                 )?
                 .clone(),

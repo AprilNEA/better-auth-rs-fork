@@ -99,8 +99,8 @@ fn snapshot(value: &FieldValue) -> AuthResult<FieldValue> {
     fn plain_tree(value: &FieldValue) -> AuthResult<FieldValue> {
         Ok(match value {
             FieldValue::Array(values) => values
-                .iter()
-                .map(plain_tree)
+                .iter()?
+                .map(|value| plain_tree(&value?))
                 .collect::<AuthResult<Vec<_>>>()?
                 .into(),
             FieldValue::Object(object) => object
@@ -208,7 +208,7 @@ async fn check<S: AuthSchema>(
                         .collect::<Vec<_>>(),
                     expected_keys
                 );
-                assert!(first(target, &value)?.strict_equals(child));
+                assert!(first(target, &value)?.strict_equals(&child));
             }
             assert_eq!(snapshot(&value)?, after);
             event(&events, "mutation", &value)?;
@@ -226,7 +226,7 @@ async fn check<S: AuthSchema>(
                 .map_err(|_| AuthError::internal("Capture lock poisoned"))?;
             assert!(value.strict_equals(&held));
             if joins {
-                assert!(first(target, &value)?.strict_equals(first(target, &held)?));
+                assert!(first(target, &value)?.strict_equals(&first(target, &held)?));
             }
             assert_eq!(snapshot(&value)?, after);
             event(&events, "mirror", &value)?;

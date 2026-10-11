@@ -63,10 +63,10 @@ impl<C: ColumnTrait> QueryPredicate<C> {
             && match self.operator {
                 WhereOperator::In | WhereOperator::NotIn => {
                     self.value.is_string()
-                        || self
-                            .value
-                            .as_array()
-                            .is_some_and(|values| values.iter().all(FieldValue::is_string))
+                        || match self.value.as_array() {
+                            Some(values) => values.every(|value| Ok(value.is_string()))?,
+                            None => false,
+                        }
                 }
                 WhereOperator::Eq
                 | WhereOperator::Ne
@@ -84,7 +84,7 @@ impl<C: ColumnTrait> QueryPredicate<C> {
         let value = match self.operator {
             WhereOperator::In | WhereOperator::NotIn => {
                 let values = match self.value {
-                    FieldValue::Array(values) => values.iter().cloned().collect(),
+                    FieldValue::Array(values) => values.snapshot()?,
                     value => vec![value],
                 };
                 Operand::List(
@@ -115,9 +115,8 @@ impl<C: ColumnTrait> QueryPredicate<C> {
                 match value {
                     FieldValue::Array(values) => Operand::List(
                         values
-                            .iter()
-                            .cloned()
-                            .map(|value| Binding::Raw(value).parse_expression())
+                            .iter()?
+                            .map(|value| Binding::Raw(value?).parse_expression())
                             .collect::<AuthResult<_>>()?,
                     ),
                     value => Operand::Single(Binding::Raw(value).parse_expression()?),
