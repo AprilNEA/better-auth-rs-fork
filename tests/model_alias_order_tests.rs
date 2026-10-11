@@ -437,7 +437,15 @@ async fn memory_model_aliases_follow_mixed_plugin_declaration_order() -> AuthRes
     for before in [true, false] {
         for reference in ["shared", "team"] {
             for joins in [false, true] {
-                let store = EphemeralStore::new(Arc::new(config(joins)));
+                let mut fields = better_auth_core::plugin_runtime::ModelFields::default();
+                fields.register_organization_schema(&Default::default(), true, false);
+                fields.register_model_schema(
+                    EntityRole::Team,
+                    Some("shared"),
+                    UserConfig::default(),
+                )?;
+                // The observer shares the physical root, but auth initialization does not update its aliases.
+                let store = EphemeralStore::from_schema(Arc::new(config(joins)), &fields);
                 let raw: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(store.clone());
                 check(
                     raw,

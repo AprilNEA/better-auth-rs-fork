@@ -384,7 +384,7 @@ async fn direct_relation_object_mutation_matches_memory_and_sqlite() -> TestResu
                     joins,
                     reject,
                 };
-                let raw = Arc::new(EphemeralStore::default());
+                let raw = Arc::new(memory_store(target)?);
                 let writer = configured::<StatelessSchema>(
                     raw.as_ref(),
                     target,

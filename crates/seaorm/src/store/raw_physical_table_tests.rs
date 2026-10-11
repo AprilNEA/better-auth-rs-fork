@@ -1,7 +1,7 @@
 use super::*;
 use crate::store::create_readback::ReadbackScope;
 use sea_orm::{DatabaseConnection, Statement};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 type Events = Arc<Mutex<Vec<serde_json::Value>>>;
 

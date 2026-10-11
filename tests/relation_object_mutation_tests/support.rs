@@ -107,7 +107,10 @@ pub(super) fn configured<S: AuthSchema>(
         }
     }
     let config = Arc::new(config);
+    raw.with_runtime(config, Vec::new(), model_fields(organization)?)
+}
 
+fn model_fields(organization: Option<(OrganizationFields, UserConfig)>) -> AuthResult<ModelFields> {
     let mut model_fields = ModelFields::default();
     model_fields.register_model_schema(
         EntityRole::User,
@@ -132,7 +135,16 @@ pub(super) fn configured<S: AuthSchema>(
             child,
         )?;
     }
-    raw.with_runtime(config, Vec::new(), model_fields)
+    Ok(model_fields)
+}
+
+pub(super) fn memory_store(target: Target) -> AuthResult<EphemeralStore> {
+    let organization = matches!(target, Target::Team)
+        .then(|| (OrganizationFields::default(), UserConfig::default()));
+    Ok(EphemeralStore::from_schema(
+        Arc::new(AuthConfig::default()),
+        &model_fields(organization)?,
+    ))
 }
 
 fn date() -> FieldDate {

@@ -124,7 +124,7 @@ async fn fixture(
         },
     )?;
     if cancel {
-        model_fields.register_database_hook(Arc::new(CancelSession));
+        init.register_database_hook(Arc::new(CancelSession));
     }
     let parts = init.into_parts();
     let store = store.with_runtime(config.clone(), parts.database_hooks, model_fields)?;

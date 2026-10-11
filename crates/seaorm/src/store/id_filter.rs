@@ -103,7 +103,7 @@ mod tests {
                         value_filter::is_in(
                             column,
                             &better_auth_core::FieldValue::Array(
-                                ["missing".into(), input.into()].into(),
+                                vec!["missing".into(), input.into()].into(),
                             ),
                             DbBackend::Sqlite,
                         )?,
