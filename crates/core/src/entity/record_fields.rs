@@ -68,6 +68,15 @@ record!(crate::types::Member, [
     created_at => "createdAt",
 ], additional_fields; order: field_order);
 
+impl serde::Serialize for crate::Member {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        crate::field_value::serde::map::serialize(
+            &self.field_values().map_err(serde::ser::Error::custom)?,
+            serializer,
+        )
+    }
+}
+
 record!(crate::types::Invitation, [
     team_id => "teamId",
     id => "id",

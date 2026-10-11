@@ -101,23 +101,8 @@ impl MemberStore for EphemeralStore {
         self.output_member(member).await
     }
     async fn get_member(&self, organization_id: &str, user_id: &str) -> AuthResult<Option<Member>> {
-        let organization_id = self.organization_query(
-            EntityRole::Member,
-            "organizationId",
-            Value::from(organization_id),
-        )?;
-        let user_id =
-            self.organization_query(EntityRole::Member, "userId", Value::from(user_id))?;
-        let schema = self.field_config(EntityRole::Member)?;
-        let rows = self.lock()?.members.snapshot()?;
-        match rows.into_iter().find(|row| {
-            organization_value(row, &schema, "organizationId")
-                .strict_equals(&organization_id.field_value())
-                && organization_value(row, &schema, "userId").strict_equals(&user_id.field_value())
-        }) {
-            Some(value) => self.output_member(value).await.map(Some),
-            None => Ok(None),
-        }
+        self.get_member_value(&organization_id.into(), &user_id.into())
+            .await
     }
     async fn get_member_value(
         &self,
@@ -131,24 +116,34 @@ impl MemberStore for EphemeralStore {
         )?;
         let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
         let schema = self.field_config(EntityRole::Member)?;
-        let rows = self.lock()?.members.snapshot()?;
-        for row in rows {
-            if organization_value(&row, &schema, "organizationId")
-                .strict_equals(&organization_id.field_value())
-                && organization_value(&row, &schema, "userId").strict_equals(&user_id.field_value())
-            {
-                return self.output_member(row).await.map(Some);
-            }
-        }
-        Ok(None)
+        let selected = self
+            .raw("member", "findOne", |state| {
+                state.members.first_ref(|row| {
+                    organization_value(row, &schema, "organizationId")
+                        .strict_equals(&organization_id.field_value())
+                        && organization_value(row, &schema, "userId")
+                            .strict_equals(&user_id.field_value())
+                })
+            })
+            .await?;
+        Ok(self
+            .output_record_refs::<Member>(EntityRole::Member, selected.into_iter().collect())
+            .await?
+            .pop())
     }
     async fn get_member_by_id(&self, id: &str) -> AuthResult<Option<Member>> {
         let id = self.organization_query(EntityRole::Member, "id", Value::from(id))?;
-        let value = self.lock()?.members.get(&id)?;
-        match value {
-            Some(value) => self.output_member(value).await.map(Some),
-            None => Ok(None),
-        }
+        let selected = self
+            .raw("member", "findOne", |state| {
+                state
+                    .members
+                    .first_ref(|row| super::super::organization_rows::id(row) == id)
+            })
+            .await?;
+        Ok(self
+            .output_record_refs::<Member>(EntityRole::Member, selected.into_iter().collect())
+            .await?
+            .pop())
     }
     async fn update_member_role(&self, id: &str, role: &str) -> AuthResult<Member> {
         self.update_member_role_value(&id.into(), role).await

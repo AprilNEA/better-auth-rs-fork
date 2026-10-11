@@ -274,31 +274,8 @@ where
     }
 
     async fn get_member(&self, organization_id: &str, user_id: &str) -> AuthResult<Option<Member>> {
-        let row = Entity::<O::Member>::find()
-            .filter(self.organization_fields_equal::<O::Member>(
-                better_auth_core::store::schema::EntityRole::Member,
-                [
-                    ("organizationId", &organization_id.into()),
-                    ("userId", &user_id.into()),
-                ],
-            )?)
-            .one(self.connection())
+        self.get_member_value(&organization_id.into(), &user_id.into())
             .await
-            .map_err(map_db_err)?;
-        match row {
-            Some(row) => models::record(
-                &row,
-                &self.organization_fields()?.member,
-                self.connection().get_database_backend(),
-                (
-                    &self.model_fields,
-                    better_auth_core::store::schema::EntityRole::Member,
-                ),
-            )
-            .await
-            .map(Some),
-            None => Ok(None),
-        }
     }
 
     async fn get_member_value(
@@ -311,29 +288,18 @@ where
     }
 
     async fn get_member_by_id(&self, id: &str) -> AuthResult<Option<Member>> {
-        let row = Entity::<O::Member>::find()
-            .filter(self.organization_field_equals::<O::Member>(
+        let query =
+            Entity::<O::Member>::find().filter(self.organization_field_equals::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 "id",
                 &id.into(),
-            )?)
-            .one(self.connection())
-            .await
-            .map_err(map_db_err)?;
-        match row {
-            Some(row) => models::record(
-                &row,
-                &self.organization_fields()?.member,
-                self.connection().get_database_backend(),
-                (
-                    &self.model_fields,
-                    better_auth_core::store::schema::EntityRole::Member,
-                ),
-            )
-            .await
-            .map(Some),
-            None => Ok(None),
-        }
+            )?);
+        self.read_organization_model::<O::Member>(
+            self.connection(),
+            query,
+            better_auth_core::store::schema::EntityRole::Member,
+        )
+        .await
     }
 
     async fn update_member_role(&self, member_id: &str, role: &str) -> AuthResult<Member> {
@@ -785,28 +751,17 @@ impl<
         organization_id: &FieldValue,
         user_id: &FieldValue,
     ) -> AuthResult<Option<Member>> {
-        let row = Entity::<O::Member>::find()
-            .filter(self.organization_fields_equal::<O::Member>(
+        let query =
+            Entity::<O::Member>::find().filter(self.organization_fields_equal::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 [("organizationId", organization_id), ("userId", user_id)],
-            )?)
-            .one(db)
-            .await
-            .map_err(map_db_err)?;
-        match row {
-            Some(row) => models::record(
-                &row,
-                &self.organization_fields()?.member,
-                db.get_database_backend(),
-                (
-                    &self.model_fields,
-                    better_auth_core::store::schema::EntityRole::Member,
-                ),
-            )
-            .await
-            .map(Some),
-            None => Ok(None),
-        }
+            )?);
+        self.read_organization_model::<O::Member>(
+            db,
+            query,
+            better_auth_core::store::schema::EntityRole::Member,
+        )
+        .await
     }
 
     pub(super) async fn count_organization_members_with_connection<C: sea_orm::ConnectionTrait>(

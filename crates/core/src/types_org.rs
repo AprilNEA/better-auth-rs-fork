@@ -28,7 +28,7 @@ pub struct Organization {
 }
 
 /// Organization member
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Member {
     /// Source property order, independent of the current typed values.
     #[serde(skip)]

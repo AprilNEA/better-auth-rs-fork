@@ -7,6 +7,15 @@ use better_auth_core::{
 #[path = "organization/team_member.rs"]
 mod team_member;
 
+#[path = "organization/member_contract_support.rs"]
+mod member_contract_support;
+#[path = "organization/member_hook_routes.rs"]
+mod member_hook_routes;
+#[path = "organization/member_native_routes.rs"]
+mod member_native_routes;
+#[path = "organization/member_point_reads.rs"]
+mod member_point_reads;
+
 fn policy(field: &'static str, events: &Arc<Mutex<Vec<Value>>>) -> UserFieldConfig {
     let input_events = events.clone();
     let output_events = events.clone();

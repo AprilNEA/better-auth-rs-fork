@@ -373,6 +373,8 @@ impl MemberUser {
         users: Vec<crate::MemberUserView>,
         require_user: bool,
     ) -> AuthResult<Option<MemberUser>> {
+        use crate::{AuthRecordFields, FromFieldMap};
+
         let user = if relation.many {
             // JavaScript reads the four summary properties from the array, including an empty array.
             crate::MemberUserView::default()
@@ -385,6 +387,9 @@ impl MemberUser {
         } else {
             return Ok(None);
         };
+        let mut fields = member.field_values()?;
+        let _ = fields.remove("user");
+        let member = crate::Member::from_field_values(fields)?;
         Ok(Some(MemberUser { member, user }))
     }
 }

@@ -1,21 +1,20 @@
 use super::{
     AcceptInvitationResponse, BasicMemberResponse, CreateOrganizationResponse,
-    CreatedOrganizationResponse, GetInvitationResponse, UserInvitationResponse,
+    CreatedOrganizationResponse, GetActiveMemberRoleResponse, GetInvitationResponse,
+    ListMembersResponse, MemberResponse, RemovedMemberResponse, UserInvitationResponse,
 };
 use better_auth_core::wire::InvitationView;
-use better_auth_core::{AuthRecordFields, AuthResult, FieldMap, FieldValue};
+use better_auth_core::{AuthRecordFields, AuthResult, FieldMap, FieldValue, FromFieldMap};
 use serde::Serialize;
 
 macro_rules! record {
-    ($record:ty, [$($field:ident => $name:literal),* $(,)?] $(; order: $order:ident)?) => {
+    ($record:ty, [$($field:ident => $name:literal),* $(,)?]) => {
         impl AuthRecordFields for $record {
             fn field_values(&self) -> AuthResult<FieldMap> {
                 let mut fields = FieldMap::from_iter([
                     $(($name.into(), self.$field.field_value())),*
                 ]);
-                $(fields.retain(|name, value| !value.is_undefined() || self.$order.contains(name));)?
                 fields.extend(self.additional_fields.clone());
-                $(let fields = fields.in_field_order(&self.$order);)?
                 Ok(fields)
             }
         }
@@ -31,13 +30,55 @@ record!(CreatedOrganizationResponse, [
     created_at => "createdAt",
 ]);
 
-record!(BasicMemberResponse, [
-    id => "id",
-    organization_id => "organizationId",
-    user_id => "userId",
-    role => "role",
-    created_at => "createdAt",
-]; order: field_order);
+impl AuthRecordFields for MemberResponse {
+    fn field_values(&self) -> AuthResult<FieldMap> {
+        let mut fields = self.member.field_values()?;
+        let _ = fields.insert("user".into(), self.user.field_values()?.into());
+        Ok(fields)
+    }
+}
+
+impl Serialize for MemberResponse {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        better_auth_core::field_value::serde::map::serialize(
+            &self.field_values().map_err(serde::ser::Error::custom)?,
+            serializer,
+        )
+    }
+}
+
+impl MemberResponse {
+    pub(crate) fn into_member(self) -> AuthResult<BasicMemberResponse> {
+        BasicMemberResponse::from_field_values(self.field_values()?)
+    }
+}
+
+impl AuthRecordFields for ListMembersResponse {
+    fn field_values(&self) -> AuthResult<FieldMap> {
+        let members = self
+            .members
+            .iter()
+            .map(|member| member.field_values().map(FieldValue::from))
+            .collect::<AuthResult<Vec<_>>>()?;
+        Ok([
+            ("members".into(), members.into()),
+            ("total".into(), FieldValue::Number(self.total as f64)),
+        ]
+        .into())
+    }
+}
+
+impl AuthRecordFields for GetActiveMemberRoleResponse {
+    fn field_values(&self) -> AuthResult<FieldMap> {
+        Ok([("role".into(), self.role.field_value())].into())
+    }
+}
+
+impl AuthRecordFields for RemovedMemberResponse {
+    fn field_values(&self) -> AuthResult<FieldMap> {
+        Ok([("member".into(), self.member.field_values()?.into())].into())
+    }
+}
 
 impl<O: Serialize + AuthRecordFields, M: Serialize + AuthRecordFields> AuthRecordFields
     for CreateOrganizationResponse<O, M>

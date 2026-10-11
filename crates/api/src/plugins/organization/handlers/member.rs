@@ -10,7 +10,7 @@ use super::{require_native_session, resolve_organization_id};
 use crate::plugins::organization::rbac::check_permission;
 use crate::plugins::organization::types::{
     BasicMemberResponse, GetActiveMemberRoleQuery, GetActiveMemberRoleResponse, ListMembersQuery,
-    ListMembersResponse, MemberResponse, RemoveMemberRequest, RemovedMember, RemovedMemberResponse,
+    ListMembersResponse, MemberResponse, RemoveMemberRequest, RemovedMemberResponse,
     UpdateMemberRoleRequest,
 };
 use crate::plugins::organization::{OrganizationConfig, hooks::*};
@@ -42,10 +42,7 @@ pub(crate) async fn get_active_member_core(
         .await?
         .ok_or_else(|| AuthError::bad_request("Member not found"))?;
 
-    Ok(MemberResponse::from_member_and_user(
-        &joined.member,
-        &joined.user,
-    ))
+    Ok(MemberResponse::from(joined))
 }
 
 pub(crate) async fn list_members_core(
@@ -123,10 +120,10 @@ pub(crate) async fn list_members_core(
                     .strict_equals(&member.user_id.field_value())
             })
             .ok_or_else(|| AuthError::internal("Unexpected error: User not found for member"))?;
-        members.push(MemberResponse::from_member_and_user(
+        members.push(MemberResponse::try_from_member_and_user(
             member,
             &better_auth_core::MemberUserView::from_user(user_info),
-        ));
+        )?);
     }
 
     Ok(ListMembersResponse { members, total })
@@ -208,10 +205,16 @@ pub(crate) async fn remove_member_core(
             .get_user_by_email(&body.member_id_or_email)
             .await?
             .ok_or_else(|| AuthError::bad_request("Member not found"))?;
-        ctx.database
+        let member = ctx
+            .database
             .get_member_value(&org_id, &target_user.id().field_value())
             .await?
-            .ok_or_else(|| AuthError::bad_request("Member not found"))?
+            .ok_or_else(|| AuthError::bad_request("Member not found"))?;
+        MemberResponse {
+            member,
+            user: better_auth_core::MemberUserView::from_user(&target_user),
+        }
+        .into_member()?
     } else {
         ctx.database
             .get_member_by_id_with_user(&body.member_id_or_email)
@@ -293,16 +296,6 @@ pub(crate) async fn remove_member_core(
     if let Some(hooks) = &config.hooks {
         hooks.before_remove_member(event).await?;
     }
-    let response = RemovedMemberResponse {
-        member: RemovedMember {
-            member: BasicMemberResponse::try_from_member(&target_member)?,
-            user: body
-                .member_id_or_email
-                .contains('@')
-                .then(|| better_auth_core::entity::MemberUserView::from_user(&target_user)),
-        },
-    };
-
     ctx.database
         .delete_member_for_user_value(
             &target_member.id().field_value(),
@@ -332,7 +325,9 @@ pub(crate) async fn remove_member_core(
     if let Some(hooks) = &config.hooks {
         hooks.after_remove_member(event).await?;
     }
-    Ok(response)
+    Ok(RemovedMemberResponse {
+        member: target_member,
+    })
 }
 
 pub(crate) async fn update_member_role_core(
@@ -349,22 +344,24 @@ pub(crate) async fn update_member_role_core(
         .database
         .get_member_with_user_value(&org_id, &session.user_property("id")?)
         .await?
-        .map(|joined| joined.member)
         .ok_or_else(|| AuthError::bad_request("Member not found"))?;
+    let requester_member = MemberResponse::from(requester_member).into_member()?;
 
-    let target_member = if requester_member
+    let other_member = if requester_member
         .id
         .field_value()
         .strict_equals(&body.member_id.as_str().into())
     {
-        requester_member.clone()
+        None
     } else {
-        ctx.database
+        let joined = ctx
+            .database
             .get_member_by_id_with_user(&body.member_id)
             .await?
-            .map(|joined| joined.member)
-            .ok_or_else(|| AuthError::bad_request("Member not found"))?
+            .ok_or_else(|| AuthError::bad_request("Member not found"))?;
+        Some(MemberResponse::from(joined).into_member()?)
     };
+    let target_member = other_member.as_ref().unwrap_or(&requester_member);
 
     if !target_member
         .organization_id()
@@ -378,7 +375,7 @@ pub(crate) async fn update_member_role_core(
 
     let creator_role = config.creator_role();
     let requester_is_owner = has_role(&requester_member, creator_role)?;
-    let target_is_owner = has_role(&target_member, creator_role)?;
+    let target_is_owner = has_role(target_member, creator_role)?;
     let new_role = body.role.joined();
     let new_role_contains_owner = new_role
         .split(',')
@@ -488,7 +485,7 @@ pub(crate) async fn update_member_role_core(
     let user_value =
         better_auth_core::FieldValue::from(better_auth_core::FieldMap::from(target_user));
     let event = OrganizationMemberEvent {
-        member: &target_member,
+        member: target_member,
         user: &user_value,
         organization: &organization_view,
     };
@@ -519,7 +516,7 @@ pub(crate) async fn update_member_role_core(
             )
             .await?;
     }
-    BasicMemberResponse::try_from_member(&updated)
+    Ok(updated)
 }
 
 // ---------------------------------------------------------------------------
@@ -533,7 +530,7 @@ pub async fn handle_get_active_member(
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
     let response = get_active_member_core(&session, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 /// Handle list members request
@@ -545,7 +542,7 @@ pub async fn handle_list_members(
     let session = require_native_session(req, ctx).await?;
     let query = crate::plugins::query_input::parse::<ListMembersQuery>(&req.query)?;
     let response = list_members_core(&query, config, &session, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 /// Handle get active member role request
@@ -556,7 +553,7 @@ pub async fn handle_get_active_member_role(
     let session = require_native_session(req, ctx).await?;
     let query = crate::plugins::query_input::parse::<GetActiveMemberRoleQuery>(&req.query)?;
     let response = get_active_member_role_core(&query, &session, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 /// Handle remove member request
@@ -568,7 +565,7 @@ pub async fn handle_remove_member(
     let session = require_native_session(req, ctx).await?;
     let body: RemoveMemberRequest = super::super::request::read(req, &config.schema)?;
     let response = remove_member_core(&body, &session, config, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 /// Handle update member role request
@@ -589,5 +586,5 @@ pub async fn handle_update_member_role(
         }
         result => result?,
     };
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }

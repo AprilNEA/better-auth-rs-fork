@@ -3,8 +3,8 @@ use better_auth_core::store::schema::{EntityRole, resolve_field_name};
 use better_auth_core::{
     AuthError, AuthResult, id::AdapterIdInput, plugin_runtime::ModelFields, user_fields::UserConfig,
 };
-use better_auth_core::{FieldMap, FieldValue};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter};
+use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, Select};
 
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
@@ -97,6 +97,33 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
             .one(conn)
             .await
             .map_err(super::map_db_err)
+    }
+
+    pub(super) async fn read_organization_model<M: SeaOrmOrganizationModel>(
+        &self,
+        conn: &impl ConnectionTrait,
+        query: Select<Entity<M>>,
+        role: EntityRole,
+    ) -> AuthResult<Option<M::Record>>
+    where
+        M::Record: FromFieldMap,
+    {
+        let row = super::instrumentation::database_operation::<Entity<M>, _>(
+            self.config(),
+            "findOne",
+            super::plugin_rows::one(conn, query),
+        )
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        let fields = self.organization_query_schema(role)?.adapter_fields(&[]);
+        let backend = conn.get_database_backend();
+        let record = raw_record::<M>(&row, &fields, backend, (&self.model_fields, role))?;
+        let mut output = fields
+            .organization_output_records(vec![record], backend == DbBackend::Postgres)
+            .await?;
+        M::Record::from_field_values(output.remove(0)).map(Some)
     }
 
     pub(super) async fn update_organization_model<M: SeaOrmOrganizationModel>(

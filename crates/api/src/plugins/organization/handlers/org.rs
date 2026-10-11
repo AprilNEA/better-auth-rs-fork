@@ -626,7 +626,6 @@ pub(crate) async fn leave_organization_core(
         }
     }
 
-    let response = MemberResponse::from_member_and_user(member, &joined.user);
     ctx.database
         .delete_member_for_user_value(
             &member.id().field_value(),
@@ -650,7 +649,7 @@ pub(crate) async fn leave_organization_core(
             .await?;
     }
 
-    Ok(response)
+    Ok(MemberResponse::from(joined))
 }
 
 // ---------------------------------------------------------------------------
@@ -839,7 +838,7 @@ pub async fn handle_leave_organization(
     let session = require_native_session(req, ctx).await?;
     let body: LeaveOrganizationRequest = super::super::request::read(req, &config.schema)?;
     let response = leave_organization_core(&body, &session, config, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
 #[cfg(test)]

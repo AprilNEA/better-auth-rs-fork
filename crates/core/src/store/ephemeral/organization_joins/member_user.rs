@@ -71,7 +71,7 @@ impl EphemeralStore {
         let Some((source, native_users)) = selected else {
             return Ok(None);
         };
-        let mut parent = self
+        let parent = self
             .project_record_sources(
                 EntityRole::Member,
                 &self.field_config(EntityRole::Member)?,
@@ -129,7 +129,6 @@ impl EphemeralStore {
                     .map(crate::MemberUserView::from_user),
             );
         }
-        let _ = parent.shift_remove("user");
         MemberUser::finish(
             &join,
             Member::from_field_values(parent)?,

@@ -415,7 +415,23 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
         response: &mut AuthResponse,
         _ctx: &AuthContext<S>,
     ) -> AuthResult<()> {
-        if req.path() == "/organization/get-full-organization" {
+        let member_endpoint = matches!(
+            (req.method(), req.path()),
+            (
+                HttpMethod::Get,
+                "/organization/get-active-member"
+                    | "/organization/list-members"
+                    | "/organization/get-active-member-role"
+            ) | (
+                HttpMethod::Post,
+                "/organization/remove-member"
+                    | "/organization/update-member-role"
+                    | "/organization/leave"
+            )
+        ) || (req.is_server_only()
+            && better_auth_core::hooks::current_request_hook_context()
+                .is_some_and(|context| context.operation_id.as_deref() == Some("addMember")));
+        if member_endpoint || req.path() == "/organization/get-full-organization" {
             return Ok(());
         }
         if !response.is_json() || response.body.is_empty() {

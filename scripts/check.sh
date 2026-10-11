@@ -97,6 +97,27 @@ run_stage() {
         --test plugin_model_fields_tests -- organization:: || organization_status=1
       return "$organization_status"
       ;;
+    organization-members)
+      cargo fmt --all -- --check
+      local organization_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/organization-member-point-reads.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-native-routes.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-hooks.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-join-reference.test.ts \
+        ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
+        ./compat-tests/reference-server/contracts/organization-direct-order.test.ts || organization_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || organization_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test plugin_model_fields_tests -- -D warnings || organization_status=1
+      cargo test --locked -p better-auth-api --lib plugins::organization:: || organization_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test organization_member_join_reference_tests --test organization_native_fields_tests \
+        --test organization_field_alias_tests --test organization_async_field_tests \
+        --test organization_query_limits_tests || organization_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- organization:: organization_order:: || organization_status=1
+      return "$organization_status"
+      ;;
     organization-details)
       cargo fmt --all -- --check
       local organization_status=0

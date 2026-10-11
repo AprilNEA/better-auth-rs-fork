@@ -327,39 +327,11 @@ pub struct RemovedMemberResponse {
     pub member: RemovedMember,
 }
 
-/// A removed membership; email lookup also includes the public user summary.
-#[derive(Debug, Serialize)]
-pub struct RemovedMember {
-    #[serde(flatten)]
-    pub member: BasicMemberResponse,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<MemberUserView>,
-}
+/// Complete removed membership; email lookup retains its native `user` summary.
+pub type RemovedMember = better_auth_core::Member;
 
-#[derive(Debug, Serialize)]
-pub struct BasicMemberResponse {
-    /// Source property order, independent of the current typed values.
-    #[serde(skip)]
-    pub field_order: Vec<String>,
-    #[serde(flatten)]
-    #[serde(with = "better_auth_core::field_value::serde::map")]
-    pub additional_fields: better_auth_core::FieldMap,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub id: SchemaValue<String>,
-    #[serde(rename = "userId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub user_id: SchemaValue<String>,
-    #[serde(rename = "organizationId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub organization_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub role: SchemaValue<String>,
-    #[serde(rename = "createdAt")]
-    #[serde(serialize_with = "better_auth_core::schema_value::serialize_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub created_at: SchemaValue<better_auth_core::FieldDate>,
-}
+/// Complete projected membership with native field values and source property order.
+pub type BasicMemberResponse = better_auth_core::Member;
 
 #[derive(Debug, Serialize)]
 pub struct AcceptInvitationResponse<I: Serialize, M: Serialize> {
@@ -485,62 +457,31 @@ impl OrganizationResponse {
     }
 }
 
-/// Member with user details (for API responses).
-///
-/// Uses [`MemberUserView`] from `better_auth_core::entity` for user info,
-/// keeping it compatible with the built-in auth store.
-#[derive(Debug, Clone, Serialize)]
+/// Complete projected membership and the Organization adapter's user summary.
+#[derive(Debug, Clone)]
 pub struct MemberResponse {
-    #[serde(flatten)]
-    #[serde(with = "better_auth_core::field_value::serde::map")]
-    pub additional_fields: better_auth_core::FieldMap,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub id: SchemaValue<String>,
-    #[serde(rename = "organizationId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub organization_id: SchemaValue<String>,
-    #[serde(rename = "userId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub user_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub role: SchemaValue<String>,
-    #[serde(rename = "createdAt")]
-    #[serde(serialize_with = "better_auth_core::schema_value::serialize_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub created_at: SchemaValue<better_auth_core::FieldDate>,
+    pub member: BasicMemberResponse,
     pub user: MemberUserView,
 }
 
-impl MemberResponse {
-    /// Construct from projected member fields and the Organization adapter's user summary.
-    pub fn from_member_and_user(
-        member: &impl better_auth_core::entity::AuthMember,
-        user: &MemberUserView,
-    ) -> Self {
+impl From<better_auth_core::store::MemberUser> for MemberResponse {
+    fn from(joined: better_auth_core::store::MemberUser) -> Self {
         Self {
-            additional_fields: member.projected_fields().cloned().unwrap_or_default(),
-            id: member.id().into_owned(),
-            organization_id: member.organization_id().clone(),
-            user_id: member.user_id().clone(),
-            role: member.role().clone(),
-            created_at: member.created_at().clone(),
-            user: user.clone(),
+            member: joined.member,
+            user: joined.user,
         }
     }
 }
 
-impl BasicMemberResponse {
-    pub fn try_from_member(member: &impl AuthMember) -> better_auth_core::AuthResult<Self> {
-        let member = better_auth_core::Member::try_from_member(member)?;
+impl MemberResponse {
+    /// Preserve the projected membership's property order and native values.
+    pub fn try_from_member_and_user(
+        member: &impl AuthMember,
+        user: &MemberUserView,
+    ) -> better_auth_core::AuthResult<Self> {
         Ok(Self {
-            field_order: member.field_order,
-            additional_fields: member.additional_fields,
-            id: member.id,
-            organization_id: member.organization_id,
-            user_id: member.user_id,
-            role: member.role,
-            created_at: member.created_at,
+            member: BasicMemberResponse::try_from_member(member)?,
+            user: user.clone(),
         })
     }
 }
