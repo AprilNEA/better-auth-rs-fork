@@ -5,10 +5,10 @@ pub(super) enum Storage {
     Sqlite(DatabaseConnection),
 }
 impl Storage {
-    pub fn sqlite(&self) -> bool {
+    pub(super) fn sqlite(&self) -> bool {
         matches!(self, Self::Sqlite(_))
     }
-    pub async fn snapshot(&self) -> AuthResult<BTreeMap<String, Vec<FieldMap>>> {
+    pub(super) async fn snapshot(&self) -> AuthResult<BTreeMap<String, Vec<FieldMap>>> {
         let mut snapshot = BTreeMap::new();
         for (model, table, role) in [
             ("user", "users", EntityRole::User),

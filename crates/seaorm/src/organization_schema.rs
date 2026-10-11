@@ -218,14 +218,14 @@ mod tests {
         reordered.field_order.reverse();
         assert_eq!(reordered, organization);
 
-        check_projected_record(&member::Model {
+        let _ = check_projected_record(&member::Model {
             id: "member".into(),
             organization_id: "organization".into(),
             user_id: "user".into(),
             role: "member".into(),
             created_at: Default::default(),
         })?;
-        check_projected_record(&invitation::Model {
+        let _ = check_projected_record(&invitation::Model {
             team_id: Some("team".into()),
             id: "invitation".into(),
             organization_id: "organization".into(),
@@ -236,7 +236,7 @@ mod tests {
             expires_at: Default::default(),
             created_at: Default::default(),
         })?;
-        check_projected_record(&team::Model {
+        let _ = check_projected_record(&team::Model {
             id: "team".into(),
             name: "Team".into(),
             organization_id: "organization".into(),
@@ -244,7 +244,7 @@ mod tests {
             updated_at: None,
             member_count: 0,
         })?;
-        check_projected_record(&team_member::Model {
+        let _ = check_projected_record(&team_member::Model {
             id: "team-member".into(),
             team_id: "team".into(),
             user_id: "user".into(),
