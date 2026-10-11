@@ -33,6 +33,14 @@ impl EphemeralStore {
                 (member.organization_id, member.user_id)
             }
         };
+        self.operation(|op| {
+            let mut members = op.capture_table(EntityRole::Member)?;
+            let _ = members.remove(&id)?;
+            op.replace_table(EntityRole::Member, members)
+        })?;
+        if !self.model_fields.organization_teams_enabled() {
+            return Ok(());
+        }
         let organization_id = self.organization_reference_query(
             EntityRole::Team,
             "organizationId",
@@ -41,9 +49,6 @@ impl EphemeralStore {
         let schema = self.field_config(EntityRole::Team)?;
         let user_id = user_id.field_value();
         let teams = self.operation(|op| {
-            let mut members = op.capture_table(EntityRole::Member)?;
-            let _ = members.remove(&id)?;
-            op.replace_table(EntityRole::Member, members)?;
             op.capture_table(EntityRole::Team)?
                 .select_refs(|row| {
                     Ok(

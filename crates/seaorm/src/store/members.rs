@@ -625,6 +625,9 @@ impl<
             .exec(db)
             .await
             .map_err(map_db_err)?;
+        if !self.model_fields.organization_teams_enabled() {
+            return Ok(());
+        }
         let teams = super::plugin_rows::all(
             db,
             super::plugin_rows::select_all::<Entity<O::Team>>()

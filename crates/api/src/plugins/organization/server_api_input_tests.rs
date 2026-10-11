@@ -1,6 +1,6 @@
 use super::*;
 use crate::plugins::organization::OrganizationConfig;
-use crate::plugins::test_helpers::create_test_context;
+use crate::plugins::test_helpers::{create_test_config, create_test_context_with_plugins};
 use better_auth_core::{CreateOrganization, CreateUser, user_fields::UserFieldConfig};
 use serde_json::{Value, json};
 use std::sync::{
@@ -21,7 +21,16 @@ impl MembershipLimitPolicy for CountLimits {
 
 #[tokio::test]
 async fn add_member_validates_fields_before_queries_and_limit_callbacks() {
-    let mut ctx = create_test_context().await;
+    let calls = Arc::new(CountLimits::default());
+    let mut config = OrganizationConfig {
+        membership_limit_callback: Some(calls.clone()),
+        ..Default::default()
+    };
+    let mut ctx = create_test_context_with_plugins(
+        create_test_config(),
+        &[&OrganizationPlugin::with_config(config.clone())],
+    )
+    .await;
     ctx.extensions.insert(Arc::new(
         better_auth_core::endpoint_dispatch::EndpointDispatcher::<
             better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
@@ -41,11 +50,6 @@ async fn add_member_validates_fields_before_queries_and_limit_callbacks() {
         .create_organization(CreateOrganization::new("Input", "member-input"))
         .await
         .unwrap();
-    let calls = Arc::new(CountLimits::default());
-    let mut config = OrganizationConfig {
-        membership_limit_callback: Some(calls.clone()),
-        ..Default::default()
-    };
     config.schema.member.fields_mut().insert(
         "role".into(),
         UserFieldConfig {

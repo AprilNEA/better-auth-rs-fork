@@ -681,8 +681,10 @@ pub async fn handle_role_request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plugins::organization::OrganizationPlugin;
     use crate::plugins::test_helpers::{
-        create_auth_json_request_no_query, create_test_context, create_user_and_session,
+        create_auth_json_request_no_query, create_test_config, create_test_context_with_plugins,
+        create_user_and_session,
     };
     use better_auth_core::{CreateMember, CreateOrganization, CreateUser};
     use chrono::Duration;
@@ -827,7 +829,19 @@ mod tests {
 
     #[tokio::test]
     async fn persisted_roles_authorize_only_their_tenant_and_cannot_escalate() {
-        let ctx = create_test_context().await;
+        let config = OrganizationConfig {
+            dynamic_access_control: true,
+            ac: Some(HashMap::from([(
+                "organization".into(),
+                vec!["update".into(), "delete".into()],
+            )])),
+            ..Default::default()
+        };
+        let ctx = create_test_context_with_plugins(
+            create_test_config(),
+            &[&OrganizationPlugin::with_config(config.clone())],
+        )
+        .await;
         let (user, session) = create_user_and_session(
             &ctx,
             CreateUser {
@@ -859,14 +873,6 @@ mod tests {
             })
             .await
             .unwrap();
-        let config = OrganizationConfig {
-            dynamic_access_control: true,
-            ac: Some(HashMap::from([(
-                "organization".into(),
-                vec!["update".into(), "delete".into()],
-            )])),
-            ..Default::default()
-        };
         let request = |permission| {
             create_auth_json_request_no_query(
                 HttpMethod::Post,

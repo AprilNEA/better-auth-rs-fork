@@ -74,10 +74,12 @@ async function check(backend, model, options, raw) {
     const selector = scenario === "where-parse" ? () => { events.push("where"); throw whereError; }
       : scenario === "where-driver" ? { "driver-invalid": true }
       : scenario === "missing" ? "missing" : "target";
-    const { adapter } = await betterAuth({ database, ...configuration(model, {
+    const context = await betterAuth({ database, ...configuration(model, {
       input() { events.push("set-input"); return set; },
       output(value) { events.push("set-output"); return value; },
     }) }).$context;
+    await context.checkSchema?.();
+    const { adapter } = context;
     events.length = 0;
     statements.length = 0;
     const where = [{ field: "id", value: selector }, model === "apikey"

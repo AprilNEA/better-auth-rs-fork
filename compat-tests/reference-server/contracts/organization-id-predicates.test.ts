@@ -4,6 +4,8 @@ import { organization } from "better-auth/plugins";
 import { expectOrdered, setup } from "./organization-invitation-response-contract";
 import { date, type Fields } from "./organization-team-member-contract";
 
+const { getOrgAdapter } = await import(new URL("../node_modules/better-auth/dist/plugins/organization/adapter.mjs", import.meta.url).href);
+
 type Model = "organization" | "invitation" | "team";
 type Selector = "shared-object" | "distinct-object" | "null" | "undefined";
 const expiryDate = () => new Date(date(0).getTime() + 1_000);
@@ -37,49 +39,56 @@ function target(model: Model, row: Fields) {
 
 for (const model of ["organization", "invitation", "team"] as const) {
   for (const selector of ["shared-object", "distinct-object", "null", "undefined"] as const satisfies readonly Selector[]) {
-    test(`memory ${model} ID read and update preserve ${selector} comparison`, async () => {
-      const fixture = await setup("memory", { name: `id-${model}-${selector}`, route: "cancel" });
-      try {
-        const events: unknown[] = [];
-        const field = observedField(model);
-        const context = await betterAuth({ ...fixture.options, plugins: [
-          organization({ teams: { enabled: true } }),
-          { id: "id-predicate-output", schema: { [model]: { fields: {
-            [field]: { type: "string", transform: { output(value) { events.push(value); return value; } } },
-          } } } },
-        ] }).$context;
-        const storedId = selector === "shared-object" || selector === "distinct-object" ? { key: "same" } : false;
-        const selectedId = selector === "shared-object" ? storedId
-          : selector === "distinct-object" ? { key: "same" } : selector === "null" ? null : undefined;
-        for (const [label, id] of [["first", storedId], ["second", storedId], ["other", "other"]] as const) {
-          await context.adapter.create({ model, forceAllowId: true, data: { ...fields(model, label), id } });
-        }
-        events.length = 0;
-        const before = fixture.snapshot();
-        const found = selector !== "distinct-object";
-        const id = typeof storedId === "object" ? "[object Object]" : undefined;
-        const actual = await context.adapter.findOne({ model, where: whereId(selectedId) });
-        expectOrdered(actual, found ? { ...fields(model, "first"), id } : null);
-        expect(fixture.snapshot()).toStrictEqual(before);
-        const update = model === "invitation" ? { status: "accepted" }
-          : model === "team" ? { name: "changed", updatedAt: date(0) } : { name: "changed" };
-        const changed = await context.adapter.update({ model, where: whereId(selectedId), update });
-        expectOrdered(changed, found ? { ...fields(model, "first", true), id } : null);
-        const after = structuredClone(before);
-        if (found) after[model] = after[model].map(row => target(model, row) ? { ...row, ...update } : row);
-        expect(fixture.snapshot()).toStrictEqual(after);
-        const expectedEvents = found ? [model === "invitation" ? "pending" : "first", model === "invitation" ? "accepted" : "changed"] : [];
-        if (model === "invitation") {
-          const changed = await context.adapter.update({ model, where: whereId(selectedId), update: { expiresAt: expiryDate() } });
-          expectOrdered(changed, found ? { ...fields(model, "first", true, true), id } : null);
+    for (const consumer of model === "invitation" ? [false, true] : [false]) {
+      test(`memory ${model} ${consumer ? "consumer" : "adapter"} ID read and update preserve ${selector} comparison`, async () => {
+        const fixture = await setup("memory", { name: `id-${model}-${selector}`, route: "cancel" });
+        try {
+          const events: unknown[] = [];
+          const field = observedField(model);
+          const context = await betterAuth({ ...fixture.options, plugins: [
+            organization({ teams: { enabled: true } }),
+            { id: "id-predicate-output", schema: { [model]: { fields: {
+              [field]: { type: "string", transform: { output(value) { events.push(value); return value; } } },
+            } } } },
+          ] }).$context;
+          const storedId = selector === "shared-object" || selector === "distinct-object" ? { key: "same" } : false;
+          const selectedId = selector === "shared-object" ? storedId
+            : selector === "distinct-object" ? { key: "same" } : selector === "null" ? null : undefined;
+          for (const [label, id] of [["first", storedId], ["second", storedId], ["other", "other"]] as const) {
+            await context.adapter.create({ model, forceAllowId: true, data: { ...fields(model, label), id } });
+          }
+          events.length = 0;
+          const before = fixture.snapshot();
+          const found = selector !== "distinct-object";
+          const id = typeof storedId === "object" ? "[object Object]" : undefined;
+          const actual = await context.adapter.findOne({ model, where: whereId(selectedId) });
+          expectOrdered(actual, found ? { ...fields(model, "first"), id } : null);
+          expect(fixture.snapshot()).toStrictEqual(before);
+          const update = model === "invitation" ? { status: "accepted" }
+            : model === "team" ? { name: "changed", updatedAt: date(0) } : { name: "changed" };
+          const changed = consumer
+            ? await getOrgAdapter(context, {}).updateInvitation({ invitationId: selectedId, status: "accepted" })
+            : await context.adapter.update({ model, where: whereId(selectedId), update });
+          expectOrdered(changed, found ? { ...fields(model, "first", true), id } : null);
+          const after = structuredClone(before);
           if (found) {
-            after[model] = after[model].map(row => target(model, row) ? { ...row, expiresAt: expiryDate() } : row);
-            expectedEvents.push("accepted");
+            const first = after[model].findIndex(row => target(model, row));
+            after[model] = after[model].map((row, index) => target(model, row) && (!consumer || index === first) ? { ...row, ...update } : row);
           }
           expect(fixture.snapshot()).toStrictEqual(after);
-        }
-        expect(events).toStrictEqual(expectedEvents);
-      } finally { fixture.close(); }
-    });
+          const expectedEvents = found ? [model === "invitation" ? "pending" : "first", model === "invitation" ? "accepted" : "changed"] : [];
+          if (model === "invitation") {
+            const changed = await context.adapter.update({ model, where: whereId(selectedId), update: { expiresAt: expiryDate() } });
+            expectOrdered(changed, found ? { ...fields(model, "first", true, true), id } : null);
+            if (found) {
+              after[model] = after[model].map(row => target(model, row) ? { ...row, expiresAt: expiryDate() } : row);
+              expectedEvents.push("accepted");
+            }
+            expect(fixture.snapshot()).toStrictEqual(after);
+          }
+          expect(events).toStrictEqual(expectedEvents);
+        } finally { fixture.close(); }
+      });
+    }
   }
 }

@@ -3,6 +3,8 @@ import { expectOrdered, outputField } from "./organization-invitation-response-c
 import { build, changed, create, early, fixture, late, list, models, mutate, point, replace, update, updated, visible, whereId, type Model } from "./organization-live-source-contract";
 import type { Backend, Events, Policies } from "./organization-team-member-contract";
 
+const { getOrgAdapter } = await import(new URL("../node_modules/better-auth/dist/plugins/organization/adapter.mjs", import.meta.url).href);
+
 type Operation = "create" | "update" | "point" | "list";
 
 async function live(backend: Backend, model: Model, operation: Operation) {
@@ -73,15 +75,16 @@ async function selected(backend: Backend, model: Model) {
   } finally { source.close(); }
 }
 
-async function duplicates(backend: Backend, model: Model) {
+async function duplicates(backend: Backend, model: Model, consumer = false) {
   const source = await fixture(backend, `duplicate-${model}`);
   try {
     await create(source.writer, model, "source-a", "First");
     const before = source.snapshot();
     const events: Events = [];
-    const reader = (await build(source.options, model, {
+    const context = await build(source.options, model, {
       [early(model)]: outputField("early", [], value => { events.push(["early", value]); return value; }, { type: "string" }),
-    }).$context).adapter;
+    }).$context;
+    const reader = context.adapter;
     if (backend === "sqlite") {
       let caught: unknown;
       try { await create(reader, model, "source-a", "Second"); } catch (error) { caught = error; }
@@ -93,17 +96,21 @@ async function duplicates(backend: Backend, model: Model) {
     }
     await create(source.writer, model, "source-a", "Second");
     const after = source.snapshot();
-    const actual = await update(reader, model, "source-a");
+    const actual = consumer
+      ? await getOrgAdapter(context, {}).updateInvitation({ invitationId: "source-a", status: "accepted" })
+      : await update(reader, model, "source-a");
     const expected = updated(model, visible(model, "source-a", "First"));
     expectOrdered(actual, expected);
     expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
     expectOrdered(events, [["early", expected[early(model)]]]);
-    replace(after, model, "source-a", [expected, updated(model, visible(model, "source-a", "Second"))]);
+    const second = visible(model, "source-a", "Second");
+    replace(after, model, "source-a", [expected, consumer ? second : updated(model, second)]);
     expect(source.snapshot()).toStrictEqual(after);
   } finally { source.close(); }
 }
 
 for (const backend of ["memory", "sqlite"] as const) {
+  test(`${backend} invitation consumer status update preserves backend write and first-output rules`, () => duplicates(backend, "invitation", true));
   for (const model of models) {
     for (const operation of ["create", "update", "point", "list"] as const) {
       test(`${backend} ${model} ${operation} reads later output fields from its backend source`, () => live(backend, model, operation));

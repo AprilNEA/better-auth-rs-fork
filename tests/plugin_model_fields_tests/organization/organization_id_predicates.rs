@@ -302,6 +302,9 @@ async fn check(model: Model, selector: Selector) -> AuthResult<()> {
                     }
                     .into(),
                 );
+                if model == Model::Invitation {
+                    break;
+                }
             }
         }
     }

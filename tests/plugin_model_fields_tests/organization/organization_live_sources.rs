@@ -336,7 +336,12 @@ async fn duplicates<S: AuthSchema>(
     let mut after = storage.snapshot_with_roles(true).await?;
     let actual = update(reader.store().as_ref(), model, "source-a").await?;
     let first = updated(model, visible(model, "source-a", "First"));
-    let second = updated(model, visible(model, "source-a", "Second"));
+    let second = visible(model, "source-a", "Second");
+    let second = if model == Model::Invitation {
+        second
+    } else {
+        updated(model, second)
+    };
     ordered(&actual.into(), &first.clone().into())?;
     ordered(
         &trace_lock(&events)?.clone().into(),

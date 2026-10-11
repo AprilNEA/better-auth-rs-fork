@@ -27,6 +27,7 @@ pub struct ModelFields {
     user_plugin_fields: Vec<&'static str>,
     session_plugin_fields: Vec<&'static str>,
     organization: Option<crate::organization_fields::OrganizationFields>,
+    organization_teams_enabled: Option<bool>,
     id_history: Arc<Mutex<IdHistory>>,
 }
 
@@ -228,6 +229,7 @@ impl ModelFields {
     ) {
         let fields = fields.initialized_options();
         self.organization = Some(fields.clone());
+        self.organization_teams_enabled = Some(teams_enabled);
         self.declare_native_fields(EntityRole::Organization, fields.organization.clone());
         if dynamic_access_control {
             self.declare_native_fields(
@@ -247,6 +249,13 @@ impl ModelFields {
         let mut declarations = Self::plugin_native_fields(role);
         declarations.fields_mut().extend(fields.fields().clone());
         self.register(role, declarations);
+    }
+
+    /// Read the configured Organization teams option.
+    /// Standalone OrganizationStore calls keep team support enabled.
+    #[doc(hidden)]
+    pub fn organization_teams_enabled(&self) -> bool {
+        self.organization_teams_enabled.unwrap_or(true)
     }
 
     /// Resolve final Organization declarations once before adapter field reads and writes.
