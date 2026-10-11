@@ -28,18 +28,6 @@ impl DetailRelation {
     }
 }
 
-fn required_page<T>(value: JoinValue<T>, name: &str) -> AuthResult<Vec<T>> {
-    match value {
-        JoinValue::Many(rows) => Ok(rows),
-        JoinValue::One(None) => Err(AuthError::type_error(
-            "Cannot read properties of null (reading 'map')",
-        )),
-        JoinValue::One(Some(_)) => Err(AuthError::type_error(format!(
-            "{name}.map is not a function"
-        ))),
-    }
-}
-
 impl EphemeralStore {
     async fn detail_relation(
         &self,
@@ -256,13 +244,10 @@ impl EphemeralStore {
             None
         };
         // The plugin consumes members only after every adapter relation finishes projection.
-        let member_rows = required_page(member_rows, "members")?
-            .into_iter()
-            .map(Member::from_field_values)
-            .collect::<AuthResult<Vec<_>>>()?;
+        let member_rows = member_rows.into_required_page("members")?;
         let owners = member_rows
             .iter()
-            .map(|member| member.user_id.field_value())
+            .map(|member| member.get("userId").cloned().unwrap_or_default())
             .collect::<Vec<_>>();
         let users = if owners.is_empty() {
             Vec::new()
@@ -286,49 +271,12 @@ impl EphemeralStore {
                 .await?;
             self.output_user_refs(rows).await?
         };
-        let members = member_rows
-            .into_iter()
-            .map(|member| {
-                let user = users
-                    .iter()
-                    .rev()
-                    .find(|user| {
-                        user.id
-                            .field_value()
-                            .same_value_zero(&member.user_id.field_value())
-                    })
-                    .ok_or_else(|| {
-                        AuthError::internal("Unexpected error: User not found for member")
-                    })?;
-                Ok(MemberUser {
-                    member,
-                    user: crate::MemberUserView::from_user(user),
-                })
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        let invitations = required_page(invitation_rows, "invitations")?
-            .into_iter()
-            .map(Invitation::from_field_values)
-            .collect::<AuthResult<Vec<_>>>()?;
-        let teams = match team_rows {
-            None | Some(JoinValue::One(None)) => None,
-            Some(JoinValue::One(Some(_))) => {
-                return Err(AuthError::type_error("teams?.map is not a function"));
-            }
-            Some(JoinValue::Many(rows)) => Some(
-                rows.into_iter()
-                    .map(crate::Team::from_field_values)
-                    .collect::<AuthResult<Vec<_>>>()?,
-            ),
-        };
-        for name in ["invitation", "member", "team"] {
-            let _ = parent.shift_remove(name);
-        }
         Ok(Some(OrganizationDetails {
-            organization: Organization::from_field_values(parent)?,
-            invitations,
-            members,
-            teams,
+            organization: parent,
+            invitations: invitation_rows,
+            members: member_rows,
+            users,
+            teams: team_rows,
         }))
     }
 }

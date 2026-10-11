@@ -178,7 +178,6 @@ pub(super) fn team(
 
 enum ResponseFields {
     Organization,
-    FullOrganization,
     Team,
     Other,
 }
@@ -190,7 +189,6 @@ fn response_fields(path: &str) -> ResponseFields {
         | "/organization/delete"
         | "/organization/get-organization"
         | "/organization/set-active" => ResponseFields::Organization,
-        "/organization/get-full-organization" => ResponseFields::FullOrganization,
         "/organization/create-team"
         | "/organization/update-team"
         | "/organization/list-teams"
@@ -235,22 +233,6 @@ pub(super) fn filter_native_response(
     }
     match response_fields(path) {
         ResponseFields::Organization => filter(value, &fields.organization, false)?,
-        ResponseFields::FullOrganization => {
-            filter(value, &fields.organization, false)?;
-            if let FieldValue::Object(record) = value {
-                let mut output = record.snapshot_fields()?;
-                for (name, schema) in [
-                    ("members", &fields.member),
-                    ("invitations", &fields.invitation),
-                    ("teams", &fields.team),
-                ] {
-                    if let Some(value) = output.get_mut(name) {
-                        filter(value, schema, false)?;
-                    }
-                }
-                *record = output.into();
-            }
-        }
         ResponseFields::Team => filter(value, &fields.team, true)?,
         ResponseFields::Other => {}
     }
@@ -276,18 +258,6 @@ pub(super) fn filter_response(path: &str, value: &mut Value, fields: &Organizati
     }
     match response_fields(path) {
         ResponseFields::Organization => filter(value, &fields.organization),
-        ResponseFields::FullOrganization => {
-            filter(value, &fields.organization);
-            for (key, schema) in [
-                ("members", &fields.member),
-                ("invitations", &fields.invitation),
-                ("teams", &fields.team),
-            ] {
-                if let Some(value) = value.get_mut(key) {
-                    filter(value, schema);
-                }
-            }
-        }
         ResponseFields::Team => {
             match value {
                 Value::Object(team) => {

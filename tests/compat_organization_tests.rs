@@ -482,7 +482,7 @@ async fn test_organization_member_endpoints() {
         ),
     )
     .await;
-    // FullOrganizationResponse uses #[serde(flatten)] on organization,
+    // Full organization output places organization fields at the top level,
     // so org fields are at the top level
     let org_id = full_body2["id"]
         .as_str()

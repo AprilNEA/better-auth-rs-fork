@@ -19,46 +19,6 @@ fn page(rows: Vec<FieldMap>) -> Value {
     rows.into_iter().map(Value::from).collect::<Vec<_>>().into()
 }
 
-fn result_fields(result: OrganizationDetails) -> AuthResult<FieldMap> {
-    let mut fields = result.organization.field_values()?;
-    let _ = fields.insert(
-        "invitations".into(),
-        page(
-            result
-                .invitations
-                .iter()
-                .map(AuthRecordFields::field_values)
-                .collect::<AuthResult<_>>()?,
-        ),
-    );
-    let _ = fields.insert(
-        "members".into(),
-        page(
-            result
-                .members
-                .iter()
-                .map(|member| {
-                    let mut fields = member.member.field_values()?;
-                    let _ = fields.insert("user".into(), member.user.field_values()?.into());
-                    Ok(fields)
-                })
-                .collect::<AuthResult<_>>()?,
-        ),
-    );
-    let _ = fields.insert(
-        "teams".into(),
-        page(
-            result
-                .teams
-                .ok_or_else(|| AuthError::internal("Expected team page"))?
-                .iter()
-                .map(AuthRecordFields::field_values)
-                .collect::<AuthResult<_>>()?,
-        ),
-    );
-    Ok(fields)
-}
-
 async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
     let events = Arc::new(Mutex::new(Vec::<(&'static str, Value)>::new()));
     let trace = |name: &'static str| {
@@ -135,7 +95,7 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
             },
         );
     }
-    store.configure_organization_fields(fields)?;
+    store.configure_organization_fields(fields.clone())?;
     let parent: FieldMap = [
         ("id".into(), "organization".into()),
         ("name".into(), "Organization".into()),
@@ -253,9 +213,10 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
             page(if native { vec![team] } else { Vec::new() }),
         );
         assert_eq!(
-            result_fields(
-                result?.ok_or_else(|| AuthError::internal("Expected organization details"))?
-            )?,
+            result?
+                .ok_or_else(|| AuthError::internal("Expected organization details"))?
+                .into_public_value(&fields)?
+                .enumerable_fields()?,
             expected
         );
     }

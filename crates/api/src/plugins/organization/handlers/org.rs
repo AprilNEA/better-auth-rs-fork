@@ -6,9 +6,8 @@ use crate::plugins::organization::rbac::check_permission;
 use crate::plugins::organization::types::{
     BasicMemberResponse, CheckSlugRequest, CheckSlugResponse, CreateOrganizationRequest,
     CreateOrganizationResponse, CreatedOrganizationResponse, DeleteOrganizationRequest,
-    FullOrganizationResponse, GetFullOrganizationQuery, LeaveOrganizationRequest, MemberResponse,
-    NullableStringField, OrganizationResponse, SetActiveOrganizationRequest,
-    UpdateOrganizationRequest,
+    GetFullOrganizationQuery, LeaveOrganizationRequest, MemberResponse, NullableStringField,
+    OrganizationResponse, SetActiveOrganizationRequest, UpdateOrganizationRequest,
 };
 use crate::plugins::organization::{OrganizationConfig, hooks::*};
 use better_auth_core::entity::{AuthMember, AuthOrganization, AuthSession};
@@ -16,7 +15,6 @@ use better_auth_core::error::{AuthError, AuthResult};
 use better_auth_core::plugin::AuthContext;
 use better_auth_core::session::NativeSessionData;
 use better_auth_core::types::{AuthRequest, AuthResponse, CreateOrganization, UpdateOrganization};
-use better_auth_core::wire::InvitationView;
 use better_auth_core::{AuthRecordFields, FieldMap, FieldValue, SchemaValue};
 
 fn has_role(member: &impl AuthMember, role: &str) -> AuthResult<bool> {
@@ -410,7 +408,7 @@ pub(crate) async fn get_full_organization_core(
     session: &NativeSessionData,
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<Option<FullOrganizationResponse<OrganizationResponse, InvitationView>>> {
+) -> AuthResult<Option<FieldValue>> {
     use better_auth_core::store::{OrganizationDetailsQuery, OrganizationKey};
 
     let active_id = session.session.active_organization_id.field_value();
@@ -442,11 +440,11 @@ pub(crate) async fn get_full_organization_core(
         })
         .await?
         .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
-    let organization = details.organization;
+    let organization = details.into_public_value(&config.schema)?;
     if ctx
         .database
         .get_member_value(
-            &organization.id.field_value(),
+            &organization.model_property("id")?,
             &session.user_property("id")?,
         )
         .await?
@@ -463,25 +461,7 @@ pub(crate) async fn get_full_organization_core(
             "User is not a member of the organization",
         ));
     }
-    Ok(Some(FullOrganizationResponse {
-        organization: crate::plugins::organization::fields::organization(&organization, ctx)?,
-        members: details
-            .members
-            .iter()
-            .map(|joined| MemberResponse::from_member_and_user(&joined.member, &joined.user))
-            .collect(),
-        invitations: details
-            .invitations
-            .iter()
-            .map(InvitationView::try_from_invitation)
-            .collect::<AuthResult<Vec<_>>>()?,
-        teams: details.teams.map(|teams| {
-            teams
-                .into_iter()
-                .map(|team| crate::plugins::organization::types::FullOrganizationTeam { team })
-                .collect()
-        }),
-    }))
+    Ok(Some(organization))
 }
 
 pub(crate) async fn check_slug_core(
@@ -822,7 +802,10 @@ pub async fn handle_get_full_organization(
     let session = require_native_session(req, ctx).await?;
     let query = crate::plugins::query_input::parse::<GetFullOrganizationQuery>(&req.query)?;
     let response = get_full_organization_core(&query, &session, config, ctx).await?;
-    AuthResponse::json(None, &response)
+    Ok(AuthResponse::native(
+        None,
+        response.unwrap_or(FieldValue::Null),
+    ))
 }
 
 /// Handle check slug request
@@ -1074,6 +1057,14 @@ mod tests {
         .expect("request should succeed")
         .expect("organization should exist");
 
-        assert_eq!(response.members.len(), 1);
+        assert_eq!(
+            response
+                .model_property("members")
+                .unwrap()
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

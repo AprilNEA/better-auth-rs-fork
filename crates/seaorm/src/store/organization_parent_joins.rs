@@ -9,7 +9,6 @@ use crate::{
 };
 use better_auth_core::{
     AuthError, AuthResult, FieldMap, FieldValue, FromFieldMap, Invitation,
-    plugin_runtime::ModelFields,
     store::{InvitationOrganization, JoinValue, ResolvedJoin, schema::EntityRole},
     user_fields::UserConfig,
 };
@@ -228,12 +227,7 @@ where
                                 relation.fallback_from((role, model, parent_fields), runtime)?;
                             let value = output.get(&from).cloned().unwrap_or_default();
                             let organizations = self
-                                .selected_parent_organizations(
-                                    relation,
-                                    organization_fields,
-                                    runtime,
-                                    value,
-                                )
+                                .selected_parent_organizations(relation, organization_fields, value)
                                 .await?;
                             Ok((
                                 plugin_rows::ordered_output(parent_fields, output),
@@ -250,19 +244,16 @@ where
         &self,
         relation: &ResolvedJoin,
         fields: &UserConfig,
-        runtime: &ModelFields,
         value: FieldValue,
     ) -> AuthResult<Vec<FieldMap>> {
         if value.is_null() || value.is_undefined() {
             return Ok(Vec::new());
         }
-        let (logical, _) = relation
-            .fallback_target((EntityRole::Organization, "organization", fields), runtime)?;
         let backend = self.connection().get_database_backend();
         let query = Entity::<O::Organization>::find().filter(
             self.organization_field_equals::<O::Organization>(
                 EntityRole::Organization,
-                &logical,
+                &relation.to,
                 &value,
             )?,
         );

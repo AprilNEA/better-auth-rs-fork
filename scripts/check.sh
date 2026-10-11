@@ -77,6 +77,26 @@ run_stage() {
         --test cookie_expires_tests --test cookie_cleanup_tests \
         --test cookie_lifetime_tests --test cookie_session_precision_tests
       ;;
+    organization-details)
+      cargo fmt --all -- --check
+      local organization_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
+        ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
+        ./compat-tests/reference-server/contracts/organization-list-relations.test.ts || organization_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || organization_status=1
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- \
+        store::joins:: store::ephemeral::organization_joins:: \
+        store::ephemeral::organization_parent_tests:: store::ephemeral::user_serial_tests:: \
+        store::core_query_binding_tests:: || organization_status=1
+      cargo test --locked -p better-auth-api --lib plugins::organization:: || organization_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test organization_native_join_tests --test organization_serial_reference_tests \
+        --test sql_relation_property_tests --test organization_list_relations_tests \
+        --test organization_list_tests --test organization_member_join_reference_tests \
+        --test organization_native_fields_tests --test compat_organization_tests || organization_status=1
+      return "$organization_status"
+      ;;
     organization-fields)
       cargo fmt --all -- --check
       local organization_status=0
@@ -117,7 +137,7 @@ run_stage() {
         --test organization_list_relations_tests --test organization_list_tests --test fallback_continuation_tests -- -D warnings || organization_status=1
       cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib || organization_status=1
       cargo test --locked -p better-auth-api --lib -- \
-        plugins::organization::handlers::native_mutation_tests:: \
+        plugins::organization:: \
         plugins::passkey::credential_tests::reopen::admission_authentication_tests:: \
         plugins::passkey::credential_tests::reopen::native_boundary_tests:: \
         plugins::passkey::credential_tests::reopen::user_id_tests:: \

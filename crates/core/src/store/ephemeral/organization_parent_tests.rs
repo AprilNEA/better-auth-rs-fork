@@ -251,11 +251,10 @@ async fn query(store: &EphemeralStore, path: &str) -> AuthResult<JsonValue> {
                 })
                 .await?
                 .unwrap();
-            json!({"name":row.organization.name,"logo":row.organization.logo,
-                "members":row.members.into_iter().map(member).collect::<AuthResult<Vec<_>>>()?,
-                "invitations":row.invitations.into_iter().map(|row| Ok(json!({
-                    "label":row.additional_fields["label"].json()?,"detail":row.additional_fields["detail"].json()?
-                }))).collect::<AuthResult<Vec<_>>>()?})
+            let row = row.into_public_value(&store.organization_fields()?)?.json()?.unwrap();
+            json!({"name":row["name"],"logo":row["logo"],
+                "members":row["members"].as_array().unwrap().iter().map(|row| json!({"label":row["label"],"detail":row["detail"],"user":{"name":row["user"]["name"],"image":row["user"]["image"]}})).collect::<Vec<_>>(),
+                "invitations":row["invitations"].as_array().unwrap().iter().map(|row| json!({"label":row["label"],"detail":row["detail"]})).collect::<Vec<_>>()})
         }
         _ => return Err(AuthError::internal("Unknown ordinary parent fixture")),
     })

@@ -51,7 +51,11 @@ fn display_team(row: &better_auth_core::Team) -> Value {
 fn display_invitation(row: &better_auth_core::Invitation) -> Value {
     json!({"label":row.additional_fields["label"].json().unwrap(),"detail":row.additional_fields["detail"].json().unwrap()})
 }
-async fn query<S: AuthSchema>(store: &impl AuthStore<S>, fixture: &Value) -> AuthResult<Value> {
+async fn query<S: AuthSchema>(
+    store: &impl AuthStore<S>,
+    fixture: &Value,
+    fields: &OrganizationFields,
+) -> AuthResult<Value> {
     Ok(match fixture["path"].as_str().unwrap() {
         "member-org" => display_member(&store.get_member_with_user("organization-a", "user-a").await?.unwrap()),
         "member-id" => display_member(&store.get_member_by_id_with_user("member-a").await?.unwrap()),
@@ -68,10 +72,11 @@ async fn query<S: AuthSchema>(store: &impl AuthStore<S>, fixture: &Value) -> Aut
                 organization: OrganizationKey::Id("organization-a"), members_limit: fixture["membersLimit"].as_f64(),
                 users_limit: 100.0, include_teams: fixture["includeTeams"].as_bool().unwrap_or(true),
             }).await?.unwrap();
-            json!({"name":row.organization.name,"logo":row.organization.logo,
-                "invitations":row.invitations.iter().map(display_invitation).collect::<Vec<_>>(),
-                "members":row.members.iter().map(display_member).collect::<Vec<_>>(),
-                "teams":row.teams.map(|rows| rows.iter().map(display_team).collect::<Vec<_>>())})
+            let row = row.into_public_value(fields)?.json()?.unwrap();
+            json!({"name":row["name"],"logo":row["logo"],
+                "invitations":row["invitations"].as_array().unwrap().iter().map(|row| json!({"label":row["label"],"detail":row["detail"]})).collect::<Vec<_>>(),
+                "members":row["members"].as_array().unwrap().iter().map(|row| json!({"label":row["label"],"detail":row["detail"],"user":{"name":row["user"]["name"],"image":row["user"]["image"]}})).collect::<Vec<_>>(),
+                "teams":row.get("teams").map(|rows| rows.as_array().unwrap().iter().map(|row| json!({"name":row["name"],"label":row["label"]})).collect::<Vec<_>>())})
         }
         #[expect(
             clippy::unreachable,
@@ -217,9 +222,8 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
     ]);
     let store = Arc::new(create(config));
     *state.store.lock().unwrap() = Arc::downgrade(&store);
-    store
-        .configure_organization_fields(support::organization_fields::<S, T>(&state, path, mode))
-        .unwrap();
+    let fields = support::organization_fields::<S, T>(&state, path, mode);
+    store.configure_organization_fields(fields.clone()).unwrap();
     support::seed::<S>(&*store).await;
     state.enabled.store(true, Ordering::Relaxed);
     let controller = async {
@@ -240,7 +244,7 @@ async fn check_case<S: AuthSchema, T: AuthStore<S> + 'static>(
             release.send(()).unwrap();
         }
     };
-    let (result, ()) = tokio::join!(query::<S>(&*store, fixture), controller);
+    let (result, ()) = tokio::join!(query::<S>(&*store, fixture, &fields), controller);
     match result {
         Ok(result) => {
             assert_eq!(result, fixture["result"], "{fixture}");

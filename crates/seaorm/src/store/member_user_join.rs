@@ -1,5 +1,5 @@
 use super::{
-    SeaOrmStore, instrumentation::database_operation, map_db_err, organization_models::Entity,
+    SeaOrmStore, instrumentation::database_operation, organization_models::Entity, plugin_rows,
 };
 use crate::{
     SeaOrmAccountModel, SeaOrmOrganizationModel, SeaOrmOrganizationSchema, SeaOrmPluginSchema,
@@ -67,50 +67,49 @@ where
                 relation.many,
                 limit,
             )?;
-            let member_fields = MemberUser::field_schema(&fields).adapter_fields(&[]);
+            (member, Some(users))
+        } else {
+            let member = database_operation::<Entity<O::Member>, _>(
+                self.config(),
+                "findOne",
+                plugin_rows::one(self.connection(), query),
+            )
+            .await?;
+            let Some(member) = member else {
+                return Ok(None);
+            };
+            (member, None)
+        };
+        let member_fields = MemberUser::field_schema(&fields).adapter_fields(&[]);
+        let backend = self.connection().get_database_backend();
+        let record = super::organization_models::raw_record::<O::Member>(
+            &member,
+            &member_fields,
+            backend,
+            (&self.model_fields, EntityRole::Member),
+        )?;
+        let record = if let Some(users) = &selected_users {
             let user_fields = self.user_field_schema().adapter_fields(&[]);
-            let backend = self.connection().get_database_backend();
             let entity = <S::User as SeaOrmUserModel>::Entity::default();
             let physical = self
                 .model_fields
                 .storage_model_name(EntityRole::User, entity.table_name());
-            let record = super::organization_models::raw_record::<O::Member>(
-                &member,
-                &member_fields,
-                backend,
-                (&self.model_fields, EntityRole::Member),
-            )?
-            .with_storage_property(
+            record.with_storage_property(
                 physical,
                 super::joins::raw_relation_value(
-                    &users,
+                    users,
                     &user_fields,
                     relation.many,
                     S::User::field_column,
                 )?,
-            );
-            let mut output = member_fields
-                .organization_output_records(vec![record], backend == DbBackend::Postgres)
-                .await?;
-            (Member::from_field_values(output.remove(0))?, Some(users))
-        } else {
-            let member =
-                database_operation::<Entity<O::Member>, _>(self.config(), "findOne", async {
-                    query.one(self.connection()).await.map_err(map_db_err)
-                })
-                .await?;
-            let Some(member) = member else {
-                return Ok(None);
-            };
-            let member = super::organization_models::record(
-                &member,
-                &fields,
-                self.connection().get_database_backend(),
-                (&self.model_fields, EntityRole::Member),
             )
-            .await?;
-            (member, None)
+        } else {
+            record
         };
+        let mut output = member_fields
+            .organization_output_records(vec![record], backend == DbBackend::Postgres)
+            .await?;
+        let member = Member::from_field_values(output.remove(0))?;
         let users = match selected_users {
             Some(users) => users,
             None => {

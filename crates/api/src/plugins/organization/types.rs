@@ -318,16 +318,6 @@ pub struct CreateOrganizationResponse<O: Serialize, M: Serialize> {
 }
 
 #[derive(Debug, Serialize)]
-pub struct FullOrganizationResponse<O: Serialize, I: Serialize> {
-    #[serde(flatten)]
-    pub organization: O,
-    pub members: Vec<MemberResponse>,
-    pub invitations: Vec<I>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub teams: Option<Vec<FullOrganizationTeam>>,
-}
-
-#[derive(Debug, Serialize)]
 pub struct InvitationResponse<I: Serialize> {
     pub invitation: I,
 }
@@ -612,11 +602,4 @@ mod tests {
         assert_eq!(string_limit.members_limit, Some(1.0));
         assert_eq!(number_limit.members_limit, Some(2.0));
     }
-}
-
-/// Team fields returned by the full organization join.
-#[derive(Debug, Serialize)]
-pub struct FullOrganizationTeam {
-    #[serde(flatten)]
-    pub team: better_auth_core::types::Team,
 }

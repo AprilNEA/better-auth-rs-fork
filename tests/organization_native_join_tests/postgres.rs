@@ -1,9 +1,9 @@
 use super::*;
-use better_auth_core::CreateMember;
 use better_auth_core::store::{
     InvitationStore, MemberStore, OrganizationStore, TeamStore, UserStore,
 };
 use better_auth_core::user_fields::UserConfig;
+use better_auth_core::{AuthRecordFields, CreateMember, FieldValue};
 use better_auth_seaorm::sea_orm::ConnectOptions;
 
 async fn check_full_read(db: DatabaseConnection) {
@@ -88,14 +88,30 @@ async fn check_full_read(db: DatabaseConnection) {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(details.organization, organization);
-    assert_eq!(details.invitations, vec![invitation]);
-    assert_eq!(details.teams, Some(vec![team]));
-    assert_eq!(details.members.len(), 1);
-    assert_eq!(details.members[0].member, member);
-    assert_eq!(details.members[0].user.id, owner.id);
-    assert_eq!(details.members[0].user.name, owner.name);
-    assert_eq!(details.members[0].user.email, owner.email);
+    let details = details
+        .into_public_value(&OrganizationFields::default())
+        .unwrap();
+    let mut expected = organization.field_values().unwrap();
+    let mut member = member.field_values().unwrap();
+    let _ = member.insert(
+        "user".into(),
+        better_auth_core::MemberUserView::from_user(&owner)
+            .field_values()
+            .unwrap()
+            .into(),
+    );
+    expected.extend([
+        (
+            "invitations".into(),
+            vec![FieldValue::from(invitation.field_values().unwrap())].into(),
+        ),
+        ("members".into(), vec![FieldValue::from(member)].into()),
+        (
+            "teams".into(),
+            vec![FieldValue::from(team.field_values().unwrap())].into(),
+        ),
+    ]);
+    assert_eq!(details, FieldValue::from(expected));
 }
 
 #[tokio::test]

@@ -55,6 +55,76 @@ pub(super) async fn session(
 }
 
 #[tokio::test]
+async fn full_organization_keeps_native_dates_undefined_and_response_identity() {
+    let config = OrganizationConfig::default();
+    let ctx = context(test_helpers::create_test_config(), &config).await;
+    let user = ctx
+        .database
+        .create_user(CreateUser::new().with_email("full-native@example.test"))
+        .await
+        .unwrap();
+    let data = session(&ctx, &user).await;
+    let organization = ctx
+        .database
+        .create_organization(CreateOrganization::new("Native", "full-native"))
+        .await
+        .unwrap();
+    let _ = ctx
+        .database
+        .create_member(CreateMember::new(
+            organization.id.typed().unwrap(),
+            user.id.typed().unwrap(),
+            "owner",
+        ))
+        .await
+        .unwrap();
+    let _ = ctx
+        .database
+        .update_session_active_organization_by_token_value(
+            &data.session.token.field_value(),
+            Some(&organization.id.field_value()),
+        )
+        .await
+        .unwrap();
+    let request = test_helpers::create_auth_json_request_no_query(
+        HttpMethod::Get,
+        "/organization/get-full-organization",
+        Some(data.session.token.typed().unwrap()),
+        None,
+    );
+    let mut response = super::org::handle_get_full_organization(&request, &ctx, &config)
+        .await
+        .unwrap();
+    assert!(matches!(
+        response.body,
+        better_auth_core::ResponseBody::Native(_)
+    ));
+    let original = response.body.field_value().unwrap();
+    assert!(matches!(
+        original.model_property("createdAt").unwrap(),
+        FieldValue::Date(_)
+    ));
+    assert!(original.enumerable_fields().unwrap().contains_key("teams"));
+    assert!(original.model_property("teams").unwrap().is_undefined());
+    OrganizationPlugin::with_config(config)
+        .after_request(&request, &mut response, &ctx)
+        .await
+        .unwrap();
+    assert!(
+        response
+            .body
+            .field_value()
+            .unwrap()
+            .strict_equals(&original)
+    );
+    let json: serde_json::Value =
+        serde_json::from_slice(&response.into_http_response().unwrap().body.bytes().unwrap())
+            .unwrap();
+    assert!(json.get("teams").is_none());
+    assert!(json.get("createdAt").unwrap().is_string());
+}
+
+#[tokio::test]
 async fn native_read_routes_preserve_property_access_order_and_failed_membership_storage() {
     let config = OrganizationConfig::default();
     let ctx = context(test_helpers::create_test_config(), &config).await;

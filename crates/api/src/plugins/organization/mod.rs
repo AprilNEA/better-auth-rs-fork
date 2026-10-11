@@ -415,6 +415,9 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
         response: &mut AuthResponse,
         _ctx: &AuthContext<S>,
     ) -> AuthResult<()> {
+        if req.path() == "/organization/get-full-organization" {
+            return Ok(());
+        }
         if !response.is_json() || response.body.is_empty() {
             return Ok(());
         }

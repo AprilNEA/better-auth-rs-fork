@@ -309,7 +309,8 @@ async fn session_membership_applies_the_declared_policy_to_the_complete_query_va
 #[tokio::test]
 async fn organization_relations_rebind_stored_keys_through_the_write_policy() -> AuthResult<()> {
     use better_auth_core::{
-        CreateInvitation, CreateMember, CreateOrganization, CreateTeam, InvitationStatus,
+        AuthRecordFields, CreateInvitation, CreateMember, CreateOrganization, CreateTeam, FieldMap,
+        FieldValue, InvitationStatus,
         store::{
             InvitationStore, MemberStore, OrganizationDetailsQuery, OrganizationKey,
             OrganizationStore, TeamStore,
@@ -414,12 +415,32 @@ async fn organization_relations_rebind_stored_keys_through_the_write_policy() ->
                     })
                     .await?,
             )?;
-            assert_eq!(details.organization, organization);
-            assert_eq!(details.invitations, [invitation.clone()]);
-            assert_eq!(details.members.len(), 1);
-            assert_eq!(required(details.members.first())?.member, member);
-            assert_eq!(required(details.members.first())?.user.id, owner.id);
-            assert_eq!(required(details.teams)?, [team]);
+            let user: FieldMap = [
+                ("id".into(), owner.id.field_value()),
+                ("name".into(), owner.name.field_value()),
+                ("email".into(), owner.email.field_value()),
+                ("image".into(), owner.image.field_value()),
+            ]
+            .into();
+            let mut expected_member = member.field_values()?;
+            let _ = expected_member.insert("user".into(), user.into());
+            let mut expected = organization.field_values()?;
+            let _ = expected.insert(
+                "invitations".into(),
+                vec![FieldValue::from(invitation.field_values()?)].into(),
+            );
+            let _ = expected.insert(
+                "members".into(),
+                vec![FieldValue::from(expected_member)].into(),
+            );
+            let _ = expected.insert(
+                "teams".into(),
+                vec![FieldValue::from(team.field_values()?)].into(),
+            );
+            assert_eq!(
+                details.into_public_value(&Default::default())?,
+                FieldValue::from(expected)
+            );
             store
                 .delete_team_value(&format!("\u{feff}{team_id}").into())
                 .await?;

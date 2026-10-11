@@ -1,5 +1,7 @@
 //! Runtime projections returned by the core adapter's ordinary joins.
 
+mod organization;
+
 use crate::{
     AuthConfig, AuthError, AuthResult,
     plugin_runtime::ModelFields,
@@ -15,6 +17,21 @@ pub enum JoinValue<T> {
     One(Option<T>),
     /// A relationship that selects a record page, including an empty page.
     Many(Vec<T>),
+}
+
+impl<T> JoinValue<T> {
+    /// Consume a relationship at the JavaScript array-operation boundary.
+    pub fn into_required_page(self, name: &str) -> AuthResult<Vec<T>> {
+        match self {
+            Self::Many(rows) => Ok(rows),
+            Self::One(None) => Err(AuthError::type_error(
+                "Cannot read properties of null (reading 'map')",
+            )),
+            Self::One(Some(_)) => Err(AuthError::type_error(format!(
+                "{name}.map is not a function"
+            ))),
+        }
+    }
 }
 
 impl From<JoinValue<crate::FieldMap>> for crate::FieldValue {
@@ -396,17 +413,19 @@ pub struct OrganizationDetailsQuery<'a> {
     pub include_teams: bool,
 }
 
-/// Projected organization records and the users loaded after the related pages.
+/// Adapter output retained until the Organization plugin consumes public fields.
 #[derive(Debug, Clone)]
 pub struct OrganizationDetails {
-    /// Organization fields.
-    pub organization: crate::Organization,
-    /// Adapter-limited invitation page.
-    pub invitations: Vec<crate::Invitation>,
-    /// Adapter-limited member page with its separately loaded users.
-    pub members: Vec<MemberUser>,
-    /// Team page when requested; omission remains distinct from an empty page.
-    pub teams: Option<Vec<crate::Team>>,
+    /// Ordered parent fields, including projected relationship properties.
+    pub organization: crate::FieldMap,
+    /// Invitation cardinality remains unchecked until public member and parent output complete.
+    pub invitations: JoinValue<crate::FieldMap>,
+    /// Member page after the plugin's first array operation.
+    pub members: Vec<crate::FieldMap>,
+    /// Users loaded from the projected member selectors, in adapter order.
+    pub users: Vec<UserView>,
+    /// Preserve omitted and singular team relationships until public consumption.
+    pub teams: Option<JoinValue<crate::FieldMap>>,
 }
 
 /// A projected team and its requested membership relationship.

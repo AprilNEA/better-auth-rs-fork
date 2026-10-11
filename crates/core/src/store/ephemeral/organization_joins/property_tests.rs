@@ -555,39 +555,26 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
             .await?
             .ok_or_else(|| AuthError::internal("Expected full organization"))?;
         let suffix = if native { "a" } else { "b" };
-        assert_eq!(result.members.len(), 1);
-        assert_eq!(result.invitations.len(), 1);
-        assert_eq!(
-            result
-                .members
-                .first()
-                .ok_or_else(|| AuthError::internal("Expected member"))?
-                .member
-                .id,
-            format!("member-{suffix}")
-        );
-        assert_eq!(
-            result
-                .invitations
-                .first()
-                .ok_or_else(|| AuthError::internal("Expected invitation"))?
-                .id,
-            format!("invitation-{suffix}")
-        );
-        assert_eq!(
-            result
-                .teams
-                .ok_or_else(|| AuthError::internal("Expected teams"))?
-                .first()
-                .ok_or_else(|| AuthError::internal("Expected team"))?
-                .id,
-            format!("team-{suffix}")
-        );
-        assert_eq!(
-            result.organization.additional_fields.get("lookup"),
-            Some(&Value::from("route-b"))
-        );
-        assert!(!result.organization.additional_fields.contains_key("member"));
+        let result = result.into_public_value(&store.organization_fields()?)?;
+        for (page, prefix) in [
+            ("members", "member"),
+            ("invitations", "invitation"),
+            ("teams", "team"),
+        ] {
+            let rows = result.model_property(page)?;
+            let rows = rows
+                .as_array()
+                .ok_or_else(|| AuthError::internal("Expected relation page"))?;
+            assert_eq!(rows.len(), 1);
+            assert_eq!(
+                rows.first()
+                    .ok_or_else(|| AuthError::internal("Expected relation row"))?
+                    .model_property("id")?,
+                Value::from(format!("{prefix}-{suffix}"))
+            );
+        }
+        assert_eq!(result.model_property("lookup")?, Value::from("route-b"));
+        assert!(!result.enumerable_fields()?.contains_key("member"));
         assert_eq!(
             *events
                 .lock()

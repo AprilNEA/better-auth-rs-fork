@@ -4,9 +4,7 @@ use better_auth_core::{
     AuthError, AuthResult, id::AdapterIdInput, plugin_runtime::ModelFields, user_fields::UserConfig,
 };
 use better_auth_core::{FieldMap, FieldValue};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter,
-};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter};
 
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
@@ -371,19 +369,6 @@ pub(super) fn validate_fields<M: SeaOrmOrganizationModel>(
         }
     }
     Ok(())
-}
-
-/// Read a stored join key before output policies can replace its public value.
-pub(super) fn join_value<M: SeaOrmOrganizationModel>(
-    model: &M,
-    name: &str,
-) -> AuthResult<sea_orm::Value> {
-    model
-        .clone()
-        .into_active_model()
-        .get(M::column(name)?)
-        .into_value()
-        .ok_or_else(|| AuthError::internal("Stored organization join key is unavailable"))
 }
 
 #[cfg(test)]

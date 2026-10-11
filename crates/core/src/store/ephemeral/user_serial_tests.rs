@@ -225,8 +225,16 @@ async fn serial_user_joins_keep_numeric_bindings_in_both_modes() -> AuthResult<(
                 })
                 .await?,
         )?;
-        assert_eq!(details.members.len(), 1);
-        assert_eq!(required(details.members.first())?.user.id, "1");
+        let details = details.into_public_value(&store.organization_fields()?)?;
+        let members = details.model_property("members")?;
+        let members = required(members.as_array())?;
+        assert_eq!(members.len(), 1);
+        assert_eq!(
+            required(members.first())?
+                .model_property("user")?
+                .model_property("id")?,
+            Value::from("1")
+        );
         assert_eq!(stored_ids(&store)?, [Value::Number(1.0)]);
     }
     Ok(())

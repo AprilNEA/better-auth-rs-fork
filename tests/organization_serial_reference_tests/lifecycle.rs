@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
     let store = EphemeralStore::new(Arc::new(config(joins)));
-    store.configure_organization_fields(OrganizationFields {
+    let fields = OrganizationFields {
         member: UserConfig {
             additional_fields: Some(
                 [
@@ -34,7 +34,8 @@ pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
             ),
         },
         ..Default::default()
-    })?;
+    };
+    store.configure_organization_fields(fields.clone())?;
     let user_id = user(&store).await?;
     let organization = store
         .create_organization(CreateOrganization::new("Organization", "ordinary"))
@@ -110,7 +111,10 @@ pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
             include_teams: true,
         })
         .await?
-        .ok_or_else(|| AuthError::internal("ordinary organization exists"))?;
+        .ok_or_else(|| AuthError::internal("ordinary organization exists"))?
+        .into_public_value(&fields)?
+        .json()?
+        .ok_or_else(|| AuthError::internal("public organization must serialize"))?;
     let point_team_member = store
         .get_team_member(&padded_team, &padded_user)
         .await?
@@ -139,9 +143,9 @@ pub(super) async fn observe(joins: bool) -> AuthResult<Value> {
         })) }).collect::<AuthResult<Vec<_>>>()?,
         "pending":store.get_pending_invitation(&padded_organization, EMAIL).await?.iter().map(|row| &row.id).collect::<Vec<_>>(),
         "full":{
-            "id":full.organization.id,"members":full.members.iter().map(joined_member).collect::<Vec<_>>(),
-            "teams":full.teams.ok_or_else(|| AuthError::internal("team page requested"))?.iter().map(|row| json!({"id":row.id,"organizationId":row.organization_id})).collect::<Vec<_>>(),
-            "invitations":full.invitations.iter().map(|row| json!({"organizationId":row.organization_id,"inviterId":row.inviter_id})).collect::<Vec<_>>(),
+            "id":full["id"],"members":full["members"].as_array().ok_or_else(|| AuthError::internal("member page requested"))?.iter().map(|row| json!({"id":row["id"],"organizationId":row["organizationId"],"userId":row["userId"],"role":row["role"],"userIdFromJoin":row["user"]["id"]})).collect::<Vec<_>>(),
+            "teams":full["teams"].as_array().ok_or_else(|| AuthError::internal("team page requested"))?.iter().map(|row| json!({"id":row["id"],"organizationId":row["organizationId"]})).collect::<Vec<_>>(),
+            "invitations":full["invitations"].as_array().ok_or_else(|| AuthError::internal("invitation page requested"))?.iter().map(|row| json!({"organizationId":row["organizationId"],"inviterId":row["inviterId"]})).collect::<Vec<_>>(),
         },
     });
     store.delete_member(created_member.id.typed()?).await?;

@@ -692,7 +692,10 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(
-            full.teams.unwrap()[0].team.additional_fields["memberCount"].as_f64(),
+            full.model_property("teams").unwrap().as_array().unwrap()[0]
+                .model_property("memberCount")
+                .unwrap()
+                .as_f64(),
             Some(1.0)
         );
         let foreign_org = ctx
