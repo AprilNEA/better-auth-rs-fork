@@ -306,20 +306,21 @@ async fn contract<S: AuthSchema>(
             .model_property("name")?
             .strict_equals(&probe.value)
     );
-    let observed = trace_lock(&observer.0)?;
-    assert_eq!(observed.len(), 1);
-    let observed_name = row(
-        model,
-        required(observed.first(), "Expected the after-hook value")?,
-    )?
-    .model_property("name")?;
-    assert!(observed_name.strict_equals(&probe.value));
-    assert!(
-        observed_name
-            .model_property("toJSON")?
-            .strict_equals(&probe.value.model_property("toJSON")?)
-    );
-    drop(observed);
+    {
+        let observed = trace_lock(&observer.0)?;
+        assert_eq!(observed.len(), 1);
+        let observed_name = row(
+            model,
+            required(observed.first(), "Expected the after-hook value")?,
+        )?
+        .model_property("name")?;
+        assert!(observed_name.strict_equals(&probe.value));
+        assert!(
+            observed_name
+                .model_property("toJSON")?
+                .strict_equals(&probe.value.model_property("toJSON")?)
+        );
+    }
     assert!(trace_lock(&probe.calls)?.is_empty());
     match (mode, native.into_http_response()) {
         (Mode::Error, Err(AuthError::Internal(message))) => {

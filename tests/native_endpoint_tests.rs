@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Native endpoint contracts assert complete hook observations and propagate setup errors."
+)]
+
 use async_trait::async_trait;
 use better_auth::plugins::email_otp::EmailOtpCallbacks;
 use better_auth::plugins::{EmailOtpPlugin, EmailOtpType, JwtPlugin, TwoFactorPlugin};
@@ -126,18 +131,32 @@ async fn native_facades_share_raw_hooks_projection_and_response_replacement() ->
     assert_eq!(
         events
             .iter()
-            .map(|e| e["phase"].as_str())
+            .map(|event| event.get("phase").and_then(Value::as_str))
             .collect::<Vec<_>>(),
         vec![Some("before"), Some("generator"), Some("after")]
     );
-    assert_eq!(events[0]["ambient"], json!({"$undefined":true}));
-    assert_eq!(events[1]["path"], "virtual:");
-    assert_eq!(events[1]["ambient"], "virtual:");
     assert_eq!(
-        events[1]["body"],
-        json!({"email":"PATCHED@example.test","type":"sign-in"})
+        events.first().and_then(|event| event.get("ambient")),
+        Some(&json!({"$undefined":true}))
     );
-    assert_eq!(events[2]["body"]["payload"], json!({"sub":"changed"}));
+    assert_eq!(
+        events.get(1).and_then(|event| event.get("path")),
+        Some(&json!("virtual:"))
+    );
+    assert_eq!(
+        events.get(1).and_then(|event| event.get("ambient")),
+        Some(&json!("virtual:"))
+    );
+    assert_eq!(
+        events.get(1).and_then(|event| event.get("body")),
+        Some(&json!({"email":"PATCHED@example.test","type":"sign-in"}))
+    );
+    assert_eq!(
+        events
+            .get(2)
+            .and_then(|event| event.pointer("/body/payload")),
+        Some(&json!({"sub":"changed"}))
+    );
     hooks.mode("normal")?;
     assert_eq!(
         auth.email_otp()?
@@ -191,7 +210,8 @@ async fn validation_errors_run_after_but_ordinary_errors_do_not() -> AuthResult<
         .email_otp()?
         .create("initial@example.test", EmailOtpType::SignIn)
         .await
-        .expect_err("patched invalid body must fail before generation");
+        .err()
+        .ok_or_else(|| AuthError::internal("patched invalid body must fail before generation"))?;
     assert_eq!(error.status_code(), 400);
     assert_eq!(hooks.events()?.len(), 2);
     hooks.mode("invalid")?;
@@ -199,7 +219,8 @@ async fn validation_errors_run_after_but_ordinary_errors_do_not() -> AuthResult<
         auth.jwt()?
             .sign(serde_json::Map::new())
             .await
-            .expect_err("invalid JWT body")
+            .err()
+            .ok_or_else(|| AuthError::internal("invalid JWT body must fail"))?
             .status_code(),
         400
     );
@@ -215,7 +236,7 @@ async fn validation_errors_run_after_but_ordinary_errors_do_not() -> AuthResult<
         hooks
             .events()?
             .iter()
-            .map(|e| e["phase"].as_str())
+            .map(|event| event.get("phase").and_then(Value::as_str))
             .collect::<Vec<_>>(),
         vec![Some("before"), Some("generator")]
     );
@@ -240,8 +261,16 @@ async fn native_request_presence_and_helper_exclusion_survive_dispatch() -> Auth
         .generate_totp(Some(json!({"secret":"literal-secret"})))
         .await?;
     let events = hooks.events()?;
-    assert_eq!(events[0]["request"], true);
-    assert_eq!(events[0]["headers"]["x-literal"], "value");
+    assert_eq!(
+        events.first().and_then(|event| event.get("request")),
+        Some(&json!(true))
+    );
+    assert_eq!(
+        events
+            .first()
+            .and_then(|event| event.pointer("/headers/x-literal")),
+        Some(&json!("value"))
+    );
     hooks.mode("normal")?;
     let _ = auth
         .jwt()?
@@ -278,14 +307,17 @@ async fn signing_options_follow_the_validated_hook_body() -> AuthResult<()> {
         .jwt()?
         .sign(serde_json::from_value(json!({"sub":"fixture","iat":100}))?)
         .await?;
-    let payload = token.split('.').nth(1).expect("signed payload");
+    let payload = token
+        .split('.')
+        .nth(1)
+        .ok_or_else(|| AuthError::internal("Missing signed payload"))?;
     let value: Value = serde_json::from_slice(
         &base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(payload)
-            .expect("signed base64url"),
+            .map_err(|error| AuthError::internal(format!("Invalid signed base64url: {error}")))?,
     )?;
-    assert_eq!(value["iss"], "changed-issuer");
-    assert_eq!(value["aud"], json!(["one", "two"]));
-    assert_eq!(value["exp"], 9000);
+    assert_eq!(value.get("iss"), Some(&json!("changed-issuer")));
+    assert_eq!(value.get("aud"), Some(&json!(["one", "two"])));
+    assert_eq!(value.get("exp"), Some(&json!(9000)));
     Ok(())
 }

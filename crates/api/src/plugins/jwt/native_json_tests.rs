@@ -223,14 +223,16 @@ async fn custom_sign_json_callback_projects_once_without_entering_local_jose_clo
         })
         .into(),
     )]);
-    let plugin = JwtPlugin::new().custom_sign(Arc::new(|payload, _| {
-        Box::pin(async move {
-            assert_eq!(payload["native"], "converted");
-            assert_eq!(payload["sub"], "owner");
-            assert!(payload.contains_key("exp"));
-            Ok("custom-signature".into())
-        })
-    }));
+    let plugin = JwtPlugin::new()
+        .remote_url("http://http-json.test/jwks".into())
+        .custom_sign(Arc::new(|payload, _| {
+            Box::pin(async move {
+                assert_eq!(payload["native"], "converted");
+                assert_eq!(payload["sub"], "owner");
+                assert!(payload.contains_key("exp"));
+                Ok("custom-signature".into())
+            })
+        }));
     let (ctx, reads) = context(&plugin, Vec::new()).await?;
     let token = plugin
         .sign_session(

@@ -11,7 +11,7 @@ use contract::{Scenario, TestResult};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-async fn stored(store: &EphemeralStore) -> TestResult<Value> {
+fn stored(store: &EphemeralStore) -> TestResult<Value> {
     let mut result = Vec::new();
     for row in store.plugin_storage_rows(EntityRole::ApiKey)? {
         let mut value = FieldValue::from(row)
@@ -38,7 +38,7 @@ async fn run(scenario: Scenario) -> TestResult {
             scenario,
             move || {
                 let observer = observer.clone();
-                async move { stored(&observer).await }
+                async move { stored(&observer) }
             },
         )
         .await?;
