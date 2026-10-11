@@ -66,10 +66,6 @@ fn callbacks(trace: &Trace, input: &'static str, output: &'static str) -> FieldT
 }
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract requires exact error priority, callback order, consumption, and full storage preservation"
-)]
 async fn device_consumption_binds_every_operand_before_resolving_the_first_id_alias() -> TestResult
 {
     for invalid_ownership in [false, true] {
@@ -185,10 +181,6 @@ async fn device_consumption_binds_every_operand_before_resolving_the_first_id_al
 }
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract distinguishes one operand conversion from conversion under the second alias"
-)]
 async fn wallet_mixed_aliases_resolve_twice_without_converting_operands_twice() -> TestResult {
     let database = database().await?;
     let _ = database
@@ -264,10 +256,6 @@ async fn wallet_mixed_aliases_resolve_twice_without_converting_operands_twice() 
 }
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract requires exact array conversion, tenant isolation, callback count, and unchanged storage"
-)]
 async fn organization_role_names_convert_as_one_array_and_keep_the_organization_filter()
 -> TestResult {
     let database = database().await?;
@@ -344,5 +332,117 @@ async fn organization_role_names_convert_as_one_array_and_keep_the_organization_
             .await?,
         before
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn organization_role_conditions_parse_before_driver_encoding() -> TestResult {
+    use better_auth_core::{FieldFunction, UpdateOrganizationRole};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let database = database().await?;
+    let _ = database
+        .execute(
+            &Schema::new(database.get_database_backend())
+                .create_table_from_entity(organization_role::Entity),
+        )
+        .await?;
+    let _ = database.execute_unprepared(
+        "INSERT INTO organization_role (id, organization_id, role, permission, created_at, updated_at) \
+         VALUES ('selected', 'target-org', 'owner', '{}', '2030-01-01T00:00:00.000Z', NULL), \
+         ('retained', 'other-org', 'member', '{}', '2030-01-01T00:00:00.000Z', NULL)",
+    ).await?;
+    let before = organization_role::Entity::find()
+        .order_by_asc(organization_role::Column::Id)
+        .all(&database)
+        .await?;
+    assert_eq!(before.len(), 2);
+    let trace = Trace::default();
+    let store = SeaOrmStore::<BundledSchema>::new(AuthConfig::default(), database.clone());
+    store.configure_organization_fields(OrganizationFields {
+        organization_role: UserConfig {
+            additional_fields: Some(
+                [(
+                    "role".into(),
+                    UserFieldConfig {
+                        transform: Some(callbacks(&trace, "role-input", "role-output")),
+                        ..Default::default()
+                    },
+                )]
+                .into(),
+            ),
+        },
+        ..Default::default()
+    })?;
+    for operation in ["find", "update", "delete"] {
+        for array in [false, true] {
+            let allocation = Arc::new(AtomicUsize::new(0));
+            let original = allocation.clone();
+            let rejected_trace = trace.clone();
+            let rejecting = FieldValue::from(FieldFunction::contextual(move |_, _| {
+                record(&rejected_trace, "rejecting")?;
+                let message = "original-condition-error".to_owned();
+                original.store(message.as_ptr() as usize, Ordering::SeqCst);
+                Err(AuthError::Internal(message))
+            }));
+            let later_trace = trace.clone();
+            let later = FieldValue::from(FieldFunction::contextual(move |_, _| {
+                record(&later_trace, "later")?;
+                Ok(FieldValue::Null)
+            }));
+            let selectors = FieldMap::from([
+                (
+                    "organizationId".into(),
+                    FieldMap::from([("driver".into(), true.into())]).into(),
+                ),
+                (
+                    "role".into(),
+                    if array {
+                        vec![rejecting].into()
+                    } else {
+                        rejecting
+                    },
+                ),
+                ("permission".into(), later),
+            ]);
+            let result = match operation {
+                "find" => store
+                    .find_organization_role_by_fields(&selectors)
+                    .await
+                    .map(drop),
+                "update" => store
+                    .update_organization_roles(
+                        &selectors,
+                        UpdateOrganizationRole {
+                            role: Some("Changed".into()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .map(drop),
+                _ => store.delete_organization_role_by_fields(&selectors).await,
+            };
+            let Err(AuthError::Internal(message)) = result else {
+                return Err(AuthError::internal("Expected the original condition error").into());
+            };
+            assert_eq!(message, "original-condition-error");
+            assert_eq!(message.as_ptr() as usize, allocation.load(Ordering::SeqCst));
+            assert_eq!(
+                take_trace(&trace)?,
+                if operation == "update" {
+                    vec!["role-input", "rejecting"]
+                } else {
+                    vec!["rejecting"]
+                }
+            );
+            assert_eq!(
+                organization_role::Entity::find()
+                    .order_by_asc(organization_role::Column::Id)
+                    .all(&database)
+                    .await?,
+                before
+            );
+        }
+    }
     Ok(())
 }

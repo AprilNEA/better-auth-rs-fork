@@ -2,8 +2,7 @@ use super::id_filter::IdColumn;
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, DatabaseBackend, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect, Select,
+    ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Select,
 };
 
 use better_auth_core::store::{ListOrganizationMembersParams, MemberStore};
@@ -16,123 +15,9 @@ use super::organization_models::{self as models, Entity, values};
 use super::{SeaOrmStore, map_db_err};
 use crate::SeaOrmOrganizationModel;
 use better_auth_core::{FieldValue, SchemaField};
-use sea_orm::sea_query::{BinOper, Expr, ExprTrait};
+use sea_orm::sea_query::{Expr, ExprTrait};
 
 mod query;
-
-fn bind_member_filter(
-    params: &ListOrganizationMembersParams,
-    config: &better_auth_core::user_fields::UserConfig,
-    backend: DatabaseBackend,
-    policy: &better_auth_core::id::IdGeneration,
-    runtime: &better_auth_core::plugin_runtime::ModelFields,
-) -> AuthResult<Option<(super::value_filter::BoundQueryField, bool)>> {
-    let Some(field) = params
-        .filter_field
-        .as_deref()
-        .filter(|field| !field.is_empty())
-    else {
-        return Ok(None);
-    };
-    let value = params
-        .filter_value
-        .as_ref()
-        .unwrap_or(&FieldValue::Undefined);
-    let operator = params.filter_operator.as_deref().unwrap_or("eq");
-    better_auth_core::query::validate_where_operand(
-        better_auth_core::query::where_operator(operator),
-        value,
-    )?;
-    let before =
-        runtime.runtime_fields(better_auth_core::store::schema::EntityRole::Member, config)?;
-    let (logical, _) = super::value_filter::query_field_name(
-        better_auth_core::store::schema::EntityRole::Member,
-        &before,
-        field,
-    )?;
-    let id_field = logical == "id"
-        || before
-            .fields()
-            .get(logical)
-            .is_some_and(|field| field.references_id());
-    let bound = super::value_filter::bind_factory_query_field(
-        runtime,
-        better_auth_core::store::schema::EntityRole::Member,
-        config,
-        field,
-        value,
-        policy,
-        backend,
-    )?;
-    Ok(Some((bound, id_field)))
-}
-
-fn apply_member_filter<M: SeaOrmOrganizationModel>(
-    mut query: Select<Entity<M>>,
-    params: &ListOrganizationMembersParams,
-    config: &better_auth_core::user_fields::UserConfig,
-    backend: DatabaseBackend,
-    policy: &better_auth_core::id::IdGeneration,
-    bound: Option<(super::value_filter::BoundQueryField, bool)>,
-) -> AuthResult<Select<Entity<M>>> {
-    use better_auth_core::FieldValue as Value;
-    let Some((bound, id_field)) = bound else {
-        return Ok(query);
-    };
-    let operator = params.filter_operator.as_deref().unwrap_or("eq");
-    let (column, bound) =
-        bound.resolve(better_auth_core::store::schema::EntityRole::Member, config)?;
-    let column = M::column(&column)?;
-    let value = &bound;
-    let id_column = (id_field
-        && !matches!(
-            column.def().get_column_type(),
-            sea_orm::ColumnType::String(_)
-                | sea_orm::ColumnType::Text
-                | sea_orm::ColumnType::Char(_)
-        ))
-    .then_some(column);
-    let column = Expr::col(column);
-    let convert = |value: &Value| -> AuthResult<sea_orm::sea_query::SimpleExpr> {
-        if let (Value::String(value), Some(column)) = (value, id_column) {
-            return column.id_parameter(value, policy, backend);
-        }
-        super::record_bindings::parameter(value.clone(), backend)
-    };
-    if matches!(operator, "in" | "not_in") {
-        // The adapter serializes the complete JSON value before Kysely constructs membership lists.
-        let values = value
-            .as_array()
-            .unwrap_or_else(|| std::slice::from_ref(value));
-        let values = values.iter().map(convert).collect::<AuthResult<Vec<_>>>()?;
-        return Ok(query.filter(super::value_filter::membership(
-            column,
-            values,
-            operator == "not_in",
-        )));
-    }
-    let raw_value = value;
-    let value = convert(value)?;
-    query = match operator {
-        "eq" => query.filter(column.eq(value)),
-        "ne" => query.filter(column.ne(value)),
-        "gt" => query.filter(column.gt(value)),
-        "gte" => query.filter(column.gte(value)),
-        "lt" => query.filter(column.lt(value)),
-        "lte" => query.filter(column.lte(value)),
-        "contains" | "starts_with" | "ends_with" => {
-            let (prefix, suffix) = match operator {
-                "starts_with" => ("", "%"),
-                "ends_with" => ("%", ""),
-                _ => ("%", "%"),
-            };
-            let pattern = super::value_filter::like_pattern(raw_value, prefix, suffix, backend)?;
-            query.filter(column.binary(BinOper::Like, pattern))
-        }
-        _ => query,
-    };
-    Ok(query)
-}
 
 #[async_trait]
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> MemberStore
@@ -443,12 +328,18 @@ mod tests {
     #[tokio::test]
     async fn member_patterns_keep_utf16_until_the_driver_binds_the_complete_pattern()
     -> better_auth_core::AuthResult<()> {
-        use crate::store::{entities::member, map_db_err, record_bindings::parameter};
+        use crate::SeaOrmOrganizationModel;
+        use crate::store::{
+            entities::member, map_db_err, record_bindings::parameter, value_filter,
+        };
         use better_auth_core::{
-            FieldValue, Utf16String, id::IdGeneration, organization_fields::OrganizationFields,
+            FieldValue, Utf16String, WhereMode, id::IdGeneration,
+            organization_fields::OrganizationFields, query::where_operator,
+            store::schema::EntityRole,
         };
         use sea_orm::{
-            ConnectOptions, ConnectionTrait, EntityTrait, QuerySelect, QueryTrait, sea_query::Query,
+            ConnectOptions, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait,
+            sea_query::Query,
         };
 
         let fields = OrganizationFields::default().into_storage().member;
@@ -496,29 +387,25 @@ mod tests {
                     .execute_raw(sea_orm::DbBackend::Sqlite.build(&insert))
                     .await
                     .map_err(map_db_err)?;
-                let params = ListOrganizationMembersParams {
-                    filter_field: Some("role".into()),
-                    filter_value: Some(FieldValue::Utf16String(Utf16String::from_units(units))),
-                    filter_operator: Some(operator.into()),
-                    ..Default::default()
-                };
-                let filter = super::bind_member_filter(
-                    &params,
-                    &fields,
-                    sea_orm::DbBackend::Sqlite,
-                    &IdGeneration::Random,
+                let (column, value) = value_filter::bind_query_field(
                     &better_auth_core::plugin_runtime::ModelFields::default(),
-                )?;
-                let query = super::apply_member_filter::<member::Model>(
-                    member::Entity::find()
-                        .select_only()
-                        .column(member::Column::Id),
-                    &params,
+                    EntityRole::Member,
                     &fields,
-                    sea_orm::DbBackend::Sqlite,
+                    "role",
+                    &FieldValue::Utf16String(Utf16String::from_units(units)),
                     &IdGeneration::Random,
-                    filter,
+                    sea_orm::DbBackend::Sqlite,
                 )?;
+                let query = member::Entity::find()
+                    .select_only()
+                    .column(member::Column::Id)
+                    .filter(value_filter::predicate(
+                        member::Model::column(&column)?,
+                        where_operator(operator),
+                        WhereMode::Sensitive,
+                        value,
+                        sea_orm::DbBackend::Sqlite,
+                    )?);
                 let rows = database
                     .query_all_raw(query.build(sea_orm::DbBackend::Sqlite))
                     .await
@@ -680,16 +567,15 @@ impl<
         db: &C,
         organization_id: &FieldValue,
     ) -> AuthResult<i64> {
-        Entity::<O::Member>::find()
-            .filter(self.organization_field_equals::<O::Member>(
+        let query =
+            Entity::<O::Member>::find().filter(self.organization_field_equals::<O::Member>(
                 better_auth_core::store::schema::EntityRole::Member,
                 "organizationId",
                 organization_id,
-            )?)
-            .count(db)
+            )?);
+        super::plugin_rows::count(db, query)
             .await
             .map(|count| count as i64)
-            .map_err(map_db_err)
     }
 
     pub(super) async fn delete_member_with_connection<C: sea_orm::ConnectionTrait>(

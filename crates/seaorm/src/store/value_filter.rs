@@ -5,10 +5,14 @@ use better_auth_core::{
 };
 use sea_orm::{
     ColumnTrait, DbBackend,
-    sea_query::{BinOper, ExprTrait, Func, SimpleExpr, extension::postgres::PgBinOper},
+    sea_query::{ExprTrait, SimpleExpr},
 };
 
 use super::id_filter::IdColumn;
+
+#[path = "value_predicate.rs"]
+mod predicate;
+pub(super) use predicate::{QueryPredicate, all};
 
 pub(super) fn query_field_name<'a>(
     role: EntityRole,
@@ -202,22 +206,14 @@ pub(super) fn adapter_query_value(
     Ok(value)
 }
 
-pub(super) fn like_pattern(
-    value: &FieldValue,
-    prefix: &str,
-    suffix: &str,
-    backend: DbBackend,
-) -> AuthResult<SimpleExpr> {
+fn like_value(value: &FieldValue, prefix: &str, suffix: &str) -> AuthResult<FieldValue> {
     let text = value.display_utf16()?;
     let units = prefix
         .encode_utf16()
         .chain(text.as_utf16().iter().copied())
         .chain(suffix.encode_utf16())
         .collect();
-    super::record_bindings::parameter(
-        better_auth_core::Utf16String::from_units(units).into(),
-        backend,
-    )
+    Ok(better_auth_core::Utf16String::from_units(units).into())
 }
 
 pub(super) fn equals_id(
@@ -238,11 +234,7 @@ pub(super) fn equals(
     value: &FieldValue,
     backend: DbBackend,
 ) -> AuthResult<SimpleExpr> {
-    if value.is_null() {
-        return Ok(column.is_null());
-    }
-    let value = candidate(value.clone(), backend)?;
-    Ok(column.into_expr().eq(column.save_as(value)))
+    QueryPredicate::equals(column, value.clone()).bind(backend)
 }
 
 pub(super) fn is_in(
@@ -250,25 +242,7 @@ pub(super) fn is_in(
     value: &FieldValue,
     backend: DbBackend,
 ) -> AuthResult<SimpleExpr> {
-    let values = value
-        .as_array()
-        .unwrap_or_else(|| std::slice::from_ref(value));
-    let values = super::record_bindings::bind(
-        backend,
-        values
-            .iter()
-            .cloned()
-            .map(super::record_bindings::Binding::Raw)
-            .collect(),
-    )?;
-    Ok(membership(
-        column.into_expr(),
-        values
-            .into_iter()
-            .map(|value| column.save_as(value))
-            .collect(),
-        false,
-    ))
+    QueryPredicate::is_in(column, value.clone()).bind(backend)
 }
 
 pub(super) fn membership(column: SimpleExpr, values: Vec<SimpleExpr>, negated: bool) -> SimpleExpr {
@@ -285,29 +259,6 @@ pub(super) fn membership(column: SimpleExpr, values: Vec<SimpleExpr>, negated: b
     }
 }
 
-fn candidates(
-    values: impl IntoIterator<Item = FieldValue>,
-    backend: DbBackend,
-) -> AuthResult<Vec<SimpleExpr>> {
-    // Only outer list entries are expressions; nested arrays remain driver parameters.
-    super::record_bindings::bind(
-        backend,
-        values
-            .into_iter()
-            .map(super::record_bindings::Binding::Raw)
-            .collect(),
-    )
-}
-
-fn candidate(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleExpr> {
-    match value {
-        FieldValue::Array(values) => {
-            candidates(values.iter().cloned(), backend).map(SimpleExpr::Tuple)
-        }
-        value => super::record_bindings::parameter(value, backend),
-    }
-}
-
 pub(super) fn predicate(
     column: impl ColumnTrait,
     operator: WhereOperator,
@@ -315,71 +266,7 @@ pub(super) fn predicate(
     value: FieldValue,
     backend: DbBackend,
 ) -> AuthResult<SimpleExpr> {
-    let insensitive = mode == WhereMode::Insensitive
-        && (value.is_string()
-            || value
-                .as_array()
-                .is_some_and(|values| values.iter().all(FieldValue::is_string)));
-    let column = column.into_expr();
-    let lower = |value: FieldValue| match value {
-        FieldValue::String(value) if insensitive => FieldValue::String(value.to_lowercase()),
-        FieldValue::Utf16String(value) if insensitive => value.to_lowercase().into(),
-        value => value,
-    };
-    Ok(match operator {
-        WhereOperator::Eq | WhereOperator::Ne if value.is_null() => {
-            if operator == WhereOperator::Eq {
-                column.is_null()
-            } else {
-                column.is_not_null()
-            }
-        }
-        WhereOperator::Eq | WhereOperator::Ne => {
-            let column = if insensitive {
-                Func::lower(column).into()
-            } else {
-                column
-            };
-            let value = candidate(lower(value), backend)?;
-            if operator == WhereOperator::Eq {
-                column.eq(value)
-            } else {
-                column.ne(value)
-            }
-        }
-        WhereOperator::In | WhereOperator::NotIn => {
-            let column = if insensitive {
-                Func::lower(column).into()
-            } else {
-                column
-            };
-            let values = match value {
-                FieldValue::Array(values) => values.iter().cloned().collect(),
-                value => vec![value],
-            };
-            let values = candidates(values.into_iter().map(lower), backend)?;
-            membership(column, values, operator == WhereOperator::NotIn)
-        }
-        WhereOperator::Lt => column.lt(candidate(value, backend)?),
-        WhereOperator::Lte => column.lte(candidate(value, backend)?),
-        WhereOperator::Gt => column.gt(candidate(value, backend)?),
-        WhereOperator::Gte => column.gte(candidate(value, backend)?),
-        WhereOperator::Contains | WhereOperator::StartsWith | WhereOperator::EndsWith => {
-            let (prefix, suffix) = match operator {
-                WhereOperator::Contains => ("%", "%"),
-                WhereOperator::StartsWith => ("", "%"),
-                _ => ("%", ""),
-            };
-            let pattern = like_pattern(&value, prefix, suffix, backend)?;
-            if insensitive && backend == DbBackend::Postgres {
-                column.binary(PgBinOper::ILike, pattern)
-            } else if insensitive {
-                Func::lower(column).binary(BinOper::Like, Func::lower(pattern))
-            } else {
-                column.binary(BinOper::Like, pattern)
-            }
-        }
-    })
+    QueryPredicate::new(column, operator, mode, value).bind(backend)
 }
 
 #[cfg(test)]

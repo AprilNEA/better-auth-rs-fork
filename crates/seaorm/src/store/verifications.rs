@@ -367,8 +367,14 @@ where
             &FieldValue::Date(Utc::now().into()),
             backend,
         )?;
-        let now = super::record_bindings::parameter(now, backend)?;
-        let filter = expires_at.into_expr().lt(expires_at.save_as(now));
+        let filter = super::value_filter::QueryPredicate::new(
+            expires_at,
+            better_auth_core::WhereOperator::Lt,
+            better_auth_core::WhereMode::Sensitive,
+            now,
+        )
+        .with_save_as()
+        .bind(backend)?;
         // Only the upstream deleteMany snapshot is best-effort. Hook and write errors propagate.
         let snapshot: AuthResult<Vec<VerificationView>> = async {
             match database_operation::<<S::Verification as SeaOrmVerificationModel>::Entity, _>(

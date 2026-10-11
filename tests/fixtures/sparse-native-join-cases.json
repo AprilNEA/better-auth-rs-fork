@@ -6,14 +6,28 @@
     { "model": "teamMember", "table": "team_member", "columns": { "id": "TEXT PRIMARY KEY", "team_id": "TEXT" }, "rows": [{ "id": "team-member", "team_id": "team" }] },
     { "model": "member", "table": "member", "columns": { "id": "TEXT PRIMARY KEY", "organization_id": "TEXT", "user_id": "TEXT", "B_id": "TEXT", "B_name": "INTEGER" }, "rows": [{ "id": "member", "organization_id": "organization", "user_id": "owner", "B_id": "parent-owner-shadow", "B_name": 999 }] },
     { "model": "invitation", "table": "invitation", "columns": { "id": "TEXT PRIMARY KEY", "organization_id": "TEXT" }, "rows": [{ "id": "invitation", "organization_id": "organization" }] },
-    { "model": "user", "table": "users", "columns": { "id": "TEXT PRIMARY KEY", "name": "INTEGER", "email": "TEXT", "email_verified": "INTEGER", "image": "TEXT", "created_at": "TEXT", "updated_at": "TEXT" }, "rows": [{ "id": "owner", "name": 13, "email": "owner@sparse-native.test", "email_verified": 1, "image": null, "created_at": "2030-01-01T00:00:00.000Z", "updated_at": "2030-01-01T00:00:00.000Z" }] }
+    { "model": "user", "table": "users", "columns": { "id": "TEXT PRIMARY KEY", "name": "INTEGER", "email": "TEXT", "email_verified": "INTEGER", "image": "TEXT", "created_at": "TEXT", "updated_at": "TEXT" }, "rows": [{ "id": "owner", "name": 13, "email": "owner@sparse-native.test", "email_verified": 1, "image": null, "created_at": "2030-01-01T00:00:00.000Z", "updated_at": "2030-01-01T00:00:00.000Z" }] },
+    { "model": "apikey", "table": "api_keys", "columns": { "id": "TEXT PRIMARY KEY", "name": "INTEGER", "reference_id": "TEXT" }, "rows": [{ "id": "api-key", "name": 19, "reference_id": "owner" }] },
+    { "model": "organizationRole", "table": "organization_role", "columns": { "id": "TEXT PRIMARY KEY", "organization_id": "TEXT" }, "rows": [{ "id": "role", "organization_id": "organization" }] }
   ],
   "declarations": {
     "organization": { "name": {} },
     "team": { "name": {}, "organizationId": { "fieldName": "organization_id", "references": "organization" } },
     "teamMember": { "teamId": { "fieldName": "team_id", "references": "team" } },
     "member": { "organizationId": { "fieldName": "organization_id", "references": "organization" }, "userId": { "fieldName": "user_id", "references": "user" } },
-    "invitation": { "organizationId": { "fieldName": "organization_id", "references": "organization" } }
+    "invitation": { "organizationId": { "fieldName": "organization_id", "references": "organization" } },
+    "apikey": { "name": {}, "referenceId": { "fieldName": "reference_id" } },
+    "organizationRole": { "organizationId": { "fieldName": "organization_id" } }
+  },
+  "adapterCounts": [
+    { "model": "apikey", "field": "referenceId", "column": "reference_id", "value": "owner", "total": 1 },
+    { "model": "member", "field": "organizationId", "column": "organization_id", "value": "organization", "total": 1 },
+    { "model": "teamMember", "field": "teamId", "column": "team_id", "value": "team", "total": 1 },
+    { "model": "organizationRole", "field": "organizationId", "column": "organization_id", "value": "organization", "total": 1 }
+  ],
+  "nullableApiKey": {
+    "result": [{ "name": "visible:19", "referenceId": "owner", "id": "api-key" }, { "name": "visible:19", "referenceId": "owner", "id": null }],
+    "events": [["apikey.name", 19], ["apikey.name", 19], ["apikey.referenceId", "owner"], ["apikey.referenceId", "owner"]]
   },
   "nullableChildRows": [{ "id": null, "team_id": "team" }, { "id": null, "team_id": "team" }],
   "zeroChildRows": [{ "id": 0, "team_id": "team" }, { "id": 0, "team_id": "team" }],

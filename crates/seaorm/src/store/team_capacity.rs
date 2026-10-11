@@ -1,14 +1,15 @@
 use super::{
     create_readback::ReadbackScope,
     organization_models::{self as models, Entity},
+    value_filter::QueryPredicate,
 };
 use crate::SeaOrmOrganizationModel;
 use better_auth_core::{
-    AuthResult, FieldValue, SchemaField, plugin_runtime::ModelFields, store::schema::EntityRole,
-    user_fields::UserConfig,
+    AuthResult, FieldValue, SchemaField, WhereMode, WhereOperator, plugin_runtime::ModelFields,
+    store::schema::EntityRole, user_fields::UserConfig,
 };
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
+    ConnectionTrait, EntityTrait, QueryFilter,
     sea_query::{Expr, ExprTrait, SimpleExpr},
 };
 
@@ -72,18 +73,27 @@ impl Selectors {
         role: EntityRole,
     ) -> AuthResult<(SimpleExpr, SimpleExpr)> {
         let (column, value) = self.id.resolve(role, fields)?;
-        let id = super::value_filter::equals(M::column(&column)?, &value, backend)?;
-        let condition = match self.guard {
-            Some((guard, bound)) => {
+        let id = QueryPredicate::equals(M::column(&column)?, value);
+        let guard = self
+            .guard
+            .map(|(guard, bound)| -> AuthResult<_> {
                 let (column, value) = bound.resolve(role, fields)?;
                 let column = M::column(&column)?;
-                let value = column.save_as(super::record_bindings::parameter(value, backend)?);
-                let guard = match guard {
-                    Guard::Below(_) => column.into_expr().lt(value),
-                    Guard::AtLeast(_) => column.into_expr().gte(value),
+                let operator = match guard {
+                    Guard::Below(_) => WhereOperator::Lt,
+                    Guard::AtLeast(_) => WhereOperator::Gte,
                 };
-                id.clone().and(guard)
-            }
+                Ok(
+                    QueryPredicate::new(column, operator, WhereMode::Sensitive, value)
+                        .with_save_as(),
+                )
+            })
+            .transpose()?;
+        let id = id.parse()?;
+        let guard = guard.map(QueryPredicate::parse).transpose()?;
+        let id = id.encode(backend)?;
+        let condition = match guard {
+            Some(guard) => id.clone().and(guard.encode(backend)?),
             None => id.clone(),
         };
         Ok((id, condition))

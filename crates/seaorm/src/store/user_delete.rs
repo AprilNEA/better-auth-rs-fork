@@ -1,5 +1,5 @@
 use super::instrumentation::database_operation;
-use sea_orm::{Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 
 use super::transaction_hooks::after_write;
 use super::{HookTransaction, map_db_err};
@@ -109,14 +109,8 @@ where
                     db,
                     tx,
                     || self.bind_session_query_field("userId", id, db.get_database_backend()),
-                    |bound| {
-                        let (column, value) = self.resolve_session_query_field(bound)?;
-                        Ok(Condition::all().add(super::value_filter::equals(
-                            column,
-                            &value,
-                            db.get_database_backend(),
-                        )?))
-                    },
+                    better_auth_core::WhereOperator::Eq,
+                    None,
                     false,
                 )
                 .await?;

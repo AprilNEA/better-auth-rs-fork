@@ -629,6 +629,8 @@ run_stage() {
         --test user_display_query_tests --test user_scalar_column_query_tests
         --test user_sort_field_tests --test user_null_query_tests --test device_where_tests
         --test query_binding_order_tests --test native_core_join_tests --test sparse_native_join_tests
+        --test two_factor_additional_fields_tests --test wallet_additional_fields_tests
+        --test organization_builtin_policy_tests --test rate_limit_database_tests
       )
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         "${account_tests[@]}" -- -D warnings || account_status=1
@@ -637,10 +639,14 @@ run_stage() {
       cargo test --locked -p better-auth-api --lib -- \
         plugins::two_factor:: plugins::oauth::generic_profile::result_tests:: || account_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        plugin_runtime::fields::models::tests:: session::native::tests:: \
+        plugin_runtime::fields::models::tests:: plugin_runtime::fields::rate_limit_tests:: session::native::tests:: \
         store::ephemeral::user_serial_tests:: store::ephemeral::sessions::live_output_tests:: \
         store::ephemeral::id_slot_tests::sessions:: request_runtime::concurrent:: || account_status=1
-      cargo test --locked -p better-auth-seaorm --lib store::record_bindings::function_tests || account_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- \
+        store::record_bindings::function_tests store::value_filter::predicate::tests:: \
+        store::device_code_consume::tests:: \
+        async_capacity_output_failure_rolls_back_the_seat_and_membership \
+        team_capacity_deduplication_and_scoped_cleanup || account_status=1
       bun --no-install test \
         ./compat-tests/reference-server/contracts/account-user-auth-boundary.test.ts \
         ./compat-tests/reference-server/contracts/account-user-auth-email.test.ts \
@@ -651,6 +657,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/user-display-query.test.ts \
         ./compat-tests/reference-server/contracts/user-scalar-column-query.test.ts \
         ./compat-tests/reference-server/contracts/sparse-native-joins.test.ts \
+        ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
         ./compat-tests/reference-server/contracts/paypal.test.ts \
         ./compat-tests/reference-server/contracts/wechat.test.ts \
         ./compat-tests/reference-server/contracts/social-http-providers.test.ts \

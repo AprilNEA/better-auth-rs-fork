@@ -160,6 +160,8 @@ impl Fixture {
             ("teamMember", EntityRole::TeamMember),
             ("member", EntityRole::Member),
             ("invitation", EntityRole::Invitation),
+            ("apikey", EntityRole::ApiKey),
+            ("organizationRole", EntityRole::OrganizationRole),
         ] {
             let fields = cases["declarations"][model]
                 .as_object()
@@ -253,6 +255,28 @@ impl Fixture {
             ("total".into(), total.into()),
         ])
         .into())
+    }
+
+    pub(super) async fn count(&self, model: &str, value: &FieldValue) -> AuthResult<FieldValue> {
+        let store = self.auth.store();
+        Ok(match model {
+            "apikey" => store.count_api_keys_by_reference_value(value).await?.into(),
+            "member" => store.count_organization_members_value(value).await?.into(),
+            "teamMember" => store.count_team_members_value(value).await?.into(),
+            "organizationRole" => store.count_organization_roles_value(value).await?.into(),
+            _ => return Err(AuthError::internal("Unknown sparse count model")),
+        })
+    }
+
+    pub(super) async fn read_api_keys(&self, reference: &FieldValue) -> AuthResult<FieldValue> {
+        self.auth
+            .store()
+            .find_api_keys_by_reference_value(reference, None)
+            .await?
+            .into_iter()
+            .map(|key| key.field_values().map(FieldValue::from))
+            .collect::<AuthResult<Vec<_>>>()
+            .map(Into::into)
     }
 
     pub(super) async fn read_selected(

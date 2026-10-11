@@ -1,6 +1,6 @@
 //! Bind declared ID references through the configured generation policy and storage type.
 
-use better_auth_core::{FieldMap, FieldValue};
+use better_auth_core::FieldValue;
 use sea_orm::sea_query::{ArrayType, ColumnType, Nullable, Value, ValueType, ValueTypeErr};
 use sea_orm::{ColIdx, QueryResult, TryGetError, TryGetable};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -51,33 +51,6 @@ pub(crate) fn input_binding<C: sea_orm::ColumnTrait>(
         return Ok(FieldValue::Number(f64::from(u8::from(value))));
     }
     Ok(value)
-}
-
-/// Convert native ID bindings before configured fields run their input policies.
-pub(crate) fn prepare_core_fields<C: sea_orm::ColumnTrait>(
-    fields: &mut FieldMap,
-    policy: &better_auth_core::id::IdGeneration,
-    config: Option<&better_auth_core::user_fields::UserConfig>,
-    column: impl Fn(&str) -> better_auth_core::AuthResult<C>,
-    is_reference: impl Fn(&C) -> bool,
-) -> better_auth_core::AuthResult<()> {
-    if !matches!(policy, better_auth_core::id::IdGeneration::Serial) {
-        return Ok(());
-    }
-    for (name, value) in fields {
-        if name != "id" && config.is_some_and(|config| config.fields().contains_key(name)) {
-            continue;
-        }
-        let column = column(name)?;
-        if name == "id" || is_reference(&column) {
-            let text = matches!(
-                column.def().get_column_type(),
-                ColumnType::String(_) | ColumnType::Text | ColumnType::Char(_)
-            );
-            *value = serial_reference(std::mem::take(value), text)?;
-        }
-    }
-    Ok(())
 }
 
 fn serial_reference(
@@ -414,7 +387,7 @@ mod tests {
 
     #[tokio::test]
     async fn declared_bindings_preserve_alias_order_and_drop_undeclared_core() {
-        use better_auth_core::{FieldMap, FieldValue};
+        use better_auth_core::FieldValue;
 
         let config = UserConfig {
             additional_fields: Some(

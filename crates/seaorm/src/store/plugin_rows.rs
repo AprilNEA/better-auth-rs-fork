@@ -8,7 +8,7 @@ use sea_orm::sqlx::{Row, TypeInfo, ValueRef};
 use sea_orm::{
     ConnectionTrait, DbBackend, EntityTrait, IdenStatic, QueryResult, QuerySelect, QueryTrait,
     Select,
-    sea_query::{Asterisk, Expr},
+    sea_query::{Alias, Asterisk, Expr, ExprTrait},
 };
 use std::{
     collections::HashSet,
@@ -163,6 +163,20 @@ pub(super) async fn one<E: EntityTrait>(
         .await
         .map(|row| row.map(Into::into))
         .map_err(super::map_db_err)
+}
+
+pub(super) async fn count<E: EntityTrait>(
+    db: &impl ConnectionTrait,
+    query: Select<E>,
+) -> AuthResult<u64> {
+    // Kysely counts the literal id column, independently of declaration aliases and primary keys.
+    let query = query
+        .select_only()
+        .expr_as(Expr::col(Alias::new("id")).count(), "count");
+    let row = one(db, query)
+        .await?
+        .ok_or_else(|| AuthError::internal("Adapter count returned no row"))?;
+    Ok(better_auth_core::query::field_number(&row.value("count")?)? as u64)
 }
 
 pub(super) fn ordered_output(fields: &UserConfig, output: FieldMap) -> FieldMap {

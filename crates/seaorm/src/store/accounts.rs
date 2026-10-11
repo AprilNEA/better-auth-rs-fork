@@ -16,6 +16,7 @@ use crate::hooks::DatabaseUpdateResult;
 use crate::schema::{AuthSchema, SeaOrmAccountModel, SeaOrmUserModel};
 use crate::types::{CreateAccount, UpdateAccount};
 
+use super::value_filter::{self, QueryPredicate};
 use super::{SeaOrmStore, cancelled_by_hook, map_db_err, plugin_rows::SqlRow};
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
@@ -105,15 +106,18 @@ where
             .account_storage_fields(&fields, prepared.into_fields(), false, backend)
             .await?;
         let write = super::record_write::RecordWrite::<<S::Account as SeaOrmAccountModel>::Entity>::from_fields(input, S::Account::field_column)?;
-        let mut query = write.update(backend)?;
-        for selector in selectors {
-            let (column, value) = selector.resolve(EntityRole::Account, &fields)?;
-            query = query.filter(super::value_filter::equals(
-                S::Account::field_column(&column)?,
-                &value,
-                backend,
-            )?);
-        }
+        let query = write.update(backend)?;
+        let selectors = selectors
+            .into_iter()
+            .map(|selector| {
+                let (column, value) = selector.resolve(EntityRole::Account, &fields)?;
+                Ok(QueryPredicate::equals(
+                    S::Account::field_column(&column)?,
+                    value,
+                ))
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+        let query = query.filter(value_filter::all(selectors, backend)?);
         let count = database_operation::<<S::Account as SeaOrmAccountModel>::Entity, _>(
             self.config(),
             "updateMany",
@@ -188,16 +192,17 @@ where
                 self.bind_query_field(EntityRole::Account, &fields, name, value, backend)
             })
             .collect::<AuthResult<Vec<_>>>()?;
-        bound
+        let predicates = bound
             .into_iter()
-            .try_fold(sea_orm::Condition::all(), |condition, bound| {
+            .map(|bound| {
                 let (column, value) = bound.resolve(EntityRole::Account, &fields)?;
-                Ok(condition.add(super::value_filter::equals(
+                Ok(QueryPredicate::equals(
                     S::Account::field_column(&column)?,
-                    &value,
-                    backend,
-                )?))
+                    value,
+                ))
             })
+            .collect::<AuthResult<Vec<_>>>()?;
+        value_filter::all(predicates, backend)
     }
 
     async fn user_account_records(&self, user_id: &FieldValue) -> AuthResult<Vec<SqlRow>> {

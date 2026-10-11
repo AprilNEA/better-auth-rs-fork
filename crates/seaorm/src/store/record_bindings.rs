@@ -15,6 +15,8 @@ pub(super) enum Binding {
     Json(FieldValue),
 }
 
+pub(super) struct ParsedBinding(Binding);
+
 impl Binding {
     pub(super) fn is_null(&self) -> bool {
         match self {
@@ -47,22 +49,26 @@ impl Binding {
         self.parse_expression()?.encode(backend)
     }
 
-    fn parse_expression(self) -> AuthResult<Self> {
+    pub(super) fn parse_expression(self) -> AuthResult<ParsedBinding> {
         if let Self::Raw(value) | Self::Json(value) = &self {
             parse_expression(value)?;
         }
-        Ok(self)
+        Ok(ParsedBinding(self))
     }
+}
 
-    fn encode(self, backend: DbBackend) -> AuthResult<SimpleExpr> {
-        match self {
-            Self::Native(value) => native_parameter(value, backend),
-            Self::Json(value) if backend == DbBackend::Postgres => driver_parameter(value, backend),
-            Self::Json(value) => {
+impl ParsedBinding {
+    pub(super) fn encode(self, backend: DbBackend) -> AuthResult<SimpleExpr> {
+        match self.0 {
+            Binding::Native(value) => native_parameter(value, backend),
+            Binding::Json(value) if backend == DbBackend::Postgres => {
+                driver_parameter(value, backend)
+            }
+            Binding::Json(value) => {
                 native_parameter(Value::Json(value.json()?.map(Box::new)), backend)
             }
-            Self::Raw(value) => driver_parameter(value, backend),
-            Self::Date(date) => {
+            Binding::Raw(value) => driver_parameter(value, backend),
+            Binding::Date(date) => {
                 let value = if backend == DbBackend::Sqlite {
                     sqlite_date(date)?
                 } else {
@@ -86,8 +92,7 @@ pub(super) fn bind(backend: DbBackend, values: Vec<Binding>) -> AuthResult<Vec<S
 }
 
 pub(super) fn parameter(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleExpr> {
-    parse_expression(&value)?;
-    driver_parameter(value, backend)
+    Binding::Raw(value).bind(backend)
 }
 
 fn parse_expression(value: &FieldValue) -> AuthResult<()> {

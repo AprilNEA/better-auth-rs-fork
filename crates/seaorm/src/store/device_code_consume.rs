@@ -1,6 +1,7 @@
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
 use super::record_bindings::Binding;
+use super::value_filter::QueryPredicate;
 use super::{SeaOrmStore, map_db_err};
 use crate::{SeaOrmPluginModel, schema::AuthSchema};
 use better_auth_core::{
@@ -36,7 +37,6 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let policy = self.config().advanced.database.generate_id();
         let selected_id =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "id", expected.id.field_value())?;
-        let user = self.plugin_column::<P::DeviceCode>(EntityRole::DeviceCode, "userId")?;
         let (mut query, field, original) = self
             .model_fields
             .device_code_ownership_query(ownership, policy)?;
@@ -45,8 +45,8 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             super::value_filter::adapter_query_value(query.value, &original, field, backend)?;
         let approved =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "status", "approved".into())?;
-        let selected_id =
-            self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, selected_id)?;
+        let (id_column, selected_id) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, selected_id)?;
         let fields = self
             .model_fields
             .plugin_fields(EntityRole::DeviceCode)
@@ -55,13 +55,18 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             super::value_filter::query_field_name(EntityRole::DeviceCode, &fields, &query.field)?
                 .1
                 .to_owned();
-        let ownership = super::value_filter::predicate(
-            P::DeviceCode::column(&query.field)?,
-            query.operator,
-            query.mode,
-            query.value,
-            backend,
-        )?;
+        let ownership_column = P::DeviceCode::column(&query.field)?;
+        let (status_column, approved) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, approved)?;
+        let user = self.plugin_column::<P::DeviceCode>(EntityRole::DeviceCode, "userId")?;
+        let selected_id = QueryPredicate::equals(id_column, selected_id).parse()?;
+        let ownership =
+            QueryPredicate::new(ownership_column, query.operator, query.mode, query.value)
+                .parse()?;
+        let approved = QueryPredicate::equals(status_column, approved).parse()?;
+        let selected_id = selected_id.encode(backend)?;
+        let ownership = ownership.encode(backend)?;
+        let approved = approved.encode(backend)?;
         let (bindings, unchanged) = expected.consumption_bindings()?;
         let mut filter = Condition::all().add(selected_id);
         for name in ["id", "deviceCode", "clientId", "userId", "status"] {
@@ -73,7 +78,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         }
         let filter = filter
             .add(user.is_not_null())
-            .add(self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, approved)?)
+            .add(approved)
             .add(ownership)
             .add(Expr::value(unchanged));
         database_operation::<Entity<P::DeviceCode>, _>(self.config(), "consumeOne", async {

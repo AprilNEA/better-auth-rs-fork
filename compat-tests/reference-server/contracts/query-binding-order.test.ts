@@ -1,9 +1,12 @@
+import "./session-predicate-binding.mjs";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { deviceAuthorization, organization } from "better-auth/plugins";
 import { walletPlugin } from "./wallet-additional-fields";
+import "./plugin-selector-binding.mjs";
+import "./predicate-case-mode.mjs";
 
 const date = (offset: number) => new Date(1_893_456_000_000 + offset * 1000);
 
@@ -113,6 +116,53 @@ const base = {
   secret: "query-binding-order-contract-at-least-32-characters",
   logger: { disabled: true }, telemetry: { enabled: false },
 };
+
+for (const operation of ["find", "update", "delete"] as const) {
+  for (const array of [false, true]) {
+    test(`SQLite OrganizationRole ${operation} parses ${array ? "array" : "scalar"} condition callbacks before driver encoding`, async () => {
+      const database = new Database(":memory:");
+      try {
+        database.exec(`CREATE TABLE organizationRole (id TEXT PRIMARY KEY NOT NULL, organizationId TEXT NOT NULL, role TEXT NOT NULL, permission TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT);
+          INSERT INTO organizationRole VALUES ('selected', 'target-org', 'owner', '{}', '2030-01-01T00:00:00.000Z', NULL),
+            ('retained', 'other-org', 'member', '{}', '2030-01-01T00:00:00.000Z', NULL);`);
+        const raw = () => database.query("SELECT * FROM organizationRole ORDER BY id").all();
+        const before = raw();
+        expect(before).toHaveLength(2);
+        const events: string[] = [];
+        const { adapter } = await betterAuth({
+          ...base, database,
+          plugins: [organization({ dynamicAccessControl: { enabled: true } }), {
+            id: "organization-role-condition-order", schema: { organizationRole: { fields: {
+              role: { type: "string", transform: {
+                input(value) { events.push("role-input"); return value; },
+                output(value) { events.push("role-output"); return value; },
+              } },
+            } } },
+          }],
+        }).$context;
+        const failure = new Error("original-condition-error");
+        const rejecting = () => { events.push("rejecting"); throw failure; };
+        const later = () => { events.push("later"); return null; };
+        const where = [
+          { field: "organizationId", value: { driver: true } },
+          { field: "role", value: array ? [rejecting] : rejecting },
+          { field: "permission", value: later },
+        ];
+        let actual: unknown;
+        let caught: unknown;
+        try {
+          if (operation === "find") actual = await Reflect.apply(adapter.findOne, adapter, [{ model: "organizationRole", where }]);
+          else if (operation === "update") actual = await Reflect.apply(adapter.updateMany, adapter, [{ model: "organizationRole", where, update: { role: "Changed" } }]);
+          else actual = await Reflect.apply(adapter.delete, adapter, [{ model: "organizationRole", where }]);
+        } catch (error) { caught = error; }
+        expect(caught).toBe(failure);
+        expect(actual).toBeUndefined();
+        expect(events).toStrictEqual(operation === "update" ? ["role-input", "rejecting"] : ["rejecting"]);
+        expect(raw()).toStrictEqual(before);
+      } finally { database.close(); }
+    });
+  }
+}
 
 for (const invalidOwnership of [false, true]) {
   test(`SQLite Device consumption ${invalidOwnership ? "operand error precedes" : "resolves"} the first ID alias`, async () => {

@@ -2,12 +2,13 @@ use async_trait::async_trait;
 use better_auth_core::middleware::{EndpointRateLimit, RateLimitDecision};
 use better_auth_core::query::{field_add, field_number};
 use better_auth_core::store::{RateLimitStore, schema::EntityRole};
-use better_auth_core::{AuthResult, AuthSchema, FieldMap};
+use better_auth_core::{AuthResult, AuthSchema, FieldMap, WhereMode, WhereOperator};
 use chrono::Utc;
-use sea_orm::sea_query::{BinOper, Expr, ExprTrait};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait};
+use sea_orm::sea_query::{Expr, ExprTrait};
+use sea_orm::{ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait};
 
 use super::plugin_models::Entity;
+use super::value_filter::QueryPredicate;
 use super::{SeaOrmStore, entities::rate_limit, instrumentation::database_operation, map_db_err};
 use crate::{SeaOrmOrganizationSchema, SeaOrmPluginSchema};
 
@@ -70,14 +71,24 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmSt
     }
 
     async fn prune_rate_limits(&self, now: i64, cleanup_window: f64) -> AuthResult<()> {
-        let (last_request, cutoff) = self.plugin_query_parameter::<P::RateLimit>(
+        let bound = self.bind_plugin_query_field(
             EntityRole::RateLimit,
             "lastRequest",
             (now as f64 - cleanup_window * 1000.0).into(),
         )?;
+        let (last_request, cutoff) =
+            self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, bound)?;
+        let filter = QueryPredicate::new(
+            last_request,
+            WhereOperator::Lt,
+            WhereMode::Sensitive,
+            cutoff,
+        )
+        .with_save_as()
+        .bind(self.connection().get_database_backend())?;
         database_operation::<Entity<P::RateLimit>, _>(self.config(), "deleteMany", async {
             let _ = Entity::<P::RateLimit>::delete_many()
-                .filter(last_request.into_expr().lt(last_request.save_as(cutoff)))
+                .filter(filter)
                 .exec(self.connection())
                 .await
                 .map_err(map_db_err)?;
@@ -166,30 +177,46 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> RateLimi
                     false,
                 )
                 .await?;
-            let reselect =
-                self.resolve_plugin_equals::<P::RateLimit>(EntityRole::RateLimit, by_key)?;
-            let (last_request, previous) = self
-                .resolve_plugin_query_parameter::<P::RateLimit>(EntityRole::RateLimit, previous)?;
-            let mut guard = reselect.clone().and(last_request.into_expr().binary(
+            let (key_column, key_value) =
+                self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, by_key)?;
+            let (last_request, previous) =
+                self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, previous)?;
+            let maximum = maximum
+                .map(|bound| {
+                    self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, bound)
+                })
+                .transpose()?;
+            let by_key = QueryPredicate::equals(key_column, key_value).parse()?;
+            let previous = QueryPredicate::new(
+                last_request,
                 if reset {
-                    BinOper::SmallerThanOrEqual
+                    WhereOperator::Lte
                 } else {
-                    BinOper::GreaterThan
+                    WhereOperator::Gt
                 },
-                last_request.save_as(previous),
-            ));
+                WhereMode::Sensitive,
+                previous,
+            )
+            .with_save_as()
+            .parse()?;
+            let maximum = maximum
+                .map(|(column, value)| {
+                    QueryPredicate::new(column, WhereOperator::Lt, WhereMode::Sensitive, value)
+                        .with_save_as()
+                        .parse()
+                })
+                .transpose()?;
+            let backend = self.connection().get_database_backend();
+            let reselect = by_key.encode(backend)?;
+            let mut guard = reselect.clone().and(previous.encode(backend)?);
             if let Some(maximum) = maximum {
-                let (count, maximum) = self.resolve_plugin_query_parameter::<P::RateLimit>(
-                    EntityRole::RateLimit,
-                    maximum,
-                )?;
-                guard = guard.and(count.into_expr().lt(count.save_as(maximum)));
+                guard = guard.and(maximum.encode(backend)?);
             }
             if let Some(count) = increment {
                 // Kysely replaces a colliding set assignment after applying all input policies.
                 fields.not_set(count);
             }
-            let mut query = fields.update(self.connection().get_database_backend())?;
+            let mut query = fields.update(backend)?;
             if let Some(count) = increment {
                 query = query.col_expr(count, Expr::col(count).add(1));
             }

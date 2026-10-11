@@ -2,8 +2,7 @@
 
 use better_auth_core::{AuthResult, FieldValue};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, Iden,
-    QueryFilter, QueryResult,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, Iden, QueryFilter, QueryResult,
     sea_query::{Query, Value},
 };
 
@@ -178,17 +177,6 @@ impl<E: EntityTrait> RecordWrite<E> {
             query: self.update(backend)?,
             null_columns,
         })
-    }
-
-    pub(super) async fn insert(
-        self,
-        db: &impl ConnectionTrait,
-        readback: CreateReadback<'_, E>,
-    ) -> AuthResult<Option<E::Model>> {
-        self.insert_raw(db, readback)
-            .await?
-            .map(|row| E::Model::from_query_result(&row, "").map_err(map_db_err))
-            .transpose()
     }
 
     pub(super) async fn insert_raw(

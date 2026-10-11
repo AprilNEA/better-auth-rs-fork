@@ -509,26 +509,11 @@ where
         ids: &[FieldValue],
         limit: f64,
     ) -> AuthResult<Vec<better_auth_core::wire::UserView>> {
-        use sea_orm::sea_query::{BinOper, ExprTrait, SimpleExpr};
-
         let backend = self.connection().get_database_backend();
         let (physical, bound) =
             self.user_field_selector(self.connection(), "id", &ids.to_vec().into())?;
         let column = S::User::field_column(&physical)?;
-        let values = bound
-            .as_array()
-            .unwrap_or_else(|| std::slice::from_ref(&bound));
-        let values = values
-            .iter()
-            .map(|value| {
-                super::record_bindings::parameter(value.clone(), backend)
-                    .map(|value| column.save_as(value))
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        // Preserve each backend's empty-set syntax and driver result.
-        let filter = column
-            .into_expr()
-            .binary(BinOper::Custom("IN"), SimpleExpr::Tuple(values));
+        let filter = super::value_filter::is_in(column, &bound, backend)?;
 
         match database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
             self.config(),

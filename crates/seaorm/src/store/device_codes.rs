@@ -1,5 +1,6 @@
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
+use super::value_filter::{QueryPredicate, all};
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FieldValue, SchemaValue};
 use sea_orm::{
@@ -333,12 +334,19 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let status =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "status", current_status.into())?;
         let active = self.prepare_device_code_update(update).await?;
-        let reselect =
-            self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
+        let (column, selector) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
+        let (status_column, status) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, status)?;
+        let selector = QueryPredicate::equals(column, selector).parse()?;
+        let status = QueryPredicate::equals(status_column, status).parse()?;
+        let backend = connection.get_database_backend();
+        let reselect = selector.encode(backend)?;
+        let status = status.encode(backend)?;
         let query = active
-            .update_returning(connection.get_database_backend())?
+            .update_returning(backend)?
             .filter(reselect.clone())
-            .filter(self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, status)?);
+            .filter(status);
         let row = database_operation::<Entity<P::DeviceCode>, _>(self.config(), "update", async {
             super::updates::execute_update_returning_raw::<Entity<P::DeviceCode>, _>(
                 connection, query, reselect,
@@ -380,13 +388,18 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             self.bind_plugin_query_field(EntityRole::DeviceCode, "id", id.field_value())?;
         let status =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "status", status.into())?;
-        let filter =
-            self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
-        let status = self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, status)?;
+        let predicates = [selector, status]
+            .into_iter()
+            .map(|field| {
+                let (column, value) = self
+                    .resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, field)?;
+                Ok(QueryPredicate::equals(column, value))
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+        let filter = all(predicates, connection.get_database_backend())?;
         database_operation::<Entity<P::DeviceCode>, _>(self.config(), "delete", async {
             Entity::<P::DeviceCode>::delete_many()
                 .filter(filter)
-                .filter(status)
                 .exec(connection)
                 .await
                 .map(|result| result.rows_affected == 1)
@@ -417,13 +430,22 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             })
             .await?;
         validate_increment_one_update(false, !active.is_empty())?;
-        let reselect =
-            self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
+        let (column, selector) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
+        let (status_column, status) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, status)?;
+        let (owner_column, owner) =
+            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, owner)?;
+        let selector = QueryPredicate::equals(column, selector).parse()?;
+        let status = QueryPredicate::equals(status_column, status).parse()?;
+        let owner = QueryPredicate::equals(owner_column, owner).parse()?;
+        let backend = self.connection().get_database_backend();
+        let reselect = selector.encode(backend)?;
         let guard = reselect
             .clone()
-            .and(self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, status)?)
-            .and(self.resolve_plugin_equals::<P::DeviceCode>(EntityRole::DeviceCode, owner)?);
-        let query = active.update(self.connection().get_database_backend())?;
+            .and(status.encode(backend)?)
+            .and(owner.encode(backend)?);
+        let query = active.update(backend)?;
         Ok((query, guard, reselect))
     }
 

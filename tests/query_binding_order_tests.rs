@@ -20,10 +20,16 @@ type Trace = Arc<Mutex<Vec<&'static str>>>;
 
 #[path = "query_binding_order_tests/empty_in.rs"]
 mod empty_in;
+#[path = "query_binding_order_tests/insensitive.rs"]
+mod insensitive;
 #[path = "query_binding_order_tests/memory_where.rs"]
 mod memory_where;
 #[path = "query_binding_order_tests/multiple_conditions.rs"]
 mod multiple_conditions;
+#[path = "query_binding_order_tests/plugin_selectors.rs"]
+mod plugin_selectors;
+#[path = "query_binding_order_tests/session_predicates.rs"]
+mod session_predicates;
 
 fn date() -> FieldDate {
     FieldDate::from_milliseconds(1_893_456_001_000.0)

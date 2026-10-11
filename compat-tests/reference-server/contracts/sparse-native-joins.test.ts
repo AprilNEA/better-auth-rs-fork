@@ -67,7 +67,31 @@ async function setup(joins: boolean, rejectAt?: string, input: FixtureInput = ca
     columns: database.query(`PRAGMA table_info("${table}")`).all().map(row => (row as { name: string }).name),
     rows: database.query(`SELECT * FROM "${table}" ORDER BY id`).all(),
   }]));
-  return { database, events, failure, read, snapshot, internalAdapter: context.internalAdapter };
+  return { database, events, failure, read, snapshot, internalAdapter: context.internalAdapter, adapter: context.adapter };
+}
+
+for (const query of cases.adapterCounts) {
+  test(`SQLite adapter count excludes null IDs without output conversion: ${query.model}`, async () => {
+    const input: FixtureInput = structuredClone(cases);
+    const table = input.tables.find(table => table.model === query.model)!;
+    table.columns.id = "TEXT";
+    table.rows.push({ ...table.rows[0], id: null }, { ...table.rows[0], id: "excluded", [query.column]: "another-owner" });
+    const fixture = await setup(false, undefined, input);
+    try {
+      const before = fixture.snapshot();
+      const where = [{ field: query.field, value: query.value }];
+      expect(await fixture.adapter.count({ model: query.model, where })).toStrictEqual(query.total);
+      expect(fixture.events).toStrictEqual([]);
+      expect(fixture.snapshot()).toStrictEqual(before);
+      if (query.model === "apikey") {
+        const actual = await fixture.adapter.findMany({ model: query.model, where });
+        expect(actual).toStrictEqual(cases.nullableApiKey.result);
+        assertKeys(actual, cases.nullableApiKey.result);
+        expect(fixture.events).toStrictEqual(cases.nullableApiKey.events);
+        expect(fixture.snapshot()).toStrictEqual(before);
+      }
+    } finally { fixture.database.close(); }
+  });
 }
 
 for (const query of cases.nullableUser.queries) {

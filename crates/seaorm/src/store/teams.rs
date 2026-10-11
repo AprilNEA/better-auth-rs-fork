@@ -243,15 +243,14 @@ where
     }
 
     async fn count_team_members_value(&self, team_id: &FieldValue) -> AuthResult<u64> {
-        Entity::<O::TeamMember>::find()
-            .filter(self.organization_field_equals::<O::TeamMember>(
+        let query = Entity::<O::TeamMember>::find().filter(
+            self.organization_field_equals::<O::TeamMember>(
                 better_auth_core::store::schema::EntityRole::TeamMember,
                 "teamId",
                 team_id,
-            )?)
-            .count(self.connection())
-            .await
-            .map_err(map_db_err)
+            )?,
+        );
+        super::plugin_rows::count(self.connection(), query).await
     }
     async fn add_team_member(
         &self,
@@ -381,15 +380,14 @@ impl<
         {
             return Ok(Some(member));
         }
-        let count = Entity::<O::TeamMember>::find()
-            .filter(self.organization_field_equals::<O::TeamMember>(
+        let query = Entity::<O::TeamMember>::find().filter(
+            self.organization_field_equals::<O::TeamMember>(
                 better_auth_core::store::schema::EntityRole::TeamMember,
                 "teamId",
                 team_id,
-            )?)
-            .count(db)
-            .await
-            .map_err(map_db_err)?;
+            )?,
+        );
+        let count = super::plugin_rows::count(db, query).await?;
         let fields = self.organization_fields()?.team;
         super::team_capacity::sync::<O::Team, _>(
             db,

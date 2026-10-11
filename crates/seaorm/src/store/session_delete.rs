@@ -1,15 +1,16 @@
 use super::instrumentation::database_operation;
-use better_auth_core::{FieldValue, store::schema::EntityRole};
+use better_auth_core::{FieldValue, WhereMode, WhereOperator, store::schema::EntityRole};
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect,
-    sea_query::ExprTrait,
+    Condition, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect,
+    sea_query::SimpleExpr,
 };
 
 use crate::SeaOrmStore;
 use crate::error::AuthResult;
 use crate::schema::{AuthSchema, SeaOrmSessionModel};
 
+use super::value_filter::{self, BoundQueryField, QueryPredicate};
 use super::{HookTransaction, map_db_err};
 
 use super::transaction_hooks::after_write;
@@ -46,14 +47,22 @@ where
         self.bind_session_query_field("token", &tokens, backend)
     }
 
-    pub(super) fn resolve_session_live_filter(
+    pub(super) fn resolve_session_predicates(
         &self,
-        bound: super::value_filter::BoundQueryField,
+        predicates: impl IntoIterator<Item = (BoundQueryField, WhereOperator)>,
         backend: DbBackend,
-    ) -> AuthResult<sea_orm::sea_query::SimpleExpr> {
-        let (column, value) = self.resolve_session_query_field(bound)?;
-        let value = super::record_bindings::parameter(value, backend)?;
-        Ok(column.into_expr().gt(column.save_as(value)))
+    ) -> AuthResult<Condition> {
+        let predicates = predicates
+            .into_iter()
+            .map(|(bound, operator)| {
+                let (column, value) = self.resolve_session_query_field(bound)?;
+                Ok(
+                    QueryPredicate::new(column, operator, WhereMode::Sensitive, value)
+                        .with_save_as(),
+                )
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+        value_filter::all(predicates, backend)
     }
 
     pub(super) fn session_query_field(
@@ -96,7 +105,8 @@ where
         db: &impl ConnectionTrait,
         transaction: Option<HookTransaction<'_, S>>,
         bind: impl Fn() -> AuthResult<super::value_filter::BoundQueryField> + Send + Sync,
-        resolve: impl Fn(super::value_filter::BoundQueryField) -> AuthResult<Condition> + Send + Sync,
+        operator: WhereOperator,
+        or_condition: Option<SimpleExpr>,
         preserve: bool,
     ) -> AuthResult<Option<usize>> {
         let backend = db.get_database_backend();
@@ -114,11 +124,15 @@ where
             Option<super::value_filter::BoundQueryField>,
         )|
          -> AuthResult<Condition> {
-            let mut condition = resolve(bound)?;
-            if let Some(live) = live {
-                condition = condition.add(self.resolve_session_live_filter(live, backend)?);
-            }
-            Ok(condition)
+            let condition = self.resolve_session_predicates(
+                std::iter::once((bound, operator))
+                    .chain(live.map(|live| (live, WhereOperator::Gt))),
+                backend,
+            )?;
+            Ok(match &or_condition {
+                Some(extra) => Condition::any().add(condition).add(extra.clone()),
+                None => condition,
+            })
         };
         // Upstream catches snapshot conversion, query and projection failures before the batch write.
         let sessions = async {

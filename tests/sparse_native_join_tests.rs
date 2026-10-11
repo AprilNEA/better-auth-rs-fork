@@ -18,6 +18,52 @@ use serde_json::Value;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
+async fn adapter_counts_exclude_null_ids_without_projecting_or_mutating_records() -> TestResult {
+    let cases: Value =
+        serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
+    for query in cases["adapterCounts"].as_array().unwrap() {
+        let mut input = cases.clone();
+        let table = input["tables"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|table| table["model"] == query["model"])
+            .unwrap();
+        table["columns"]["id"] = "TEXT".into();
+        let rows = table["rows"].as_array_mut().unwrap();
+        let mut null_id = rows[0].clone();
+        null_id["id"] = Value::Null;
+        let mut excluded = rows[0].clone();
+        excluded["id"] = "excluded".into();
+        excluded[query["column"].as_str().unwrap()] = "another-owner".into();
+        rows.extend([null_id, excluded]);
+        let fixture = contract::Fixture::new(&input, &input["cases"][0], false, false).await?;
+        let before = fixture.snapshot().await?;
+        let value = values::revive(&query["value"])?;
+        contract::assert_value(
+            &fixture
+                .count(query["model"].as_str().unwrap(), &value)
+                .await?,
+            &query["total"],
+        )?;
+        assert!(fixture.events.lock().unwrap().is_empty());
+        assert_eq!(fixture.snapshot().await?, before);
+        if query["model"] == "apikey" {
+            contract::assert_value(
+                &fixture.read_api_keys(&value).await?,
+                &cases["nullableApiKey"]["result"],
+            )?;
+            assert_eq!(
+                *fixture.events.lock().unwrap(),
+                *cases["nullableApiKey"]["events"].as_array().unwrap()
+            );
+            assert_eq!(fixture.snapshot().await?, before);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn nullable_user_ids_remain_in_pages_but_do_not_contribute_to_sql_counts() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;

@@ -2,10 +2,14 @@ use super::super::{instrumentation, pagination, plugin_rows, value_filter};
 use super::*;
 use better_auth_core::request_runtime::concurrent;
 use better_auth_core::store::schema::EntityRole;
+use better_auth_core::{
+    WhereMode, WhereOperator,
+    query::{validate_where_operand, where_operator},
+};
 
 struct BoundMemberQuery {
     organization: value_filter::BoundQueryField,
-    filter: Option<(value_filter::BoundQueryField, bool)>,
+    filter: Option<(value_filter::BoundQueryField, WhereOperator)>,
 }
 
 impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
@@ -20,13 +24,24 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             "organizationId",
             &params.organization_id.field_value(),
         )?;
-        let filter = bind_member_filter(
-            params,
-            &self.organization_fields()?.member,
-            self.connection().get_database_backend(),
-            self.config().advanced.database.generate_id(),
-            &self.model_fields,
-        )?;
+        let filter = if let Some(field) = params
+            .filter_field
+            .as_deref()
+            .filter(|field| !field.is_empty())
+        {
+            let value = params
+                .filter_value
+                .as_ref()
+                .unwrap_or(&FieldValue::Undefined);
+            let operator = where_operator(params.filter_operator.as_deref().unwrap_or("eq"));
+            validate_where_operand(operator, value)?;
+            Some((
+                self.bind_organization_query_field(EntityRole::Member, field, value)?,
+                operator,
+            ))
+        } else {
+            None
+        };
         Ok(BoundMemberQuery {
             organization,
             filter,
@@ -36,25 +51,31 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
     fn resolve_member_query(
         &self,
         bound: BoundMemberQuery,
-        params: &ListOrganizationMembersParams,
+        sort: Option<&ListOrganizationMembersParams>,
     ) -> AuthResult<Select<Entity<O::Member>>> {
         let (column, value) = self.resolve_organization_query_field::<O::Member>(
             EntityRole::Member,
             bound.organization,
         )?;
-        let query = plugin_rows::select_all::<Entity<O::Member>>().filter(value_filter::equals(
-            column,
-            &value,
+        let mut predicates = vec![value_filter::QueryPredicate::equals(column, value)];
+        if let Some((filter, operator)) = bound.filter {
+            let (column, value) =
+                self.resolve_organization_query_field::<O::Member>(EntityRole::Member, filter)?;
+            predicates.push(value_filter::QueryPredicate::new(
+                column,
+                operator,
+                WhereMode::Sensitive,
+                value,
+            ));
+        }
+        let mut query = plugin_rows::select_all::<Entity<O::Member>>();
+        if let Some(params) = sort {
+            query = self.sort_member_query(query, params)?;
+        }
+        Ok(query.filter(value_filter::all(
+            predicates,
             self.connection().get_database_backend(),
-        )?);
-        apply_member_filter::<O::Member>(
-            query,
-            params,
-            &self.organization_fields()?.member,
-            self.connection().get_database_backend(),
-            self.config().advanced.database.generate_id(),
-            bound.filter,
-        )
+        )?))
     }
 
     fn sort_member_query(
@@ -87,8 +108,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             self.config(),
             "findMany",
             async {
-                let query = self.resolve_member_query(bound, params)?;
-                let mut query = self.sort_member_query(query, params)?;
+                let mut query = self.resolve_member_query(bound, Some(params))?;
                 let (limit, offset) = pagination::sql_pagination(
                     self.connection().get_database_backend(),
                     params.limit,
@@ -130,11 +150,9 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             self.config(),
             "count",
             async {
-                self.resolve_member_query(bound, params)?
-                    .count(self.connection())
+                plugin_rows::count(self.connection(), self.resolve_member_query(bound, None)?)
                     .await
                     .map(|count| count as usize)
-                    .map_err(map_db_err)
             },
         )
         .await;

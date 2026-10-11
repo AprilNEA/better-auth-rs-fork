@@ -337,3 +337,64 @@ fn candidate_expression_errors_retain_the_original_allocation() -> AuthResult<()
     }
     Ok(())
 }
+
+#[test]
+fn all_condition_expressions_parse_before_any_driver_parameter_is_encoded() -> AuthResult<()> {
+    use crate::store::value_filter::{self, QueryPredicate};
+
+    for backend in [DbBackend::Sqlite, DbBackend::Postgres, DbBackend::MySql] {
+        for operator in [WhereOperator::Eq, WhereOperator::In] {
+            let allocation = Arc::new(AtomicUsize::new(0));
+            let calls = Arc::new(AtomicUsize::new(0));
+            let driver_calls = Arc::new(AtomicUsize::new(0));
+            let later = Arc::new(AtomicUsize::new(0));
+            let returned = Arc::new(AtomicUsize::new(0));
+            let original = allocation.clone();
+            let called = calls.clone();
+            let factory: UserFieldFactory = Arc::new(move || {
+                let _ = called.fetch_add(1, Ordering::SeqCst);
+                let message = "original-condition-error".to_owned();
+                original.store(message.as_ptr() as usize, Ordering::SeqCst);
+                Err(AuthError::Internal(message))
+            });
+            let rejecting = FieldValue::from(FieldFunction::from(factory));
+            // The nested function is a driver value; expression parsing must not invoke its body.
+            let invalid_driver = vec![FieldValue::from(vec![function(
+                "string",
+                &driver_calls,
+                &returned,
+            )])]
+            .into();
+            let result = value_filter::all(
+                [
+                    QueryPredicate::equals(user::Column::Name, invalid_driver),
+                    QueryPredicate::new(
+                        user::Column::Email,
+                        operator,
+                        WhereMode::Sensitive,
+                        if operator == WhereOperator::In {
+                            vec![rejecting].into()
+                        } else {
+                            rejecting
+                        },
+                    ),
+                    QueryPredicate::equals(
+                        user::Column::Image,
+                        function("string", &later, &returned),
+                    ),
+                ],
+                backend,
+            );
+            let Err(AuthError::Internal(message)) = result else {
+                return Err(AuthError::internal("Expected the original condition error"));
+            };
+            assert_eq!(message, "original-condition-error");
+            assert_eq!(message.as_ptr() as usize, allocation.load(Ordering::SeqCst));
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            assert_eq!(driver_calls.load(Ordering::SeqCst), 0);
+            assert_eq!(later.load(Ordering::SeqCst), 0);
+            assert_eq!(returned.load(Ordering::SeqCst), 0);
+        }
+    }
+    Ok(())
+}

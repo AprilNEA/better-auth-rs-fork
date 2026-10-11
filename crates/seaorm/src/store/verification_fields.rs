@@ -1,3 +1,4 @@
+use super::value_filter::{self, QueryPredicate};
 use super::{
     SeaOrmStore,
     plugin_rows::{self, SqlRow},
@@ -10,10 +11,7 @@ use better_auth_core::{
     user_fields::{AdapterRecord, UserConfig},
     wire::VerificationView,
 };
-use sea_orm::{
-    ColumnTrait, Condition, ConnectionTrait, DbBackend,
-    sea_query::{ExprTrait, SimpleExpr},
-};
+use sea_orm::{Condition, ConnectionTrait, DbBackend, sea_query::SimpleExpr};
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
@@ -86,17 +84,23 @@ where
             .collect::<AuthResult<Vec<_>>>()?;
         let (column, now) = expires.resolve(EntityRole::Verification, &fields)?;
         let column = S::Verification::field_column(&column)?;
-        let now = super::record_bindings::parameter(now, backend)?;
-        let mut condition = Condition::all();
+        let mut predicates = vec![
+            QueryPredicate::new(
+                column,
+                better_auth_core::WhereOperator::Gt,
+                better_auth_core::WhereMode::Sensitive,
+                now,
+            )
+            .with_save_as(),
+        ];
         for selector in selectors {
             let (column, value) = selector.resolve(EntityRole::Verification, &fields)?;
-            condition = condition.add(super::value_filter::equals(
+            predicates.push(QueryPredicate::equals(
                 S::Verification::field_column(&column)?,
-                &value,
-                backend,
-            )?);
+                value,
+            ));
         }
-        Ok(condition.add(column.into_expr().gt(column.save_as(now))))
+        value_filter::all(predicates, backend)
     }
 
     async fn project_verification_records(

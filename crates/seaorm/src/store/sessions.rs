@@ -3,9 +3,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sea_orm::{
     ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait,
-    sea_query::ExprTrait,
 };
 
+use better_auth_core::WhereOperator;
 use better_auth_core::session::SessionData;
 use better_auth_core::store::schema::EntityRole;
 use better_auth_core::store::{SessionStore, SessionUpdateWriter};
@@ -104,14 +104,8 @@ where
             db,
             None,
             || self.bind_session_query_field("token", token, db.get_database_backend()),
-            |bound| {
-                let (column, value) = self.resolve_session_query_field(bound)?;
-                Ok(Condition::all().add(super::value_filter::equals(
-                    column,
-                    &value,
-                    db.get_database_backend(),
-                )?))
-            },
+            WhereOperator::Eq,
+            None,
             true,
         )
         .await
@@ -250,13 +244,13 @@ where
         let live = only_active
             .then(|| self.bind_session_query_field("expiresAt", &Utc::now().into(), backend))
             .transpose()?;
-        let (column, value) = self.resolve_session_query_field(tokens)?;
-        let mut condition = Condition::all()
-            .add(super::value_filter::is_in(column, &value, backend)?)
+        let condition = self
+            .resolve_session_predicates(
+                std::iter::once((tokens, WhereOperator::In))
+                    .chain(live.map(|live| (live, WhereOperator::Gt))),
+                backend,
+            )?
             .add_option(S::Session::active_column().map(|column| column.eq(true)));
-        if let Some(live) = live {
-            condition = condition.add(self.resolve_session_live_filter(live, backend)?);
-        }
         let relation = SessionData::resolve_schema(
             self.config(),
             &self.model_fields,
@@ -354,12 +348,11 @@ where
         let live = only_active
             .then(|| self.bind_session_query_field("expiresAt", &Utc::now().into(), backend))
             .transpose()?;
-        let (column, value) = self.resolve_session_query_field(user_id)?;
-        let mut condition =
-            Condition::all().add(super::value_filter::equals(column, &value, backend)?);
-        if let Some(live) = live {
-            condition = condition.add(self.resolve_session_live_filter(live, backend)?);
-        }
+        let condition = self.resolve_session_predicates(
+            std::iter::once((user_id, WhereOperator::Eq))
+                .chain(live.map(|live| (live, WhereOperator::Gt))),
+            backend,
+        )?;
         match database_operation::<<S::Session as SeaOrmSessionModel>::Entity, _>(
             self.config(),
             "findMany",
@@ -511,14 +504,8 @@ where
             db,
             None,
             || self.bind_session_tokens(tokens, db.get_database_backend()),
-            |bound| {
-                let (column, value) = self.resolve_session_query_field(bound)?;
-                Ok(Condition::all().add(super::value_filter::is_in(
-                    column,
-                    &value,
-                    db.get_database_backend(),
-                )?))
-            },
+            WhereOperator::In,
+            None,
             false,
         )
         .await
@@ -531,14 +518,8 @@ where
             db,
             None,
             || self.bind_session_tokens(tokens, db.get_database_backend()),
-            |bound| {
-                let (column, value) = self.resolve_session_query_field(bound)?;
-                Ok(Condition::all().add(super::value_filter::is_in(
-                    column,
-                    &value,
-                    db.get_database_backend(),
-                )?))
-            },
+            WhereOperator::In,
+            None,
             true,
         )
         .await
@@ -578,14 +559,8 @@ where
             db,
             None,
             || self.bind_session_query_field("userId", user_id, db.get_database_backend()),
-            |bound| {
-                let (column, value) = self.resolve_session_query_field(bound)?;
-                Ok(Condition::all().add(super::value_filter::equals(
-                    column,
-                    &value,
-                    db.get_database_backend(),
-                )?))
-            },
+            WhereOperator::Eq,
+            None,
             preserve,
         )
         .await
@@ -599,13 +574,8 @@ where
             db,
             None,
             || self.bind_session_query_field("expiresAt", &now, backend),
-            |bound| {
-                let (column, value) = self.resolve_session_query_field(bound)?;
-                let value = super::record_bindings::parameter(value, backend)?;
-                Ok(Condition::any()
-                    .add(column.into_expr().lt(column.save_as(value)))
-                    .add_option(S::Session::active_column().map(|column| column.eq(false))))
-            },
+            WhereOperator::Lt,
+            S::Session::active_column().map(|column| column.eq(false)),
             false,
         )
         .await

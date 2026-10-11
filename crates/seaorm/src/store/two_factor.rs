@@ -1,16 +1,16 @@
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
+use super::value_filter::QueryPredicate;
 use super::{SeaOrmStore, map_db_err};
 use crate::{SeaOrmPluginModel, schema::AuthSchema};
 use async_trait::async_trait;
 use better_auth_core::{
     AuthError, AuthResult, CreateTwoFactor, FieldDate, FieldMap, FieldValue, FromFieldMap,
-    SchemaValue, TwoFactor, TwoFactorStorage, UpdateTwoFactor,
+    SchemaValue, TwoFactor, TwoFactorStorage, UpdateTwoFactor, WhereMode, WhereOperator,
     store::{TwoFactorStore, schema::EntityRole, validate_increment_one_update},
 };
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, ExprTrait, IdenStatic, QueryFilter, QueryResult,
-    QueryTrait,
+    ConnectionTrait, EntityTrait, ExprTrait, IdenStatic, QueryFilter, QueryResult, QueryTrait,
     sea_query::{Expr, SimpleExpr},
 };
 
@@ -316,10 +316,15 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let active = self
             .prepare_two_factor_fields(input, WriteOperation::Increment)
             .await?;
-        let by_id = self.resolve_plugin_equals::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-        let guard = by_id
-            .clone()
-            .and(self.resolve_plugin_equals::<P::TwoFactor>(EntityRole::TwoFactor, previous)?);
+        let (id_column, by_id) =
+            self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+        let (previous_column, previous) =
+            self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, previous)?;
+        let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
+        let previous = QueryPredicate::equals(previous_column, previous).parse()?;
+        let backend = self.connection().get_database_backend();
+        let by_id = by_id.encode(backend)?;
+        let guard = by_id.clone().and(previous.encode(backend)?);
         let row =
             database_operation::<Entity<P::TwoFactor>, _>(self.config(), "incrementOne", async {
                 super::updates::increment_returning_raw::<Entity<P::TwoFactor>>(
@@ -389,14 +394,22 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                     WriteOperation::Increment,
                 )
                 .await?;
-            let by_id = self.resolve_plugin_equals::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-            let (selected_counter, maximum) = self
-                .resolve_plugin_query_parameter::<P::TwoFactor>(EntityRole::TwoFactor, maximum)?;
-            let guard = by_id.clone().and(
-                selected_counter
-                    .into_expr()
-                    .gte(selected_counter.save_as(maximum)),
-            );
+            let (id_column, by_id) =
+                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+            let (selected_counter, maximum) =
+                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, maximum)?;
+            let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
+            let maximum = QueryPredicate::new(
+                selected_counter,
+                WhereOperator::Gte,
+                WhereMode::Sensitive,
+                maximum,
+            )
+            .with_save_as()
+            .parse()?;
+            let backend = self.connection().get_database_backend();
+            let by_id = by_id.encode(backend)?;
+            let guard = by_id.clone().and(maximum.encode(backend)?);
             let row = database_operation::<Entity<P::TwoFactor>, _>(
                 self.config(),
                 "incrementOne",
@@ -445,13 +458,27 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                 },
             )
             .await?;
-        let by_id = self.resolve_plugin_equals::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-        let mut guard = by_id.clone();
-        if let Some(expired) = expired {
-            let (column, expired) = self
-                .resolve_plugin_query_parameter::<P::TwoFactor>(EntityRole::TwoFactor, expired)?;
-            guard = guard.and(column.into_expr().lte(column.save_as(expired)));
-        }
+        let (id_column, by_id) =
+            self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+        let expired = expired
+            .map(|expired| {
+                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, expired)
+            })
+            .transpose()?;
+        let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
+        let expired = expired
+            .map(|(column, value)| {
+                QueryPredicate::new(column, WhereOperator::Lte, WhereMode::Sensitive, value)
+                    .with_save_as()
+                    .parse()
+            })
+            .transpose()?;
+        let backend = self.connection().get_database_backend();
+        let by_id = by_id.encode(backend)?;
+        let guard = match expired {
+            Some(expired) => by_id.clone().and(expired.encode(backend)?),
+            None => by_id.clone(),
+        };
         let row = database_operation::<Entity<P::TwoFactor>, _>(
             self.config(),
             if guarded { "incrementOne" } else { "update" },

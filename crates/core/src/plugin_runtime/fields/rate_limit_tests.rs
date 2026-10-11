@@ -202,6 +202,7 @@ async fn database_rate_limit_replaces_the_complete_declaration_without_resetting
                 ("lastRequest".into(), 100.into()),
             ]
             .into();
+            let schema = schema.adapter_fields(&[]);
             let stored = schema
                 .storage_fields_with_bound_id(
                     input.clone(),

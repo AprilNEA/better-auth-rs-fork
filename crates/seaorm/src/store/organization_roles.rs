@@ -1,3 +1,4 @@
+use super::value_filter::{self, QueryPredicate};
 use super::{
     SeaOrmStore, map_db_err,
     organization_models::{self as models, Entity, values},
@@ -11,7 +12,7 @@ use better_auth_core::{
 };
 use better_auth_core::{FieldMap, FieldValue, SchemaField, store::schema::EntityRole};
 use chrono::Utc;
-use sea_orm::{Condition, EntityTrait, PaginatorTrait, QueryFilter, QuerySelect};
+use sea_orm::{Condition, EntityTrait, QueryFilter, QuerySelect};
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -40,16 +41,17 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     ) -> AuthResult<Condition> {
         let fields = self.organization_query_schema(EntityRole::OrganizationRole)?;
         let backend = self.connection().get_database_backend();
-        selectors
+        let predicates = selectors
             .into_iter()
-            .try_fold(Condition::all(), |condition, selector| {
+            .map(|selector| {
                 let (column, value) = selector.resolve(EntityRole::OrganizationRole, &fields)?;
-                Ok(condition.add(super::value_filter::equals(
+                Ok(QueryPredicate::equals(
                     O::OrganizationRole::column(&column)?,
-                    &value,
-                    backend,
-                )?))
+                    value,
+                ))
             })
+            .collect::<AuthResult<Vec<_>>>()?;
+        value_filter::all(predicates, backend)
     }
 
     async fn organization_role_write(
@@ -243,12 +245,13 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         let rows = super::plugin_rows::all(
             self.connection(),
             super::plugin_rows::select_all::<Entity<O::OrganizationRole>>()
-                .filter(super::value_filter::equals(
-                    organization_column,
-                    &organization,
+                .filter(value_filter::all(
+                    [
+                        QueryPredicate::equals(organization_column, organization),
+                        QueryPredicate::is_in(role_column, names),
+                    ],
                     backend,
                 )?)
-                .filter(super::value_filter::is_in(role_column, &names, backend)?)
                 .limit(super::pagination::default_limit(
                     self.config(),
                     self.connection().get_database_backend(),
@@ -303,15 +306,14 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> O
         &self,
         organization_id: &better_auth_core::FieldValue,
     ) -> AuthResult<u64> {
-        Entity::<O::OrganizationRole>::find()
-            .filter(self.organization_field_equals::<O::OrganizationRole>(
+        let query = Entity::<O::OrganizationRole>::find().filter(
+            self.organization_field_equals::<O::OrganizationRole>(
                 EntityRole::OrganizationRole,
                 "organizationId",
                 organization_id,
-            )?)
-            .count(self.connection())
-            .await
-            .map_err(map_db_err)
+            )?,
+        );
+        super::plugin_rows::count(self.connection(), query).await
     }
     async fn update_organization_role(
         &self,

@@ -1,3 +1,4 @@
+use super::value_filter::{QueryPredicate, all};
 use super::{SeaOrmStore, instrumentation::database_operation, map_db_err, plugin_models::Entity};
 use async_trait::async_trait;
 use better_auth_core::{
@@ -137,15 +138,18 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                 self.bind_plugin_query_field(EntityRole::WalletAddress, "chainId", value.clone())
             })
             .transpose()?;
-        let query = super::plugin_rows::select_all::<Entity<P::WalletAddress>>().filter(
-            self.resolve_plugin_equals::<P::WalletAddress>(EntityRole::WalletAddress, address)?,
-        );
-        let query = match chain_id {
-            Some(value) => query.filter(
-                self.resolve_plugin_equals::<P::WalletAddress>(EntityRole::WalletAddress, value)?,
-            ),
-            None => query,
-        };
+        let predicates = std::iter::once(address)
+            .chain(chain_id)
+            .map(|field| {
+                let (column, value) = self.resolve_plugin_query_field::<P::WalletAddress>(
+                    EntityRole::WalletAddress,
+                    field,
+                )?;
+                Ok(QueryPredicate::equals(column, value))
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+        let query = super::plugin_rows::select_all::<Entity<P::WalletAddress>>()
+            .filter(all(predicates, connection.get_database_backend())?);
         let row =
             database_operation::<Entity<P::WalletAddress>, _>(self.config(), "findOne", async {
                 connection

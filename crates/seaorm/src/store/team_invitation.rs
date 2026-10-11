@@ -12,7 +12,7 @@ use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema:
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
 use sea_orm::{
-    EntityTrait, PaginatorTrait, QueryFilter, TransactionTrait,
+    EntityTrait, QueryFilter, TransactionTrait,
     sea_query::{Expr, ExprTrait},
 };
 use std::sync::{Arc, Mutex};
@@ -91,10 +91,10 @@ where
             self.resolve_organization_query_field::<O::Invitation>(EntityRole::Invitation, id)?;
         let (status_column, from) =
             self.resolve_organization_query_field::<O::Invitation>(EntityRole::Invitation, from)?;
-        let id = super::value_filter::equals(id_column, &id, backend)?;
-        let condition = id
-            .clone()
-            .and(super::value_filter::equals(status_column, &from, backend)?);
+        let id = super::value_filter::QueryPredicate::equals(id_column, id).parse()?;
+        let from = super::value_filter::QueryPredicate::equals(status_column, from).parse()?;
+        let id = id.encode(backend)?;
+        let condition = id.clone().and(from.encode(backend)?);
         let tx = self.connection().begin().await.map_err(map_db_err)?;
         let row =
             super::updates::increment_returning_raw_with_connection::<Entity<O::Invitation>, _>(
@@ -189,15 +189,14 @@ where
                     .find_team_member_by_key_or_pair(tx, &team_value, user_id, &membership_key)
                     .await?;
                 if existing.is_none() {
-                    let count = Entity::<O::TeamMember>::find()
-                        .filter(store.organization_field_equals::<O::TeamMember>(
+                    let query = Entity::<O::TeamMember>::find().filter(
+                        store.organization_field_equals::<O::TeamMember>(
                             better_auth_core::store::schema::EntityRole::TeamMember,
                             "teamId",
                             &team_value,
-                        )?)
-                        .count(tx)
-                        .await
-                        .map_err(map_db_err)?;
+                        )?,
+                    );
+                    let count = super::plugin_rows::count(tx, query).await?;
                     super::team_capacity::sync::<O::Team, _>(
                         tx,
                         &team_value,

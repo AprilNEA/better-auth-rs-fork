@@ -7,6 +7,7 @@ use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, IdenStatic, QueryFilter, Select};
 
 use super::plugin_rows::{self, SqlRow};
+use super::value_filter::{self, QueryPredicate};
 
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
@@ -78,16 +79,14 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
             .into_iter()
             .map(|(name, value)| self.bind_organization_query_field(role, name, value))
             .collect::<AuthResult<Vec<_>>>()?;
-        selectors
+        let predicates = selectors
             .into_iter()
-            .try_fold(sea_orm::Condition::all(), |condition, bound| {
+            .map(|bound| {
                 let (column, value) = self.resolve_organization_query_field::<M>(role, bound)?;
-                Ok(condition.add(super::value_filter::equals(
-                    column,
-                    &value,
-                    self.connection().get_database_backend(),
-                )?))
+                Ok(QueryPredicate::equals(column, value))
             })
+            .collect::<AuthResult<Vec<_>>>()?;
+        value_filter::all(predicates, self.connection().get_database_backend())
     }
 
     pub(super) fn organization_field_equals<M: SeaOrmOrganizationModel>(

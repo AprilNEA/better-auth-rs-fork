@@ -3,11 +3,12 @@ mod fields;
 
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
+use super::value_filter::QueryPredicate;
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, ExprTrait, Order, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, QueryTrait, sea_query::Expr,
+    ColumnTrait, ConnectionTrait, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder,
+    QuerySelect, QueryTrait, sea_query::Expr,
 };
 
 use better_auth_core::store::{
@@ -140,15 +141,12 @@ where
         reference_id: &FieldValue,
     ) -> AuthResult<u64> {
         database_operation::<Entity<P::ApiKey>, _>(self.config(), "count", async {
-            Entity::<P::ApiKey>::find()
-                .filter(self.plugin_equals::<P::ApiKey>(
-                    EntityRole::ApiKey,
-                    "referenceId",
-                    reference_id.clone(),
-                )?)
-                .count(self.connection())
-                .await
-                .map_err(map_db_err)
+            let query = Entity::<P::ApiKey>::find().filter(self.plugin_equals::<P::ApiKey>(
+                EntityRole::ApiKey,
+                "referenceId",
+                reference_id.clone(),
+            )?);
+            super::plugin_rows::count(self.connection(), query).await
         })
         .await
     }
@@ -214,7 +212,7 @@ where
             ApiKeyUsageWrite::Decrement => {
                 comparisons.push((
                     self.bind_plugin_query_field(EntityRole::ApiKey, "remaining", 0.0.into())?,
-                    Some(sea_orm::sea_query::BinOper::GreaterThan),
+                    Some(better_auth_core::WhereOperator::Gt),
                 ));
                 increment = Some(("remaining", -1.0));
             }
@@ -228,7 +226,7 @@ where
                             "lastRequest",
                             previous.into(),
                         )?,
-                        Some(sea_orm::sea_query::BinOper::SmallerThanOrEqual),
+                        Some(better_auth_core::WhereOperator::Lte),
                     ),
                     None => (
                         self.bind_plugin_query_field(
@@ -251,11 +249,11 @@ where
                         "lastRequest",
                         previous_after.into(),
                     )?,
-                    Some(sea_orm::sea_query::BinOper::GreaterThan),
+                    Some(better_auth_core::WhereOperator::Gt),
                 ));
                 comparisons.push((
                     self.bind_plugin_query_field(EntityRole::ApiKey, "requestCount", maximum)?,
-                    Some(sea_orm::sea_query::BinOper::SmallerThan),
+                    Some(better_auth_core::WhereOperator::Lt),
                 ));
                 increment = Some(("requestCount", 1.0));
             }
@@ -281,17 +279,35 @@ where
         if operation == "incrementOne" {
             validate_increment_one_update(increment.is_some(), !fields.is_empty())?;
         }
-        let reselect = self.resolve_plugin_equals::<P::ApiKey>(EntityRole::ApiKey, by_id)?;
-        let mut guard = reselect.clone();
-        for (bound, operator) in comparisons {
-            let condition = if let Some(operator) = operator {
+        let (column, id) =
+            self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, by_id)?;
+        let by_id = QueryPredicate::equals(column, id);
+        let comparisons = comparisons
+            .into_iter()
+            .map(|(bound, operator)| {
                 let (column, value) =
-                    self.resolve_plugin_query_parameter::<P::ApiKey>(EntityRole::ApiKey, bound)?;
-                column.into_expr().binary(operator, column.save_as(value))
-            } else {
-                self.resolve_plugin_equals::<P::ApiKey>(EntityRole::ApiKey, bound)?
-            };
-            guard = guard.and(condition);
+                    self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, bound)?;
+                Ok(match operator {
+                    Some(operator) => QueryPredicate::new(
+                        column,
+                        operator,
+                        better_auth_core::WhereMode::Sensitive,
+                        value,
+                    )
+                    .with_save_as(),
+                    None => QueryPredicate::equals(column, value),
+                })
+            })
+            .collect::<AuthResult<Vec<_>>>()?;
+        let by_id = by_id.parse()?;
+        let comparisons = comparisons
+            .into_iter()
+            .map(QueryPredicate::parse)
+            .collect::<AuthResult<Vec<_>>>()?;
+        let reselect = by_id.encode(backend)?;
+        let mut guard = reselect.clone();
+        for comparison in comparisons {
+            guard = guard.and(comparison.encode(backend)?);
         }
         if let Some((column, _)) = &increment {
             // Kysely evaluates set policies, then replaces colliding assignments with increments.
@@ -334,14 +350,21 @@ where
 
     async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
         database_operation::<Entity<P::ApiKey>, _>(self.config(), "deleteMany", async {
-            let (expires_at, now) = self.plugin_query_parameter::<P::ApiKey>(
-                EntityRole::ApiKey,
-                "expiresAt",
-                Utc::now().into(),
-            )?;
+            let bound =
+                self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", Utc::now().into())?;
+            let (expires_at, now) =
+                self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, bound)?;
+            let expired = QueryPredicate::new(
+                expires_at,
+                better_auth_core::WhereOperator::Lt,
+                better_auth_core::WhereMode::Sensitive,
+                now,
+            )
+            .with_save_as()
+            .bind(self.connection().get_database_backend())?;
             Entity::<P::ApiKey>::delete_many()
                 .filter(expires_at.is_not_null())
-                .filter(expires_at.into_expr().lt(expires_at.save_as(now)))
+                .filter(expired)
                 .exec(self.connection())
                 .await
                 .map(|result| result.rows_affected as usize)

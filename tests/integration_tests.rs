@@ -14,7 +14,6 @@ mod compat;
 
 use better_auth::BetterAuth;
 use better_auth_core::entity::AuthUser;
-use better_auth_core::store::UserStore;
 use compat::helpers::*;
 use std::sync::Arc;
 
@@ -2375,7 +2374,7 @@ async fn test_api_key_get_nonexistent() {
 // Upstream source: packages/better-auth/src/api/routes public endpoint handler matching this request path; adapted to the Rust integration endpoint case.
 #[tokio::test]
 async fn test_get_user_by_username_adapter() {
-    use better_auth::prelude::CreateUser;
+    use better_auth::{plugins::EmailPasswordPlugin, prelude::CreateUser};
     use better_auth_seaorm::{Database, SeaOrmStore};
     let database = Database::connect("sqlite::memory:").await.unwrap();
     better_auth_seaorm::store::__private_test_support::migrator::run_migrations(&database)

@@ -1,12 +1,9 @@
 use better_auth_core::{
-    AuthError, AuthResult, FieldValue, ListUsersParams, WhereMode, WhereOperator,
-    query::{field_number, validate_where_operand, where_operator},
+    AuthResult, FieldValue, ListUsersParams, WhereMode, WhereOperator,
+    query::{validate_where_operand, where_operator},
     store::schema::EntityRole,
 };
-use sea_orm::{
-    ConnectionTrait, QueryFilter, QueryOrder, QuerySelect, Select,
-    sea_query::{Alias, Expr, ExprTrait},
-};
+use sea_orm::{QueryFilter, QueryOrder, QuerySelect, Select};
 
 use crate::{SeaOrmUserModel, schema::AuthSchema};
 
@@ -107,16 +104,12 @@ where
                 query.order_by_asc(column)
             };
         }
-        for (column, operator, value) in bound {
-            query = query.filter(value_filter::predicate(
-                column,
-                operator,
-                WhereMode::Sensitive,
-                value,
-                self.connection().get_database_backend(),
-            )?);
-        }
-        Ok(query)
+        Ok(query.filter(value_filter::all(
+            bound.into_iter().map(|(column, operator, value)| {
+                value_filter::QueryPredicate::new(column, operator, WhereMode::Sensitive, value)
+            }),
+            self.connection().get_database_backend(),
+        )?))
     }
 
     pub(super) async fn user_query_page(
@@ -163,15 +156,9 @@ where
             self.config(),
             "count",
             async {
-                // Kysely counts the literal id column, even when the declared primary key differs.
-                let query = self
-                    .resolve_user_query(bound, None)?
-                    .select_only()
-                    .expr_as(Expr::col(Alias::new("id")).count(), "count");
-                let row = plugin_rows::one(self.connection(), query)
-                    .await?
-                    .ok_or_else(|| AuthError::internal("User count returned no row"))?;
-                Ok(field_number(&row.value("count")?)? as usize)
+                plugin_rows::count(self.connection(), self.resolve_user_query(bound, None)?)
+                    .await
+                    .map(|count| count as usize)
             },
         )
         .await
