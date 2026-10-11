@@ -17,6 +17,12 @@ mod member_hook_routes;
 mod member_native_routes;
 #[path = "organization/member_point_reads.rs"]
 mod member_point_reads;
+#[path = "organization/organization_id_predicates.rs"]
+mod organization_id_predicates;
+#[path = "organization/organization_live_business.rs"]
+mod organization_live_business;
+#[path = "organization/organization_live_sources.rs"]
+mod organization_live_sources;
 
 fn policy(field: &'static str, events: &Arc<Mutex<Vec<Value>>>) -> UserFieldConfig {
     let input_events = events.clone();

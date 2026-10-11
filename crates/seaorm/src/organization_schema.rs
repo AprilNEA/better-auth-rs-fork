@@ -137,7 +137,7 @@ mod tests {
     )]
     fn check_projected_record<M: SeaOrmOrganizationModel>(model: &M) -> AuthResult<M::Record>
     where
-        M::Record: AuthRecordFields + Serialize,
+        M::Record: AuthRecordFields + Serialize + serde::de::DeserializeOwned,
     {
         let role: FieldValue = FieldMap::from([("custom".into(), true.into())]).into();
         let projected = FieldMap::from([
@@ -164,12 +164,27 @@ mod tests {
             serde_json::to_string(&record)?,
             r#"{"role":{"custom":true},"extra":false,"createdAt":null}"#
         );
+        let decoded: M::Record = serde_json::from_str(&serde_json::to_string(&record)?)?;
+        let mut json_fields = projected;
+        let _ = json_fields.remove("id");
+        let decoded_fields = decoded.field_values()?;
+        assert_eq!(decoded_fields, json_fields);
+        assert_eq!(
+            decoded_fields.keys().collect::<Vec<_>>(),
+            json_fields.keys().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            serde_json::to_string(&decoded)?,
+            r#"{"role":{"custom":true},"extra":false,"createdAt":null}"#
+        );
         Ok(record)
     }
 
     #[test]
     fn organization_models_preserve_projected_presence_order_and_identity() -> AuthResult<()> {
-        use crate::store::entities::{invitation, member, organization, organization_role, team};
+        use crate::store::entities::{
+            invitation, member, organization, organization_role, team, team_member,
+        };
 
         let organization = check_projected_record(&organization::Model {
             id: "organization".into(),
@@ -228,6 +243,13 @@ mod tests {
             created_at: Default::default(),
             updated_at: None,
             member_count: 0,
+        })?;
+        check_projected_record(&team_member::Model {
+            id: "team-member".into(),
+            team_id: "team".into(),
+            user_id: "user".into(),
+            membership_key: Some("internal-key".into()),
+            created_at: None,
         })?;
         let role = check_projected_record(&organization_role::Model {
             id: "role".into(),

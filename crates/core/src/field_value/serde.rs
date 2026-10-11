@@ -142,6 +142,14 @@ pub mod optional_value {
     }
 }
 
+pub(crate) fn revive_schema_date(value: &mut FieldValue) {
+    if let FieldValue::String(text) = value
+        && let Some(date) = crate::utils::json::parse_json_date(text)
+    {
+        *value = FieldDate::from(date).into();
+    }
+}
+
 pub mod schema_date {
     use super::*;
 
@@ -155,12 +163,9 @@ pub mod schema_date {
     pub fn deserialize<'de, D: ::serde::Deserializer<'de>>(
         deserializer: D,
     ) -> Result<crate::SchemaValue<FieldDate>, D::Error> {
-        let value = super::value::deserialize(deserializer)?;
-        Ok(crate::SchemaValue::from_field(match value {
-            FieldValue::String(text) => crate::utils::json::parse_json_date(&text)
-                .map_or_else(|| text.into(), |date| FieldDate::from(date).into()),
-            value => value,
-        }))
+        let mut value = super::value::deserialize(deserializer)?;
+        revive_schema_date(&mut value);
+        Ok(crate::SchemaValue::from_field(value))
     }
 }
 
@@ -249,7 +254,9 @@ pub mod date_update {
 )]
 mod tests {
     use crate::{
-        ApiKey, AuthResult, FieldDate, Passkey,
+        ApiKey, AuthRecordFields, AuthResult, FieldDate, FieldMap, FieldValue, FromFieldMap,
+        Invitation, InvitationView, Member, Organization, OrganizationRole, Passkey, Team,
+        TeamMember,
         wire::{ApiKeyView, PasskeyView},
     };
     use ::serde::{Serialize, de::DeserializeOwned};
@@ -333,6 +340,122 @@ mod tests {
         assert_eq!(serde_json::to_value(key_view)?, input);
         assert_eq!(serde_json::to_value(passkey)?, passkey_input);
         assert_eq!(serde_json::to_value(passkey_view)?, passkey_view_input);
+        Ok(())
+    }
+
+    fn check_organization_json<T>(dates: &[&str]) -> AuthResult<T>
+    where
+        T: DeserializeOwned + Serialize + AuthRecordFields + FromFieldMap,
+    {
+        let source = r#"{"role":{"dynamic":true},"2":"two","updatedAt":"2100-01-01T00:00:00.000Z","id":null,"1":"one","extra":{"when":"2100-01-01T00:00:00.000Z"},"createdAt":"2100-01-01T00:00:00.000Z","expiresAt":"2100-01-01T00:00:00.000Z","01":false}"#;
+        let source_fields = FieldMap::from_json(serde_json::from_str(source)?)?;
+        let native = T::from_field_values(source_fields.clone())?.field_values()?;
+        assert_eq!(native, source_fields);
+        assert_eq!(
+            native.keys().collect::<Vec<_>>(),
+            source_fields.keys().collect::<Vec<_>>()
+        );
+
+        let record: T = serde_json::from_str(source)?;
+        let mut expected = source_fields;
+        for name in dates {
+            let _ = expected.insert(
+                (*name).into(),
+                FieldDate::from_milliseconds(4_102_444_800_000.0).into(),
+            );
+        }
+        let actual = record.field_values()?;
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual.keys().map(String::as_str).collect::<Vec<_>>(),
+            [
+                "1",
+                "2",
+                "role",
+                "updatedAt",
+                "id",
+                "extra",
+                "createdAt",
+                "expiresAt",
+                "01"
+            ]
+        );
+        assert_eq!(
+            serde_json::to_string(&record)?,
+            r#"{"1":"one","2":"two","role":{"dynamic":true},"updatedAt":"2100-01-01T00:00:00.000Z","id":null,"extra":{"when":"2100-01-01T00:00:00.000Z"},"createdAt":"2100-01-01T00:00:00.000Z","expiresAt":"2100-01-01T00:00:00.000Z","01":false}"#
+        );
+        let missing: T = serde_json::from_str("{}")?;
+        assert!(missing.field_values()?.is_empty());
+        assert_eq!(serde_json::to_string(&missing)?, "{}");
+        for value in [
+            Value::Null,
+            json!(false),
+            json!(42),
+            json!({"dynamic": true}),
+            json!(["2100-01-01T00:00:00.000Z"]),
+            json!("raw-date"),
+            json!("2100-01-01T00:00Z"),
+            json!("2100-01-01T00:00:00+00:00"),
+            json!("2100-13-01T00:00:00Z"),
+        ] {
+            let input: serde_json::Map<String, Value> = dates
+                .iter()
+                .map(|name| ((*name).into(), value.clone()))
+                .collect();
+            let decoded: T = serde_json::from_value(Value::Object(input.clone()))?;
+            let fields = decoded.field_values()?;
+            let expected = FieldMap::from_json(input.clone())?;
+            assert_eq!(fields, expected);
+            assert_eq!(
+                fields.keys().collect::<Vec<_>>(),
+                expected.keys().collect::<Vec<_>>()
+            );
+            assert_eq!(serde_json::to_value(&decoded)?, Value::Object(input));
+        }
+        Ok(record)
+    }
+
+    #[test]
+    fn organization_json_preserves_order_presence_and_date_boundaries() -> AuthResult<()> {
+        let organization = check_organization_json::<Organization>(&["createdAt"])?;
+        let member = check_organization_json::<Member>(&["createdAt"])?;
+        let invitation = check_organization_json::<Invitation>(&["expiresAt", "createdAt"])?;
+        let view = check_organization_json::<InvitationView>(&["expiresAt", "createdAt"])?;
+        let team = check_organization_json::<Team>(&["createdAt", "updatedAt"])?;
+        let team_member = check_organization_json::<TeamMember>(&["createdAt"])?;
+        let role = check_organization_json::<OrganizationRole>(&["createdAt", "updatedAt"])?;
+        let expected = FieldDate::from_milliseconds(4_102_444_800_000.0);
+        for date in [
+            &organization.created_at,
+            &member.created_at,
+            &invitation.created_at,
+            &invitation.expires_at,
+            &view.created_at,
+            &view.expires_at,
+            &team.created_at,
+            &team_member.created_at,
+            &role.created_at,
+        ] {
+            assert_eq!(date.typed()?, &expected);
+        }
+        for date in [&team.updated_at, &role.updated_at] {
+            assert_eq!(date.typed()?, &Some(expected.clone()));
+        }
+        let private: TeamMember =
+            serde_json::from_str(r#"{"extra":false,"membershipKey":"private","createdAt":null}"#)?;
+        let expected = FieldMap::from([
+            ("extra".into(), false.into()),
+            ("createdAt".into(), FieldValue::Null),
+        ]);
+        assert_eq!(private.field_values()?, expected);
+        assert_eq!(
+            private.field_order,
+            expected.keys().cloned().collect::<Vec<_>>()
+        );
+        assert_eq!(
+            serde_json::to_string(&private)?,
+            r#"{"extra":false,"createdAt":null}"#
+        );
         Ok(())
     }
 }

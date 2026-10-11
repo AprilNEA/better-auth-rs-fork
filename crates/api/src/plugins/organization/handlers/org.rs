@@ -104,10 +104,11 @@ pub(crate) async fn create_organization_core(
     if !org_data.metadata.is_truthy()? {
         org_data.metadata = better_auth_core::SchemaValue::Undefined;
     }
-    let mut organization = ctx.database.create_organization(org_data).await?;
-    organization.metadata = super::super::native_json::metadata(organization.metadata, true)?;
-    let organization_view =
-        crate::plugins::organization::fields::created_organization(&organization, ctx)?;
+    let organization = super::super::native_json::metadata(
+        ctx.database.create_organization(org_data).await?,
+        true,
+    )?;
+    let organization = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
     let mut member_data = OrganizationMemberDraft {
         additional_fields: Default::default(),
@@ -127,7 +128,7 @@ pub(crate) async fn create_organization_core(
             .before_add_member(
                 &mut member_data,
                 OrganizationUser {
-                    organization: &organization_view,
+                    organization: &organization,
                     user,
                 },
             )
@@ -140,7 +141,7 @@ pub(crate) async fn create_organization_core(
     let event = OrganizationMemberEvent {
         member: &member,
         user,
-        organization: &organization_view,
+        organization: &organization,
     };
     if let Some(hooks) = &config.hooks {
         hooks.after_add_member(event).await?;
@@ -158,11 +159,11 @@ pub(crate) async fn create_organization_core(
         };
         if let Some(hooks) = &config.hooks {
             hooks
-                .before_create_team(&mut team_data, &organization_view, Some(user))
+                .before_create_team(&mut team_data, &organization, Some(user))
                 .await?;
         }
         let team = match config
-            .custom_default_team(&organization_view, OrganizationEndpoint::new(ctx, request))
+            .custom_default_team(&organization, OrganizationEndpoint::new(ctx, request))
             .await?
         {
             Some(team) => team,
@@ -183,7 +184,7 @@ pub(crate) async fn create_organization_core(
                 .after_create_team(OrganizationTeamEvent {
                     team: &team,
                     user: Some(user),
-                    organization: &organization_view,
+                    organization: &organization,
                 })
                 .await?;
         }
@@ -192,17 +193,9 @@ pub(crate) async fn create_organization_core(
     if let Some(hooks) = &config.hooks {
         hooks.after_create_organization(event).await?;
     }
-    let mut response = CreatedOrganizationResponse::from_organization(&organization);
-    if let better_auth_core::FieldValue::String(value) = response.metadata.field_value()
-        && !value.is_empty()
-    {
-        response.metadata = better_auth_core::SchemaValue::from_json(Some(
-            super::super::native_json::parse_json(&value)?,
-        ))?;
-    }
     Ok((
         CreateOrganizationResponse {
-            organization: response,
+            organization,
             members: vec![BasicMemberResponse::try_from_member(&member)?],
         },
         default_team_id,
@@ -286,21 +279,18 @@ pub(crate) async fn update_organization_core(
             .before_update_organization(&mut update_data, actor)
             .await?;
     }
-    let mut updated = ctx
-        .database
-        .update_organization_value(&org_id, update_data)
-        .await?;
-    updated.metadata = super::super::native_json::metadata(updated.metadata, false)?;
+    let updated = super::super::native_json::metadata(
+        ctx.database
+            .update_organization_value(&org_id, update_data)
+            .await?,
+        false,
+    )?;
 
+    let updated = crate::plugins::organization::fields::organization(&updated, ctx)?;
     if let Some(hooks) = &config.hooks {
-        hooks
-            .after_update_organization(
-                &crate::plugins::organization::fields::created_organization(&updated, ctx)?,
-                actor,
-            )
-            .await?;
+        hooks.after_update_organization(&updated, actor).await?;
     }
-    Ok(CreatedOrganizationResponse::from_organization(&updated))
+    Ok(updated)
 }
 
 pub(crate) async fn delete_organization_core(
@@ -365,7 +355,7 @@ pub(crate) async fn delete_organization_core(
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
     let event = OrganizationUser {
-        organization: &organization_view,
+        organization: &organization,
         user: &session.user,
     };
     if let Some(hooks) = &config.hooks {
@@ -670,7 +660,7 @@ pub async fn handle_create_organization(
         )?));
     }
     let body: CreateOrganizationRequest = super::super::request::read(req, &config.schema)?;
-    let (response, default_team_id) =
+    let (mut response, default_team_id) =
         create_organization_core(&body, session.as_ref(), config, ctx, Some(req)).await?;
     if !body.keep_current_active_organization.unwrap_or(false)
         && let Some(session) = session
@@ -692,6 +682,11 @@ pub async fn handle_create_organization(
                 .await?;
         }
     }
+    let metadata = response.organization.metadata.field_value();
+    if metadata.is_truthy() && metadata.is_string() {
+        response.organization.metadata =
+            SchemaValue::from_field(super::super::native_json::parse_json(&metadata)?);
+    }
     Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
 
@@ -712,7 +707,7 @@ pub async fn handle_update_organization(
     };
     let body: UpdateOrganizationRequest = super::super::request::read(req, &config.schema)?;
     let updated = update_organization_core(&body, &session, config, ctx).await?;
-    AuthResponse::json(None, &updated)
+    Ok(AuthResponse::native(None, updated.field_values()?.into()))
 }
 
 /// Handle delete organization request

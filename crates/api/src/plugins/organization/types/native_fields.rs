@@ -1,34 +1,11 @@
 use super::{
     AcceptInvitationResponse, BasicMemberResponse, CreateOrganizationResponse,
-    CreatedOrganizationResponse, GetActiveMemberRoleResponse, GetInvitationResponse,
-    ListMembersResponse, MemberResponse, RemovedMemberResponse, UserInvitationResponse,
+    GetActiveMemberRoleResponse, GetInvitationResponse, ListMembersResponse, MemberResponse,
+    RemovedMemberResponse, UserInvitationResponse,
 };
 use better_auth_core::wire::InvitationView;
 use better_auth_core::{AuthRecordFields, AuthResult, FieldMap, FieldValue, FromFieldMap};
 use serde::Serialize;
-
-macro_rules! record {
-    ($record:ty, [$($field:ident => $name:literal),* $(,)?]) => {
-        impl AuthRecordFields for $record {
-            fn field_values(&self) -> AuthResult<FieldMap> {
-                let mut fields = FieldMap::from_iter([
-                    $(($name.into(), self.$field.field_value())),*
-                ]);
-                fields.extend(self.additional_fields.clone());
-                Ok(fields)
-            }
-        }
-    };
-}
-
-record!(CreatedOrganizationResponse, [
-    id => "id",
-    name => "name",
-    slug => "slug",
-    logo => "logo",
-    metadata => "metadata",
-    created_at => "createdAt",
-]);
 
 impl AuthRecordFields for MemberResponse {
     fn field_values(&self) -> AuthResult<FieldMap> {
@@ -85,6 +62,9 @@ impl<O: Serialize + AuthRecordFields, M: Serialize + AuthRecordFields> AuthRecor
 {
     fn field_values(&self) -> AuthResult<FieldMap> {
         let mut fields = self.organization.field_values()?;
+        let _ = fields
+            .entry("metadata".into())
+            .or_insert(FieldValue::Undefined);
         let members = self
             .members
             .iter()

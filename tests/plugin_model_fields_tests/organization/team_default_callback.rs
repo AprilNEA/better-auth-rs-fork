@@ -14,19 +14,6 @@ struct Callback {
     team: Team,
 }
 
-fn organization_view(organization: &OrganizationResponse) -> FieldMap {
-    let mut fields = organization.additional_fields.clone();
-    fields.extend([
-        ("id".into(), organization.id.field_value()),
-        ("name".into(), organization.name.field_value()),
-        ("slug".into(), organization.slug.field_value()),
-        ("logo".into(), organization.logo.field_value()),
-        ("metadata".into(), organization.metadata.field_value()),
-        ("createdAt".into(), organization.created_at.field_value()),
-    ]);
-    fields
-}
-
 #[async_trait]
 impl OrganizationPolicy for Callback {
     async fn create_default_team(
@@ -37,7 +24,7 @@ impl OrganizationPolicy for Callback {
         self.events.push(
             "customCreateDefaultTeam",
             "callback",
-            organization_view(organization).into(),
+            organization.field_values()?.into(),
         )?;
         Ok(Some(self.team.clone()))
     }
@@ -83,7 +70,7 @@ impl OrganizationHooks for Callback {
             vec![
                 "afterCreateOrganization".into(),
                 "hook".into(),
-                organization_view(event.organization).into(),
+                event.organization.field_values()?.into(),
                 event.member.field_values()?.into(),
             ]
             .into(),

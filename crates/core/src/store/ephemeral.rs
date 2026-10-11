@@ -232,17 +232,6 @@ impl EphemeralStore {
         Ok(lock)
     }
 
-    async fn output_organization(&self, value: FieldMap) -> AuthResult<Organization> {
-        Ok(self.output_organizations(vec![value]).await?.remove(0))
-    }
-    async fn output_organizations(&self, values: Vec<FieldMap>) -> AuthResult<Vec<Organization>> {
-        self.output_records(
-            better_auth_schema_registry::EntityRole::Organization,
-            values,
-        )
-        .await
-    }
-
     async fn output_member(&self, value: FieldMap) -> AuthResult<Member> {
         self.output_record(better_auth_schema_registry::EntityRole::Member, value)
             .await
@@ -254,16 +243,6 @@ impl EphemeralStore {
     async fn output_team(&self, value: FieldMap) -> AuthResult<crate::Team> {
         self.output_record(better_auth_schema_registry::EntityRole::Team, value)
             .await
-    }
-    async fn output_organization_role(
-        &self,
-        value: FieldMap,
-    ) -> AuthResult<crate::OrganizationRole> {
-        self.output_record(
-            better_auth_schema_registry::EntityRole::OrganizationRole,
-            value,
-        )
-        .await
     }
 }
 

@@ -1,28 +1,17 @@
 //! Organization teams and dynamic access-control records.
 use crate::SchemaValue;
-use serde::Deserialize;
 
 /// A team belonging to one organization.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct Team {
     /// Source property order, independent of the current typed values.
-    #[serde(skip)]
     pub field_order: Vec<String>,
     /// Application fields projected by the configured team schema.
-    #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub name: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub organization_id: SchemaValue<String>,
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub updated_at: SchemaValue<Option<crate::FieldDate>>,
 }
 
@@ -50,23 +39,15 @@ pub struct UpdateTeam {
 }
 
 /// A user's membership in a team.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct TeamMember {
     /// Source property order, independent of the current typed values.
-    #[serde(skip)]
     pub field_order: Vec<String>,
     /// Application fields projected by the registered membership schema.
-    #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub team_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub user_id: SchemaValue<String>,
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
 }
 
@@ -131,28 +112,17 @@ impl Team {
 }
 
 /// A dynamic role scoped to one organization.
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct OrganizationRole {
     /// Source property order, independent of the current typed values.
-    #[serde(skip)]
     pub field_order: Vec<String>,
     /// Application fields projected by the configured role schema.
-    #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub organization_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub role: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub permission: SchemaValue<crate::FieldValue>,
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub updated_at: SchemaValue<Option<crate::FieldDate>>,
 }
 

@@ -488,38 +488,20 @@ impl AuthSession for SessionView {
 pub type OrganizationView = crate::Organization;
 
 /// Public invitation response shape.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct InvitationView {
     /// Source property order, independent of the current typed values.
-    #[serde(skip)]
     pub field_order: Vec<String>,
-    #[serde(with = "crate::field_value::serde::map", flatten)]
     pub additional_fields: crate::FieldMap,
 
-    #[serde(rename = "teamId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub team_id: SchemaValue<Option<String>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(rename = "organizationId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub organization_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub email: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub role: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub status: SchemaValue<InvitationStatus>,
-    #[serde(rename = "inviterId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub inviter_id: SchemaValue<String>,
-    #[serde(rename = "expiresAt")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub expires_at: SchemaValue<crate::FieldDate>,
-    #[serde(rename = "createdAt")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
 }
 

@@ -20,14 +20,17 @@ impl OrganizationStore for EphemeralStore {
         let mut record = self
             .create_record(EntityRole::Organization, record, fields)
             .await?;
-        {
+        let source = {
             let mut state = self.lock()?;
             if let Some(id) = self.next_serial_id(state.organizations.len()) {
                 let _ = record.insert("id".into(), id);
             }
-            state.organizations.push(record.clone());
-        }
-        self.output_organization(record).await
+            state.organizations.push_ref(record)
+        };
+        Ok(self
+            .output_record_refs(EntityRole::Organization, vec![source])
+            .await?
+            .remove(0))
     }
     async fn delete_organization_records(&self, id: &str) -> AuthResult<()> {
         let member_schema = self.field_config(EntityRole::Member)?;
@@ -92,7 +95,7 @@ impl OrganizationStore for EphemeralStore {
         let mut org = self
             .create_record(EntityRole::Organization, org, input.additional_fields)
             .await?;
-        {
+        let source = {
             let mut state = self.lock()?;
             if state.organizations.snapshot()?.iter().any(|org| {
                 organization_value(org, &schema, "slug").strict_equals(&slug.field_value())
@@ -102,37 +105,34 @@ impl OrganizationStore for EphemeralStore {
             if let Some(id) = self.next_serial_id(state.organizations.len()) {
                 let _ = org.insert("id".into(), id);
             }
-            state.organizations.push(org.clone());
-        }
-        self.output_organization(org).await
+            state.organizations.push_ref(org)
+        };
+        Ok(self
+            .output_record_refs(EntityRole::Organization, vec![source])
+            .await?
+            .remove(0))
     }
     async fn get_organization_by_id(&self, id: &str) -> AuthResult<Option<Organization>> {
-        let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
-        let value = self.lock()?.organizations.get(&id)?;
-        match value {
-            Some(value) => self.output_organization(value).await.map(Some),
-            None => Ok(None),
-        }
+        self.get_organization_by_id_value(&Value::from(id)).await
     }
     async fn get_organization_by_id_value(&self, id: &Value) -> AuthResult<Option<Organization>> {
-        let id = self.organization_query(EntityRole::Organization, "id", id.clone())?;
-        let rows = self.lock()?.organizations.snapshot()?;
-        match rows.into_iter().find(|row| organization_id(row) == id) {
-            Some(value) => self.output_organization(value).await.map(Some),
+        let id = self
+            .organization_query(EntityRole::Organization, "id", id.clone())?
+            .field_value();
+        let row = self.lock()?.organizations.first_ref(|row| {
+            crate::query::field_matches_equality(row.get("id").unwrap_or(&Value::Undefined), &id)
+        })?;
+        match row {
+            Some(row) => Ok(self
+                .output_record_refs(EntityRole::Organization, vec![row])
+                .await?
+                .pop()),
             None => Ok(None),
         }
     }
     async fn get_organization_by_slug(&self, slug: &str) -> AuthResult<Option<Organization>> {
-        let schema = self.field_config(EntityRole::Organization)?;
-        let slug = self.organization_query(EntityRole::Organization, "slug", Value::from(slug))?;
-        let rows = self.lock()?.organizations.snapshot()?;
-        match rows
-            .into_iter()
-            .find(|row| organization_value(row, &schema, "slug").strict_equals(&slug.field_value()))
-        {
-            Some(value) => self.output_organization(value).await.map(Some),
-            None => Ok(None),
-        }
+        self.get_organization_by_slug_value(&Value::from(slug))
+            .await
     }
     async fn get_organization_by_slug_value(
         &self,
@@ -140,13 +140,16 @@ impl OrganizationStore for EphemeralStore {
     ) -> AuthResult<Option<Organization>> {
         let schema = self.field_config(EntityRole::Organization)?;
         let slug = self.organization_query(EntityRole::Organization, "slug", slug.clone())?;
-        let rows = self.lock()?.organizations.snapshot()?;
-        for row in rows {
-            if organization_value(&row, &schema, "slug").strict_equals(&slug.field_value()) {
-                return self.output_organization(row).await.map(Some);
-            }
+        let row = self.lock()?.organizations.first_ref(|row| {
+            organization_value(row, &schema, "slug").strict_equals(&slug.field_value())
+        })?;
+        match row {
+            Some(row) => Ok(self
+                .output_record_refs(EntityRole::Organization, vec![row])
+                .await?
+                .pop()),
+            None => Ok(None),
         }
-        Ok(None)
     }
     async fn list_organizations_by_ids(&self, ids: &[String]) -> AuthResult<Vec<Organization>> {
         let ids = ids
@@ -155,19 +158,14 @@ impl OrganizationStore for EphemeralStore {
                 self.organization_query(EntityRole::Organization, "id", Value::from(id.as_str()))
             })
             .collect::<AuthResult<Vec<_>>>()?;
-        let rows = self
-            .lock()?
-            .organizations
-            .snapshot()?
-            .into_iter()
-            .filter(|org| {
-                ids.iter().any(|id| {
-                    id.field_value()
-                        .same_value_zero(&organization_id(org).field_value())
-                })
+        let rows = self.lock()?.organizations.select_refs(|org| {
+            ids.iter().any(|id| {
+                id.field_value()
+                    .same_value_zero(&organization_id(org).field_value())
             })
-            .collect();
-        self.output_organizations(rows).await
+        })?;
+        self.output_record_refs(EntityRole::Organization, rows)
+            .await
     }
     async fn update_organization(
         &self,
@@ -182,7 +180,9 @@ impl OrganizationStore for EphemeralStore {
         id: &Value,
         update: UpdateOrganization,
     ) -> AuthResult<Organization> {
-        let id = self.organization_query(EntityRole::Organization, "id", id.clone())?;
+        let id = self
+            .organization_query(EntityRole::Organization, "id", id.clone())?
+            .field_value();
         let mut patch = FieldMap::new();
         if let Some(name) = update.name {
             let _ = patch.insert("name".into(), Value::from(name));
@@ -205,17 +205,27 @@ impl OrganizationStore for EphemeralStore {
         let patch = self
             .prepare_record_patch(EntityRole::Organization, patch, update.additional_fields)
             .await?;
-        let result = {
-            let mut state = self.lock()?;
-            let org = state
-                .organizations
-                .get(&id)?
-                .ok_or_else(|| AuthError::not_found("Organization not found"))?;
-            let result = patch.apply(org);
-            let _ = state.organizations.replace(&id, result.clone())?;
-            result
-        };
-        self.output_organization(result).await
+        let source = {
+            let state = self.lock()?;
+            let selected = state.organizations.select_refs(|row| {
+                crate::query::field_matches_equality(
+                    row.get("id").unwrap_or(&Value::Undefined),
+                    &id,
+                )
+            })?;
+            for source in &selected {
+                source.write(|row| {
+                    patch.clone().apply_to(row);
+                    Ok(())
+                })?;
+            }
+            selected.into_iter().next()
+        }
+        .ok_or_else(|| AuthError::not_found("Organization not found"))?;
+        Ok(self
+            .output_record_refs(EntityRole::Organization, vec![source])
+            .await?
+            .remove(0))
     }
     async fn delete_organization(&self, id: &str) -> AuthResult<()> {
         let member_schema = self.field_config(EntityRole::Member)?;

@@ -149,6 +149,10 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-member-native-routes.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-hooks.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-crud-sources.test.ts \
+        ./compat-tests/reference-server/contracts/organization-live-sources.test.ts \
+        ./compat-tests/reference-server/contracts/organization-live-consumption.test.ts \
+        ./compat-tests/reference-server/contracts/organization-live-business.test.ts \
+        ./compat-tests/reference-server/contracts/organization-id-predicates.test.ts \
         ./compat-tests/reference-server/contracts/organization-invitation-session-hooks.test.ts \
         ./compat-tests/reference-server/contracts/organization-invitation-cookie-transaction.test.ts \
         ./compat-tests/reference-server/contracts/organization-full-fallback.test.ts \

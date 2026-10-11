@@ -5,6 +5,23 @@ fn field<T: SchemaField>(value: &T) -> crate::FieldValue {
 }
 
 macro_rules! record {
+    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($record:tt)*) => {
+        record!(serialize $type, [$($field => $name),*], $($record)*);
+
+        impl<'de> serde::Deserialize<'de> for $type {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let mut fields = crate::field_value::serde::map::deserialize(deserializer)?;
+                fields.sort_property_order();
+                $($(record!(@json_field fields, $name, $json);)?)*
+                Self::from_field_values(fields).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+    (@json_field $fields:ident, $name:literal, date) => {
+        if let Some(value) = $fields.get_mut($name) {
+            crate::field_value::serde::revive_schema_date(value);
+        }
+    };
     (serialize $type:ty, $($record:tt)*) => {
         record!($type, $($record)*);
 
@@ -63,24 +80,24 @@ macro_rules! record {
     };
 }
 
-record!(serialize crate::types::Organization, [
+record!(serde crate::types::Organization, [
     id => "id",
     name => "name",
     slug => "slug",
     logo => "logo",
     metadata => "metadata",
-    created_at => "createdAt",
+    created_at => "createdAt" [date],
 ], additional_fields; order: field_order);
 
-record!(serialize crate::types::Member, [
+record!(serde crate::types::Member, [
     id => "id",
     organization_id => "organizationId",
     user_id => "userId",
     role => "role",
-    created_at => "createdAt",
+    created_at => "createdAt" [date],
 ], additional_fields; order: field_order);
 
-record!(serialize crate::types::Invitation, [
+record!(serde crate::types::Invitation, [
     team_id => "teamId",
     id => "id",
     organization_id => "organizationId",
@@ -88,11 +105,11 @@ record!(serialize crate::types::Invitation, [
     role => "role",
     status => "status",
     inviter_id => "inviterId",
-    expires_at => "expiresAt",
-    created_at => "createdAt",
+    expires_at => "expiresAt" [date],
+    created_at => "createdAt" [date],
 ], additional_fields; order: field_order);
 
-record!(serialize crate::wire::InvitationView, [
+record!(serde crate::wire::InvitationView, [
     team_id => "teamId",
     id => "id",
     organization_id => "organizationId",
@@ -100,32 +117,32 @@ record!(serialize crate::wire::InvitationView, [
     role => "role",
     status => "status",
     inviter_id => "inviterId",
-    expires_at => "expiresAt",
-    created_at => "createdAt",
+    expires_at => "expiresAt" [date],
+    created_at => "createdAt" [date],
 ], additional_fields; order: field_order);
 
-record!(serialize crate::types::Team, [
+record!(serde crate::types::Team, [
     id => "id",
     name => "name",
     organization_id => "organizationId",
-    created_at => "createdAt",
-    updated_at => "updatedAt",
+    created_at => "createdAt" [date],
+    updated_at => "updatedAt" [date],
 ], additional_fields; order: field_order);
 
-record!(serialize crate::types::TeamMember, [
+record!(serde crate::types::TeamMember, [
     id => "id",
     team_id => "teamId",
     user_id => "userId",
-    created_at => "createdAt",
+    created_at => "createdAt" [date],
 ], additional_fields; order: field_order; omit: ["membershipKey"]);
 
-record!(serialize crate::types::OrganizationRole, [
+record!(serde crate::types::OrganizationRole, [
     id => "id",
     organization_id => "organizationId",
     role => "role",
     permission => "permission",
-    created_at => "createdAt",
-    updated_at => "updatedAt",
+    created_at => "createdAt" [date],
+    updated_at => "updatedAt" [date],
 ], additional_fields; order: field_order);
 
 record!(crate::types::TwoFactor, [

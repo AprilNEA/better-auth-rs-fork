@@ -31,23 +31,33 @@ impl InvitationStore for EphemeralStore {
         let mut invitation = self
             .create_record(EntityRole::Invitation, invitation, input.additional_fields)
             .await?;
-        {
+        let source = {
             let mut state = self.lock()?;
             if let Some(id) = self.next_serial_id(state.invitations.len()) {
                 let _ = invitation.insert("id".into(), id);
             }
-            state.invitations.push(invitation.clone());
-        }
-        self.output_invitation(invitation).await
+            state.invitations.push_ref(invitation)
+        };
+        Ok(self
+            .output_record_refs(EntityRole::Invitation, vec![source])
+            .await?
+            .remove(0))
     }
     async fn get_invitation_by_id(&self, id: &str) -> AuthResult<Option<Invitation>> {
         self.get_invitation_by_id_value(&id.into()).await
     }
     async fn get_invitation_by_id_value(&self, id: &Value) -> AuthResult<Option<Invitation>> {
-        let id = self.organization_query(EntityRole::Invitation, "id", id.clone())?;
-        let value = self.lock()?.invitations.get(&id)?;
-        match value {
-            Some(value) => self.output_invitation(value).await.map(Some),
+        let id = self
+            .organization_query(EntityRole::Invitation, "id", id.clone())?
+            .field_value();
+        let row = self.lock()?.invitations.first_ref(|row| {
+            crate::query::field_matches_equality(row.get("id").unwrap_or(&Value::Undefined), &id)
+        })?;
+        match row {
+            Some(row) => Ok(self
+                .output_record_refs(EntityRole::Invitation, vec![row])
+                .await?
+                .pop()),
             None => Ok(None),
         }
     }
@@ -82,7 +92,9 @@ impl InvitationStore for EphemeralStore {
         id: &Value,
         status: InvitationStatus,
     ) -> AuthResult<Option<Invitation>> {
-        let id = self.organization_query(EntityRole::Invitation, "id", id.clone())?;
+        let id = self
+            .organization_query(EntityRole::Invitation, "id", id.clone())?
+            .field_value();
         let patch = self
             .prepare_record_patch(
                 EntityRole::Invitation,
@@ -92,15 +104,29 @@ impl InvitationStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let result = {
+        let source = {
             let state = self.lock()?;
-            let Some(mut value) = state.invitations.get_mut(&id)? else {
-                return Ok(None);
-            };
-            *value = patch.apply(value.clone());
-            value.clone()
+            let selected = state.invitations.select_refs(|row| {
+                crate::query::field_matches_equality(
+                    row.get("id").unwrap_or(&Value::Undefined),
+                    &id,
+                )
+            })?;
+            for source in &selected {
+                source.write(|row| {
+                    patch.clone().apply_to(row);
+                    Ok(())
+                })?;
+            }
+            selected.into_iter().next()
         };
-        self.output_invitation(result).await.map(Some)
+        match source {
+            Some(source) => Ok(self
+                .output_record_refs(EntityRole::Invitation, vec![source])
+                .await?
+                .pop()),
+            None => Ok(None),
+        }
     }
     async fn update_invitation_expiry(
         &self,
@@ -115,7 +141,9 @@ impl InvitationStore for EphemeralStore {
         id: &Value,
         expires_at: DateTime<Utc>,
     ) -> AuthResult<Invitation> {
-        let id = self.organization_query(EntityRole::Invitation, "id", id.clone())?;
+        let id = self
+            .organization_query(EntityRole::Invitation, "id", id.clone())?
+            .field_value();
         let patch = self
             .prepare_record_patch(
                 EntityRole::Invitation,
@@ -125,16 +153,27 @@ impl InvitationStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let result = {
+        let source = {
             let state = self.lock()?;
-            let mut value = state
-                .invitations
-                .get_mut(&id)?
-                .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
-            *value = patch.apply(value.clone());
-            value.clone()
-        };
-        self.output_invitation(result).await
+            let selected = state.invitations.select_refs(|row| {
+                crate::query::field_matches_equality(
+                    row.get("id").unwrap_or(&Value::Undefined),
+                    &id,
+                )
+            })?;
+            for source in &selected {
+                source.write(|row| {
+                    patch.clone().apply_to(row);
+                    Ok(())
+                })?;
+            }
+            selected.into_iter().next()
+        }
+        .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
+        Ok(self
+            .output_record_refs(EntityRole::Invitation, vec![source])
+            .await?
+            .remove(0))
     }
     async fn list_organization_invitations(&self, org: &str) -> AuthResult<Vec<Invitation>> {
         self.list_organization_invitations_value(&Value::from(org))
@@ -146,21 +185,15 @@ impl InvitationStore for EphemeralStore {
     ) -> AuthResult<Vec<Invitation>> {
         let org = self.organization_query(EntityRole::Invitation, "organizationId", org.clone())?;
         let schema = self.field_config(EntityRole::Invitation)?;
-        let rows = self
-            .lock()?
-            .invitations
-            .snapshot()?
-            .into_iter()
-            .filter(|row| {
-                organization_value(row, &schema, "organizationId").strict_equals(&org.field_value())
-            })
-            .collect();
+        let rows = self.lock()?.invitations.select_refs(|row| {
+            organization_value(row, &schema, "organizationId").strict_equals(&org.field_value())
+        })?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
             None,
         );
-        self.output_records(EntityRole::Invitation, rows).await
+        self.output_record_refs(EntityRole::Invitation, rows).await
     }
     async fn count_pending_organization_invitations(&self, org: &str) -> AuthResult<i64> {
         self.count_pending_organization_invitations_value(&org.into())

@@ -44,28 +44,33 @@ impl TeamStore for EphemeralStore {
         let mut team = self
             .create_record(EntityRole::Team, team, input.additional_fields)
             .await?;
-        {
+        let source = {
             let mut state = self.lock()?;
             if let Some(id) = self.next_serial_id(state.teams.len()) {
                 let _ = team.insert("id".into(), id);
             }
-            state.teams.push(team.clone());
-        }
-        self.output_team(team).await
+            state.teams.push_ref(team)
+        };
+        Ok(self
+            .output_record_refs(EntityRole::Team, vec![source])
+            .await?
+            .remove(0))
     }
     async fn get_team(&self, id: &str) -> AuthResult<Option<Team>> {
-        let id = self.organization_query(EntityRole::Team, "id", Value::from(id))?;
-        let row = self.lock()?.teams.get(&id)?;
-        match row {
-            Some(row) => self.output_team(row).await.map(Some),
-            None => Ok(None),
-        }
+        self.get_team_value(&Value::from(id)).await
     }
     async fn get_team_value(&self, id: &Value) -> AuthResult<Option<Team>> {
-        let id = self.organization_query(EntityRole::Team, "id", id.clone())?;
-        let rows = self.lock()?.teams.snapshot()?;
-        match rows.into_iter().find(|row| organization_id(row) == id) {
-            Some(row) => self.output_team(row).await.map(Some),
+        let id = self
+            .organization_query(EntityRole::Team, "id", id.clone())?
+            .field_value();
+        let row = self.lock()?.teams.first_ref(|row| {
+            crate::query::field_matches_equality(row.get("id").unwrap_or(&Value::Undefined), &id)
+        })?;
+        match row {
+            Some(row) => Ok(self
+                .output_record_refs(EntityRole::Team, vec![row])
+                .await?
+                .pop()),
             None => Ok(None),
         }
     }
@@ -73,7 +78,9 @@ impl TeamStore for EphemeralStore {
         self.update_team_value(&id.into(), update).await
     }
     async fn update_team_value(&self, id: &Value, update: UpdateTeam) -> AuthResult<Team> {
-        let id = self.organization_query(EntityRole::Team, "id", id.clone())?;
+        let id = self
+            .organization_query(EntityRole::Team, "id", id.clone())?
+            .field_value();
         let mut patch = FieldMap::new();
         if let Some(name) = update.name {
             let _ = patch.insert("name".into(), name.into_field());
@@ -90,16 +97,27 @@ impl TeamStore for EphemeralStore {
         let patch = self
             .prepare_record_patch(EntityRole::Team, patch, update.additional_fields)
             .await?;
-        let team = {
+        let source = {
             let state = self.lock()?;
-            let mut team = state
-                .teams
-                .get_mut(&id)?
-                .ok_or_else(|| AuthError::not_found("Team not found"))?;
-            *team = patch.apply(team.clone());
-            team.clone()
-        };
-        self.output_team(team).await
+            let selected = state.teams.select_refs(|row| {
+                crate::query::field_matches_equality(
+                    row.get("id").unwrap_or(&Value::Undefined),
+                    &id,
+                )
+            })?;
+            for source in &selected {
+                source.write(|row| {
+                    patch.clone().apply_to(row);
+                    Ok(())
+                })?;
+            }
+            selected.into_iter().next()
+        }
+        .ok_or_else(|| AuthError::not_found("Team not found"))?;
+        Ok(self
+            .output_record_refs(EntityRole::Team, vec![source])
+            .await?
+            .remove(0))
     }
     async fn delete_team(&self, id: &str) -> AuthResult<()> {
         self.delete_team_value(&id.into()).await
@@ -228,22 +246,16 @@ impl TeamStore for EphemeralStore {
         let schema = self.field_config(EntityRole::Team)?;
         let organization_id =
             self.organization_query(EntityRole::Team, "organizationId", organization_id.clone())?;
-        let rows = self
-            .lock()?
-            .teams
-            .snapshot()?
-            .into_iter()
-            .filter(|row| {
-                organization_value(row, &schema, "organizationId")
-                    .strict_equals(&organization_id.field_value())
-            })
-            .collect();
+        let rows = self.lock()?.teams.select_refs(|row| {
+            organization_value(row, &schema, "organizationId")
+                .strict_equals(&organization_id.field_value())
+        })?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
             None,
         );
-        self.output_records(EntityRole::Team, rows).await
+        self.output_record_refs(EntityRole::Team, rows).await
     }
     async fn count_organization_teams(&self, organization_id: &str) -> AuthResult<u64> {
         self.count_organization_teams_value(&Value::from(organization_id))
@@ -661,7 +673,7 @@ impl OrganizationRoleStore for EphemeralStore {
         let mut role = self
             .create_record(EntityRole::OrganizationRole, role, input.additional_fields)
             .await?;
-        {
+        let source = {
             let mut state = self.lock()?;
             if state.organization_roles.snapshot()?.iter().any(|role| {
                 organization_value(role, &schema, "organizationId")
@@ -674,9 +686,12 @@ impl OrganizationRoleStore for EphemeralStore {
             if let Some(id) = self.next_serial_id(state.organization_roles.len()) {
                 let _ = role.insert("id".into(), id);
             }
-            state.organization_roles.push(role.clone());
-        }
-        self.output_organization_role(role).await
+            state.organization_roles.push_ref(role)
+        };
+        Ok(self
+            .output_record_refs(EntityRole::OrganizationRole, vec![source])
+            .await?
+            .remove(0))
     }
     async fn get_organization_role(&self, id: &str) -> AuthResult<Option<OrganizationRole>> {
         self.find_organization_role_by_fields(&[("id".into(), Value::from(id))].into())
@@ -718,22 +733,16 @@ impl OrganizationRoleStore for EphemeralStore {
             "organizationId",
             organization_id.clone(),
         )?;
-        let rows = self
-            .lock()?
-            .organization_roles
-            .snapshot()?
-            .into_iter()
-            .filter(|row| {
-                organization_value(row, &schema, "organizationId")
-                    .strict_equals(&organization_id.field_value())
-            })
-            .collect();
+        let rows = self.lock()?.organization_roles.select_refs(|row| {
+            organization_value(row, &schema, "organizationId")
+                .strict_equals(&organization_id.field_value())
+        })?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
             None,
         );
-        self.output_records(EntityRole::OrganizationRole, rows)
+        self.output_record_refs(EntityRole::OrganizationRole, rows)
             .await
     }
     async fn query_organization_roles(
@@ -766,32 +775,23 @@ impl OrganizationRoleStore for EphemeralStore {
             "organizationId",
             organization_id.clone(),
         )?;
-        let rows = self
-            .lock()?
-            .organization_roles
-            .snapshot()?
-            .into_iter()
-            .try_fold(Vec::new(), |mut selected, row| -> AuthResult<_> {
-                // Memory validates the transformed IN operand only when a stored row is evaluated.
-                let names = names
-                    .as_array()
-                    .ok_or_else(|| AuthError::internal("Value must be an array"))?;
-                if organization_value(&row, &schema, "organizationId")
-                    .strict_equals(&organization_id.field_value())
-                    && names.iter().any(|name| {
-                        name.same_value_zero(&organization_value(&row, &schema, "role"))
-                    })
-                {
-                    selected.push(row);
-                }
-                Ok(selected)
-            })?;
+        let rows = self.lock()?.organization_roles.try_select_refs(|row| {
+            // Memory validates the transformed IN operand only when a stored row is evaluated.
+            let names = names
+                .as_array()
+                .ok_or_else(|| AuthError::internal("Value must be an array"))?;
+            Ok(organization_value(row, &schema, "organizationId")
+                .strict_equals(&organization_id.field_value())
+                && names
+                    .iter()
+                    .any(|name| name.same_value_zero(&organization_value(row, &schema, "role"))))
+        })?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
             None,
         );
-        self.output_records(EntityRole::OrganizationRole, rows)
+        self.output_record_refs(EntityRole::OrganizationRole, rows)
             .await
     }
     async fn find_organization_role(
@@ -857,17 +857,20 @@ impl OrganizationRoleStore for EphemeralStore {
     ) -> AuthResult<OrganizationRole> {
         let selectors = self.organization_role_selectors(&[("id".into(), id.clone())].into())?;
         let patch = self.organization_role_patch(update).await?;
-        let role = self
-            .lock()?
-            .organization_roles
-            .try_select_refs(|row| Self::organization_role_matches(row, &selectors))?
-            .into_iter()
-            .next()
-            .ok_or_else(|| AuthError::not_found("Role not found"))?;
-        role.write(|row| {
-            *row = patch.apply(row.clone());
-            Ok(())
-        })?;
+        let role = {
+            let state = self.lock()?;
+            let selected = state
+                .organization_roles
+                .try_select_refs(|row| Self::organization_role_matches(row, &selectors))?;
+            for source in &selected {
+                source.write(|row| {
+                    patch.clone().apply_to(row);
+                    Ok(())
+                })?;
+            }
+            selected.into_iter().next()
+        }
+        .ok_or_else(|| AuthError::not_found("Role not found"))?;
         self.output_record_refs(EntityRole::OrganizationRole, vec![role])
             .await?
             .pop()
@@ -883,7 +886,7 @@ impl OrganizationRoleStore for EphemeralStore {
         let mut count = 0;
         self.lock()?.organization_roles.update_each(|row| {
             if Self::organization_role_matches(row, &selectors)? {
-                *row = patch.clone().apply(row.clone());
+                patch.clone().apply_to(row);
                 count += 1;
             }
             Ok(())

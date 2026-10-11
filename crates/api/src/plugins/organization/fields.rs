@@ -1,7 +1,7 @@
 use super::types::OrganizationResponse;
 use better_auth_core::{
-    AuthContext, AuthResult, AuthSchema, FieldValue, FromFieldMap, Organization, Team,
-    entity::AuthOrganization, organization_fields::OrganizationFields,
+    AuthContext, AuthResult, AuthSchema, FieldValue, FromFieldMap, Team, entity::AuthOrganization,
+    organization_fields::OrganizationFields,
 };
 use serde_json::Value;
 
@@ -147,9 +147,7 @@ pub(super) fn organization(
 ) -> AuthResult<OrganizationResponse> {
     let fields =
         organization_value(organization.field_values()?.into(), ctx)?.enumerable_fields()?;
-    Ok(OrganizationResponse::from_organization(
-        &Organization::from_field_values(fields)?,
-    ))
+    OrganizationResponse::from_field_values(fields)
 }
 
 pub(super) fn organization_value(
@@ -160,13 +158,6 @@ pub(super) fn organization_value(
         Some(plugin) => plugin.config.schema.organization.filter_output_value(value),
         None => Ok(value),
     }
-}
-
-pub(super) fn created_organization(
-    organization: &impl AuthOrganization,
-    ctx: &AuthContext<impl AuthSchema>,
-) -> AuthResult<OrganizationResponse> {
-    self::organization(organization, ctx)
 }
 
 pub(super) fn team(
@@ -184,11 +175,9 @@ enum ResponseFields {
 
 fn response_fields(path: &str) -> ResponseFields {
     match path {
-        "/organization/create"
-        | "/organization/update"
-        | "/organization/delete"
-        | "/organization/get-organization"
-        | "/organization/set-active" => ResponseFields::Organization,
+        "/organization/delete" | "/organization/get-organization" | "/organization/set-active" => {
+            ResponseFields::Organization
+        }
         "/organization/create-team"
         | "/organization/update-team"
         | "/organization/list-teams"

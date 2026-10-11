@@ -1,5 +1,5 @@
+use better_auth_core::entity::AuthMember;
 use better_auth_core::entity::MemberUserView;
-use better_auth_core::entity::{AuthMember, AuthOrganization};
 use better_auth_core::{SchemaField, SchemaValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -306,8 +306,8 @@ pub struct SuccessResponse {
 
 #[derive(Debug, Serialize)]
 pub struct HasPermissionResponse {
-    pub success: bool,
     pub error: Option<String>,
+    pub success: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -377,85 +377,9 @@ pub struct UserInvitationResponse<I: Serialize> {
     pub organization_name: SchemaValue<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct CreatedOrganizationResponse {
-    #[serde(flatten)]
-    #[serde(with = "better_auth_core::field_value::serde::map")]
-    pub additional_fields: better_auth_core::FieldMap,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub name: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub slug: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub logo: SchemaValue<Option<String>>,
-    #[serde(rename = "createdAt")]
-    #[serde(serialize_with = "better_auth_core::schema_value::serialize_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub created_at: SchemaValue<better_auth_core::FieldDate>,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub metadata: SchemaValue<Option<better_auth_core::FieldValue>>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct OrganizationResponse {
-    #[serde(flatten)]
-    #[serde(with = "better_auth_core::field_value::serde::map")]
-    pub additional_fields: better_auth_core::FieldMap,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub name: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub slug: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub logo: SchemaValue<Option<String>>,
-    #[serde(rename = "createdAt")]
-    #[serde(serialize_with = "better_auth_core::schema_value::serialize_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub created_at: SchemaValue<better_auth_core::FieldDate>,
-
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    pub metadata: SchemaValue<Option<better_auth_core::FieldValue>>,
-}
-
-impl CreatedOrganizationResponse {
-    pub fn from_organization(organization: &impl AuthOrganization) -> Self {
-        Self {
-            additional_fields: organization.projected_fields().cloned().unwrap_or_default(),
-            id: organization.id().into_owned(),
-            name: organization.name().clone(),
-            slug: organization.slug().clone(),
-            logo: organization.logo().clone(),
-            created_at: organization.created_at().clone(),
-            metadata: organization.metadata().clone(),
-        }
-    }
-}
-
-impl OrganizationResponse {
-    /// Creation and update adapter outputs decode the stored JSON text.
-    pub fn from_created_organization(organization: &impl AuthOrganization) -> Self {
-        let mut output = Self::from_organization(organization);
-        output.metadata = organization.metadata().clone();
-        output
-    }
-    pub fn from_organization(organization: &impl AuthOrganization) -> Self {
-        Self {
-            additional_fields: organization.projected_fields().cloned().unwrap_or_default(),
-            id: organization.id().into_owned(),
-            name: organization.name().clone(),
-            slug: organization.slug().clone(),
-            logo: organization.logo().clone(),
-            created_at: organization.created_at().clone(),
-            metadata: organization.metadata().clone(),
-        }
-    }
-}
+/// Complete Organization output with native fields and source property order.
+pub type CreatedOrganizationResponse = better_auth_core::Organization;
+pub type OrganizationResponse = better_auth_core::Organization;
 
 /// Complete projected membership and the Organization adapter's user summary.
 #[derive(Debug, Clone)]

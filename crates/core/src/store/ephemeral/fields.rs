@@ -17,24 +17,6 @@ fn public_name(name: &str) -> String {
     result
 }
 
-fn object(value: &impl AuthRecordFields) -> AuthResult<FieldMap> {
-    value.field_values()
-}
-
-pub(super) trait MemoryOrganizationRecord: AuthRecordFields + FromFieldMap + Send {}
-
-impl MemoryOrganizationRecord for FieldMap {}
-impl MemoryOrganizationRecord for Organization {}
-impl MemoryOrganizationRecord for Member {}
-impl MemoryOrganizationRecord for Invitation {}
-impl MemoryOrganizationRecord for crate::Team {}
-impl MemoryOrganizationRecord for crate::TeamMember {}
-impl MemoryOrganizationRecord for crate::OrganizationRole {}
-
-fn decode_record<T: MemoryOrganizationRecord>(fields: FieldMap) -> AuthResult<T> {
-    T::from_field_values(fields)
-}
-
 #[tokio::test]
 async fn native_organization_defaults_and_replacements_survive_crud() {
     use crate::{
@@ -278,8 +260,8 @@ impl PreparedOrganizationFields {
     }
 }
 
-fn record_input<T: MemoryOrganizationRecord>(role: EntityRole, value: &T) -> AuthResult<FieldMap> {
-    let record = object(value)?;
+fn record_input(role: EntityRole, value: &impl AuthRecordFields) -> AuthResult<FieldMap> {
+    let record = value.field_values()?;
     let core_names: Vec<_> = core_fields(role)
         .iter()
         .map(|field| public_name(field.name))
@@ -317,7 +299,7 @@ impl EphemeralStore {
         Ok(PreparedOrganizationFields { fields })
     }
 
-    pub(super) async fn create_record<T: MemoryOrganizationRecord>(
+    pub(super) async fn create_record<T: AuthRecordFields + Send>(
         &self,
         role: EntityRole,
         value: T,
@@ -377,7 +359,7 @@ impl EphemeralStore {
             .await
     }
 
-    pub(super) async fn output_record_refs<T: MemoryOrganizationRecord>(
+    pub(super) async fn output_record_refs<T: FromFieldMap + Send>(
         &self,
         role: EntityRole,
         values: Vec<super::rows::RowRef<FieldMap>>,
@@ -437,7 +419,7 @@ impl EphemeralStore {
         })
     }
 
-    pub(super) async fn output_record_refs_batches_then<T: MemoryOrganizationRecord, R: Send, F>(
+    pub(super) async fn output_record_refs_batches_then<T: FromFieldMap + Send, R: Send, F>(
         &self,
         role: EntityRole,
         values: Vec<super::rows::RowRef<FieldMap>>,
@@ -451,13 +433,13 @@ impl EphemeralStore {
             role,
             &schema,
             values.into_iter().map(RecordSource::Live).collect(),
-            |_, fields| decode_record(fields),
+            |_, fields| T::from_field_values(fields),
             complete,
         )
         .await
     }
 
-    pub(super) async fn output_records<T: MemoryOrganizationRecord + Send>(
+    pub(super) async fn output_records<T: FromFieldMap + Send>(
         &self,
         role: EntityRole,
         values: Vec<FieldMap>,
@@ -470,11 +452,11 @@ impl EphemeralStore {
         self.project_record_sources(role, &schema, sources)
             .await?
             .into_iter()
-            .map(decode_record)
+            .map(T::from_field_values)
             .collect()
     }
 
-    pub(super) async fn output_record<T: MemoryOrganizationRecord + Send>(
+    pub(super) async fn output_record<T: FromFieldMap + Send>(
         &self,
         role: EntityRole,
         value: FieldMap,
