@@ -109,10 +109,6 @@ impl Case {
     }
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract compares complete errors, callback order, and every stored table"
-)]
 async fn check<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
     storage: Storage,
