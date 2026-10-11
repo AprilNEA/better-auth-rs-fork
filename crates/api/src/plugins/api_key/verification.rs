@@ -8,6 +8,10 @@ use serde::Serialize;
 
 use super::{ApiKeyEndpoint, ApiKeyErrorCode, ApiKeyPlugin, ApiKeyReferences, config_id_matches};
 
+#[cfg(test)]
+#[path = "validator_error_tests.rs"]
+mod validator_error_tests;
+
 /// Inputs for server-only API key verification. Verification consumes one use.
 pub struct VerifyApiKey<'a> {
     /// The plaintext API key presented by the caller.
@@ -139,11 +143,7 @@ impl ApiKeyVerificationError {
                 );
             }
             Self::Validation(error) => error,
-            Self::Internal(error) => {
-                better_auth_core::observability::logger::current().error(
-                    "Failed to validate API key",
-                    &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+            Self::Internal(_) => {
                 ApiKeyValidationError::invalid_constant(ApiKeyErrorCode::InvalidApiKey)
             }
         };
@@ -156,7 +156,11 @@ impl ApiKeyVerificationError {
 
 impl From<AuthError> for ApiKeyVerificationError {
     fn from(error: AuthError) -> Self {
-        Self::Internal(error)
+        if error.is_api_error() {
+            Self::Rejected(error)
+        } else {
+            Self::Internal(error)
+        }
     }
 }
 
@@ -215,7 +219,19 @@ impl ApiKeyPlugin {
         }
         let key = self
             .validate_api_key(input, ctx, endpoint, input.config_id.is_none())
-            .await?;
+            .await
+            .inspect_err(|error| {
+                let cause: &(dyn std::error::Error + Send + Sync) = match error {
+                    ApiKeyVerificationError::Rejected(error)
+                    | ApiKeyVerificationError::Internal(error)
+                    | ApiKeyVerificationError::Endpoint(error) => error,
+                    ApiKeyVerificationError::Validation(_) => error,
+                };
+                ctx.config.logger.error(
+                    "Failed to validate API key:",
+                    &[better_auth_core::observability::LogArgument::Error(cause)],
+                );
+            })?;
         let config = self
             .resolve_configuration(key.config_id.as_str())
             .map_err(ApiKeyVerificationError::Endpoint)?;
@@ -253,18 +269,11 @@ impl ApiKeyPlugin {
             .resolve_configuration(api_key.config_id.as_str())
             .map_err(|_| ApiKeyErrorCode::NoDefaultConfiguration)?;
 
-        if run_custom_validator && let Some(validator) = &config.custom_api_key_validator {
-            match validator.validate(input.key, endpoint).await {
-                Ok(true) => {}
-                Ok(false) => return Err(ApiKeyErrorCode::KeyNotFound.into()),
-                Err(
-                    error @ (AuthError::Internal(_)
-                    | AuthError::Database(_)
-                    | AuthError::Config(_)
-                    | AuthError::Serialization(_)),
-                ) => return Err(ApiKeyVerificationError::Internal(error)),
-                Err(error) => return Err(ApiKeyVerificationError::Rejected(error)),
-            }
+        if run_custom_validator
+            && let Some(validator) = &config.custom_api_key_validator
+            && !validator.validate(input.key, endpoint).await?
+        {
+            return Err(ApiKeyErrorCode::KeyNotFound.into());
         }
 
         if api_key.enabled.field_value().strict_equals(&false.into()) {

@@ -421,10 +421,11 @@ impl FieldValue {
                         "Converting circular structure to JSON",
                     ));
                 }
-                let fields = values.snapshot_fields()?;
                 let mut output = serde_json::Map::new();
-                for (name, value) in fields {
-                    if let Some(value) = value.json_with_active(active)? {
+                for name in values.own_keys()? {
+                    if let Some(value) = values.get(&name)?
+                        && let Some(value) = value.json_with_active(active)?
+                    {
                         let _ = output.insert(name, value);
                     }
                 }
@@ -471,9 +472,7 @@ impl FieldValue {
         if self.is_json_omitted() {
             Ok(None)
         } else {
-            ::serde_json::to_string(&serde::Json(self))
-                .map(Some)
-                .map_err(Into::into)
+            serde::stringify(self).map(Some)
         }
     }
 }

@@ -141,7 +141,7 @@ fn cyclic_live_objects_clone_and_fail_at_json_conversion_boundaries() -> AuthRes
         matches!(json, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
     );
     assert!(
-        matches!(text, Err(error) if error.to_string().contains("Converting circular structure to JSON"))
+        matches!(text, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
     );
     let copied = copied?;
     assert!(!copied.strict_equals(&value));

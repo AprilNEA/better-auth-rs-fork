@@ -268,7 +268,9 @@ run_stage() {
         --test plugin_model_fields_tests --test query_binding_order_tests \
         --test nullable_user_update_tests --test telemetry_options_tests -- -D warnings || query_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: field_value:: query:: || query_status=1
+        store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: field_value:: query:: \
+        user_fields::record:: session::cookie_cache:: || query_status=1
+      cargo test --locked -p better-auth-api --lib plugins::api_key::verification::validator_error_tests || query_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test device_runtime_transaction_tests --test device_where_tests \
         --test organization_query_limits_tests --test organization_native_fields_tests \

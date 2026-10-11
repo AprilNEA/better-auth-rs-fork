@@ -11,6 +11,9 @@ import "./plugin-selector-binding.mjs";
 import "./predicate-case-mode.mjs";
 import "./memory-operation-reentry.mjs";
 import "./memory-graph-clone.mjs";
+import "./runtime-json-getters.mjs";
+import "./cookie-cache-json-errors.mjs";
+import "./api-key-validator-errors.mjs";
 
 test("SQLite incrementOne preserves expression phases and unchanged storage", async () => {
   await checkIncrementBindingPhases("sqlite");

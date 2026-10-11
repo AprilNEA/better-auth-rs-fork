@@ -1,6 +1,10 @@
 //! Explicit JSON serializers for DTO and cache boundaries.
 
-use crate::{FieldDate, FieldMap, FieldValue};
+#[cfg(test)]
+#[path = "serde_tests.rs"]
+mod live_tests;
+
+use crate::{AuthError, AuthResult, FieldDate, FieldMap, FieldValue};
 use ::serde::{Deserialize, Serialize, de::Error};
 use std::{cell::RefCell, collections::HashSet};
 
@@ -8,11 +12,37 @@ pub(crate) struct Json<'a>(pub(crate) &'a FieldValue);
 
 impl Serialize for Json<'_> {
     fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        JsonNode(self.0, &RefCell::new(HashSet::new())).serialize(serializer)
+        JsonNode(self.0, &JsonState::default()).serialize(serializer)
     }
 }
 
-struct JsonNode<'a>(&'a FieldValue, &'a RefCell<HashSet<super::ObjectIdentity>>);
+#[derive(Default)]
+struct JsonState {
+    active: RefCell<HashSet<super::ObjectIdentity>>,
+    source_error: RefCell<Option<AuthError>>,
+}
+
+impl JsonState {
+    fn error<E: ::serde::ser::Error>(&self, error: AuthError) -> E {
+        let serialized = E::custom(&error);
+        *self.source_error.borrow_mut() = Some(error);
+        serialized
+    }
+}
+
+pub(super) fn stringify(value: &FieldValue) -> AuthResult<String> {
+    let state = JsonState::default();
+    let result = ::serde_json::to_string(&JsonNode(value, &state));
+    result.map_err(|error| state.source_error.into_inner().unwrap_or(error.into()))
+}
+
+pub(crate) fn to_value(value: &FieldValue) -> AuthResult<::serde_json::Value> {
+    let state = JsonState::default();
+    let result = ::serde_json::to_value(JsonNode(value, &state));
+    result.map_err(|error| state.source_error.into_inner().unwrap_or(error.into()))
+}
+
+struct JsonNode<'a>(&'a FieldValue, &'a JsonState);
 
 impl Serialize for JsonNode<'_> {
     fn serialize<S: ::serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -32,7 +62,7 @@ impl Serialize for JsonNode<'_> {
             FieldValue::Date(_) => self
                 .0
                 .json()
-                .map_err(::serde::ser::Error::custom)?
+                .map_err(|error| self.1.error(error))?
                 .serialize(serializer),
             FieldValue::Array(values) => {
                 use ::serde::ser::SerializeSeq;
@@ -44,16 +74,26 @@ impl Serialize for JsonNode<'_> {
             }
             FieldValue::Object(object) => {
                 let identity = object.identity();
-                if !self.1.borrow_mut().insert(identity) {
-                    return Err(::serde::ser::Error::custom(
+                if !self.1.active.borrow_mut().insert(identity) {
+                    return Err(self.1.error(AuthError::type_error(
                         "Converting circular structure to JSON",
-                    ));
+                    )));
                 }
-                let fields = object
-                    .snapshot_fields()
-                    .map_err(::serde::ser::Error::custom)?;
-                let result = serialize_fields(&fields, serializer, self.1);
-                let _ = self.1.borrow_mut().remove(&identity);
+                let result = (|| {
+                    use ::serde::ser::SerializeMap;
+                    let keys = object.own_keys().map_err(|error| self.1.error(error))?;
+                    let mut output = serializer.serialize_map(None)?;
+                    for name in keys {
+                        if let Some(value) =
+                            object.get(&name).map_err(|error| self.1.error(error))?
+                            && !value.is_json_omitted()
+                        {
+                            output.serialize_entry(&name, &JsonNode(&value, self.1))?;
+                        }
+                    }
+                    output.end()
+                })();
+                let _ = self.1.active.borrow_mut().remove(&identity);
                 result
             }
         }
@@ -63,7 +103,7 @@ impl Serialize for JsonNode<'_> {
 fn serialize_fields<S: ::serde::Serializer>(
     fields: &FieldMap,
     serializer: S,
-    active: &RefCell<HashSet<super::ObjectIdentity>>,
+    state: &JsonState,
 ) -> Result<S::Ok, S::Error> {
     use ::serde::ser::SerializeMap;
     let mut fields: Vec<_> = fields
@@ -75,7 +115,7 @@ fn serialize_fields<S: ::serde::Serializer>(
     });
     let mut output = serializer.serialize_map(Some(fields.len()))?;
     for (name, value) in fields {
-        output.serialize_entry(name, &JsonNode(value, active))?;
+        output.serialize_entry(name, &JsonNode(value, state))?;
     }
     output.end()
 }
@@ -87,7 +127,7 @@ pub mod map {
         fields: &FieldMap,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
-        serialize_fields(fields, serializer, &RefCell::new(HashSet::new()))
+        serialize_fields(fields, serializer, &JsonState::default())
     }
 
     pub fn deserialize<'de, D: ::serde::Deserializer<'de>>(

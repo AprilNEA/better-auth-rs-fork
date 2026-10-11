@@ -68,11 +68,11 @@ pub(super) async fn payload(
     let user = data.public_user(&config.user)?;
     let version = cache.version.resolve(data).await?;
     let mut payload = serde_json::Map::new();
-    let _ = payload.insert("session".into(), serde_json::to_value(&session)?);
     let _ = payload.insert(
-        "user".into(),
-        serde_json::to_value(crate::field_value::serde::Json(&user))?,
+        "session".into(),
+        crate::field_value::serde::to_value(&FieldMap::from(session).into())?,
     );
+    let _ = payload.insert("user".into(), crate::field_value::serde::to_value(&user)?);
     let _ = payload.insert("updatedAt".into(), now.timestamp_millis().into());
     let _ = payload.insert("version".into(), version.into());
     let max_age = cache_cookie(config, cache, dont_remember)
@@ -397,3 +397,7 @@ fn renew_account_cookie(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "cookie_cache_json_tests.rs"]
+mod json_tests;

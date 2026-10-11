@@ -128,7 +128,7 @@ fn owned_cycles_have_finite_comparison_and_debug_but_require_explicit_unlinking(
         matches!(json, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
     );
     assert!(
-        matches!(text, Err(error) if error.to_string().contains("Converting circular structure to JSON"))
+        matches!(text, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
     );
     let cloned = clone?;
     assert!(!cloned.strict_equals(&value));

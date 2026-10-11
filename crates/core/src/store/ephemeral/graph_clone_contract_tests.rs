@@ -425,7 +425,9 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
         assert_eq!(changed_user.field_values()?, user("Published".into()));
         record(&trace, "transaction:return")?;
         let result = store.commit_adapter_transaction(base, tx, queue).await;
-        assert!(matches!(&result, Err(AuthError::Serialization(_))));
+        assert!(
+            matches!(&result, Err(AuthError::TypeError(message)) if message == "Converting circular structure to JSON")
+        );
         assert_eq!(
             required(result.err())?.instrumentation_message(),
             expected_failure.instrumentation_message()
