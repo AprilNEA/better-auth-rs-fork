@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "The cache contracts assert original errors, callback order, and private field omission."
-)]
-
 use super::*;
 use crate::config::CookieCacheVersion;
 use crate::field_value::{FieldObject, FieldObjectSource};

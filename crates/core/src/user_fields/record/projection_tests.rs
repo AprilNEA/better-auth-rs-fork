@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "The projection contracts assert complete fields and callback timing while propagating source errors."
-)]
-
 use super::*;
 use crate::{
     FieldFunction,
