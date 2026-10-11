@@ -14,7 +14,7 @@ use better_auth_core::{
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 struct Sender;
 #[async_trait]
@@ -27,11 +27,18 @@ impl SendMagicLink for Sender {
 #[derive(Clone, Default)]
 struct Hooks(Arc<Mutex<Vec<Value>>>);
 impl Hooks {
-    fn record(&self, phase: &str, request: &AuthRequest) {
-        self.0.lock().unwrap().push(json!({
-            "phase":phase,"body":request.input_body().unwrap(),"query":request.query,
+    fn trace(&self) -> AuthResult<MutexGuard<'_, Vec<Value>>> {
+        self.0
+            .lock()
+            .map_err(|_| AuthError::internal("Endpoint hook trace lock poisoned"))
+    }
+
+    fn record(&self, phase: &str, request: &AuthRequest) -> AuthResult<()> {
+        self.trace()?.push(json!({
+            "phase":phase,"body":request.input_body()?,"query":request.query,
             "request":request.original_request().is_some(),
         }));
+        Ok(())
     }
 }
 #[async_trait]
@@ -41,7 +48,7 @@ impl BeforeEndpointHook<S> for Hooks {
         req: &AuthRequest,
         _: &AuthContext<S>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
-        self.record("before", req);
+        self.record("before", req)?;
         Ok(None)
     }
 }
@@ -53,8 +60,7 @@ impl AfterEndpointHook<S> for Hooks {
         _: &mut AuthResponse,
         _: &AuthContext<S>,
     ) -> AuthResult<()> {
-        self.record("after", req);
-        Ok(())
+        self.record("after", req)
     }
 }
 
@@ -76,6 +82,10 @@ struct Oracle {
 
 // Better Auth 1.7.6: better-call/dist/validator.mjs and the registered endpoint options.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The fixture compares complete validation responses and endpoint hook traces with assertions"
+)]
 async fn required_headers_preserve_schema_precedence_and_native_request_authority() -> AuthResult<()>
 {
     let hooks = Hooks::default();
@@ -164,7 +174,7 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
         }
     }
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
-    hooks.0.lock().unwrap().clear();
+    hooks.trace()?.clear();
     let response = auth
         .call_endpoint(
             HttpMethod::Post,
@@ -177,6 +187,6 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
         .await
         .unwrap_or_else(AuthError::to_auth_response);
     assert_eq!(response.status, 400);
-    assert_eq!(*hooks.0.lock().unwrap(), oracle.trace);
+    assert_eq!(*hooks.trace()?, oracle.trace);
     Ok(())
 }
