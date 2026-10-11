@@ -570,12 +570,15 @@ where
                 <S::User as SeaOrmUserModel>::Entity,
                 <S::Account as SeaOrmAccountModel>::Entity,
             >(
-                self.user_field_query(
-                    self.connection(),
-                    "email",
-                    &normalize_user_email(email).into(),
-                )?
-                .limit(1),
+                (
+                    self.user_field_query(
+                        self.connection(),
+                        "email",
+                        &normalize_user_email(email).into(),
+                    )?
+                    .limit(1),
+                    S::User::id_column(),
+                ),
                 (
                     S::User::field_column(&relation.from)?,
                     S::Account::field_column(&relation.to)?,

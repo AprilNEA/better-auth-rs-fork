@@ -1,9 +1,12 @@
 use super::*;
 use better_auth_core::{
-    FieldValue, SchemaValue, plugin::AuthInitContext, schema::EntityRole, store::AuthStore,
+    FieldValue, SchemaValue,
+    plugin::AuthInitContext,
+    schema::EntityRole,
+    store::{AuthStore, schema::SchemaConfiguration},
     user_fields::UserConfig,
 };
-use better_auth_seaorm::{PluginModels, store::__private_test_support::entities};
+use better_auth_seaorm::{PluginModels, store::entities};
 
 #[expect(
     unreachable_pub,
@@ -144,7 +147,15 @@ async fn check(database: DatabaseConnection) -> TestResult {
     );
     let mut init = AuthInitContext::new(config.clone(), raw.clone());
     init.register_model_fields(EntityRole::Jwk, fields)?;
-    let store = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+    let mut fields = init.into_parts().plugin_fields;
+    fields.set_schema_configuration(&SchemaConfiguration {
+        config: config.clone(),
+        plugins: Vec::new(),
+        metadata: Default::default(),
+        secondary_storage: false,
+        database_rate_limit: false,
+    });
+    let store = raw.with_runtime(config, Vec::new(), fields)?;
     let id = SchemaValue::<String>::from("mapping-row");
     for (stage, label) in [
         ("create", Some("source")),

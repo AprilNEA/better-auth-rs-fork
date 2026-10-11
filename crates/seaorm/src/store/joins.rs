@@ -18,14 +18,18 @@ use super::plugin_rows::SqlRow;
 
 pub(super) struct ChildSelection {
     prefix: String,
+    alternate_prefix: String,
     columns: Vec<String>,
 }
 
 impl ChildSelection {
     pub(super) fn aliases(&self) -> impl Iterator<Item = String> + '_ {
-        self.columns
-            .iter()
-            .map(|column| format!("{}{column}", self.prefix))
+        self.columns.iter().flat_map(|column| {
+            [
+                format!("{}{column}", self.prefix),
+                format!("{}{}", self.alternate_prefix, capitalize_first_unit(column)),
+            ]
+        })
     }
 
     pub(super) fn read(&self, row: &SqlRow) -> AuthResult<Option<SqlRow>> {
@@ -41,7 +45,20 @@ impl ChildSelection {
 
 pub(super) struct NativeJoinQuery {
     query: SelectStatement,
+    parent_id: String,
     child: ChildSelection,
+}
+
+fn capitalize_first_unit(value: &str) -> String {
+    let mut chars = value.chars();
+    chars.next().map_or_else(String::new, |first| {
+        // JavaScript uppercases one UTF-16 unit; a leading surrogate remains unchanged.
+        if first.len_utf16() == 2 {
+            value.to_owned()
+        } else {
+            first.to_uppercase().chain(chars).collect()
+        }
+    })
 }
 
 pub(super) fn relation_value<T>(many: bool, mut rows: Vec<T>) -> JoinValue<T> {
@@ -239,13 +256,13 @@ pub(super) fn raw_relation_value<C: IdenStatic>(
 
 // Current core callers have no sort. An ordered caller must order both query levels explicitly.
 pub(super) fn joined_query<P: EntityTrait, C: EntityTrait>(
-    parent: Select<P>,
+    parent: (Select<P>, P::Column),
     on: (P::Column, C::Column),
     child_fields: &UserConfig,
     column: impl Fn(&str) -> AuthResult<C::Column>,
 ) -> AuthResult<NativeJoinQuery> {
     let mut query = Query::select();
-    let _ = query.from_subquery(parent.into_query(), PARENT).join_as(
+    let _ = query.from_subquery(parent.0.into_query(), PARENT).join_as(
         JoinType::LeftJoin,
         C::default().table_ref(),
         CHILD,
@@ -259,7 +276,21 @@ pub(super) fn joined_query<P: EntityTrait, C: EntityTrait>(
         child_fields,
         column,
     )?;
-    Ok(NativeJoinQuery { query, child })
+    Ok(NativeJoinQuery {
+        query,
+        parent_id: parent.1.as_str().to_owned(),
+        child,
+    })
+}
+
+pub(super) fn native_parent(
+    row: &SqlRow,
+    parent_id: &str,
+    child_aliases: impl IntoIterator<Item = String>,
+) -> AuthResult<Option<SqlRow>> {
+    let parent = row.without_columns(child_aliases);
+    // Kysely discards falsy raw parent IDs after SQL pagination and before output callbacks.
+    Ok(parent.value(parent_id)?.is_truthy().then_some(parent))
 }
 
 pub(super) fn select_child_fields<C: IdenStatic>(
@@ -278,24 +309,29 @@ pub(super) fn select_child_fields<C: IdenStatic>(
         let _ = query.expr_as(Expr::col((table, column)), alias);
         columns.push(column.as_str().to_owned());
     }
-    Ok(ChildSelection { prefix, columns })
+    Ok(ChildSelection {
+        prefix,
+        alternate_prefix: format!("_Joined{}", capitalize_first_unit(model)),
+        columns,
+    })
 }
 
 pub(super) async fn joined_raw_rows(
     db: &impl ConnectionTrait,
     query: &NativeJoinQuery,
 ) -> AuthResult<Vec<(SqlRow, Option<SqlRow>)>> {
-    db.query_all(&query.query)
+    let rows = db
+        .query_all(&query.query)
         .await
-        .map_err(super::map_db_err)?
-        .into_iter()
-        .map(|row| {
-            let row = SqlRow::from(row);
-            let child = query.child.read(&row)?;
-            // Kysely assigns join aliases to child objects and removes those keys from the parent.
-            Ok((row.without_columns(query.child.aliases()), child))
-        })
-        .collect()
+        .map_err(super::map_db_err)?;
+    let mut selected = Vec::new();
+    for row in rows {
+        let row = SqlRow::from(row);
+        if let Some(parent) = native_parent(&row, &query.parent_id, query.child.aliases())? {
+            selected.push((parent, query.child.read(&row)?));
+        }
+    }
+    Ok(selected)
 }
 
 #[cfg(test)]
@@ -304,6 +340,26 @@ mod tests {
     use better_auth_core::user_fields::{FieldTransforms, UserFieldTransform};
     use sea_orm::Database;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn reserved_child_aliases_capitalize_only_the_first_utf16_unit() {
+        let selection = ChildSelection {
+            prefix: "_joined_team_member_".into(),
+            alternate_prefix: "_JoinedTeam_member".into(),
+            columns: vec!["team_id".into(), "ßeta".into(), "𐐨name".into()],
+        };
+        assert_eq!(
+            selection.aliases().collect::<Vec<_>>(),
+            [
+                "_joined_team_member_team_id",
+                "_JoinedTeam_memberTeam_id",
+                "_joined_team_member_ßeta",
+                "_JoinedTeam_memberSSeta",
+                "_joined_team_member_𐐨name",
+                "_JoinedTeam_member𐐨name",
+            ]
+        );
+    }
 
     #[tokio::test]
     async fn native_child_pages_advance_ready_parents_without_reordering_children() -> AuthResult<()>
@@ -394,6 +450,7 @@ mod tests {
             .map_err(super::super::map_db_err)?;
         let selection = ChildSelection {
             prefix: "_joined_child_".into(),
+            alternate_prefix: "_JoinedChild".into(),
             columns: vec!["id".into(), "name".into()],
         };
         for present in [false, true] {
@@ -437,6 +494,7 @@ mod tests {
             .ok_or_else(|| crate::error::AuthError::internal("Presence query returned no row"))?;
         let selection = ChildSelection {
             prefix: "_joined_child_".into(),
+            alternate_prefix: "_JoinedChild".into(),
             columns: vec!["id".into(), "name".into()],
         };
         let child = selection

@@ -3,8 +3,10 @@
 use crate::SchemaValue;
 
 /// A persisted signing key. Private key material must never enter an HTTP response.
-#[derive(Clone, Default, PartialEq)]
+#[derive(Clone, Default)]
 pub struct Jwk {
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     /// Stable identifier used by the JWT `kid` header.
     pub id: SchemaValue<String>,
     /// Serialized public JWK.
@@ -21,6 +23,19 @@ pub struct Jwk {
     pub crv: SchemaValue<Option<String>>,
     /// Declared application fields returned by the adapter; excluded from public JWKS discovery.
     pub additional_fields: crate::FieldMap,
+}
+
+impl PartialEq for Jwk {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.public_key == other.public_key
+            && self.private_key == other.private_key
+            && self.created_at == other.created_at
+            && self.expires_at == other.expires_at
+            && self.alg == other.alg
+            && self.crv == other.crv
+            && self.additional_fields == other.additional_fields
+    }
 }
 
 /// Key material to persist after generation.

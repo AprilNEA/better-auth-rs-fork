@@ -100,6 +100,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             .into_iter()
             .zip(rows)
             .map(|(mut fields, row)| {
+                let field_order = fields.keys().cloned().collect();
                 if P::TwoFactor::two_factor_storage() == TwoFactorStorage::Legacy {
                     for name in ["createdAt", "updatedAt"] {
                         if !schema.fields().contains_key(name) {
@@ -112,7 +113,9 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                         }
                     }
                 }
-                TwoFactor::from_field_values(fields)
+                let mut record = TwoFactor::from_field_values(fields)?;
+                record.field_order = field_order;
+                Ok(record)
             })
             .collect()
     }

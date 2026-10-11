@@ -65,6 +65,8 @@ pub(super) use reference::property as list_field;
 use reference::{cache_key, modify_reference};
 #[cfg(test)]
 mod batch_tests;
+#[cfg(test)]
+mod cache_metadata_tests;
 
 /// Persistence used by an API Key configuration.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

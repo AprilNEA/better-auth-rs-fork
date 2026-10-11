@@ -28,7 +28,7 @@ fn snapshot(store: &EphemeralStore) -> AuthResult<Snapshot> {
 async fn seed(store: &EphemeralStore) -> AuthResult<()> {
     let date = FieldDate::from_milliseconds(1_893_456_000_000.0);
     for id in ["deleted", "retained"] {
-        store
+        let _ = store
             .insert_organization(Organization {
                 id: id.into(),
                 name: id.into(),
@@ -37,7 +37,7 @@ async fn seed(store: &EphemeralStore) -> AuthResult<()> {
                 ..Default::default()
             })
             .await?;
-        store
+        let _ = store
             .insert_member(Member {
                 field_order: Default::default(),
                 additional_fields: Default::default(),
@@ -52,7 +52,7 @@ async fn seed(store: &EphemeralStore) -> AuthResult<()> {
             CreateInvitation::new(id, "owner@delete.test", "member", "owner", date.clone());
         invitation.id = Some(format!("{id}-invitation"));
         invitation.created_at = Some(date.clone());
-        store.create_invitation(invitation).await?;
+        let _ = store.create_invitation(invitation).await?;
         let team = store
             .create_team(CreateTeam {
                 id: Some(format!("{id}-team")),
@@ -62,11 +62,11 @@ async fn seed(store: &EphemeralStore) -> AuthResult<()> {
                 ..Default::default()
             })
             .await?;
-        store
+        let _ = store
             .add_team_member(&team.id, "owner", None)
             .await?
             .ok_or_else(|| AuthError::internal("Expected the seeded Team membership"))?;
-        store
+        let _ = store
             .create_organization_role(CreateOrganizationRole {
                 organization_id: id.into(),
                 role: "reader".into(),
@@ -144,7 +144,7 @@ fn remove_target(mut stored: Snapshot, tables: &[&'static str]) -> AuthResult<Sn
         let rows = stored
             .get_mut(table)
             .ok_or_else(|| AuthError::internal("Expected the observed table"))?;
-        rows.remove(0);
+        let _ = rows.remove(0);
     }
     Ok(stored)
 }

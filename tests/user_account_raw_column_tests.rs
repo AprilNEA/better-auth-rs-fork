@@ -33,6 +33,9 @@ mod server;
 #[path = "support/postgres_enum_record.rs"]
 mod postgres_enum;
 
+#[path = "support/sparse_consume.rs"]
+mod sparse_consume;
+
 type Events = Arc<Mutex<Vec<Value>>>;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

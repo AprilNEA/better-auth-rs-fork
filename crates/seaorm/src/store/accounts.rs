@@ -537,12 +537,15 @@ where
                 <S::Account as SeaOrmAccountModel>::Entity,
                 <S::User as SeaOrmUserModel>::Entity,
             >(
-                super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
-                    .filter(self.account_selectors([
-                        ("providerId", &provider.into()),
-                        ("accountId", &account_id.into()),
-                    ])?)
-                    .limit(2),
+                (
+                    super::plugin_rows::select_all::<<S::Account as SeaOrmAccountModel>::Entity>()
+                        .filter(self.account_selectors([
+                            ("providerId", &provider.into()),
+                            ("accountId", &account_id.into()),
+                        ])?)
+                        .limit(2),
+                    S::Account::id_column(),
+                ),
                 (
                     S::Account::field_column(&relation.from)?,
                     S::User::field_column(&relation.to)?,

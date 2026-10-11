@@ -338,6 +338,7 @@ run_stage() {
         ./compat-tests/reference-server/consumer-contracts/api-key-date-usage.test.ts \
         ./compat-tests/reference-server/consumer-contracts/mysql-create-readback.test.ts \
         ./compat-tests/reference-server/contracts/native-plugin-replacements.test.ts \
+        ./compat-tests/reference-server/contracts/plugin-typed-metadata.test.ts \
         ./compat-tests/reference-server/contracts/native-atomic-update.test.ts \
         ./compat-tests/reference-server/contracts/passkey-projected-id.test.ts \
         ./compat-tests/reference-server/contracts/device-grant.test.ts \

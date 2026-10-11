@@ -9,8 +9,8 @@ use better_auth_core::{
     WhereOperator, store::schema::EntityRole,
 };
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, IdenStatic, Iterable, QueryFilter,
-    QueryResult, QuerySelect, QueryTrait,
+    ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, IdenStatic, QueryFilter, QueryResult,
+    QuerySelect, QueryTrait,
     sea_query::{
         BinOper, Condition, Expr, ExprTrait, Func, Query, SimpleExpr,
         extension::postgres::PgBinOper,
@@ -168,19 +168,14 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                 let mut query = Entity::<P::DeviceCode>::delete_many()
                     .filter(filter)
                     .into_query();
-                let _ = query.returning(
-                    Query::returning().exprs(
-                        <P::DeviceCode as SeaOrmPluginModel>::Column::iter()
-                            .map(|column| column.select_as(column.into_returning_expr(backend))),
-                    ),
-                );
+                let _ = query.returning(Query::returning().all());
                 return connection
                     .query_one_raw(backend.build(&query))
                     .await
                     .map_err(map_db_err);
             }
             // Callers keep the MySQL row lock and deletion in the same transaction.
-            let query = Entity::<P::DeviceCode>::find()
+            let query = super::plugin_rows::select_all::<Entity<P::DeviceCode>>()
                 .filter(filter)
                 .lock_exclusive();
             let Some(row) = connection

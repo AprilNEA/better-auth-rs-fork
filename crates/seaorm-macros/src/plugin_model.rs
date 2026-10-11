@@ -140,17 +140,6 @@ pub(super) fn generate(
             }
         }
     });
-    if matches!(
-        role,
-        EntityRole::ApiKey
-            | EntityRole::DeviceCode
-            | EntityRole::Passkey
-            | EntityRole::Jwk
-            | EntityRole::WalletAddress
-            | EntityRole::TwoFactor
-    ) {
-        output.push(quote!(additional_fields: Default::default(),));
-    }
     let declaration = options.model_name.as_ref().map(|name| {
         quote! {
             fn model_declaration() -> Option<#core_root::schema::ModelDeclaration> {

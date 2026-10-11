@@ -1,4 +1,4 @@
-use super::TestResult;
+use super::{TestResult, models, values};
 use async_trait::async_trait;
 use better_auth::{AuthConfig, BetterAuth};
 use better_auth_core::{
@@ -59,7 +59,10 @@ fn field(label: String, value: &Value, reject: Option<&str>, events: &Events) ->
             }),
         transform: Some(FieldTransforms {
             output: Some(UserFieldTransform::new(move |value| {
-                events.lock().unwrap().push(json!([label, value.json()?]));
+                events
+                    .lock()
+                    .unwrap()
+                    .push(json!([label, values::observe(&value)?]));
                 if reject {
                     return Err(AuthError::internal("sparse-native-output-rejected"));
                 }
@@ -176,7 +179,10 @@ impl Fixture {
             ));
         }
         let auth = BetterAuth::new(config.clone())
-            .store(SeaOrmStore::<BundledSchema>::new(config, database.clone()))
+            .store(
+                SeaOrmStore::<BundledSchema>::new(config, database.clone())
+                    .with_organization_schema::<models::Models>(),
+            )
             .plugin(Declarations(declarations))
             .build()
             .await?;
@@ -226,13 +232,27 @@ impl Fixture {
     }
 
     pub(super) async fn read(&self, path: &str) -> AuthResult<FieldValue> {
+        let selector = match path {
+            "team" => "team",
+            "member" => "member",
+            "full" => "organization",
+            _ => return Err(AuthError::internal("Unknown sparse join operation")),
+        };
+        Ok(self.read_selected(path, &selector.into()).await?.unwrap())
+    }
+
+    pub(super) async fn read_selected(
+        &self,
+        path: &str,
+        selector: &FieldValue,
+    ) -> AuthResult<Option<FieldValue>> {
         let store = self.auth.store();
         match path {
             "team" => {
-                let details = store
-                    .get_team_details_value(&"team".into(), None, true)
-                    .await?
-                    .unwrap();
+                let Some(details) = store.get_team_details_value(selector, None, true).await?
+                else {
+                    return Ok(None);
+                };
                 let (team, members) = details.into_public_parts(&UserConfig::default())?;
                 let mut output = team.field_values()?;
                 let members = members
@@ -241,45 +261,57 @@ impl Fixture {
                     .map(|row| row.field_values().map(FieldValue::from))
                     .collect::<AuthResult<Vec<_>>>()?;
                 let _ = output.insert("members".into(), members.into());
-                Ok(output.into())
+                Ok(Some(output.into()))
             }
             "member" => {
-                let member = store.get_member_by_id_with_user("member").await?.unwrap();
+                let Some(member) = store
+                    .get_member_by_id_with_user(selector.as_str().ok_or_else(|| {
+                        AuthError::internal("Member fixture selector must be a string")
+                    })?)
+                    .await?
+                else {
+                    return Ok(None);
+                };
                 let mut output = member.member.field_values()?;
                 let _ = output.insert("user".into(), member.user.field_values()?.into());
-                Ok(output.into())
+                Ok(Some(output.into()))
             }
             "full" => store
                 .get_organization_details(OrganizationDetailsQuery {
-                    organization: OrganizationKey::Id("organization"),
+                    organization: OrganizationKey::IdValue(selector),
                     members_limit: None,
                     users_limit: 100.0,
                     include_teams: true,
                 })
                 .await?
-                .unwrap()
-                .into_public_value(&OrganizationFields::default()),
+                .map(|value| value.into_public_value(&OrganizationFields::default()))
+                .transpose(),
             _ => Err(AuthError::internal("Unknown sparse join operation")),
         }
     }
 }
 
 pub(super) fn assert_value(actual: &FieldValue, expected: &Value) -> AuthResult<()> {
-    assert_eq!(actual, &FieldValue::from_json(expected.clone())?);
+    assert_fields(actual, &values::revive(expected)?)
+}
+
+fn assert_fields(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> {
+    assert_eq!(actual, expected);
     match expected {
-        Value::Object(expected) => {
+        FieldValue::Object(expected) => {
             let actual = actual.enumerable_fields()?;
+            let expected = expected.snapshot_fields()?;
             assert_eq!(
                 actual.keys().collect::<Vec<_>>(),
                 expected.keys().collect::<Vec<_>>()
             );
-            for (key, value) in expected {
-                assert_value(&actual[key], value)?;
+            for (key, value) in &expected {
+                assert_fields(&actual[key], value)?;
             }
         }
-        Value::Array(expected) => {
-            for (actual, expected) in actual.as_array().unwrap().iter().zip(expected) {
-                assert_value(actual, expected)?;
+        FieldValue::Array(expected) => {
+            for (actual, expected) in actual.as_array().unwrap().iter().zip(expected.iter()) {
+                assert_fields(actual, expected)?;
             }
         }
         _ => {}

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test while setup errors propagate through Result."
+)]
+
 use super::*;
 use better_auth::plugins::{
     LastLoginMethodConfig, LastLoginMethodPlugin, UsernameConfig, UsernamePlugin,
@@ -245,7 +250,8 @@ async fn documentation_overlays_preserve_runtime_policies_and_final_declaration_
         ),
         (0, 0, 0)
     );
-    auth.store()
+    let _ = auth
+        .store()
         .create_jwk_record(
             [
                 ("id".into(), FieldValue::from("overlay-row")),

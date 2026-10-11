@@ -19,6 +19,8 @@ mod name_mapping_conflicts;
 mod name_mapping_contract;
 #[path = "api_key_additional_fields_tests/native_replacements.rs"]
 mod native_replacements;
+#[path = "support/plugin_typed_metadata.rs"]
+mod typed_metadata;
 
 use better_auth::{
     __private_core::{

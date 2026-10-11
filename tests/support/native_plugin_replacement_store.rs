@@ -21,6 +21,9 @@ enum Model {
 
 struct Store<S: AuthSchema, F> {
     model: Model,
+    typed: bool,
+    target: Target,
+    projection: policies::Shared,
     store: Arc<dyn AuthStore<S>>,
     raw: Arc<F>,
 }
@@ -33,17 +36,22 @@ where
     Fut: Future<Output = TestResult<Value>> + Send,
 {
     async fn create(&self, fields: FieldMap) -> AuthResult<Option<FieldMap>> {
-        match self.model {
+        let result = match self.model {
             Model::ApiKey => self.store.create_api_key_record(fields).await,
             Model::Passkey => self.store.create_passkey_record(fields).await,
             Model::DeviceCode => self.store.create_device_code_record(fields).await,
             Model::TwoFactor => self.store.create_two_factor_record(fields).await,
             Model::Jwk => self.store.create_jwk_record(fields).await,
             Model::WalletAddress => self.store.create_wallet_address_record(fields).await,
-        }
+        }?;
+        self.observe_typed(result)
     }
 
     async fn read(&self, id: FieldValue) -> AuthResult<Option<FieldMap>> {
+        if self.typed {
+            let result = typed::read(self.store.as_ref(), &self.target, id).await?;
+            return self.observe_typed(result);
+        }
         let id = SchemaValue::from_field(id);
         match self.model {
             Model::ApiKey => self.store.get_api_key_record(&id).await,
@@ -57,14 +65,15 @@ where
 
     async fn update(&self, id: FieldValue, fields: FieldMap) -> AuthResult<Option<FieldMap>> {
         let id = SchemaValue::from_field(id);
-        match self.model {
+        let result = match self.model {
             Model::ApiKey => self.store.update_api_key_record(&id, fields).await,
             Model::Passkey => self.store.update_passkey_record(&id, fields).await,
             Model::DeviceCode => self.store.update_device_code_record(&id, fields).await,
             Model::TwoFactor => self.store.update_two_factor_record(&id, fields).await,
             Model::Jwk => self.store.update_jwk_record(&id, fields).await,
             Model::WalletAddress => self.store.update_wallet_address_record(&id, fields).await,
-        }
+        }?;
+        self.observe_typed(result)
     }
 
     async fn delete(&self, id: FieldValue) -> AuthResult<Option<FieldMap>> {
@@ -100,6 +109,32 @@ where
     }
 }
 
+impl<S: AuthSchema, F> Store<S, F> {
+    fn observe_typed(&self, result: Option<FieldMap>) -> AuthResult<Option<FieldMap>> {
+        if !self.typed {
+            return Ok(result);
+        }
+        result
+            .map(|fields| {
+                if let Some(value) = &self
+                    .projection
+                    .lock()
+                    .expect("typed projection state")
+                    .projection
+                {
+                    assert!(
+                        fields
+                            .get(&self.target.field)
+                            .is_some_and(|actual| actual.strict_equals(value)),
+                        "The typed output must retain the callback value and object identity"
+                    );
+                }
+                typed::project(self.target.role, fields)
+            })
+            .transpose()
+    }
+}
+
 pub(crate) async fn with_store<S, F, Fut>(
     raw: Arc<dyn AuthStore<S>>,
     backend: &str,
@@ -131,30 +166,39 @@ where
         .await?;
     assert_eq!(owner.id.typed()?, OWNER);
     let observe_raw = Arc::new(observe_raw);
-    contract(backend, expected, move |policy| {
-        let raw = raw.clone();
-        let observe_raw = observe_raw.clone();
-        async move {
-            let builder = BetterAuth::new(config()).store_arc(raw);
-            let builder = match model {
-                Model::ApiKey => builder.plugin(ApiKeyPlugin::builder().build()),
-                Model::Passkey => builder.plugin(PasskeyPlugin::new()),
-                Model::DeviceCode => builder.plugin(DeviceAuthorizationPlugin::new()),
-                Model::TwoFactor => builder.plugin(TwoFactorPlugin::new()),
-                Model::Jwk => builder.plugin(JwtPlugin::new()),
-                Model::WalletAddress => builder.plugin(SiwePlugin::new(
-                    "native-replacements.test",
-                    || async { Ok("native-replacement-nonce".into()) },
-                    |_| async { Ok(false) },
-                )),
-            };
-            let auth = builder.plugin(policy).build().await?;
-            Ok(Store {
-                model,
-                store: auth.store().clone(),
-                raw: observe_raw,
-            })
-        }
-    })
-    .await
+    let typed = typed::supports(target.role);
+    for typed in [false, true].into_iter().filter(|value| !value || typed) {
+        contract(backend, expected.clone(), |policy| {
+            let raw = raw.clone();
+            let observe_raw = observe_raw.clone();
+            let target = target.clone();
+            async move {
+                let projection = policy.state.clone();
+                let builder = BetterAuth::new(config()).store_arc(raw);
+                let builder = match model {
+                    Model::ApiKey => builder.plugin(ApiKeyPlugin::builder().build()),
+                    Model::Passkey => builder.plugin(PasskeyPlugin::new()),
+                    Model::DeviceCode => builder.plugin(DeviceAuthorizationPlugin::new()),
+                    Model::TwoFactor => builder.plugin(TwoFactorPlugin::new()),
+                    Model::Jwk => builder.plugin(JwtPlugin::new()),
+                    Model::WalletAddress => builder.plugin(SiwePlugin::new(
+                        "native-replacements.test",
+                        || async { Ok("native-replacement-nonce".into()) },
+                        |_| async { Ok(false) },
+                    )),
+                };
+                let auth = builder.plugin(policy).build().await?;
+                Ok(Store {
+                    model,
+                    typed,
+                    target,
+                    projection,
+                    store: auth.store().clone(),
+                    raw: observe_raw,
+                })
+            }
+        })
+        .await?;
+    }
+    Ok(())
 }

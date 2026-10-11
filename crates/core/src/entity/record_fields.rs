@@ -5,8 +5,8 @@ fn field<T: SchemaField>(value: &T) -> crate::FieldValue {
 }
 
 macro_rules! record {
-    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])?) => {
-        record!(serialize $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; serde_omit: [$($private),*])?);
+    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
+        record!(serialize $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; serde_omit: [$($private),*])? $(; state: $state => $clone_state)? $(; from: $constructor)?);
 
         impl<'de> serde::Deserialize<'de> for $type {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -23,8 +23,8 @@ macro_rules! record {
             crate::field_value::serde::revive_schema_date(value);
         }
     };
-    (serialize $type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])?) => {
-        record!($type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])?);
+    (serialize $type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
+        record!($type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; state: $state => $clone_state)? $(; from: $constructor)?);
 
         impl serde::Serialize for $type {
             fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -41,7 +41,40 @@ macro_rules! record {
             }
         }
     };
-    ($type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])?) => {
+    (@constructor infallible $type:ty, [$($field:ident => $name:literal),*], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident)?) => {
+        impl From<FieldMap> for $type {
+            fn from(mut fields: FieldMap) -> Self {
+                $($(let _ = fields.remove($omit);)*)?
+                $(let $order = fields.keys().cloned().collect();)?
+                Self {
+                    $($field: crate::SchemaValue::from_field(fields.remove($name).unwrap_or_default()),)*
+                    $($extra: fields,)?
+                    $($order,)?
+                    $($state: Default::default(),)?
+                }
+            }
+        }
+        impl FromFieldMap for $type {
+            fn from_field_values(fields: FieldMap) -> AuthResult<Self> {
+                Ok(fields.into())
+            }
+        }
+    };
+    (@constructor $type:ty, [$($field:ident => $name:literal),*], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident)?) => {
+        impl FromFieldMap for $type {
+            fn from_field_values(mut fields: FieldMap) -> AuthResult<Self> {
+                $($(let _ = fields.remove($omit);)*)?
+                $(let $order = fields.keys().cloned().collect();)?
+                Ok(Self {
+                    $($field: fields.remove($name).unwrap_or_default().decode()?,)*
+                    $($extra: fields,)?
+                    $($order,)?
+                    $($state: Default::default(),)?
+                })
+            }
+        }
+    };
+    ($type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
         impl AuthRecordFields for $type {
             fn field_values(&self) -> AuthResult<FieldMap> {
                 let fields = FieldMap::from_iter([
@@ -70,21 +103,13 @@ macro_rules! record {
                 let mut record = self.clone();
                 $(record.$field = context.clone_field(&self.$field)?;)*
                 $(record.$extra = context.clone_map(&self.$extra)?;)?
+                $(record.$state = self.$clone_state(context)?;)?
                 Ok(record)
             }
         }
-        impl FromFieldMap for $type {
-            fn from_field_values(mut fields: FieldMap) -> AuthResult<Self> {
-                $($(let _ = fields.remove($omit);)*)?
-                $(let $order = fields.keys().cloned().collect();)?
-                Ok(Self {
-                    $($field: fields.remove($name).unwrap_or_default().decode()?,)*
-                    $($extra: fields,)?
-                    $($order,)?
-                })
-            }
-        }
+        record!(@constructor $($constructor)? $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; state: $state)?);
     };
+
 }
 
 record!(serde crate::types::Organization, [
@@ -152,17 +177,30 @@ record!(serde crate::types::OrganizationRole, [
     updated_at => "updatedAt" [date],
 ], additional_fields; order: field_order);
 
-record!(crate::types::TwoFactor, [
+record!(serde crate::types::DeviceCode, [
+    id => "id",
+    device_code => "deviceCode",
+    user_code => "userCode",
+    user_id => "userId",
+    expires_at => "expiresAt",
+    status => "status",
+    last_polled_at => "lastPolledAt",
+    polling_interval => "pollingInterval",
+    client_id => "clientId",
+    scope => "scope",
+], additional_fields; order: field_order; state: consumption => clone_consumption; from: infallible);
+
+record!(serde crate::types::TwoFactor, [
     id => "id",
     secret => "secret",
     backup_codes => "backupCodes",
     user_id => "userId",
     verified => "verified",
     failed_verification_count => "failedVerificationCount",
-    locked_until => "lockedUntil",
-    created_at => "createdAt",
-    updated_at => "updatedAt",
-], additional_fields);
+    locked_until => "lockedUntil" [date],
+    created_at => "createdAt" [date],
+    updated_at => "updatedAt" [date],
+], additional_fields; order: field_order);
 
 record!(serde crate::types::Passkey, [
     id => "id",
@@ -194,7 +232,7 @@ record!(serde crate::wire::PasskeyView, [
     aaguid => "aaguid",
 ], additional_fields; order: field_order);
 
-record!(crate::types::ApiKey, [
+record!(serde crate::types::ApiKey, [
     id => "id",
     name => "name",
     start => "start",
@@ -204,20 +242,20 @@ record!(crate::types::ApiKey, [
     config_id => "configId",
     refill_interval => "refillInterval",
     refill_amount => "refillAmount",
-    last_refill_at => "lastRefillAt",
+    last_refill_at => "lastRefillAt" [date],
     enabled => "enabled",
     rate_limit_enabled => "rateLimitEnabled",
     rate_limit_time_window => "rateLimitTimeWindow",
     rate_limit_max => "rateLimitMax",
     request_count => "requestCount",
     remaining => "remaining",
-    last_request => "lastRequest",
-    expires_at => "expiresAt",
-    created_at => "createdAt",
-    updated_at => "updatedAt",
+    last_request => "lastRequest" [date],
+    expires_at => "expiresAt" [date],
+    created_at => "createdAt" [date],
+    updated_at => "updatedAt" [date],
     permissions => "permissions",
     metadata => "metadata",
-], additional_fields);
+], additional_fields; order: field_order);
 
 record!(crate::wire::ApiKeyView, [
     id => "id",
@@ -243,14 +281,14 @@ record!(crate::wire::ApiKeyView, [
     metadata => "metadata",
 ], additional_fields; order: field_order; omit: ["key"]);
 
-record!(crate::types::WalletAddress, [
+record!(serde crate::types::WalletAddress, [
     id => "id",
     user_id => "userId",
     address => "address",
     chain_id => "chainId",
     is_primary => "isPrimary",
-    created_at => "createdAt",
-], additional_fields);
+    created_at => "createdAt" [date],
+], additional_fields; order: field_order);
 
 record!(crate::types_jwt::Jwk, [
     id => "id",
@@ -260,7 +298,7 @@ record!(crate::types_jwt::Jwk, [
     expires_at => "expiresAt",
     alg => "alg",
     crv => "crv",
-], additional_fields);
+], additional_fields; order: field_order);
 
 record!(crate::wire::AccountView, [
     id => "id",

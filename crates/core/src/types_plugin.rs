@@ -1,48 +1,42 @@
 use crate::SchemaValue;
-use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 use crate::entity::{AuthApiKey, AuthPasskey, AuthTwoFactor};
 
 /// Two-factor authentication response shape.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct TwoFactor {
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub secret: SchemaValue<String>,
-    #[serde(rename = "backupCodes")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub backup_codes: SchemaValue<String>,
-    #[serde(rename = "userId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub user_id: SchemaValue<String>,
     /// Whether the authenticator secret has completed enrollment.
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub verified: SchemaValue<Option<bool>>,
     /// Consecutive failed sign-in verifications across factors and challenges.
-    #[serde(rename = "failedVerificationCount")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub failed_verification_count: SchemaValue<Option<f64>>,
     /// End of the account-level verification lock.
-    #[serde(rename = "lockedUntil")]
-    #[serde(
-        default,
-        with = "crate::field_value::serde::optional_schema_date",
-        skip_serializing_if = "SchemaValue::is_json_omitted"
-    )]
     pub locked_until: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(rename = "createdAt")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
     pub created_at: SchemaValue<crate::FieldDate>,
-    #[serde(rename = "updatedAt")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
     pub updated_at: SchemaValue<crate::FieldDate>,
     /// Declared application fields after adapter output projection.
-    #[serde(with = "crate::field_value::serde::map", flatten, default)]
     pub additional_fields: crate::FieldMap,
+}
+
+impl PartialEq for TwoFactor {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.secret == other.secret
+            && self.backup_codes == other.backup_codes
+            && self.user_id == other.user_id
+            && self.verified == other.verified
+            && self.failed_verification_count == other.failed_verification_count
+            && self.locked_until == other.locked_until
+            && self.created_at == other.created_at
+            && self.updated_at == other.updated_at
+            && self.additional_fields == other.additional_fields
+    }
 }
 
 /// Two-factor persistence representation selected by the model.
@@ -340,75 +334,63 @@ pub struct UpdateDeviceCode {
 }
 
 /// API key response shape.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ApiKey {
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     /// Declared application fields after adapter output projection.
-    #[serde(with = "crate::field_value::serde::map", flatten, default)]
     pub additional_fields: crate::FieldMap,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub name: SchemaValue<Option<String>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub start: SchemaValue<Option<crate::ApiKeyStart>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub prefix: SchemaValue<Option<String>>,
     /// SHA-256 hash of the key (column name: `key` in SQL)
-    #[serde(rename = "key")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub key_hash: SchemaValue<String>,
-    #[serde(rename = "referenceId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub reference_id: SchemaValue<String>,
-    #[serde(rename = "configId")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub config_id: SchemaValue<String>,
-    #[serde(rename = "refillInterval")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub refill_interval: SchemaValue<Option<f64>>,
-    #[serde(rename = "refillAmount")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub refill_amount: SchemaValue<Option<f64>>,
-    #[serde(rename = "lastRefillAt")]
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub last_refill_at: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub enabled: SchemaValue<bool>,
-    #[serde(rename = "rateLimitEnabled")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub rate_limit_enabled: SchemaValue<bool>,
-    #[serde(rename = "rateLimitTimeWindow")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub rate_limit_time_window: SchemaValue<Option<f64>>,
-    #[serde(rename = "rateLimitMax")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub rate_limit_max: SchemaValue<Option<f64>>,
-    #[serde(rename = "requestCount")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub request_count: SchemaValue<Option<f64>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub remaining: SchemaValue<Option<f64>>,
-    #[serde(rename = "lastRequest")]
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub last_request: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(rename = "expiresAt")]
-    #[serde(with = "crate::field_value::serde::optional_schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub expires_at: SchemaValue<Option<crate::FieldDate>>,
-    #[serde(rename = "createdAt")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
-    #[serde(rename = "updatedAt")]
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub updated_at: SchemaValue<crate::FieldDate>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub permissions: SchemaValue<Option<String>>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub metadata: SchemaValue<Option<String>>,
+}
+
+impl PartialEq for ApiKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.additional_fields == other.additional_fields
+            && self.id == other.id
+            && self.name == other.name
+            && self.start == other.start
+            && self.prefix == other.prefix
+            && self.key_hash == other.key_hash
+            && self.reference_id == other.reference_id
+            && self.config_id == other.config_id
+            && self.refill_interval == other.refill_interval
+            && self.refill_amount == other.refill_amount
+            && self.last_refill_at == other.last_refill_at
+            && self.enabled == other.enabled
+            && self.rate_limit_enabled == other.rate_limit_enabled
+            && self.rate_limit_time_window == other.rate_limit_time_window
+            && self.rate_limit_max == other.rate_limit_max
+            && self.request_count == other.request_count
+            && self.remaining == other.remaining
+            && self.last_request == other.last_request
+            && self.expires_at == other.expires_at
+            && self.created_at == other.created_at
+            && self.updated_at == other.updated_at
+            && self.permissions == other.permissions
+            && self.metadata == other.metadata
+    }
 }
 
 /// API key creation data.
@@ -466,6 +448,9 @@ pub struct UpdateApiKey {
 }
 
 impl AuthTwoFactor for TwoFactor {
+    fn field_order(&self) -> Option<&[String]> {
+        Some(&self.field_order)
+    }
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         Some(&self.additional_fields)
     }
@@ -501,6 +486,7 @@ impl AuthTwoFactor for TwoFactor {
 impl<T: AuthTwoFactor> From<&T> for TwoFactor {
     fn from(two_factor: &T) -> Self {
         Self {
+            field_order: two_factor.field_order().unwrap_or_default().to_vec(),
             additional_fields: two_factor.additional_fields().cloned().unwrap_or_default(),
             id: two_factor.id().into_owned(),
             secret: two_factor.secret().to_owned(),
@@ -516,6 +502,9 @@ impl<T: AuthTwoFactor> From<&T> for TwoFactor {
 }
 
 impl AuthApiKey for ApiKey {
+    fn field_order(&self) -> Option<&[String]> {
+        Some(&self.field_order)
+    }
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         Some(&self.additional_fields)
     }
@@ -590,6 +579,7 @@ impl AuthApiKey for ApiKey {
 impl<T: AuthApiKey> From<&T> for ApiKey {
     fn from(api_key: &T) -> Self {
         Self {
+            field_order: api_key.field_order().unwrap_or_default().to_vec(),
             additional_fields: api_key.additional_fields().cloned().unwrap_or_default(),
             id: api_key.id().into_owned(),
             name: api_key.name().clone(),
@@ -688,24 +678,30 @@ impl<T: AuthPasskey> From<&T> for Passkey {
 }
 
 /// Persisted SIWE wallet identity. Multiple chains can belong to one user.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default)]
 pub struct WalletAddress {
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
+    /// Source property order, independent of the current typed values.
+    pub field_order: Vec<String>,
     pub id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub user_id: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub address: SchemaValue<String>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub chain_id: SchemaValue<f64>,
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub is_primary: SchemaValue<bool>,
-    #[serde(with = "crate::field_value::serde::schema_date")]
-    #[serde(default, skip_serializing_if = "SchemaValue::is_json_omitted")]
     pub created_at: SchemaValue<crate::FieldDate>,
     /// Declared application fields returned by the adapter.
-    #[serde(with = "crate::field_value::serde::map", default, flatten)]
     pub additional_fields: crate::FieldMap,
+}
+
+impl PartialEq for WalletAddress {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.user_id == other.user_id
+            && self.address == other.address
+            && self.chain_id == other.chain_id
+            && self.is_primary == other.is_primary
+            && self.created_at == other.created_at
+            && self.additional_fields == other.additional_fields
+    }
 }
 
 /// SIWE wallet creation data. The adapter generates the model ID.

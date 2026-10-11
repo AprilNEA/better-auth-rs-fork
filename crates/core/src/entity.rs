@@ -289,6 +289,10 @@ pub trait AuthVerification:
 pub trait AuthTwoFactor:
     AuthRecordFields + Clone + Send + Sync + Serialize + std::fmt::Debug + 'static
 {
+    /// Preserve native own-property order when available.
+    fn field_order(&self) -> Option<&[String]> {
+        None
+    }
     /// Return application fields when the entity already contains an adapter projection.
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         None
@@ -308,6 +312,10 @@ pub trait AuthTwoFactor:
 pub trait AuthApiKey:
     AuthRecordFields + Clone + Send + Sync + Serialize + std::fmt::Debug + 'static
 {
+    /// Preserve native own-property order when available.
+    fn field_order(&self) -> Option<&[String]> {
+        None
+    }
     /// Return application fields when the entity already contains an adapter projection.
     fn additional_fields(&self) -> Option<&crate::FieldMap> {
         None

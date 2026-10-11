@@ -7,6 +7,10 @@
 
 #[path = "support/sparse_native_join_contract.rs"]
 mod contract;
+#[path = "support/sparse_native_join_models.rs"]
+mod models;
+#[path = "support/device_where_values.rs"]
+mod values;
 
 use better_auth_core::AuthError;
 use serde_json::Value;
@@ -116,6 +120,115 @@ async fn null_child_ids_preserve_present_rows_and_empty_relationships() -> TestR
             );
             assert_eq!(*fixture.events.lock().unwrap(), events);
             assert_eq!(fixture.snapshot().await?, before);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn zero_child_ids_are_not_deduplicated_before_id_output_conversion() -> TestResult {
+    let cases: Value =
+        serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
+    for joins in [false, true] {
+        let mut input = cases.clone();
+        let table = input["tables"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|table| table["model"] == "teamMember")
+            .unwrap();
+        table["columns"]["id"] = "INTEGER".into();
+        table["rows"] = cases["zeroChildRows"].clone();
+        let case = &input["cases"][0];
+        let fixture = contract::Fixture::new(&input, case, joins, false).await?;
+        let before = fixture.snapshot().await?;
+        let mut expected = case["result"].clone();
+        expected["members"] = serde_json::json!([
+            {"teamId": "team", "id": "0"}, {"teamId": "team", "id": "0"}
+        ]);
+        contract::assert_value(&fixture.read("team").await?, &expected)?;
+        let mut events = case["events"].as_array().unwrap().clone();
+        events.push(case["events"][2].clone());
+        assert_eq!(*fixture.events.lock().unwrap(), events);
+        assert_eq!(fixture.snapshot().await?, before);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_joins_discard_falsy_parent_ids_before_any_output_callbacks() -> TestResult {
+    let cases: Value =
+        serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
+    for joins in [false, true] {
+        for case in cases["falsyParentCases"].as_array().unwrap() {
+            let mut input = cases.clone();
+            let table = input["tables"]
+                .as_array_mut()
+                .unwrap()
+                .iter_mut()
+                .find(|table| table["model"] == case["model"])
+                .unwrap();
+            table["columns"]["id"] = case["idType"].clone();
+            table["rows"][0]["id"] = case["id"].clone();
+            let fixture = contract::Fixture::new(&input, case, joins, false).await?;
+            let before = fixture.snapshot().await?;
+            let selector = values::revive(&case["id"])?;
+            let result = fixture
+                .read_selected(case["path"].as_str().unwrap(), &selector)
+                .await?;
+            if joins {
+                assert!(result.is_none());
+                assert!(fixture.events.lock().unwrap().is_empty());
+            } else {
+                contract::assert_value(&result.unwrap(), &case["result"])?;
+                assert_eq!(
+                    *fixture.events.lock().unwrap(),
+                    *case["events"].as_array().unwrap()
+                );
+            }
+            assert_eq!(fixture.snapshot().await?, before);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn reserved_child_aliases_remove_parent_fields_without_losing_own_undefined() -> TestResult {
+    let cases: Value =
+        serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
+    let collision = &cases["aliasCollision"];
+    for key in ["column", "alternateColumn"] {
+        let column = collision[key].as_str().unwrap();
+        for joins in [false, true] {
+            for populated in [false, true] {
+                let mut input = cases.clone();
+                for table in input["tables"].as_array_mut().unwrap() {
+                    if table["model"] == "team" {
+                        table["columns"][column] = "TEXT".into();
+                        table["rows"][0][column] = collision["value"].clone();
+                    } else if table["model"] == "teamMember" && !populated {
+                        table["rows"] = serde_json::json!([]);
+                    }
+                }
+                input["declarations"]["team"]["shadow"] = serde_json::json!({"fieldName": column});
+                let fixture =
+                    contract::Fixture::new(&input, &input["cases"][0], joins, false).await?;
+                let before = fixture.snapshot().await?;
+                let (result, events) = if joins {
+                    ("nativeResult", "nativeEvents")
+                } else {
+                    ("fallbackResult", "fallbackEvents")
+                };
+                let mut expected = collision[result].clone();
+                let mut events = collision[events].as_array().unwrap().clone();
+                if !populated {
+                    expected["members"] = serde_json::json!([]);
+                    let _ = events.pop();
+                }
+                contract::assert_value(&fixture.read("team").await?, &expected)?;
+                assert_eq!(*fixture.events.lock().unwrap(), events);
+                assert_eq!(fixture.snapshot().await?, before);
+            }
         }
     }
     Ok(())

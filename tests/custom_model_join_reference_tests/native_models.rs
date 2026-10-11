@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test while setup errors propagate through Result."
+)]
+
 use super::*;
 
 pub(super) fn key_order(value: &FieldValue) -> AuthResult<Value> {
@@ -35,9 +40,10 @@ async fn explicit_native_declarations_preserve_logical_and_aliased_account_owner
     let fixture: Value = serde_json::from_str(include_str!(
         "../fixtures/custom-model-join-reference-1.7.6.json"
     ))?;
-    assert_eq!(fixture["version"], "1.7.6");
-    let cases = fixture["cases"]
-        .as_array()
+    assert_eq!(fixture.get("version"), Some(&json!("1.7.6")));
+    let cases = fixture
+        .get("cases")
+        .and_then(Value::as_array)
         .ok_or("Missing captured cases")?
         .iter()
         .filter(|case| case["scenario"] == "declared-badge-reference")

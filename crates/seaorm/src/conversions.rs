@@ -61,6 +61,7 @@ impl From<&entities::invitation::Model> for Invitation {
 impl From<&entities::two_factor::Model> for TwoFactor {
     fn from(model: &entities::two_factor::Model) -> Self {
         Self {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: model.id.clone().into(),
             secret: model.secret.clone().into(),
@@ -81,6 +82,7 @@ impl From<&entities::two_factor::Model> for TwoFactor {
 impl From<&entities::api_key::Model> for ApiKey {
     fn from(model: &entities::api_key::Model) -> Self {
         Self {
+            field_order: Default::default(),
             additional_fields: Default::default(),
             id: model.id.clone().into(),
             name: model.name.clone().into(),

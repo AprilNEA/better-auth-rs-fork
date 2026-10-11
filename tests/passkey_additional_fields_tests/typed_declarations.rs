@@ -4,7 +4,7 @@ use better_auth_core::{
     FieldValue, Passkey, PasskeyCredentialState, PasskeyStorage, SchemaValue, UpdatePasskey,
     UpdatePasskeyAuthentication,
     id::{IdGeneration, IdGenerator},
-    store::schema::EntityRole,
+    store::schema::{EntityRole, SchemaConfiguration},
     user_fields::{FieldTransforms, UserFieldTransform, UserFieldType},
     wire::PasskeyView,
 };
@@ -273,7 +273,15 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
         EntityRole::Passkey,
         fields(&events, &object, "stored_label"),
     )?;
-    let store = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+    let mut model_fields = init.into_parts().plugin_fields;
+    model_fields.set_schema_configuration(&SchemaConfiguration {
+        config: config.clone(),
+        plugins: Vec::new(),
+        metadata: Default::default(),
+        secondary_storage: false,
+        database_rate_limit: false,
+    });
+    let store = raw.with_runtime(config, Vec::new(), model_fields)?;
     let mut raw_observations = Vec::new();
     for typed in [false, true] {
         let mut observations = Vec::new();
@@ -511,7 +519,15 @@ async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_
             Arc::new(raw.clone());
         let mut init = AuthInitContext::new(config.clone(), raw_store.clone());
         init.register_model_fields(EntityRole::Passkey, declaration)?;
-        let store = raw_store.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+        let mut model_fields = init.into_parts().plugin_fields;
+        model_fields.set_schema_configuration(&SchemaConfiguration {
+            config: config.clone(),
+            plugins: Vec::new(),
+            metadata: Default::default(),
+            secondary_storage: false,
+            database_rate_limit: false,
+        });
+        let store = raw_store.with_runtime(config, Vec::new(), model_fields)?;
         for (stage, counter) in [("create", 1), ("auth", 2)] {
             let started = chrono::Utc::now().timestamp_millis() as f64;
             let row = match execute(store.as_ref(), true, stage, "Desk".into(), counter).await? {

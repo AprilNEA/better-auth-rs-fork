@@ -88,7 +88,7 @@ where
             self.model_fields
                 .canonicalize_id(EntityRole::Organization)?;
             let query = super::joins::joined_query::<Entity<M>, Entity<O::Organization>>(
-                parent,
+                (parent, M::column("id")?),
                 (
                     M::column(&relation.from)?,
                     O::Organization::column(&relation.to)?,

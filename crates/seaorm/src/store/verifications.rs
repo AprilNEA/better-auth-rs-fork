@@ -2,8 +2,8 @@ use super::instrumentation::database_operation;
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, IdenStatic, Iterable, QueryFilter, QueryOrder,
-    QuerySelect, QueryTrait, SqliteTransactionMode, TransactionOptions, TransactionTrait,
+    ColumnTrait, ConnectionTrait, EntityTrait, IdenStatic, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait, SqliteTransactionMode, TransactionOptions, TransactionTrait,
     sea_query::{ExprTrait, Query},
 };
 
@@ -774,7 +774,7 @@ where
         >(self.config(), "findMany", async {
             plugin_rows::one(
                 transaction,
-                <S::Verification as SeaOrmVerificationModel>::Entity::find()
+                plugin_rows::select_all::<<S::Verification as SeaOrmVerificationModel>::Entity>()
                     .filter(self.verification_selector(
                         "identifier",
                         &identifier.into(),
@@ -858,22 +858,19 @@ where
                         <S::Verification as SeaOrmVerificationModel>::Entity::delete_many()
                             .filter(primary.in_subquery(target.into_query()))
                             .into_query();
-                    let _ =
-                        query.returning(Query::returning().exprs(
-                            <S::Verification as SeaOrmVerificationModel>::Column::iter().map(
-                                |column| column.select_as(column.into_returning_expr(backend)),
-                            ),
-                        ));
+                    let _ = query.returning(Query::returning().all());
                     return transaction
                         .query_one_raw(backend.build(&query))
                         .await
                         .map_err(map_db_err);
                 }
                 // MySQL keeps the refreshed row lock and primary-key delete inside the caller's transaction.
-                let query = <S::Verification as SeaOrmVerificationModel>::Entity::find()
-                    .filter(filter)
-                    .limit(1)
-                    .lock_exclusive();
+                let query = plugin_rows::select_all::<
+                    <S::Verification as SeaOrmVerificationModel>::Entity,
+                >()
+                .filter(filter)
+                .limit(1)
+                .lock_exclusive();
                 let Some(row) = transaction
                     .query_one_raw(query.build(backend))
                     .await

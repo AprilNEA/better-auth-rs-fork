@@ -3,24 +3,24 @@ import { Database } from "bun:sqlite";
 import type { DBFieldAttribute } from "@better-auth/core/db";
 import { betterAuth } from "better-auth";
 import cases from "../../../tests/fixtures/sparse-native-join-cases.json";
+import { observe, revive } from "./user-runtime-contract";
 
 const { getOrgAdapter } = await import(new URL("../node_modules/better-auth/dist/plugins/organization/adapter.mjs", import.meta.url).href);
 type Row = Record<string, unknown>;
 type Declaration = { fieldName?: string; references?: string };
+type FixtureInput = {
+  tables: { model: string; table: string; columns: Record<string, string | undefined>; rows: Record<string, string | number | null | undefined>[] }[];
+  declarations: Record<string, Record<string, Declaration>>;
+};
 
-async function setup(joins: boolean, rejectAt?: string, nullableChildren?: boolean) {
+async function setup(joins: boolean, rejectAt?: string, input: FixtureInput = cases) {
   const database = new Database(":memory:");
   const events: unknown[][] = [];
   const failure = new Error("sparse-native-output-rejected");
-  for (const table of cases.tables) {
-    const columns = Object.entries(table.columns).map(([name, kind]) => `"${name}" ${
-      nullableChildren !== undefined && table.model === "teamMember" && name === "id" ? "TEXT" : kind
-    }`).join(", ");
+  for (const table of input.tables) {
+    const columns = Object.entries(table.columns).map(([name, kind]) => `"${name}" ${kind}`).join(", ");
     database.exec(`CREATE TABLE "${table.table}" (${columns})`);
-    const rows = nullableChildren !== undefined && table.model === "teamMember"
-      ? nullableChildren ? cases.nullableChildRows : []
-      : table.rows;
-    for (const row of rows) {
+    for (const row of table.rows) {
       const names = Object.keys(row).map(name => `"${name}"`).join(", ");
       const markers = Object.keys(row).map(() => "?").join(", ");
       database.query(`INSERT INTO "${table.table}" (${names}) VALUES (${markers})`).run(...Object.values(row));
@@ -31,7 +31,7 @@ async function setup(joins: boolean, rejectAt?: string, nullableChildren?: boole
     ...(declaration.fieldName ? { fieldName: declaration.fieldName } : {}),
     ...(declaration.references ? { references: { model: declaration.references, field: "id" } } : {}),
     transform: { output(value) {
-      events.push([label, value]);
+      events.push([label, observe(value)]);
       if (label === rejectAt) throw failure;
       if (label.endsWith(".name")) {
         expect(typeof value).toBe("number");
@@ -40,8 +40,8 @@ async function setup(joins: boolean, rejectAt?: string, nullableChildren?: boole
       return value;
     } },
   });
-  const schema = Object.fromEntries(Object.entries(cases.declarations).map(([model, fields]) => [model, {
-    modelName: cases.tables.find(table => table.model === model)!.table,
+  const schema = Object.fromEntries(Object.entries(input.declarations).map(([model, fields]) => [model, {
+    modelName: input.tables.find(table => table.model === model)!.table,
     fields: Object.fromEntries(Object.entries(fields).map(([name, declaration]) => [name, field(`${model}.${name}`, declaration)])),
   }]));
   const context = await betterAuth({
@@ -58,12 +58,12 @@ async function setup(joins: boolean, rejectAt?: string, nullableChildren?: boole
     plugins: [{ id: "sparse-native-fields", schema }],
   }).$context;
   const adapter = getOrgAdapter(context, { teams: { enabled: true } });
-  const read = (path: string) => path === "team"
-    ? adapter.findTeamById({ teamId: "team", includeTeamMembers: true })
+  const read = (path: string, selector: unknown = path === "full" ? "organization" : path) => path === "team"
+    ? adapter.findTeamById({ teamId: selector, includeTeamMembers: true })
     : path === "member"
-      ? adapter.findMemberById("member")
-      : adapter.findFullOrganization({ organizationId: "organization", includeTeams: true });
-  const snapshot = () => Object.fromEntries(cases.tables.map(({ table }) => [table, {
+      ? adapter.findMemberById(selector)
+      : adapter.findFullOrganization({ organizationId: selector, includeTeams: true });
+  const snapshot = () => Object.fromEntries(input.tables.map(({ table }) => [table, {
     columns: database.query(`PRAGMA table_info("${table}")`).all().map(row => (row as { name: string }).name),
     rows: database.query(`SELECT * FROM "${table}" ORDER BY id`).all(),
   }]));
@@ -72,7 +72,11 @@ async function setup(joins: boolean, rejectAt?: string, nullableChildren?: boole
 
 for (const joins of [false, true]) for (const populated of [false, true]) {
   test(`SQLite sparse child id=null joins=${joins} populated=${populated}`, async () => {
-    const fixture = await setup(joins, undefined, populated);
+    const input: FixtureInput = structuredClone(cases);
+    const table = input.tables.find(table => table.model === "teamMember")!;
+    table.columns.id = "TEXT";
+    table.rows = populated ? cases.nullableChildRows : [];
+    const fixture = await setup(joins, undefined, input);
     try {
       const before = fixture.snapshot();
       const rows = populated ? cases.nullableChildRows : [];
@@ -84,6 +88,68 @@ for (const joins of [false, true]) for (const populated of [false, true]) {
         ...cases.cases[0].events.slice(0, 2),
         ...rows.map(() => cases.cases[0].events[2]),
       ]);
+      expect(fixture.snapshot()).toStrictEqual(before);
+    } finally { fixture.database.close(); }
+  });
+}
+
+for (const joins of [false, true]) {
+  test(`SQLite zero child IDs retain duplicates before ID conversion joins=${joins}`, async () => {
+    const input: FixtureInput = structuredClone(cases);
+    const table = input.tables.find(table => table.model === "teamMember")!;
+    table.columns.id = "INTEGER";
+    table.rows = cases.zeroChildRows;
+    const fixture = await setup(joins, undefined, input);
+    try {
+      const before = fixture.snapshot();
+      const expected = { ...cases.cases[0].result, members: [{ teamId: "team", id: "0" }, { teamId: "team", id: "0" }] };
+      const actual = await fixture.read("team");
+      expect(actual).toStrictEqual(expected);
+      assertKeys(actual, expected);
+      expect(fixture.events).toStrictEqual([...cases.cases[0].events, cases.cases[0].events[2]]);
+      expect(fixture.snapshot()).toStrictEqual(before);
+    } finally { fixture.database.close(); }
+  });
+}
+
+for (const joins of [false, true]) for (const row of cases.falsyParentCases) {
+  test(`SQLite falsy parent ${row.path} id=${JSON.stringify(row.id)} joins=${joins}`, async () => {
+    const input: FixtureInput = structuredClone(cases);
+    const table = input.tables.find(table => table.model === row.model)!;
+    table.columns.id = row.idType;
+    table.rows[0].id = row.id;
+    const fixture = await setup(joins, undefined, input);
+    try {
+      const before = fixture.snapshot();
+      const expected = joins ? null : row.result;
+      const actual = await fixture.read(row.path, row.id);
+      expect(actual).toStrictEqual(expected);
+      assertKeys(actual, expected);
+      expect(fixture.events).toStrictEqual(joins ? [] : row.events);
+      expect(fixture.snapshot()).toStrictEqual(before);
+    } finally { fixture.database.close(); }
+  });
+}
+
+for (const column of [cases.aliasCollision.column, cases.aliasCollision.alternateColumn]) for (const joins of [false, true]) for (const populated of [false, true]) {
+  test(`SQLite reserved child alias ${column} retains own undefined joins=${joins} populated=${populated}`, async () => {
+    const input: FixtureInput = structuredClone(cases);
+    const collision = cases.aliasCollision;
+    const table = input.tables.find(table => table.model === "team")!;
+    table.columns[column] = "TEXT";
+    table.rows[0][column] = collision.value;
+    if (!populated) input.tables.find(table => table.model === "teamMember")!.rows = [];
+    input.declarations.team.shadow = { fieldName: column };
+    const fixture = await setup(joins, undefined, input);
+    try {
+      const before = fixture.snapshot();
+      const expected = revive(joins ? collision.nativeResult : collision.fallbackResult);
+      const events = structuredClone(joins ? collision.nativeEvents : collision.fallbackEvents);
+      if (!populated) { expected.members = []; events.pop(); }
+      const actual = await fixture.read("team");
+      expect(actual).toStrictEqual(expected);
+      assertKeys(actual, expected);
+      expect(fixture.events).toStrictEqual(events);
       expect(fixture.snapshot()).toStrictEqual(before);
     } finally { fixture.database.close(); }
   });

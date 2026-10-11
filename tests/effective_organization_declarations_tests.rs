@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test while setup errors propagate through Result."
+)]
+
 use async_trait::async_trait;
 use better_auth::{
     BetterAuth,
@@ -399,8 +404,10 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
         };
         context
             .register_model_fields(EntityRole::OrganizationRole, declaration("externalBefore"))?;
-        let mut options = OrganizationConfig::default();
-        options.dynamic_access_control = enabled;
+        let mut options = OrganizationConfig {
+            dynamic_access_control: enabled,
+            ..Default::default()
+        };
         options.schema.organization_role = declaration("own");
         OrganizationPlugin::with_config(options)
             .on_init(&mut context)

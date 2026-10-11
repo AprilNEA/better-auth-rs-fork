@@ -42,7 +42,7 @@ where
                 Entity<O::Member>,
                 <S::User as SeaOrmUserModel>::Entity,
             >(
-                query.limit(1),
+                (query.limit(1), O::Member::column("id")?),
                 (
                     O::Member::column(&relation.from)?,
                     S::User::field_column(&relation.to)?,

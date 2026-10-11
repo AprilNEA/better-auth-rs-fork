@@ -46,6 +46,7 @@ fn public(row: WalletAddress) -> TestResult<Value> {
         is_primary,
         created_at,
         additional_fields,
+        ..
     } = row;
     assert!(additional_fields.is_empty());
     Ok(json!({

@@ -77,7 +77,7 @@ where
         {
             self.model_fields.canonicalize_id(EntityRole::TeamMember)?;
             let query = super::joins::joined_query::<Entity<O::Team>, Entity<O::TeamMember>>(
-                parent,
+                (parent, O::Team::column("id")?),
                 (
                     O::Team::column(&relation.from)?,
                     O::TeamMember::column(&relation.to)?,

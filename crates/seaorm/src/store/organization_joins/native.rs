@@ -6,7 +6,7 @@ use crate::{
 };
 use better_auth_core::{AuthResult, store::schema::EntityRole, user_fields::AdapterRecord};
 use sea_orm::{
-    ConnectionTrait, EntityName, EntityTrait, QueryTrait, Select,
+    ConnectionTrait, EntityName, EntityTrait, IdenStatic, QueryTrait, Select,
     sea_query::{Asterisk, Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 
@@ -113,7 +113,9 @@ where
         let Some(first) = rows.first() else {
             return Ok(None);
         };
-        let organization = first.without_columns(
+        let Some(organization) = joins::native_parent(
+            first,
+            O::Organization::column("id")?.as_str(),
             invitation_selection
                 .aliases()
                 .chain(member_selection.aliases())
@@ -122,7 +124,10 @@ where
                         .iter()
                         .flat_map(joins::ChildSelection::aliases),
                 ),
-        );
+        )?
+        else {
+            return Ok(None);
+        };
         let mut invitations = Vec::new();
         let mut members = Vec::new();
         let mut teams = Vec::new();

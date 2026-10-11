@@ -204,7 +204,7 @@ where
             <S::Session as SeaOrmSessionModel>::Entity,
             <S::User as SeaOrmUserModel>::Entity,
         >(
-            parent,
+            (parent, S::Session::id_column()),
             (
                 S::Session::field_column(&relation.from)?,
                 S::User::field_column(&relation.to)?,
@@ -280,7 +280,7 @@ where
                     <S::Session as SeaOrmSessionModel>::Entity,
                     <S::User as SeaOrmUserModel>::Entity,
                 >(
-                    parent,
+                    (parent, S::Session::id_column()),
                     (
                         S::Session::field_column(&relation.from)?,
                         S::User::field_column(&relation.to)?,

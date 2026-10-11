@@ -115,6 +115,7 @@ where
     let id = created.id.typed()?.clone();
     assert!(!id.is_empty());
     let mut expected = TwoFactor {
+        field_order: Default::default(),
         additional_fields: Default::default(),
         id: created.id.clone(),
         user_id: owner_id.clone().into(),

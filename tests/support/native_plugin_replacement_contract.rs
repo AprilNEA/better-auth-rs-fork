@@ -22,6 +22,8 @@ pub(crate) use target::Target;
 #[path = "native_plugin_replacement_store.rs"]
 mod store;
 pub(crate) use store::with_store;
+#[path = "native_plugin_replacement_typed.rs"]
+mod typed;
 
 mod values {
     use better_auth::seaorm::__private_chrono as chrono;

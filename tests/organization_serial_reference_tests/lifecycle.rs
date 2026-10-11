@@ -1,3 +1,8 @@
+#![expect(
+    clippy::indexing_slicing,
+    reason = "The contract requires every selected key in the complete captured relation record."
+)]
+
 use super::*;
 
 pub(super) async fn observe(joins: bool) -> AuthResult<Value> {

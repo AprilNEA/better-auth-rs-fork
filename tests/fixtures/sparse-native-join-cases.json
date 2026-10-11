@@ -16,6 +16,25 @@
     "invitation": { "organizationId": { "fieldName": "organization_id", "references": "organization" } }
   },
   "nullableChildRows": [{ "id": null, "team_id": "team" }, { "id": null, "team_id": "team" }],
+  "zeroChildRows": [{ "id": 0, "team_id": "team" }, { "id": 0, "team_id": "team" }],
+  "falsyParentCases": [
+    { "path": "team", "model": "team", "id": null, "idType": "TEXT", "result": { "name": "visible:7", "organizationId": "organization", "id": null, "members": [] }, "events": [["team.name", 7], ["team.organizationId", "organization"]] },
+    { "path": "team", "model": "team", "id": 0, "idType": "INTEGER", "result": { "name": "visible:7", "organizationId": "organization", "id": "0", "members": [] }, "events": [["team.name", 7], ["team.organizationId", "organization"]] },
+    { "path": "team", "model": "team", "id": "", "idType": "TEXT", "result": { "name": "visible:7", "organizationId": "organization", "id": "", "members": [] }, "events": [["team.name", 7], ["team.organizationId", "organization"]] },
+    { "path": "full", "model": "organization", "id": null, "idType": "TEXT", "result": { "name": "visible:11", "id": null, "invitations": [], "members": [], "teams": [] }, "events": [["organization.name", 11]] },
+    { "path": "full", "model": "organization", "id": 0, "idType": "INTEGER", "result": { "name": "visible:11", "id": "0", "invitations": [], "members": [], "teams": [] }, "events": [["organization.name", 11]] },
+    { "path": "full", "model": "organization", "id": "", "idType": "TEXT", "result": { "name": "visible:11", "id": "", "invitations": [], "members": [], "teams": [] }, "events": [["organization.name", 11]] },
+    { "path": "member", "model": "member", "id": "", "idType": "TEXT", "result": { "organizationId": "organization", "userId": "owner", "id": "", "user": { "id": "owner", "name": "visible:13", "email": "owner@sparse-native.test", "image": null } }, "events": [["member.organizationId", "organization"], ["member.userId", "owner"], ["user.name", 13]] }
+  ],
+  "aliasCollision": {
+    "column": "_joined_team_member_team_id",
+    "alternateColumn": "_JoinedTeam_memberTeam_id",
+    "value": "parent-shadow",
+    "fallbackResult": { "name": "visible:7", "organizationId": "organization", "shadow": "parent-shadow", "id": "team", "members": [{ "teamId": "team", "id": "team-member" }] },
+    "nativeResult": { "name": "visible:7", "organizationId": "organization", "shadow": { "type": "undefined" }, "id": "team", "members": [{ "teamId": "team", "id": "team-member" }] },
+    "fallbackEvents": [["team.name", 7], ["team.organizationId", "organization"], ["team.shadow", "parent-shadow"], ["teamMember.teamId", "team"]],
+    "nativeEvents": [["team.name", 7], ["team.organizationId", "organization"], ["team.shadow", { "type": "undefined" }], ["teamMember.teamId", "team"]]
+  },
   "cases": [
     {
       "path": "team",
