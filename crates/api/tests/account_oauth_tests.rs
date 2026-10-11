@@ -33,6 +33,9 @@ use serde::Serialize;
 
 use serde_json::json;
 
+#[path = "account_oauth_tests/refresh_cookie.rs"]
+mod refresh_cookie;
+
 const TEST_SECRET: &str = "test-secret-key-that-is-at-least-32-characters-long";
 static LOCAL_PROXY_BYPASS: Once = Once::new();
 

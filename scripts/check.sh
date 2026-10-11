@@ -1056,6 +1056,7 @@ run_stage() {
         plugins::oauth::apple_flow_tests:: \
         plugins::oauth::tiktok_tests:: \
         plugins::oauth::provider_tokens:: \
+        plugins::oauth::state::raw_state_tests:: \
         plugins::oauth::providers::twitch::tests:: \
         plugins::oauth::signin::override_tests:: \
         plugins::oauth::generic_profile::result_tests::

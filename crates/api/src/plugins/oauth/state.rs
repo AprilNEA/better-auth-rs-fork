@@ -247,7 +247,9 @@ pub(crate) fn decode_account_cookie_value<'a>(
     token: &str,
 ) -> Option<AccountCookiePayload> {
     let payload = better_auth_core::utils::jwe::decode(token, secret, "better-auth-account")?;
-    serde_json::from_value(Value::Object(payload)).ok()
+    Some(AccountCookiePayload::from_adapter_fields(
+        FieldMap::from_json(payload).ok()?,
+    ))
 }
 
 pub(crate) fn get_cookie(req: &AuthRequest, name: &str) -> Option<String> {

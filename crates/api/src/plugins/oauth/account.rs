@@ -1,6 +1,7 @@
 use better_auth_core::SchemaValue;
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, FieldValue, UpdateAccount,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, FieldMap, FieldValue,
+    UpdateAccount,
 };
 use chrono::Utc;
 
@@ -232,52 +233,15 @@ fn decrypt_value(
     .into())
 }
 
-fn overlay_account(target: &mut AccountCookiePayload, source: AccountCookiePayload) {
-    if !source.id.is_undefined() {
-        target.id = source.id;
-    }
-    if !source.account_id.is_undefined() {
-        target.account_id = source.account_id;
-    }
-    if !source.provider_id.is_undefined() {
-        target.provider_id = source.provider_id;
-    }
-    if !source.user_id.is_undefined() {
-        target.user_id = source.user_id;
-    }
-    if !source.access_token.is_undefined() {
-        target.access_token = source.access_token;
-    }
-    if !source.refresh_token.is_undefined() {
-        target.refresh_token = source.refresh_token;
-    }
-    if !source.id_token.is_undefined() {
-        target.id_token = source.id_token;
-    }
-    if !source.access_token_expires_at.is_undefined() {
-        target.access_token_expires_at = source.access_token_expires_at;
-    }
-    if !source.refresh_token_expires_at.is_undefined() {
-        target.refresh_token_expires_at = source.refresh_token_expires_at;
-    }
-    if !source.scope.is_undefined() {
-        target.scope = source.scope;
-    }
-    if !source.password.is_undefined() {
-        target.password = source.password;
-    }
-    if !source.created_at.is_undefined() {
-        target.created_at = source.created_at;
-    }
-    if !source.updated_at.is_undefined() {
-        target.updated_at = source.updated_at;
-    }
-    target.additional_fields.extend(source.additional_fields);
+enum TokenRefresh {
+    AccessToken,
+    RefreshToken,
 }
 
 async fn persist_tokens(
     account: &AccountCookiePayload,
     tokens: &OAuthTokenSet,
+    refresh: TokenRefresh,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AccountCookiePayload> {
     let encrypted = encrypt_token_set(
@@ -289,58 +253,78 @@ async fn persist_tokens(
             .filter(|token| !token.is_empty()),
         None,
     )?;
-    let mut update = UpdateAccount {
-        access_token: encrypted
-            .access_token
-            .map(|value| SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        refresh_token: encrypted
-            .refresh_token
-            .map(|value| SchemaValue::Typed(Some(value)))
-            .unwrap_or_else(|| account.refresh_token.clone()),
-        id_token: tokens
-            .id_token
-            .clone()
-            .filter(|value| !value.is_empty())
-            .map(|value| SchemaValue::Typed(Some(value)))
-            .unwrap_or_else(|| account.id_token.clone()),
-        access_token_expires_at: tokens
-            .access_token_expires_at
-            .clone()
-            .map(|value| SchemaValue::Typed(Some(value)))
-            .unwrap_or_default(),
-        refresh_token_expires_at: tokens
-            .refresh_token_expires_at
-            .clone()
-            .map(|value| SchemaValue::Typed(Some(value)))
-            .unwrap_or_else(|| account.refresh_token_expires_at.clone()),
-        ..Default::default()
+    let refresh_token = encrypted
+        .refresh_token
+        .map(FieldValue::from)
+        .unwrap_or_else(|| account.refresh_token.field_value());
+    let access_token_expires_at = tokens
+        .access_token_expires_at
+        .clone()
+        .map(FieldValue::from)
+        .unwrap_or_default();
+    // The endpoints construct these properties in different observable hook orders.
+    let middle = match refresh {
+        TokenRefresh::AccessToken => [
+            ("accessTokenExpiresAt", access_token_expires_at),
+            ("refreshToken", refresh_token),
+        ],
+        TokenRefresh::RefreshToken => [
+            ("refreshToken", refresh_token),
+            ("accessTokenExpiresAt", access_token_expires_at),
+        ],
     };
-    if tokens.access_token_expires_at.is_none() {
-        // The refresh input owns this undefined key before the adapter removes absent writes.
-        let _ = update.additional_fields.insert(
-            "accessTokenExpiresAt".into(),
-            better_auth_core::FieldValue::Undefined,
-        );
-    }
+    let update_fields: FieldMap = std::iter::once((
+        "accessToken",
+        encrypted
+            .access_token
+            .map(FieldValue::from)
+            .unwrap_or_default(),
+    ))
+    .chain(middle)
+    .chain([
+        (
+            "refreshTokenExpiresAt",
+            tokens
+                .refresh_token_expires_at
+                .clone()
+                .map(FieldValue::from)
+                .unwrap_or_else(|| account.refresh_token_expires_at.field_value()),
+        ),
+        (
+            "idToken",
+            tokens
+                .id_token
+                .clone()
+                .filter(|value| !value.is_empty())
+                .map(FieldValue::from)
+                .unwrap_or_else(|| account.id_token.field_value()),
+        ),
+    ])
+    .map(|(name, value)| (name.into(), value))
+    .collect();
     let updated = if account.id.is_truthy()? {
         ctx.database
-            .update_account_by_id_value(&account.id.field_value(), update.clone())
+            .update_account_by_id_value(
+                &account.id.field_value(),
+                UpdateAccount {
+                    additional_fields: update_fields.clone(),
+                    ..Default::default()
+                },
+            )
             .await?
     } else {
         None
     };
-    let mut cookie = account.clone();
-    if let Some(updated) = updated {
-        overlay_account(&mut cookie, updated);
-    } else {
-        cookie.access_token = update.access_token;
-        cookie.refresh_token = update.refresh_token;
-        cookie.id_token = update.id_token;
-        cookie.access_token_expires_at = update.access_token_expires_at;
-        cookie.refresh_token_expires_at = update.refresh_token_expires_at;
-    }
-    Ok(cookie)
+    Ok(updated.unwrap_or_else(|| AccountCookiePayload::from_adapter_fields(update_fields)))
+}
+
+fn updated_account_cookie(
+    account: &AccountCookiePayload,
+    update: &AccountCookiePayload,
+) -> AuthResult<AccountCookiePayload> {
+    let mut fields = account.internal_fields()?;
+    fields.extend(update.internal_fields()?);
+    Ok(AccountCookiePayload::from_adapter_fields(fields))
 }
 
 async fn valid_access_token(
@@ -371,9 +355,13 @@ async fn valid_access_token(
                 .as_deref()
                 .ok_or_else(|| AuthError::internal("Refresh token is null"))?;
             let tokens = refresh_tokens_via_provider(provider, refresh, req).await?;
-            let updated = persist_tokens(account, &tokens, ctx).await?;
+            let updated = persist_tokens(account, &tokens, TokenRefresh::AccessToken, ctx).await?;
             if ctx.config.account.store_account_cookie() {
-                cookies = create_account_cookie_headers(req, &ctx.config, &updated)?;
+                cookies = create_account_cookie_headers(
+                    req,
+                    &ctx.config,
+                    &updated_account_cookie(account, &updated)?,
+                )?;
             }
             Some(tokens)
         } else {
@@ -493,7 +481,7 @@ pub(super) async fn handle_refresh_token(
             .as_deref()
             .ok_or_else(|| AuthError::internal("Refresh token is null"))?;
         let tokens = refresh_tokens_via_provider(provider, refresh_token, req).await?;
-        let updated = persist_tokens(&account, &tokens, ctx).await?;
+        let updated = persist_tokens(&account, &tokens, TokenRefresh::RefreshToken, ctx).await?;
         let response = RefreshTokenResponse {
             access_token: tokens.access_token,
             access_token_expires_at: tokens.access_token_expires_at,
@@ -520,7 +508,11 @@ pub(super) async fn handle_refresh_token(
         let cookies = if matches!(selection.source, AccountSource::Cookie)
             && ctx.config.account.store_account_cookie()
         {
-            create_account_cookie_headers(req, &ctx.config, &updated)?
+            create_account_cookie_headers(
+                req,
+                &ctx.config,
+                &updated_account_cookie(&account, &updated)?,
+            )?
         } else {
             Vec::new()
         };
@@ -564,10 +556,10 @@ pub(super) async fn handle_account_info(
         .ok_or_else(|| AuthError::bad_request("Access token not found"))?;
     let request = OAuthUserInfoRequest {
         access_token: Some(access_token),
-        access_token_expires_at: if account.access_token_expires_at.is_absent() {
+        access_token_expires_at: if tokens.access_token_expires_at.is_absent() {
             None
         } else {
-            account.access_token_expires_at.typed()?.clone()
+            tokens.access_token_expires_at.typed()?.clone()
         },
         scopes: tokens.scopes,
         id_token: if tokens.id_token.is_absent() {
