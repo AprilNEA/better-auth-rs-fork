@@ -36,7 +36,8 @@ pub trait SeaOrmUserModel:
         false
     }
 
-    /// Columns written by a handwritten insert beyond core and configured application fields.
+    /// Legacy insert metadata retained for direct model callers.
+    /// The User store writes configured fields directly and does not consult this method.
     fn extra_insert_columns() -> Vec<<Self::Entity as EntityTrait>::Column> {
         Vec::new()
     }

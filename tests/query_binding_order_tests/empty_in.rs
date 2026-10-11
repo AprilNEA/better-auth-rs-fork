@@ -18,10 +18,6 @@ use serde_json::json;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract requires backend syntax errors, zero callbacks, and complete storage preservation"
-)]
 async fn check(database: DatabaseConnection) -> TestResult {
     let backend = database.get_database_backend();
     let _ = database

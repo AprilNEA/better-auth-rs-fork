@@ -27,6 +27,9 @@ use std::sync::{
 #[path = "schema_preflight_tests/mysql.rs"]
 mod mysql;
 
+#[path = "schema_preflight_tests/native_mappings.rs"]
+mod native_mappings;
+
 #[derive(Clone)]
 struct Observe(Arc<AtomicUsize>);
 

@@ -643,6 +643,8 @@ Adapters used with secondary sessions must implement `SessionStore::update_sessi
 
 SeaORM stores backed by SQLite, PostgreSQL or MySQL validate the configured physical tables before HTTP request hooks, native endpoints and outer transactions. PostgreSQL resolves unqualified entity tables through the effective connection search path. MySQL inspects the current database. Enable SeaORM's `sqlx-mysql` feature in the application to connect to MySQL. Initialization logs failures without rejecting the auth context. A disabled HTTP path returns its 404 before validation. Direct adapter CRUD does not run preflight.
 
+The check resolves the complete field declarations before collecting physical columns. A native field replacement removes its original column from that set unless another declaration writes it. The original column must then be nullable or have a database default. The physical primary key remains required independently of an explicit `id` declaration and its mapping. Schema inspection does not run field defaults or transforms, or change runtime ID policies.
+
 The check reports missing tables, missing columns and extra required columns that inserts do not write. It does not validate SQL types, expected nullability, indexes or foreign keys. `AuthError::SchemaCheck` preserves structured `SchemaFinding` values. Configuration errors in entity mappings remain configuration errors.
 
 Set `config.advanced.database.validate_schema = Some(false)` to disable automatic validation. `auth.context().database.schema_validation()` still exposes the explicit check. Adapters without introspection log a warning only when validation is explicitly enabled.
@@ -651,7 +653,7 @@ Each auth build has an independent cached verdict. Concurrent calls share one ch
 
 PostgreSQL preflight reads sequence ownership and schema privileges through catalog OIDs. Unrelated schema cleanup does not require name resolution for those rows. The optional PostgreSQL acceptance test verifies migrations, cached results, defaults, serial columns and search-path precedence against a real server. Set `BETTER_AUTH_TEST_POSTGRES_URL` to a test database whose role can create and drop schemas, then run `devenv shell -- cargo test --locked --features axum,seaorm2,redis-cache --test schema_preflight_tests live_postgres_ -- --ignored`. The test removes its isolated schemas after success. If the test fails, inspect and remove its `ba_preflight_` schemas before repeating the test.
 
-`AuthEntity` provides physical core-field mappings automatically. Handwritten models must implement `field_column` for every core and configured field. Use the existing typed `Column` values so `column_name` remains authoritative. If a handwritten `new_active` supplies extra application columns outside field policies, declare only those columns through `extra_insert_columns`:
+`AuthEntity` provides physical core-field mappings automatically. Handwritten models must implement `field_column` for every core and configured field. Use the existing typed `Column` values so `column_name` remains authoritative. If a handwritten Account, Verification, or Session `new_active` supplies extra application columns outside field policies, declare only those columns through `extra_insert_columns`:
 
 ```rust,ignore
 fn extra_insert_columns() -> Vec<Column> {
@@ -659,7 +661,7 @@ fn extra_insert_columns() -> Vec<Column> {
 }
 ```
 
-Leave the default empty list when inserts do not supply extra columns. Do not declare every entity column: an unconfigured required column must still fail preflight.
+Leave the default empty list when inserts do not supply extra columns. Do not declare every entity column: an unconfigured required column must still fail preflight. User inserts use the complete field declarations directly; the legacy User `new_active` and `extra_insert_columns` methods do not supply extra columns to the store. Configure User application fields through `AuthConfig.user` and provide database defaults or nullable columns for fields outside those declarations.
 
 Account, Verification, and Session inserts evaluate the handwritten initializer only when application columns require initialization. Session also initializes its independent active column when the model declares one. The initializer receives `None` for the typed ID argument and the final physical `FieldMap`; read any needed ID from that map without reconstructing a complete typed record. The shared record binder retains prepared field order and values, then appends initialized extra columns. An initializer cannot overwrite a field already supplied by the field policies. Account creation and updates resolve IDs in declaration order, using the policy active after preceding callbacks. Native supplied values reach backend binding without an intermediate string or application ID conversion.
 
