@@ -21,6 +21,8 @@ mod assertions;
 mod callbacks;
 #[path = "native_profile_contract/capture.rs"]
 mod capture;
+#[path = "native_profile_contract/dates.rs"]
+mod dates;
 #[path = "native_profile_contract/endpoint.rs"]
 mod endpoint;
 #[path = "native_profile_contract/harness.rs"]

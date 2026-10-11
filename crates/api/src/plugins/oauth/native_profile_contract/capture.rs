@@ -48,7 +48,7 @@ impl Before {
         mut outcome: Value,
         headers: Value,
     ) -> AuthResult<Value> {
-        let events = state.log.take();
+        let mut events = state.log.take();
         state.log.phase("assertion");
         assertions::execution(state, store, &outcome, &events, &value)?;
         let assertion_events = state.log.take();
@@ -88,17 +88,25 @@ impl Before {
             "admissionProfilesAreRaw": admissions.iter().map(|data| Ok(data.model_property("source")?.model_property("oauth")?.model_property("profile")?.strict_equals(&state.raw))).collect::<AuthResult<Vec<_>>>()?,
         });
         let tracking = state.tracking.lock().unwrap();
-        for name in ["result", "admissions", "storage"] {
-            after[name] = observe::replace_generated(after[name].take(), &tracking.generated_dates);
-        }
+        dates::apply(
+            &mut events,
+            &mut after,
+            &state.scenario,
+            &tracking.generated_dates,
+        );
         let mut sample = serde_json::to_value(&state.scenario)?;
-        sample.as_object_mut().unwrap().extend(json!({
-            "backend": "memory", "before": self.observations, "outcome": outcome,
-            "executionEvents": observe::replace_generated(Value::Array(events), &tracking.generated_dates),
-            "assertionEvents": assertion_events, "after": after,
-            "observationEvents": {"before": self.events, "after": state.log.take()},
-            "identities": identities,
-        }).as_object().unwrap().clone());
+        sample.as_object_mut().unwrap().extend(
+            json!({
+                "backend": "memory", "before": self.observations, "outcome": outcome,
+                "executionEvents": events,
+                "assertionEvents": assertion_events, "after": after,
+                "observationEvents": {"before": self.events, "after": state.log.take()},
+                "identities": identities,
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        );
         Ok(observe::replace_generated(sample, &tracking.replacements))
     }
 }
