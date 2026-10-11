@@ -68,14 +68,18 @@ impl MemoryOperation<'_> {
         self.capture_state()?.shallow_snapshot()
     }
 
-    pub(super) fn structured_clone(&self) -> AuthResult<State> {
-        self.structured_clone_with_device_origins(|_, _, _| {})
+    pub(super) fn structured_clone(
+        &self,
+        context: &mut crate::StructuredCloneContext,
+    ) -> AuthResult<State> {
+        self.structured_clone_with_device_origins(context, |_, _, _| {})
     }
 
     pub(super) fn structured_clone_with_device_origins(
         &self,
+        context: &mut crate::StructuredCloneContext,
         device_origin: impl FnMut(RowRef<FieldMap>, RowRef<FieldMap>, FieldMap),
     ) -> AuthResult<State> {
-        State::structured_clone_from(self, device_origin)
+        State::structured_clone_from(self, context, device_origin)
     }
 }

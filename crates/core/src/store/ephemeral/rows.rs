@@ -83,8 +83,18 @@ impl RecordSource {
 }
 
 /// Read properties as shallow handles; implementations must not evaluate child values.
-pub(super) trait ObjectRow: AuthRecordFields + FromFieldMap {
+pub(super) trait ObjectRow:
+    AuthRecordFields + FromFieldMap + Clone + Send + Sync + 'static
+{
     fn property(&self, name: &str) -> AuthResult<Option<FieldValue>>;
+
+    fn clone_hidden_values(&self) -> AuthResult<Vec<FieldValue>> {
+        Ok(Vec::new())
+    }
+
+    fn with_cloned_fields(&self, fields: FieldMap, _state: Vec<FieldValue>) -> AuthResult<Self> {
+        Self::from_field_values(fields)
+    }
 }
 
 impl ObjectRow for FieldMap {
@@ -97,9 +107,21 @@ impl ObjectRow for crate::UserView {
     fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         Ok(self.field_values()?.get(name).cloned())
     }
+
+    fn clone_hidden_values(&self) -> AuthResult<Vec<FieldValue>> {
+        self.clone_hidden_values()
+    }
+
+    fn with_cloned_fields(&self, fields: FieldMap, state: Vec<FieldValue>) -> AuthResult<Self> {
+        self.with_cloned_fields(fields, state)
+    }
 }
 
-impl<T: ObjectRow + Send> crate::field_value::FieldObjectSource for RowRef<T> {
+impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(self.shallow_fields()?.keys().cloned().collect())
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         self.field(name)
     }
@@ -118,6 +140,28 @@ impl<T: ObjectRow + Send> crate::field_value::FieldObjectSource for RowRef<T> {
 
     fn identity(&self) -> usize {
         Arc::as_ptr(&self.0) as usize
+    }
+
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+
+    fn clone_seed(&self) -> AuthResult<Option<crate::field_value::ObjectCloneSeed>> {
+        let before = Arc::new(self.snapshot()?);
+        let state = before.clone_hidden_values()?;
+        let target = Self(Arc::new(Mutex::new((*before).clone())), self.1.clone());
+        let object = crate::FieldObject::from_source(Arc::new(target.clone()));
+        Ok(Some(crate::field_value::ObjectCloneSeed {
+            object,
+            state,
+            original_record: Some(before.clone()),
+            prepare: Box::new(move |fields, state| {
+                let row = before.with_cloned_fields(fields, state)?;
+                Ok(Box::new(move || {
+                    crate::field_value::publish_clone(&target.0, row);
+                }))
+            }),
+        }))
     }
 }
 
@@ -173,13 +217,26 @@ impl<T: ObjectRow> RowRef<T> {
     }
 }
 
-impl<T: ObjectRow + Clone + Send + 'static> RowRef<T> {
+impl<T: ObjectRow> RowRef<T> {
     pub(super) fn field_value(&self) -> FieldValue {
         FieldValue::Object(crate::FieldObject::from_source(Arc::new(self.clone())))
     }
+
+    pub(super) fn structured_clone(
+        &self,
+        context: &mut crate::StructuredCloneContext,
+    ) -> AuthResult<(Self, T)> {
+        let (value, before) = context.clone_record(&self.field_value())?;
+        let row = value
+            .as_object()
+            .and_then(crate::FieldObject::source::<Self>)
+            .cloned()
+            .ok_or_else(|| AuthError::internal("Structured clone lost its native row type"))?;
+        Ok((row, before))
+    }
 }
 
-impl<T: ObjectRow + Clone + Send + 'static> crate::store::JoinValue<RowRef<T>> {
+impl<T: ObjectRow> crate::store::JoinValue<RowRef<T>> {
     pub(super) fn raw_value(&self) -> FieldValue {
         match self {
             Self::One(row) => row.as_ref().map_or(FieldValue::Null, RowRef::field_value),
@@ -318,6 +375,12 @@ mod tests {
                 id: SchemaValue::from_field(fields.remove("id").unwrap_or_default()),
                 label: fields.remove("label").unwrap_or_default().decode()?,
             })
+        }
+    }
+
+    impl ObjectRow for Record {
+        fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            Ok(self.field_values()?.get(name).cloned())
         }
     }
 

@@ -326,6 +326,53 @@ macro_rules! user_fields {
                     self.field_order.push(name.into());
                 }
             }
+
+            pub(crate) fn clone_hidden_values(&self) -> AuthResult<Vec<Value>> {
+                let visible = self.field_values()?;
+                let mut values = vec![
+                    $(if visible.contains_key($name) { Value::Undefined } else { self.$field.field_value() },)*
+                    if visible.contains_key("metadata") { Value::Undefined } else { self.metadata.clone() },
+                ];
+                values.extend(self.additional_fields.iter().map(|(name, value)| {
+                    if name != "metadata" && !Self::NATIVE_FIELDS.contains(&name.as_str()) && visible.contains_key(name) {
+                        Value::Undefined
+                    } else {
+                        value.clone()
+                    }
+                }));
+                Ok(values)
+            }
+
+            pub(crate) fn with_cloned_fields(&self, mut fields: FieldMap, state: Vec<Value>) -> AuthResult<Self> {
+                let cloned_order: Vec<_> = fields.keys().cloned().collect();
+                let original_fields = self.field_values()?;
+                let original_order: Vec<_> = original_fields.keys().cloned().collect();
+                let mut state = state.into_iter();
+                let mut next = || state.next().ok_or_else(|| crate::AuthError::internal("User clone state is incomplete"));
+                let mut user = self.clone();
+                $(user.$field = SchemaValue::from_field(fields.remove($name).unwrap_or(next()?));)*
+                user.metadata = fields.remove("metadata").unwrap_or(next()?);
+                user.additional_fields = FieldMap::new();
+                for name in self.additional_fields.keys() {
+                    let hidden = next()?;
+                    let value = if name != "metadata" && !Self::NATIVE_FIELDS.contains(&name.as_str()) {
+                        fields.remove(name).or_else(|| (!original_fields.contains_key(name)).then_some(hidden))
+                    } else {
+                        Some(hidden)
+                    };
+                    if let Some(value) = value {
+                        let _ = user.additional_fields.insert(name.clone(), value);
+                    }
+                }
+                user.additional_fields.extend(fields);
+                if original_order != cloned_order {
+                    user.field_order = cloned_order.clone();
+                }
+                if user.visible_fields.is_some() {
+                    user.visible_fields = Some(cloned_order.into_iter().collect());
+                }
+                Ok(user)
+            }
         }
 
         impl TryFrom<FieldMap> for UserView {

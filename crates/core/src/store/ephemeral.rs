@@ -34,6 +34,8 @@ mod device_codes;
 mod field_bindings;
 mod fields;
 #[cfg(test)]
+mod graph_clone_contract_tests;
+#[cfg(test)]
 mod history_tests;
 mod hooks;
 #[cfg(test)]

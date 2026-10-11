@@ -46,6 +46,12 @@ struct Operand {
 }
 
 impl FieldObjectSource for Operand {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Err(AuthError::internal(
+            "The predicate must read individual properties",
+        ))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         match name {
             "tag" => Ok(Some(self.tag.into())),

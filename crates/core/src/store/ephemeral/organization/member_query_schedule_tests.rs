@@ -71,6 +71,12 @@ struct Operand {
 }
 
 impl FieldObjectSource for Operand {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Err(AuthError::internal(
+            "Member query must not enumerate its operand",
+        ))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<Value>> {
         if name == "toString" {
             check_context(&self.marker)?;

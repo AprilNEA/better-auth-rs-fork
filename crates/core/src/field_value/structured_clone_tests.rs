@@ -1,0 +1,339 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions verify graph ownership, getter order, and failure atomicity; source errors propagate."
+)]
+
+use super::*;
+use crate::field_value::FieldObjectSource;
+use std::sync::Mutex;
+
+type Events = Arc<Mutex<Vec<String>>>;
+type OnRead = Box<dyn Fn(&str) -> AuthResult<()> + Send + Sync>;
+
+struct Source {
+    name: &'static str,
+    fields: Mutex<FieldMap>,
+    events: Events,
+    on_read: OnRead,
+    target: Option<Arc<Mutex<Option<FieldObject>>>>,
+}
+
+impl FieldObjectSource for Source {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        self.events
+            .lock()
+            .map_err(poisoned)?
+            .push(format!("keys:{}", self.name));
+        Ok(self
+            .fields
+            .lock()
+            .map_err(poisoned)?
+            .keys()
+            .cloned()
+            .collect())
+    }
+
+    fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        self.events
+            .lock()
+            .map_err(poisoned)?
+            .push(format!("get:{}.{name}", self.name));
+        (self.on_read)(name)?;
+        Ok(self.fields.lock().map_err(poisoned)?.get(name).cloned())
+    }
+
+    fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Ok(self.fields.lock().map_err(poisoned)?.insert(name, value))
+    }
+
+    fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(self.fields.lock().map_err(poisoned)?.remove(name))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        Err(AuthError::internal(
+            "Graph traversal must read each property before the next getter",
+        ))
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self) as usize
+    }
+
+    fn clone_seed(&self) -> AuthResult<Option<ObjectCloneSeed>> {
+        let Some(target) = &self.target else {
+            return Ok(None);
+        };
+        let seed = FieldObject::from(FieldMap::new()).clone_seed()?;
+        *target.lock().map_err(poisoned)? = Some(seed.object.clone());
+        Ok(Some(seed))
+    }
+}
+
+fn poisoned<T>(_: std::sync::PoisonError<T>) -> AuthError {
+    AuthError::internal("Graph contract lock poisoned")
+}
+
+#[test]
+fn getters_follow_depth_first_property_order_and_keep_undefined_distinct_from_deletion()
+-> AuthResult<()> {
+    let events = Events::default();
+    let root = Arc::new(Source {
+        name: "root",
+        fields: Mutex::new(FieldMap::from([
+            ("child".into(), FieldValue::Undefined),
+            ("2".into(), "two".into()),
+            ("1".into(), "one".into()),
+            ("later".into(), 1.into()),
+            ("removed".into(), "delete-before-read".into()),
+            ("ownUndefined".into(), FieldValue::Undefined),
+        ])),
+        events: events.clone(),
+        on_read: Box::new(|_| Ok(())),
+        target: None,
+    });
+    let weak = Arc::downgrade(&root);
+    let child = FieldObject::from_source(Arc::new(Source {
+        name: "child",
+        fields: Mutex::new([("value".into(), "child-value".into())].into()),
+        events: events.clone(),
+        on_read: Box::new(move |_| {
+            let root = weak
+                .upgrade()
+                .ok_or_else(|| AuthError::internal("Missing root source"))?;
+            let _ = root.set("later".into(), 2.into())?;
+            let _ = root.delete("removed")?;
+            let _ = root.set("appended".into(), "not-enumerated".into())?;
+            Ok(())
+        }),
+        target: None,
+    }));
+    let _ = root.set("child".into(), FieldValue::Object(child))?;
+    let value = FieldValue::Object(FieldObject::from_source(root.clone()));
+    let cloned = StructuredCloneContext::new().clone_value(&value)?;
+    assert_eq!(
+        *events.lock().map_err(poisoned)?,
+        [
+            "keys:root",
+            "get:root.1",
+            "get:root.2",
+            "get:root.child",
+            "keys:child",
+            "get:child.value",
+            "get:root.later",
+            "get:root.removed",
+            "get:root.ownUndefined",
+        ]
+    );
+    assert_eq!(
+        cloned.enumerable_fields()?,
+        FieldMap::from([
+            ("1".into(), "one".into()),
+            ("2".into(), "two".into()),
+            (
+                "child".into(),
+                FieldMap::from([("value".into(), "child-value".into())]).into()
+            ),
+            ("later".into(), 2.into()),
+            ("ownUndefined".into(), FieldValue::Undefined),
+        ])
+    );
+    assert_eq!(
+        cloned
+            .enumerable_fields()?
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["1", "2", "child", "later", "ownUndefined"]
+    );
+    assert!(
+        root.fields
+            .lock()
+            .map_err(poisoned)?
+            .contains_key("appended")
+    );
+    assert!(
+        !root
+            .fields
+            .lock()
+            .map_err(poisoned)?
+            .contains_key("removed")
+    );
+    Ok(())
+}
+
+#[test]
+fn failed_traversal_does_not_publish_partial_aliases_and_retry_observes_fresh_values()
+-> AuthResult<()> {
+    let mut context = StructuredCloneContext::new();
+    let date = FieldValue::from(FieldDate::from_milliseconds(42.0));
+    let existing = context.clone_value(&date)?;
+    let cycle = FieldObject::from(FieldMap::from([("value".into(), 1.into())]));
+    let _ = cycle.set("self", FieldValue::Object(cycle.clone()))?;
+    let fields = FieldMap::from([
+        ("date".into(), date.clone()),
+        ("cycle".into(), FieldValue::Object(cycle.clone())),
+        (
+            "failure".into(),
+            crate::FieldFunction::contextual(|_, _| Ok(FieldValue::Undefined)).into(),
+        ),
+    ]);
+    assert!(matches!(
+        context.clone_map(&fields),
+        Err(AuthError::DataClone)
+    ));
+    assert_eq!(context.copies.len(), 1);
+    let _ = cycle.set("value", 2.into())?;
+    let mut retry = fields;
+    let _ = retry.remove("failure");
+    let copied = context.clone_map(&retry)?;
+    let copied_cycle = copied
+        .get("cycle")
+        .ok_or_else(|| AuthError::internal("Missing copied cycle"))?;
+    assert!(
+        copied_cycle
+            .model_property("self")?
+            .strict_equals(copied_cycle)
+    );
+    assert_eq!(copied_cycle.model_property("value")?, 2.into());
+    assert!(
+        copied
+            .get("date")
+            .is_some_and(|value| value.strict_equals(&existing))
+    );
+    let _ = cycle.delete("self")?;
+    let _ = copied_cycle
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Expected copied cycle"))?
+        .delete("self")?;
+    Ok(())
+}
+
+struct RejectedRecord {
+    target: Arc<Mutex<Option<FieldObject>>>,
+    error: Mutex<Option<AuthError>>,
+}
+
+impl FieldObjectSource for RejectedRecord {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(Vec::new())
+    }
+    fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(None)
+    }
+    fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Ok(None)
+    }
+    fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(None)
+    }
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        Ok(FieldMap::new())
+    }
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self) as usize
+    }
+
+    fn clone_seed(&self) -> AuthResult<Option<ObjectCloneSeed>> {
+        let object = FieldObject::from(FieldMap::new());
+        *self.target.lock().map_err(poisoned)? = Some(object.clone());
+        let error = self
+            .error
+            .lock()
+            .map_err(poisoned)?
+            .take()
+            .ok_or_else(|| AuthError::internal("Repeated rejected record conversion"))?;
+        Ok(Some(ObjectCloneSeed {
+            object,
+            state: Vec::new(),
+            original_record: None,
+            prepare: Box::new(move |_, _| Err(error)),
+        }))
+    }
+}
+
+#[test]
+fn failed_native_preparation_fills_no_objects_and_retains_the_original_error() -> AuthResult<()> {
+    let target = Arc::new(Mutex::new(None));
+    let cycle_target = Arc::new(Mutex::new(None));
+    let message = "Native record conversion failed".to_owned();
+    let allocation = message.as_ptr();
+    let rejection = FieldObject::from_source(Arc::new(RejectedRecord {
+        target: target.clone(),
+        error: Mutex::new(Some(AuthError::Internal(message))),
+    }));
+    let cycle = FieldObject::from_source(Arc::new(Source {
+        name: "cycle",
+        fields: Mutex::new(FieldMap::new()),
+        events: Events::default(),
+        on_read: Box::new(|_| Ok(())),
+        target: Some(cycle_target.clone()),
+    }));
+    let _ = cycle.set("self", FieldValue::Object(cycle.clone()))?;
+    let _ = cycle.set("rejection", FieldValue::Object(rejection))?;
+    let mut context = StructuredCloneContext::new();
+    let result = context.clone_value(&FieldValue::Object(cycle.clone()));
+    let _ = cycle.delete("self")?;
+    assert!(matches!(result, Err(AuthError::Internal(message)) if message.as_ptr() == allocation));
+    assert!(context.copies.is_empty());
+    assert!(
+        target
+            .lock()
+            .map_err(poisoned)?
+            .as_ref()
+            .ok_or_else(|| AuthError::internal("Missing rejected clone target"))?
+            .snapshot_fields()?
+            .is_empty()
+    );
+    assert!(
+        cycle_target
+            .lock()
+            .map_err(poisoned)?
+            .as_ref()
+            .ok_or_else(|| AuthError::internal("Missing cyclic clone target"))?
+            .snapshot_fields()?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[test]
+fn deferred_snapshot_failure_does_not_publish_an_earlier_cyclic_graph() -> AuthResult<()> {
+    let observed = Arc::new(Mutex::new(None));
+    let source = FieldObject::from_source(Arc::new(Source {
+        name: "cycle",
+        fields: Mutex::new(FieldMap::new()),
+        events: Events::default(),
+        on_read: Box::new(|_| Ok(())),
+        target: Some(observed.clone()),
+    }));
+    let _ = source.set("self", FieldValue::Object(source.clone()))?;
+    let mut base = StructuredCloneContext::deferred();
+    let first = base.clone_value(&FieldValue::Object(source.clone()))?;
+    let first_target = observed
+        .lock()
+        .map_err(poisoned)?
+        .clone()
+        .ok_or_else(|| AuthError::internal("Missing first clone target"))?;
+    let _ = source.set(
+        "failure",
+        crate::FieldFunction::contextual(|_, _| Ok(FieldValue::Undefined)).into(),
+    )?;
+    let mut working = StructuredCloneContext::deferred();
+    let failed = working.clone_value(&FieldValue::Object(source.clone()));
+    assert!(matches!(failed, Err(AuthError::DataClone)));
+    drop((base, working));
+    assert!(first_target.snapshot_fields()?.is_empty());
+    assert!(first.enumerable_fields()?.is_empty());
+    assert!(
+        observed
+            .lock()
+            .map_err(poisoned)?
+            .as_ref()
+            .ok_or_else(|| AuthError::internal("Missing second clone target"))?
+            .snapshot_fields()?
+            .is_empty()
+    );
+    let _ = source.delete("self")?;
+    Ok(())
+}

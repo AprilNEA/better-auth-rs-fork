@@ -5,7 +5,7 @@ use chrono::{DateTime, Datelike, Utc};
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -15,6 +15,9 @@ pub use function::FieldFunction;
 mod object;
 pub use object::FieldObject;
 pub(crate) use object::{FieldObjectSource, ObjectIdentity};
+mod structured_clone;
+pub use structured_clone::StructuredCloneContext;
+pub(crate) use structured_clone::{ObjectCloneSeed, publish_clone};
 mod primitive;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
@@ -544,75 +547,6 @@ impl From<FieldMap> for FieldValue {
     }
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-enum Identity {
-    Date(usize),
-    Array(usize),
-    Object(ObjectIdentity),
-}
-
-/// Copy one value graph with fresh object identities and preserved aliases.
-/// Reuse one context across all records in a transaction snapshot.
-/// Create a new context for each independent snapshot.
-#[derive(Default)]
-pub struct StructuredCloneContext {
-    // Retaining source handles prevents pointer reuse between calls through the same context.
-    copies: HashMap<Identity, (FieldValue, FieldValue)>,
-    active: HashSet<Identity>,
-}
-
-impl StructuredCloneContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Copy a value while preserving aliases already copied by this context.
-    pub fn clone_value(&mut self, value: &FieldValue) -> AuthResult<FieldValue> {
-        let identity = match value {
-            FieldValue::Function(_) => return Err(AuthError::DataClone),
-            FieldValue::Date(value) => Identity::Date(Arc::as_ptr(&value.0) as usize),
-            FieldValue::Array(value) => Identity::Array(Arc::as_ptr(value) as *const () as usize),
-            FieldValue::Object(value) => Identity::Object(value.identity()),
-            value => return Ok(value.clone()),
-        };
-        if let Some((_, copied)) = self.copies.get(&identity) {
-            return Ok(copied.clone());
-        }
-        if !self.active.insert(identity) {
-            // shortcut: cyclic graphs require clone placeholders before back-references can be retained.
-            return Err(AuthError::internal(
-                "Structured clone of cyclic field objects is not supported",
-            ));
-        }
-        let copied = (|| -> AuthResult<FieldValue> {
-            Ok(match value {
-                FieldValue::Date(value) => FieldDate(Arc::new(*value.0)).into(),
-                FieldValue::Array(values) => values
-                    .iter()
-                    .map(|value| self.clone_value(value))
-                    .collect::<AuthResult<Vec<_>>>()?
-                    .into(),
-                FieldValue::Object(values) => self.clone_map(&values.snapshot_fields()?)?.into(),
-                value => value.clone(),
-            })
-        })();
-        let _ = self.active.remove(&identity);
-        let copied = copied?;
-        let _ = self
-            .copies
-            .insert(identity, (value.clone(), copied.clone()));
-        Ok(copied)
-    }
-
-    /// Copy record fields using the same alias map as other records in this context.
-    pub fn clone_map(&mut self, fields: &FieldMap) -> AuthResult<FieldMap> {
-        fields
-            .iter()
-            .map(|(name, value)| Ok((name.clone(), self.clone_value(value)?)))
-            .collect()
-    }
-}
-
 #[cfg(test)]
 mod object_tests;
 #[cfg(test)]
@@ -656,13 +590,6 @@ impl FieldValue {
                 crate::Utf16String::from_units(units)
             }
         })
-    }
-}
-
-impl StructuredCloneContext {
-    /// Clone one native schema field using the same object graph as its containing record.
-    pub fn clone_field<T: crate::SchemaField>(&mut self, value: &T) -> AuthResult<T> {
-        self.clone_value(&value.clone().into_field())?.decode()
     }
 }
 

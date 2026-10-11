@@ -125,59 +125,59 @@ impl State {
 
     pub(super) fn structured_clone_from(
         operation: &MemoryOperation<'_>,
+        context: &mut crate::StructuredCloneContext,
         mut device_origin: impl FnMut(RowRef<FieldMap>, RowRef<FieldMap>, FieldMap),
     ) -> AuthResult<Self> {
-        let mut context = crate::StructuredCloneContext::new();
         Ok(Self {
             organizations: operation
                 .capture_table(EntityRole::Organization)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             members: operation
                 .capture_table(EntityRole::Member)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             invitations: operation
                 .capture_table(EntityRole::Invitation)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             teams: operation
                 .capture_table(EntityRole::Team)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             organization_roles: operation
                 .capture_table(EntityRole::OrganizationRole)?
-                .deep_clone(&mut context)?,
-            users: operation.capture_users()?.deep_clone(&mut context)?,
+                .deep_clone(context)?,
+            users: operation.capture_users()?.deep_clone(context)?,
             two_factors: operation
                 .capture_table(EntityRole::TwoFactor)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             device_codes: operation
                 .capture_table(EntityRole::DeviceCode)?
-                .deep_clone_with(&mut context, &mut device_origin)?,
+                .deep_clone_with(context, &mut device_origin)?,
             api_keys: operation
                 .capture_table(EntityRole::ApiKey)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             passkeys: operation
                 .capture_table(EntityRole::Passkey)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             team_members: operation
                 .capture_table(EntityRole::TeamMember)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             jwks: operation
                 .capture_table(EntityRole::Jwk)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             wallets: operation
                 .capture_table(EntityRole::WalletAddress)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             sessions: operation
                 .capture_table(EntityRole::Session)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             accounts: operation
                 .capture_table(EntityRole::Account)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             verifications: operation
                 .capture_table(EntityRole::Verification)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
             rate_limits: operation
                 .capture_table(EntityRole::RateLimit)?
-                .deep_clone(&mut context)?,
+                .deep_clone(context)?,
         })
     }
 }

@@ -104,6 +104,10 @@ struct ComparisonSource {
 }
 
 impl FieldObjectSource for ComparisonSource {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(vec!["value".into()])
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         Ok(self.snapshot_fields()?.get(name).cloned())
     }

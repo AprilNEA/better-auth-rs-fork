@@ -52,6 +52,12 @@ struct ObservedOperand {
 }
 
 impl FieldObjectSource for ObservedOperand {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Err(AuthError::internal(
+            "The query must not enumerate its operand",
+        ))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         if name == "toString" {
             record(&self.trace, "get toString")?;

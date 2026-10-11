@@ -15,7 +15,7 @@ fn required<T>(value: Option<T>) -> AuthResult<T> {
     value.ok_or_else(|| AuthError::internal("Expected a retained object fixture"))
 }
 
-fn detached<T: ObjectRow + FromFieldMap + Clone + Send + 'static>() -> AuthResult<()> {
+fn detached<T: ObjectRow>() -> AuthResult<()> {
     let mut rows = TableRef::new(Arc::default());
     let original = rows.push(T::from_field_values(
         [
@@ -60,6 +60,79 @@ fn detached<T: ObjectRow + FromFieldMap + Clone + Send + 'static>() -> AuthResul
 fn retained_map_and_user_handles_do_not_rebind_after_deletion() -> AuthResult<()> {
     detached::<FieldMap>()?;
     detached::<crate::UserView>()
+}
+
+#[test]
+fn user_row_clone_preserves_native_state_and_hidden_graph_aliases() -> AuthResult<()> {
+    let date = FieldValue::from(crate::FieldDate::from_milliseconds(42.0));
+    let mut user = crate::UserView::from_field_values(FieldMap::from([
+        ("id".into(), "user".into()),
+        ("name".into(), date.clone()),
+        ("createdAt".into(), date.clone()),
+    ]))?;
+    user.visible_fields = None;
+    user.is_anonymous = None.into();
+    let table = TableRef::new(Arc::default());
+    let source = table.push(user)?;
+    let metadata = crate::FieldObject::from(FieldMap::from([
+        ("date".into(), date.clone()),
+        ("row".into(), source.field_value()),
+    ]));
+    let mut user = source.snapshot()?;
+    user.metadata = FieldValue::Object(metadata.clone());
+    let _ = user
+        .additional_fields
+        .insert("metadata".into(), FieldValue::Object(metadata.clone()));
+    let _ = user
+        .additional_fields
+        .insert("payload".into(), FieldValue::Object(metadata.clone()));
+    source.replace(user.clone())?;
+    let copied = table.deep_clone(&mut crate::StructuredCloneContext::new())?;
+    let target = required(copied.row_at(0)?)?;
+    let cloned = target.snapshot()?;
+    assert_eq!(cloned.visible_fields, None);
+    assert_eq!(cloned.is_anonymous, None);
+    assert_eq!(cloned.field_order, user.field_order);
+    assert!(!target.same_row(&source));
+    let cloned_date = cloned.created_at.field_value();
+    assert!(!cloned_date.strict_equals(&date));
+    assert!(cloned.name.field_value().strict_equals(&cloned_date));
+    let cloned_metadata = required(cloned.metadata.as_object())?;
+    assert!(!cloned_metadata.same_object(&metadata));
+    assert!(required(cloned.additional_fields.get("metadata"))?.strict_equals(&cloned.metadata));
+    assert!(required(cloned.additional_fields.get("payload"))?.strict_equals(&cloned.metadata));
+    assert!(required(cloned_metadata.get("date")?)?.strict_equals(&cloned_date));
+    assert!(required(cloned_metadata.get("row")?)?.strict_equals(&target.field_value()));
+    assert!(!cloned.field_values()?.contains_key("metadata"));
+    let _ = metadata.delete("row")?;
+    let _ = cloned_metadata.delete("row")?;
+    Ok(())
+}
+
+#[test]
+fn memoized_rows_retain_the_first_clone_origin_for_ownership_checks() -> AuthResult<()> {
+    let table = TableRef::new(Arc::default());
+    let original = FieldMap::from([
+        ("id".into(), "device".into()),
+        ("userId".into(), "first-owner".into()),
+    ]);
+    let source = table.push(original.clone())?;
+    let mut context = crate::StructuredCloneContext::new();
+    let nested = context.clone_value(&source.field_value())?;
+    let _ = source.set_field("userId".into(), "reassigned-owner".into())?;
+    let mut origins = Vec::new();
+    let cloned = table.deep_clone_with(&mut context, |live, isolated, before| {
+        origins.push((live, isolated, before));
+    })?;
+    assert_eq!(origins.len(), 1);
+    let (live, isolated, before) = required(origins.pop())?;
+    assert_eq!(before, original);
+    assert_eq!(isolated.shallow_fields()?, original);
+    assert!(live.same_row(&source));
+    assert_eq!(live.field("userId")?, Some("reassigned-owner".into()));
+    assert!(required(cloned.row_at(0)?)?.same_row(&isolated));
+    assert!(nested.strict_equals(&isolated.field_value()));
+    Ok(())
 }
 
 #[tokio::test]
@@ -126,6 +199,10 @@ struct InvitationGraphSource {
 }
 
 impl FieldObjectSource for InvitationGraphSource {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(vec!["name".into()])
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         Ok(self.snapshot_fields()?.get(name).cloned())
     }

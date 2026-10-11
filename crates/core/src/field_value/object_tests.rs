@@ -130,8 +130,13 @@ fn owned_cycles_have_finite_comparison_and_debug_but_require_explicit_unlinking(
     assert!(
         matches!(text, Err(error) if error.to_string().contains("Converting circular structure to JSON"))
     );
-    assert!(
-        matches!(clone, Err(AuthError::Internal(message)) if message == "Structured clone of cyclic field objects is not supported")
-    );
+    let cloned = clone?;
+    assert!(!cloned.strict_equals(&value));
+    assert!(cloned.model_property("self")?.strict_equals(&cloned));
+    assert_eq!(cloned.model_property("value")?, 1.into());
+    let _ = cloned
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Expected cloned object"))?
+        .delete("self")?;
     Ok(())
 }

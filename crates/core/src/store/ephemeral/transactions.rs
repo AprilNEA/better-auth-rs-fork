@@ -406,11 +406,19 @@ impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
 impl EphemeralStore {
     pub(super) fn begin_transaction(&self) -> AuthResult<(State, Self, Arc<PendingHookQueue>)> {
         let (base, working, devices) = self.operation(|op| {
-            let base = op.structured_clone()?;
+            let mut base_context = crate::StructuredCloneContext::deferred();
+            let base = op.structured_clone(&mut base_context)?;
             let mut devices = super::device_codes::DeviceCodeTransaction::default();
-            let working = op.structured_clone_with_device_origins(|live, isolated, before| {
-                devices.capture_origin(live, isolated, before);
-            })?;
+            let mut working_context = crate::StructuredCloneContext::deferred();
+            let working = op.structured_clone_with_device_origins(
+                &mut working_context,
+                |live, isolated, before| {
+                    devices.capture_origin(live, isolated, before);
+                },
+            )?;
+            // Neither independent graph forms cycles until both snapshots are complete.
+            base_context.publish();
+            working_context.publish();
             Ok((base, working, devices))
         })?;
         let queue = Arc::new(Mutex::new(Vec::new()));
@@ -477,7 +485,7 @@ impl EphemeralStore {
         Ok(())
     }
 
-    async fn commit_adapter_transaction(
+    pub(super) async fn commit_adapter_transaction(
         &self,
         base: State,
         isolated: Self,

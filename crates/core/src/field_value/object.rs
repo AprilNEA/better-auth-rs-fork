@@ -1,6 +1,7 @@
 use super::{FieldMap, FieldValue};
 use crate::{AuthError, AuthResult};
 use std::{
+    any::Any,
     cell::RefCell,
     collections::HashSet,
     fmt,
@@ -21,11 +22,20 @@ enum ObjectStorage {
 }
 
 pub(crate) trait FieldObjectSource: Send + Sync {
+    fn own_keys(&self) -> AuthResult<Vec<String>>;
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>>;
     fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>>;
     fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>>;
     fn snapshot_fields(&self) -> AuthResult<FieldMap>;
     fn identity(&self) -> usize;
+
+    fn clone_seed(&self) -> AuthResult<Option<super::ObjectCloneSeed>> {
+        Ok(None)
+    }
+
+    fn as_any(&self) -> Option<&dyn Any> {
+        None
+    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -78,6 +88,50 @@ impl Drop for FormattingGuard {
 impl FieldObject {
     pub(crate) fn from_source(source: Arc<dyn FieldObjectSource>) -> Self {
         Self(ObjectStorage::Live(source))
+    }
+
+    /// Capture property names without evaluating property values.
+    pub(crate) fn own_keys(&self) -> AuthResult<Vec<String>> {
+        let mut keys = match &self.0 {
+            ObjectStorage::Owned(fields) => fields
+                .lock()
+                .map_err(|_| AuthError::internal("Field object lock poisoned"))?
+                .keys()
+                .cloned()
+                .collect(),
+            ObjectStorage::Live(source) => source.own_keys()?,
+        };
+        keys.sort_by_key(|name| {
+            crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))
+        });
+        Ok(keys)
+    }
+
+    pub(crate) fn source<T: 'static>(&self) -> Option<&T> {
+        match &self.0 {
+            ObjectStorage::Live(source) => source.as_any()?.downcast_ref(),
+            ObjectStorage::Owned(_) => None,
+        }
+    }
+
+    pub(crate) fn clone_seed(&self) -> AuthResult<super::ObjectCloneSeed> {
+        if let ObjectStorage::Live(source) = &self.0
+            && let Some(seed) = source.clone_seed()?
+        {
+            return Ok(seed);
+        }
+        let fields = Arc::new(Mutex::new(FieldMap::new()));
+        let object = Self(ObjectStorage::Owned(fields.clone()));
+        Ok(super::ObjectCloneSeed {
+            object,
+            state: Vec::new(),
+            original_record: None,
+            prepare: Box::new(move |values, _| {
+                Ok(Box::new(move || {
+                    super::structured_clone::publish_clone(&fields, values);
+                }))
+            }),
+        })
     }
 
     /// Read one current property without retaining a source lock.

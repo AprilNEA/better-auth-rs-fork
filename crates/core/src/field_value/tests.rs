@@ -33,6 +33,10 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
     struct FailedSource(AtomicUsize);
 
     impl FieldObjectSource for FailedSource {
+        fn own_keys(&self) -> AuthResult<Vec<String>> {
+            Ok(vec!["id".into()])
+        }
+
         fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
             let _ = self.0.fetch_add(1, Ordering::SeqCst);
             Err(AuthError::internal("object source read failed"))
@@ -87,7 +91,7 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
 }
 
 #[test]
-fn cyclic_live_objects_fail_at_explicit_conversion_boundaries() -> AuthResult<()> {
+fn cyclic_live_objects_clone_and_fail_at_json_conversion_boundaries() -> AuthResult<()> {
     use std::sync::{Mutex, MutexGuard};
 
     struct CyclicSource(Mutex<FieldMap>);
@@ -101,6 +105,10 @@ fn cyclic_live_objects_fail_at_explicit_conversion_boundaries() -> AuthResult<()
     }
 
     impl FieldObjectSource for CyclicSource {
+        fn own_keys(&self) -> AuthResult<Vec<String>> {
+            Ok(self.fields()?.keys().cloned().collect())
+        }
+
         fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
             Ok(self.fields()?.get(name).cloned())
         }
@@ -135,9 +143,13 @@ fn cyclic_live_objects_fail_at_explicit_conversion_boundaries() -> AuthResult<()
     assert!(
         matches!(text, Err(error) if error.to_string().contains("Converting circular structure to JSON"))
     );
-    assert!(
-        matches!(copied, Err(AuthError::Internal(message)) if message == "Structured clone of cyclic field objects is not supported")
-    );
+    let copied = copied?;
+    assert!(!copied.strict_equals(&value));
+    assert!(copied.model_property("self")?.strict_equals(&copied));
+    let _ = copied
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Expected cloned object"))?
+        .delete("self")?;
     Ok(())
 }
 

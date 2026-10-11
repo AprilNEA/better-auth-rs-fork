@@ -10,6 +10,7 @@ import { walletPlugin } from "./wallet-additional-fields";
 import "./plugin-selector-binding.mjs";
 import "./predicate-case-mode.mjs";
 import "./memory-operation-reentry.mjs";
+import "./memory-graph-clone.mjs";
 
 test("SQLite incrementOne preserves expression phases and unchanged storage", async () => {
   await checkIncrementBindingPhases("sqlite");

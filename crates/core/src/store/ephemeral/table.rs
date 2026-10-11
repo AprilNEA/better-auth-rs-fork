@@ -1,8 +1,8 @@
 //! Captured arrays retain their identity when an operation replaces an active table.
 
 use super::operation::MemoryGate;
-use super::rows::{RowRef, TransactionId, TransactionRow, row_json};
-use crate::{AuthError, AuthRecordFields, AuthResult, FromFieldMap, StructuredCloneContext};
+use super::rows::{ObjectRow, RowRef, TransactionId, TransactionRow, row_json};
+use crate::{AuthError, AuthRecordFields, AuthResult, StructuredCloneContext};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -145,7 +145,7 @@ impl<T: Clone> TableRef<T> {
     }
 }
 
-impl<T: Clone + AuthRecordFields + FromFieldMap> TableRef<T> {
+impl<T: ObjectRow> TableRef<T> {
     pub(super) fn deep_clone(&self, context: &mut StructuredCloneContext) -> AuthResult<Self> {
         self.deep_clone_with(context, |_, _, _| {})
     }
@@ -156,17 +156,16 @@ impl<T: Clone + AuthRecordFields + FromFieldMap> TableRef<T> {
         mut cloned_row: impl FnMut(RowRef<T>, RowRef<T>, T),
     ) -> AuthResult<Self> {
         let _operation = self.gate.lock();
-        let cloned = Self::new(self.gate.clone());
+        let mut rows = Vec::new();
         let length = self.len()?;
         for index in 0..length {
             if let Some(source) = self.row_at(index)? {
-                let before = source.snapshot()?;
-                let row = before.structured_clone(context)?;
-                let target = cloned.push(row)?;
+                let (target, before) = source.structured_clone(context)?;
+                rows.push(target.clone());
                 cloned_row(source, target, before);
             }
         }
-        Ok(cloned)
+        Ok(Self::from_refs(self.gate.clone(), rows))
     }
 }
 
