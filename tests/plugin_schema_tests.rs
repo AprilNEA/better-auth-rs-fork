@@ -185,7 +185,7 @@ async fn disabled_username_ignores_inputs_without_persisting_them()
     let database = Database::connect("sqlite::memory:").await?;
     better_auth_seaorm::store::__private_test_support::migrator::run_migrations(&database).await?;
     let auth = BetterAuth::<FullSchema>::new(config())
-        .store(SeaOrmStore::<FullSchema>::new(config(), database))
+        .store(SeaOrmStore::<FullSchema>::new(config(), database.clone()))
         .plugin(EmailPasswordPlugin::new())
         .build()
         .await?;
@@ -225,7 +225,15 @@ async fn disabled_username_ignores_inputs_without_persisting_them()
         .await?
         .ok_or("missing user")?;
     assert_eq!(user.name.typed().unwrap().as_deref(), Some("Changed name"));
-    assert_eq!(user.username().typed().unwrap().as_deref(), None);
-    assert_eq!(user.display_username().typed().unwrap().as_deref(), None);
+    assert!(user.username().is_undefined());
+    assert!(user.display_username().is_undefined());
+    assert!(!user.additional_fields.contains_key("username"));
+    assert!(!user.additional_fields.contains_key("displayUsername"));
+    let stored = entities::user::Entity::find_by_id(user.id.display_string()?)
+        .one(&database)
+        .await?
+        .ok_or("missing stored user")?;
+    assert_eq!(stored.username, None);
+    assert_eq!(stored.display_username, None);
     Ok(())
 }

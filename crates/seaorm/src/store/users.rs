@@ -14,6 +14,9 @@ use crate::utils::email::normalize_user_email;
 
 use super::{SeaOrmStore, cancelled_by_hook, plugin_rows::SqlRow};
 
+#[path = "users/query.rs"]
+mod query;
+
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
     S: AuthSchema,
@@ -753,66 +756,11 @@ where
 
     async fn list_users(
         &self,
-        mut params: ListUsersParams,
+        params: ListUsersParams,
     ) -> AuthResult<(Vec<better_auth_core::wire::UserView>, usize)> {
-        let _ = params
-            .limit
-            .get_or_insert(self.config.advanced.database.find_many_limit());
-        let (limit, offset) = super::pagination::sql_pagination(
-            self.connection().get_database_backend(),
-            params.limit,
-            params.offset,
-        )?;
-        params.limit = limit.map(|value| value as f64);
-        params.offset = offset.map(|value| value as f64);
-        let query = better_auth_core::user_query::PreparedUserQuery::for_adapter(
-            &params,
-            &self.config().user,
-            &self.model_fields,
-        )?;
-        query.validate_sort()?;
-        let models = database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
-            self.config(),
-            "findMany",
-            async {
-                super::plugin_rows::all(
-                    self.connection(),
-                    super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>(),
-                )
-                .await
-            },
-        )
-        .await?;
-
-        let query_record = |row| self.query_user_record(row);
-        let records = models
-            .into_iter()
-            .map(&query_record)
-            .collect::<AuthResult<Vec<_>>>()?;
-        let (selected, _) = query.select(records, |(view, fields, _)| (view, fields))?;
-        let selected = selected
-            .into_iter()
-            .map(|(_, _, model)| model)
-            .collect::<Vec<_>>();
+        let selected = self.user_query_page(&params).await?;
         let users = self.output_users(&selected, self.connection()).await?;
-        query.begin_adapter_count(&self.model_fields)?;
-        let total = database_operation::<<S::User as SeaOrmUserModel>::Entity, _>(
-            self.config(),
-            "count",
-            async {
-                let rows = super::plugin_rows::all(
-                    self.connection(),
-                    super::plugin_rows::select_all::<<S::User as SeaOrmUserModel>::Entity>(),
-                )
-                .await?;
-                let records = rows
-                    .into_iter()
-                    .map(query_record)
-                    .collect::<AuthResult<Vec<_>>>()?;
-                Ok(query.count(&records, |(view, fields, _)| (view, fields)))
-            },
-        )
-        .await?;
+        let total = self.user_query_count(&params).await?;
         Ok((users, total))
     }
 }

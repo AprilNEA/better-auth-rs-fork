@@ -178,6 +178,8 @@ async fn paypal_code_account_info_and_refresh_use_the_complete_sqlite_dispatcher
             },
         )
         .await
+        .unwrap()
+        .into_http_response()
         .unwrap();
     assert_eq!(callback.status, 302);
     assert_eq!(

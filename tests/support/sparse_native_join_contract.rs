@@ -3,7 +3,8 @@ use async_trait::async_trait;
 use better_auth::{AuthConfig, BetterAuth};
 use better_auth_core::{
     AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, FieldValue, SchemaValue,
+    AuthResponse, AuthResult, AuthRoute, AuthSchema, FieldMap, FieldValue, ListUsersParams,
+    SchemaValue,
     organization_fields::OrganizationFields,
     store::{OrganizationDetailsQuery, OrganizationKey, schema::EntityRole},
     user_fields::{
@@ -239,6 +240,19 @@ impl Fixture {
             _ => return Err(AuthError::internal("Unknown sparse join operation")),
         };
         Ok(self.read_selected(path, &selector.into()).await?.unwrap())
+    }
+
+    pub(super) async fn read_users(&self, params: ListUsersParams) -> AuthResult<FieldValue> {
+        let (users, total) = self.auth.store().list_users(params).await?;
+        let users = users
+            .into_iter()
+            .map(|user| FieldValue::from(FieldMap::from(user)))
+            .collect::<Vec<_>>();
+        Ok(FieldMap::from([
+            ("users".into(), users.into()),
+            ("total".into(), total.into()),
+        ])
+        .into())
     }
 
     pub(super) async fn read_selected(

@@ -378,6 +378,9 @@ async fn check_case(db: DatabaseConnection, fixture: &Value, limit: Option<f64>)
         }
     };
     let (result, ()) = tokio::join!(query(&store, path), controller);
+    if mode == "parent-error" {
+        finished.recv().await.unwrap();
+    }
     match result {
         Ok(result) => {
             assert_eq!(result, fixture["result"], "{fixture}");

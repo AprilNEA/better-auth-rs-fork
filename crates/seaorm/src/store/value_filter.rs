@@ -1,11 +1,11 @@
 use better_auth_core::{
-    AuthError, AuthResult, FieldValue,
+    AuthError, AuthResult, FieldValue, WhereMode, WhereOperator,
     store::schema::{EntityRole, resolve_field_name},
     user_fields::{UserConfig, UserFieldConfig, UserFieldType},
 };
 use sea_orm::{
     ColumnTrait, DbBackend,
-    sea_query::{ExprTrait, SimpleExpr},
+    sea_query::{BinOper, ExprTrait, Func, SimpleExpr, extension::postgres::PgBinOper},
 };
 
 use super::id_filter::IdColumn;
@@ -241,17 +241,7 @@ pub(super) fn equals(
     if value.is_null() {
         return Ok(column.is_null());
     }
-    let value = if let FieldValue::Array(values) = value {
-        SimpleExpr::Tuple(
-            values
-                .iter()
-                .cloned()
-                .map(|value| super::record_bindings::parameter(value, backend))
-                .collect::<AuthResult<Vec<_>>>()?,
-        )
-    } else {
-        super::record_bindings::parameter(value.clone(), backend)?
-    };
+    let value = candidate(value.clone(), backend)?;
     Ok(column.into_expr().eq(column.save_as(value)))
 }
 
@@ -293,6 +283,103 @@ pub(super) fn membership(column: SimpleExpr, values: Vec<SimpleExpr>, negated: b
     } else {
         column.is_in(values)
     }
+}
+
+fn candidates(
+    values: impl IntoIterator<Item = FieldValue>,
+    backend: DbBackend,
+) -> AuthResult<Vec<SimpleExpr>> {
+    // Only outer list entries are expressions; nested arrays remain driver parameters.
+    super::record_bindings::bind(
+        backend,
+        values
+            .into_iter()
+            .map(super::record_bindings::Binding::Raw)
+            .collect(),
+    )
+}
+
+fn candidate(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleExpr> {
+    match value {
+        FieldValue::Array(values) => {
+            candidates(values.iter().cloned(), backend).map(SimpleExpr::Tuple)
+        }
+        value => super::record_bindings::parameter(value, backend),
+    }
+}
+
+pub(super) fn predicate(
+    column: impl ColumnTrait,
+    operator: WhereOperator,
+    mode: WhereMode,
+    value: FieldValue,
+    backend: DbBackend,
+) -> AuthResult<SimpleExpr> {
+    let insensitive = mode == WhereMode::Insensitive
+        && (value.is_string()
+            || value
+                .as_array()
+                .is_some_and(|values| values.iter().all(FieldValue::is_string)));
+    let column = column.into_expr();
+    let lower = |value: FieldValue| match value {
+        FieldValue::String(value) if insensitive => FieldValue::String(value.to_lowercase()),
+        FieldValue::Utf16String(value) if insensitive => value.to_lowercase().into(),
+        value => value,
+    };
+    Ok(match operator {
+        WhereOperator::Eq | WhereOperator::Ne if value.is_null() => {
+            if operator == WhereOperator::Eq {
+                column.is_null()
+            } else {
+                column.is_not_null()
+            }
+        }
+        WhereOperator::Eq | WhereOperator::Ne => {
+            let column = if insensitive {
+                Func::lower(column).into()
+            } else {
+                column
+            };
+            let value = candidate(lower(value), backend)?;
+            if operator == WhereOperator::Eq {
+                column.eq(value)
+            } else {
+                column.ne(value)
+            }
+        }
+        WhereOperator::In | WhereOperator::NotIn => {
+            let column = if insensitive {
+                Func::lower(column).into()
+            } else {
+                column
+            };
+            let values = match value {
+                FieldValue::Array(values) => values.iter().cloned().collect(),
+                value => vec![value],
+            };
+            let values = candidates(values.into_iter().map(lower), backend)?;
+            membership(column, values, operator == WhereOperator::NotIn)
+        }
+        WhereOperator::Lt => column.lt(candidate(value, backend)?),
+        WhereOperator::Lte => column.lte(candidate(value, backend)?),
+        WhereOperator::Gt => column.gt(candidate(value, backend)?),
+        WhereOperator::Gte => column.gte(candidate(value, backend)?),
+        WhereOperator::Contains | WhereOperator::StartsWith | WhereOperator::EndsWith => {
+            let (prefix, suffix) = match operator {
+                WhereOperator::Contains => ("%", "%"),
+                WhereOperator::StartsWith => ("", "%"),
+                _ => ("%", ""),
+            };
+            let pattern = like_pattern(&value, prefix, suffix, backend)?;
+            if insensitive && backend == DbBackend::Postgres {
+                column.binary(PgBinOper::ILike, pattern)
+            } else if insensitive {
+                Func::lower(column).binary(BinOper::Like, Func::lower(pattern))
+            } else {
+                column.binary(BinOper::Like, pattern)
+            }
+        }
+    })
 }
 
 #[cfg(test)]

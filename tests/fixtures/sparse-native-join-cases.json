@@ -17,6 +17,15 @@
   },
   "nullableChildRows": [{ "id": null, "team_id": "team" }, { "id": null, "team_id": "team" }],
   "zeroChildRows": [{ "id": 0, "team_id": "team" }, { "id": 0, "team_id": "team" }],
+  "nullableUser": {
+    "row": { "id": null, "name": 17, "email": "null@sparse-native.test", "email_verified": 1, "image": null, "created_at": "2030-01-01T00:00:00.000Z", "updated_at": "2030-01-01T00:00:00.000Z" },
+    "result": { "name": "visible:17", "email": "null@sparse-native.test", "emailVerified": true, "image": null, "createdAt": { "type": "date", "value": "2030-01-01T00:00:00.000Z" }, "updatedAt": { "type": "date", "value": "2030-01-01T00:00:00.000Z" }, "id": null },
+    "events": [["user.name", 17]],
+    "queries": [
+      { "name": "page-with-null-id", "limit": 1, "offset": 1, "total": 1 },
+      { "name": "null-id-filter", "limit": 10, "offset": 0, "filter": { "field": "id", "operator": "eq", "value": null }, "total": 0 }
+    ]
+  },
   "falsyParentCases": [
     { "path": "team", "model": "team", "id": null, "idType": "TEXT", "result": { "name": "visible:7", "organizationId": "organization", "id": null, "members": [] }, "events": [["team.name", 7], ["team.organizationId", "organization"]] },
     { "path": "team", "model": "team", "id": 0, "idType": "INTEGER", "result": { "name": "visible:7", "organizationId": "organization", "id": "0", "members": [] }, "events": [["team.name", 7], ["team.organizationId", "organization"]] },

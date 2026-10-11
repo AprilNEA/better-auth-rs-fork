@@ -615,29 +615,48 @@ run_stage() {
       ;;
     account-user-auth)
       cargo fmt --all -- --check
+      local account_status=0
+      local account_tests=(
+        --test account_user_auth_boundary_reference_tests --test compat_consistency_tests
+        --test wire_compat_smoke_tests --test two_factor_cookie_duration_tests
+        --test plugin_model_fields_tests --test session_create_payload_tests
+        --test session_user_join_reference_tests --test custom_model_join_reference_tests
+        --test secondary_storage_hooks_tests --test background_transaction_tests
+        --test missing_user_transaction_tests --test axum_session_tests
+        --test paypal_provider_tests --test wechat_provider_tests
+        --test social_http_provider_tests --test social_refresh_context_tests
+        --test integration_tests --test plugin_schema_tests --test user_verification_fields_tests
+        --test user_display_query_tests --test user_scalar_column_query_tests
+        --test user_sort_field_tests --test user_null_query_tests --test device_where_tests
+        --test query_binding_order_tests --test native_core_join_tests --test sparse_native_join_tests
+      )
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test account_user_auth_boundary_reference_tests --test compat_consistency_tests \
-        --test wire_compat_smoke_tests --test two_factor_cookie_duration_tests \
-        --test plugin_model_fields_tests --test session_create_payload_tests \
-        --test session_user_join_reference_tests --test custom_model_join_reference_tests \
-        --test secondary_storage_hooks_tests --test background_transaction_tests \
-        --test missing_user_transaction_tests -- -D warnings
+        "${account_tests[@]}" -- -D warnings || account_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
-        --test account_user_auth_boundary_reference_tests --test compat_consistency_tests \
-        --test wire_compat_smoke_tests --test two_factor_cookie_duration_tests \
-        --test plugin_model_fields_tests --test session_create_payload_tests \
-        --test session_user_join_reference_tests --test custom_model_join_reference_tests \
-        --test secondary_storage_hooks_tests --test background_transaction_tests \
-        --test missing_user_transaction_tests
-      cargo test --locked -p better-auth-api --lib plugins::two_factor::
-      cargo test --locked -p better-auth-core --lib -- plugin_runtime::fields::models::tests:: session::native::tests:: store::ephemeral::user_serial_tests:: store::ephemeral::sessions::live_output_tests:: store::ephemeral::id_slot_tests::sessions::
+        "${account_tests[@]}" || account_status=1
+      cargo test --locked -p better-auth-api --lib -- \
+        plugins::two_factor:: plugins::oauth::generic_profile::result_tests:: || account_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        plugin_runtime::fields::models::tests:: session::native::tests:: \
+        store::ephemeral::user_serial_tests:: store::ephemeral::sessions::live_output_tests:: \
+        store::ephemeral::id_slot_tests::sessions:: request_runtime::concurrent:: || account_status=1
+      cargo test --locked -p better-auth-seaorm --lib store::record_bindings::function_tests || account_status=1
       bun --no-install test \
         ./compat-tests/reference-server/contracts/account-user-auth-boundary.test.ts \
         ./compat-tests/reference-server/contracts/account-user-auth-email.test.ts \
         ./compat-tests/reference-server/contracts/account-user-auth-secondary.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/custom-model-join-reference.test.ts \
-        ./compat-tests/reference-server/contracts/adapter-id-slot.test.ts
+        ./compat-tests/reference-server/contracts/adapter-id-slot.test.ts \
+        ./compat-tests/reference-server/contracts/user-display-query.test.ts \
+        ./compat-tests/reference-server/contracts/user-scalar-column-query.test.ts \
+        ./compat-tests/reference-server/contracts/sparse-native-joins.test.ts \
+        ./compat-tests/reference-server/contracts/paypal.test.ts \
+        ./compat-tests/reference-server/contracts/wechat.test.ts \
+        ./compat-tests/reference-server/contracts/social-http-providers.test.ts \
+        ./compat-tests/reference-server/contracts/social-refresh-context.test.ts \
+        ./compat-tests/reference-server/contracts/generic-profile-results.test.ts || account_status=1
+      return "$account_status"
       ;;
     field-projection)
       cargo fmt --all -- --check

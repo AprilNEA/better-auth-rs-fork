@@ -536,6 +536,8 @@ async fn social_code_exchange_and_profile_mapping_persist_through_sqlite() {
                     },
                 )
                 .await
+                .unwrap()
+                .into_http_response()
                 .unwrap();
             assert_eq!(callback.status, 302);
             assert_eq!(

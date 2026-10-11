@@ -203,7 +203,7 @@ async fn verification_uses_mapped_fields_and_transforms_serial_references_once()
         id::IdGeneration,
         user_fields::{UserFieldConfig, UserFieldReference},
     };
-    use better_auth_seaorm::{SeaOrmAccountModel, SeaOrmSessionModel, SeaOrmVerificationModel};
+    use better_auth_seaorm::{SeaOrmAccountModel, SeaOrmSessionModel};
     let inputs = Arc::new(AtomicUsize::new(0));
     let observed = inputs.clone();
     let mut config = AuthConfig::default();
@@ -260,12 +260,16 @@ async fn verification_uses_mapped_fields_and_transforms_serial_references_once()
         schema.create_table_from_entity(
             <<MappedSchema as AuthSchema>::Session as SeaOrmSessionModel>::Entity::default(),
         ),
-        schema.create_table_from_entity(
-            <<MappedSchema as AuthSchema>::Verification as SeaOrmVerificationModel>::Entity::default(),
-        ),
     ] {
         let _ = database.execute(&statement).await.unwrap();
     }
+    // Serial ID mode delegates verification claim IDs to the database.
+    let _ = database
+        .execute_unprepared(
+            "CREATE TABLE verifications (id INTEGER PRIMARY KEY NOT NULL, identifier TEXT NOT NULL, value TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        )
+        .await
+        .unwrap();
     let after = Arc::new(AtomicUsize::new(0));
     let store = SeaOrmStore::<MappedSchema>::new(config.clone(), database.clone())
         .with_runtime(

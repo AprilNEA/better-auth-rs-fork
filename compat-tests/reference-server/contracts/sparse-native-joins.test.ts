@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import type { DBFieldAttribute } from "@better-auth/core/db";
+import type { DBFieldAttribute, Where } from "@better-auth/core/db";
 import { betterAuth } from "better-auth";
 import cases from "../../../tests/fixtures/sparse-native-join-cases.json";
 import { observe, revive } from "./user-runtime-contract";
@@ -67,7 +67,31 @@ async function setup(joins: boolean, rejectAt?: string, input: FixtureInput = ca
     columns: database.query(`PRAGMA table_info("${table}")`).all().map(row => (row as { name: string }).name),
     rows: database.query(`SELECT * FROM "${table}" ORDER BY id`).all(),
   }]));
-  return { database, events, failure, read, snapshot };
+  return { database, events, failure, read, snapshot, internalAdapter: context.internalAdapter };
+}
+
+for (const query of cases.nullableUser.queries) {
+  test(`SQLite nullable User IDs preserve pages and literal id counts: ${query.name}`, async () => {
+    const input: FixtureInput = structuredClone(cases);
+    const table = input.tables.find(table => table.model === "user")!;
+    table.columns.id = "TEXT";
+    table.rows.push(cases.nullableUser.row);
+    const fixture = await setup(false, undefined, input);
+    try {
+      const before = fixture.snapshot();
+      const filter = "filter" in query ? query.filter : undefined;
+      if (filter && filter.operator !== "eq") throw new Error("Nullable User count cases must use equality");
+      const where: Where[] | undefined = filter ? [{ field: filter.field, operator: "eq", value: filter.value }] : undefined;
+      const users = await fixture.internalAdapter.listUsers(query.limit, query.offset, { field: "name", direction: "asc" }, where);
+      const total = await fixture.internalAdapter.countTotalUsers(where);
+      const actual = { users, total };
+      const expected = revive({ users: [cases.nullableUser.result], total: query.total });
+      expect(actual).toStrictEqual(expected);
+      assertKeys(actual, expected);
+      expect(fixture.events).toStrictEqual(cases.nullableUser.events);
+      expect(fixture.snapshot()).toStrictEqual(before);
+    } finally { fixture.database.close(); }
+  });
 }
 
 for (const joins of [false, true]) for (const populated of [false, true]) {

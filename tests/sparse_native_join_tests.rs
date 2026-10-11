@@ -12,10 +12,57 @@ mod models;
 #[path = "support/device_where_values.rs"]
 mod values;
 
-use better_auth_core::AuthError;
+use better_auth_core::{AuthError, ListUsersParams};
 use serde_json::Value;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+#[tokio::test]
+async fn nullable_user_ids_remain_in_pages_but_do_not_contribute_to_sql_counts() -> TestResult {
+    let cases: Value =
+        serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
+    let mut input = cases.clone();
+    let user = &cases["nullableUser"];
+    let table = input["tables"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|table| table["model"] == "user")
+        .unwrap();
+    table["columns"]["id"] = "TEXT".into();
+    table["rows"]
+        .as_array_mut()
+        .unwrap()
+        .push(user["row"].clone());
+    let fixture = contract::Fixture::new(&input, &input["cases"][0], false, false).await?;
+    let before = fixture.snapshot().await?;
+    for query in user["queries"].as_array().unwrap() {
+        fixture.events.lock().unwrap().clear();
+        let filter = query.get("filter");
+        let params = ListUsersParams {
+            limit: query["limit"].as_f64(),
+            offset: query["offset"].as_f64(),
+            sort_by: Some("name".into()),
+            sort_direction: Some("asc".into()),
+            filter_field: filter.map(|filter| filter["field"].as_str().unwrap().into()),
+            filter_operator: filter.map(|filter| filter["operator"].as_str().unwrap().into()),
+            filter_value: filter
+                .map(|filter| values::revive(&filter["value"]))
+                .transpose()?,
+            ..Default::default()
+        };
+        contract::assert_value(
+            &fixture.read_users(params).await?,
+            &serde_json::json!({"users": [user["result"]], "total": query["total"]}),
+        )?;
+        assert_eq!(
+            *fixture.events.lock().unwrap(),
+            *user["events"].as_array().unwrap()
+        );
+        assert_eq!(fixture.snapshot().await?, before);
+    }
+    Ok(())
+}
 
 #[tokio::test]
 async fn sparse_native_and_fallback_joins_match_complete_results_callbacks_and_storage()

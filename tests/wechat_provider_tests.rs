@@ -195,6 +195,8 @@ async fn wechat_login_saved_account_info_and_refresh_use_normal_sqlite_lifecycle
             },
         )
         .await
+        .unwrap()
+        .into_http_response()
         .unwrap();
     assert_eq!(callback.status, 302);
     assert_eq!(

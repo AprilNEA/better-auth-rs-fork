@@ -3,107 +3,14 @@ use super::plugin_models::Entity;
 use super::record_bindings::Binding;
 use super::{SeaOrmStore, map_db_err};
 use crate::{SeaOrmPluginModel, schema::AuthSchema};
-use better_auth_core::FieldValue as Value;
 use better_auth_core::{
-    AuthError, AuthResult, DeviceCode, DeviceCodeOwnership, DeviceCodeWhere, FieldValue, WhereMode,
-    WhereOperator, store::schema::EntityRole,
+    AuthError, AuthResult, DeviceCode, DeviceCodeOwnership, FieldValue, store::schema::EntityRole,
 };
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, IdenStatic, QueryFilter, QueryResult,
     QuerySelect, QueryTrait,
-    sea_query::{
-        BinOper, Condition, Expr, ExprTrait, Func, Query, SimpleExpr,
-        extension::postgres::PgBinOper,
-    },
+    sea_query::{Condition, Expr, ExprTrait, Query, SimpleExpr},
 };
-
-fn candidate(value: FieldValue, backend: DbBackend) -> AuthResult<SimpleExpr> {
-    match value {
-        FieldValue::Array(values) => values
-            .iter()
-            .cloned()
-            .map(|value| super::record_bindings::parameter(value, backend))
-            .collect::<AuthResult<Vec<_>>>()
-            .map(SimpleExpr::Tuple),
-        value => super::record_bindings::parameter(value, backend),
-    }
-}
-
-fn ownership_predicate(
-    column: impl ColumnTrait,
-    query: DeviceCodeWhere,
-    backend: DbBackend,
-) -> AuthResult<SimpleExpr> {
-    let insensitive = query.mode == WhereMode::Insensitive
-        && (query.value.is_string()
-            || query
-                .value
-                .as_array()
-                .is_some_and(|values| values.iter().all(Value::is_string)));
-    let column = column.into_expr();
-    let lower = |value: Value| match value {
-        Value::String(value) if insensitive => Value::String(value.to_lowercase()),
-        Value::Utf16String(value) if insensitive => value.to_lowercase().into(),
-        value => value,
-    };
-    Ok(match query.operator {
-        WhereOperator::Eq | WhereOperator::Ne if matches!(&query.value, Value::Null) => {
-            if query.operator == WhereOperator::Eq {
-                column.is_null()
-            } else {
-                column.is_not_null()
-            }
-        }
-        WhereOperator::Eq | WhereOperator::Ne => {
-            let column = if insensitive {
-                Func::lower(column).into()
-            } else {
-                column
-            };
-            let value = candidate(lower(query.value), backend)?;
-            if query.operator == WhereOperator::Eq {
-                column.eq(value)
-            } else {
-                column.ne(value)
-            }
-        }
-        WhereOperator::In | WhereOperator::NotIn => {
-            let column = if insensitive {
-                Func::lower(column).into()
-            } else {
-                column
-            };
-            let values = match query.value {
-                Value::Array(values) => values.iter().cloned().collect(),
-                value => vec![value],
-            };
-            let values = values
-                .into_iter()
-                .map(|value| candidate(lower(value), backend))
-                .collect::<AuthResult<Vec<_>>>()?;
-            super::value_filter::membership(column, values, query.operator == WhereOperator::NotIn)
-        }
-        WhereOperator::Lt => column.lt(candidate(query.value, backend)?),
-        WhereOperator::Lte => column.lte(candidate(query.value, backend)?),
-        WhereOperator::Gt => column.gt(candidate(query.value, backend)?),
-        WhereOperator::Gte => column.gte(candidate(query.value, backend)?),
-        WhereOperator::Contains | WhereOperator::StartsWith | WhereOperator::EndsWith => {
-            let (prefix, suffix) = match query.operator {
-                WhereOperator::Contains => ("%", "%"),
-                WhereOperator::StartsWith => ("", "%"),
-                _ => ("%", ""),
-            };
-            let pattern = super::value_filter::like_pattern(&query.value, prefix, suffix, backend)?;
-            if insensitive && backend == DbBackend::Postgres {
-                column.binary(PgBinOper::ILike, pattern)
-            } else if insensitive {
-                Func::lower(column).binary(BinOper::Like, Func::lower(pattern))
-            } else {
-                column.binary(BinOper::Like, pattern)
-            }
-        }
-    })
-}
 
 fn stored_equals(
     column: impl ColumnTrait,
@@ -148,7 +55,13 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             super::value_filter::query_field_name(EntityRole::DeviceCode, &fields, &query.field)?
                 .1
                 .to_owned();
-        let ownership = ownership_predicate(P::DeviceCode::column(&query.field)?, query, backend)?;
+        let ownership = super::value_filter::predicate(
+            P::DeviceCode::column(&query.field)?,
+            query.operator,
+            query.mode,
+            query.value,
+            backend,
+        )?;
         let (bindings, unchanged) = expected.consumption_bindings()?;
         let mut filter = Condition::all().add(selected_id);
         for name in ["id", "deviceCode", "clientId", "userId", "status"] {
@@ -221,7 +134,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
 mod tests {
     use super::*;
     use crate::store::{entities::device_code, record_bindings::parameter};
-    use better_auth_core::Utf16String;
+    use better_auth_core::{Utf16String, WhereMode, WhereOperator};
     use sea_orm::{ConnectOptions, Database, sea_query::Alias};
 
     #[tokio::test]
@@ -316,14 +229,11 @@ mod tests {
                 } else {
                     value
                 };
-                let predicate = ownership_predicate(
+                let predicate = super::super::value_filter::predicate(
                     device_code::Column::Scope,
-                    DeviceCodeWhere {
-                        field: "scope".into(),
-                        operator,
-                        mode,
-                        value,
-                    },
+                    operator,
+                    mode,
+                    value,
                     DbBackend::Sqlite,
                 )?;
                 let query = Query::select()

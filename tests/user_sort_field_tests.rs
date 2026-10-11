@@ -192,15 +192,21 @@ async fn observe<S: AuthSchema>(
                     total,
                 },
             }),
-            Err(AuthError::Internal(message)) => Observation::Error(ErrorObservation {
-                name: name.into(),
-                events,
-                error: ObservedError {
-                    kind: "Internal".into(),
-                    message,
-                },
-            }),
-            Err(error) => return Err(error),
+            Err(error) => {
+                let (kind, message) = match (backend, error) {
+                    ("memory", AuthError::Internal(message)) => ("Internal", message),
+                    ("sqlite", AuthError::Config(message)) => ("Config", message),
+                    (_, error) => return Err(error),
+                };
+                Observation::Error(ErrorObservation {
+                    name: name.into(),
+                    events,
+                    error: ObservedError {
+                        kind: kind.into(),
+                        message,
+                    },
+                })
+            }
         });
     }
     Ok(BackendObservation {
@@ -265,6 +271,11 @@ async fn contract() -> Result<(), Box<dyn std::error::Error>> {
     for (actual, expected) in actual.into_iter().zip(expected.backends) {
         assert_eq!(actual.backend, expected.backend);
         assert_eq!(actual.queries.len(), expected.queries.len());
+        let error_kind = if actual.backend == "sqlite" {
+            "Config"
+        } else {
+            "Internal"
+        };
         for (actual, expected) in actual.queries.into_iter().zip(expected.queries) {
             match (actual, expected) {
                 (Observation::Success(actual), Observation::Success(expected)) => {
@@ -276,7 +287,7 @@ async fn contract() -> Result<(), Box<dyn std::error::Error>> {
                 (Observation::Error(actual), Observation::Error(expected)) => {
                     assert_eq!(actual.name, expected.name);
                     assert_eq!(actual.events, expected.events);
-                    assert_eq!(actual.error.kind, "Internal");
+                    assert_eq!(actual.error.kind, error_kind);
                     assert_eq!(expected.error.kind, "BetterAuthError");
                     assert_eq!(actual.error.message, expected.error.message);
                 }

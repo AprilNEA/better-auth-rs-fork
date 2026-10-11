@@ -8,6 +8,9 @@ use better_auth::{AuthConfig, AuthSchema, middleware::EndpointRateLimit, store::
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+#[path = "rate_limit_server_runtime.rs"]
+mod business;
+
 mod postgres_default {
     include!(env!(
         "BETTER_AUTH_RATE_LIMIT_SERVER_POSTGRES_DEFAULT_SCHEMA"
@@ -280,8 +283,12 @@ async fn check_counter(
     macro_rules! generated {
         ($module:ident) => {{
             $module::create_auth_tables(database).await?;
-            observe_counter::<$module::AppAuthSchema, $module::AppPluginSchema>(database, case)
-                .await?
+            let steps =
+                observe_counter::<$module::AppAuthSchema, $module::AppPluginSchema>(database, case)
+                    .await?;
+            business::check::<$module::AppAuthSchema, $module::AppPluginSchema>(database, case)
+                .await?;
+            steps
         }};
     }
     let actual = match (backend, case.name.as_str()) {

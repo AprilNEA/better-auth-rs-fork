@@ -2381,12 +2381,15 @@ async fn test_get_user_by_username_adapter() {
     better_auth_seaorm::store::__private_test_support::migrator::run_migrations(&database)
         .await
         .unwrap();
-    let db = SeaOrmStore::<TestSchema>::new(
-        Arc::new(better_auth::AuthConfig::new(
-            "test-secret-key-that-is-at-least-32-characters-long",
-        )),
-        database,
-    );
+    let config =
+        better_auth::AuthConfig::new("test-secret-key-that-is-at-least-32-characters-long");
+    let auth = BetterAuth::<TestSchema>::new(config.clone())
+        .store(SeaOrmStore::<TestSchema>::new(config, database))
+        .plugin(EmailPasswordPlugin::new().username(true))
+        .build()
+        .await
+        .unwrap();
+    let db = auth.store();
 
     // Create user with username
     let create = CreateUser::new()

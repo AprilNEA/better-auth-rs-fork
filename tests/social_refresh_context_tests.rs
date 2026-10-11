@@ -114,6 +114,7 @@ impl OAuthRefreshTokenHandler for Refresh {
 }
 
 fn response(response: AuthResponse) -> Result<Value, Box<dyn Error>> {
+    let response = response.into_http_response()?;
     let mut headers: Vec<_> = response
         .headers
         .iter()

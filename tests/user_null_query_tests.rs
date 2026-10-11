@@ -142,19 +142,22 @@ fn observe_error<T>(
     name: &str,
     result: AuthResult<T>,
     trace: &Trace,
+    expect_config_error: bool,
 ) -> AuthResult<ErrorObservation> {
-    match result {
-        Err(AuthError::Internal(message)) => Ok(ErrorObservation {
-            name: name.into(),
-            events: take_events(trace)?,
-            error: ObservedError {
-                kind: "Internal".into(),
-                message,
-            },
-        }),
-        Err(error) => Err(error),
-        Ok(_) => Err(AuthError::internal("The undeclared filter must fail")),
-    }
+    let (kind, message) = match (expect_config_error, result) {
+        (true, Err(AuthError::Config(message))) => ("Config", message),
+        (false, Err(AuthError::Internal(message))) => ("Internal", message),
+        (_, Err(error)) => return Err(error),
+        (_, Ok(_)) => return Err(AuthError::internal("The undeclared filter must fail")),
+    };
+    Ok(ErrorObservation {
+        name: name.into(),
+        events: take_events(trace)?,
+        error: ObservedError {
+            kind: kind.into(),
+            message,
+        },
+    })
 }
 
 async fn observe<S: AuthSchema>(
@@ -209,6 +212,7 @@ async fn observe<S: AuthSchema>(
         "unknown-list",
         store.list_users(unknown.clone()).await,
         trace,
+        backend == "sqlite",
     )?;
     let count_error = observe_error(
         "unknown-count",
@@ -219,6 +223,7 @@ async fn observe<S: AuthSchema>(
             |user| (user, &user.additional_fields),
         ),
         trace,
+        false,
     )?;
     Ok(BackendObservation {
         backend: backend.into(),
@@ -283,10 +288,18 @@ async fn contract() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(actual.backend, expected.backend);
         assert_eq!(actual.queries, expected.queries);
         assert_eq!(actual.errors.len(), expected.errors.len());
+        let sql = actual.backend == "sqlite";
         for (actual, expected) in actual.errors.into_iter().zip(expected.errors) {
             assert_eq!(actual.name, expected.name);
             assert_eq!(actual.events, expected.events);
-            assert_eq!(actual.error.kind, "Internal");
+            assert_eq!(
+                actual.error.kind,
+                if sql && actual.name == "unknown-list" {
+                    "Config"
+                } else {
+                    "Internal"
+                },
+            );
             assert_eq!(expected.error.kind, "BetterAuthError");
             assert_eq!(actual.error.message, expected.error.message);
         }

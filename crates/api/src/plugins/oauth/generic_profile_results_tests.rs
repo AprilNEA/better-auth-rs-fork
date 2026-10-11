@@ -197,6 +197,7 @@ fn drain<T>(records: &Records<T>) -> TestResult<Vec<T>> {
 }
 
 fn response_result(response: AuthResponse) -> TestResult<Value> {
+    let response = response.into_http_response()?;
     let body = if response.body.is_empty() {
         Value::Null
     } else {

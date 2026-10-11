@@ -4,8 +4,8 @@ use crate::store::{
     migrator::run_migrations, record_write::RecordWrite,
 };
 use better_auth_core::{
-    AuthConfig, CreateUser, FieldFunction, FieldMap, UpdateUser, store::UserStore,
-    user_fields::UserFieldFactory,
+    AuthConfig, CreateUser, FieldFunction, FieldMap, UpdateUser, WhereMode, WhereOperator,
+    store::UserStore, user_fields::UserFieldFactory,
 };
 use sea_orm::{Database, EntityTrait};
 use serde_json::Value as JsonValue;
@@ -139,6 +139,28 @@ fn captured_expression_failures_run_once_before_parameter_encoding() -> AuthResu
                 assert_eq!(returned.load(Ordering::SeqCst), 0);
                 assert_eq!(later.load(Ordering::SeqCst), 0);
 
+                for operator in [WhereOperator::Eq, WhereOperator::In] {
+                    calls.store(0, Ordering::SeqCst);
+                    assert_rejection(
+                        crate::store::value_filter::predicate(
+                            user::Column::Name,
+                            operator,
+                            WhereMode::Sensitive,
+                            vec![
+                                FieldMap::from([("driver".into(), true.into())]).into(),
+                                function(result, &calls, &returned),
+                                function("string", &later, &returned),
+                            ]
+                            .into(),
+                            backend,
+                        ),
+                        operation(case, "direct:create")?,
+                    )?;
+                    assert_eq!(calls.load(Ordering::SeqCst), 1);
+                    assert_eq!(returned.load(Ordering::SeqCst), 0);
+                    assert_eq!(later.load(Ordering::SeqCst), 0);
+                }
+
                 calls.store(0, Ordering::SeqCst);
                 let mut write = RecordWrite::<user::Entity>::default();
                 write.field(
@@ -252,6 +274,66 @@ fn null_results_fail_after_invocation_and_nested_driver_functions_are_not_called
         calls.store(0, Ordering::SeqCst);
         assert!(parameter(vec![function("throws", &calls, &returned)].into(), backend).is_err());
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+        for operator in [WhereOperator::Eq, WhereOperator::In] {
+            let result = crate::store::value_filter::predicate(
+                user::Column::Name,
+                operator,
+                WhereMode::Sensitive,
+                vec![FieldValue::from(vec![function(
+                    "throws", &calls, &returned,
+                )])]
+                .into(),
+                backend,
+            );
+            let error = result.err().ok_or_else(|| {
+                AuthError::internal("Nested driver function unexpectedly encoded")
+            })?;
+            assert_eq!(
+                error.instrumentation_message(),
+                if backend == DbBackend::Sqlite {
+                    "Binding expected string, TypedArray, boolean, number, bigint or null"
+                } else {
+                    "JavaScript function source is unavailable for this Rust field callback"
+                },
+            );
+            assert_eq!(calls.load(Ordering::SeqCst), 0);
+            assert_eq!(returned.load(Ordering::SeqCst), 0);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn candidate_expression_errors_retain_the_original_allocation() -> AuthResult<()> {
+    for backend in [DbBackend::Sqlite, DbBackend::Postgres, DbBackend::MySql] {
+        for operator in [WhereOperator::Eq, WhereOperator::In] {
+            let allocation = Arc::new(AtomicUsize::new(0));
+            let original = allocation.clone();
+            let factory: UserFieldFactory = Arc::new(move || {
+                let message = "original-candidate-error".to_owned();
+                original.store(message.as_ptr() as usize, Ordering::SeqCst);
+                Err(AuthError::Internal(message))
+            });
+            let result = crate::store::value_filter::predicate(
+                user::Column::Name,
+                operator,
+                WhereMode::Sensitive,
+                vec![
+                    FieldMap::from([("driver".into(), true.into())]).into(),
+                    FieldFunction::from(factory).into(),
+                ]
+                .into(),
+                backend,
+            );
+            match result {
+                Err(AuthError::Internal(message)) => {
+                    assert_eq!(message, "original-candidate-error");
+                    assert_eq!(message.as_ptr() as usize, allocation.load(Ordering::SeqCst));
+                }
+                Err(error) => return Err(error),
+                Ok(_) => return Err(AuthError::internal("Candidate expression must fail")),
+            }
+        }
     }
     Ok(())
 }

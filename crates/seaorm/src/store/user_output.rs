@@ -1,9 +1,9 @@
 use better_auth_core::{
     AuthResult, FieldMap, UserView,
-    store::schema::{EntityRole, resolve_field_name},
+    store::schema::EntityRole,
     user_fields::{AdapterRecord, UserConfig},
 };
-use sea_orm::{ConnectionTrait, DbBackend, IdenStatic};
+use sea_orm::{ConnectionTrait, DbBackend};
 
 use crate::{SeaOrmUserModel, schema::AuthSchema};
 
@@ -89,35 +89,5 @@ where
                 .map(|record| record.with_id_output(&runtime, EntityRole::User))
         })
         .await
-    }
-
-    pub(super) fn query_user_record(
-        &self,
-        row: SqlRow,
-    ) -> AuthResult<(UserView, FieldMap, SqlRow)> {
-        let schema = self.user_field_schema().adapter_fields(&[]);
-        let mut native = FieldMap::new();
-        let mut storage = FieldMap::new();
-        for (name, field) in schema.fields() {
-            let physical = resolve_field_name(field.field_name.as_deref(), name);
-            let value = row.value(S::User::field_column(physical)?.as_str())?;
-            let selected = match (name.as_str(), &field.field_type, &value) {
-                ("id", _, value) if !value.is_null() => value.display_utf16()?.into(),
-                (_, better_auth_core::user_fields::UserFieldType::Date, value)
-                    if !value.is_null() =>
-                {
-                    better_auth_core::query::field_date(value)?.into()
-                }
-                (
-                    _,
-                    better_auth_core::user_fields::UserFieldType::Boolean,
-                    better_auth_core::FieldValue::Number(value),
-                ) => (*value != 0.0).into(),
-                _ => value.clone(),
-            };
-            let _ = native.insert(name.clone(), selected);
-            let _ = storage.insert(physical.to_owned(), value);
-        }
-        Ok((UserView::try_from(native)?, storage, row))
     }
 }

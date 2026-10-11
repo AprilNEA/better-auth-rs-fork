@@ -113,6 +113,9 @@ async fn resolve<T: AuthSchema>(
     if failed {
         return Err(Box::new(super::axum::convert_auth_response(response)));
     }
+    let response = response
+        .into_http_response()
+        .map_err(|error| Box::new(error.into_response()))?;
     let mut headers = HeaderMap::new();
     for (name, value) in response.headers {
         let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| {
