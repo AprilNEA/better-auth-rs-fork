@@ -500,6 +500,17 @@ run_stage() {
         plugins::api_key:: plugins::jwt:: || cache_status=1
       return "$cache_status"
       ;;
+    native-errors)
+      cargo fmt --all -- --check
+      local errors_status=0
+      cargo clippy --locked -p better-auth-core --lib -- -D warnings || errors_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        error:: plugin::tests::raw_api_errors:: || errors_status=1
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
+        ./compat-tests/reference-server/contracts/error-construction.test.ts || errors_status=1
+      return "$errors_status"
+      ;;
     native-json)
       cargo fmt --all -- --check
       local json_status=0

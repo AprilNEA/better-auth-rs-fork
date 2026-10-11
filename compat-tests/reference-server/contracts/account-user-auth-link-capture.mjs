@@ -183,8 +183,18 @@ async function verify({ scenario, before, after, response, body, events, request
   if (scenario.invocation === "native") {
     assert.equal(response, undefined);
     assert.equal(nativeResult.rejected, scenario.callback || scenario.mode !== "success");
-    if (["lookup-api", "before-api", "after-error", "admission-uncoded"].includes(scenario.mode) && scenario.callback) {
-      assert.equal(nativeResult.error.sameObject, true, "Only admission errors with a truthy code may become callback redirects");
+    if (["lookup-api", "before-api", "after-error"].includes(scenario.mode) && scenario.callback) {
+      assert.equal(nativeResult.error.sameObject, true, "Account lookup and write errors must retain their original objects");
+    }
+    if (scenario.mode.startsWith("admission-")) {
+      const location = "http://account-user-auth-boundary.test/api/auth/error?error=validation_failed&error_description=User+validation+failed";
+      const cookies = ["better-auth.oauth_state=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax"];
+      const expectedHeaders = { entries: [["location", location], ["set-cookie", cookies[0]]], cookies };
+      assert.deepEqual(nativeResult.error, {
+        sameObject: false, sameBody: false, sameHeaders: false,
+        name: "APIError", message: "", status: "FOUND", statusCode: 302,
+        body: observeValue(undefined), headers: expectedHeaders, capturedHeaders: expectedHeaders,
+      }, "The admission boundary wraps application throws as validation_failed before callback redirection");
     }
     if (!scenario.callback && scenario.mode === "before-api") {
       assert.equal(nativeResult.error.statusCode, 417);

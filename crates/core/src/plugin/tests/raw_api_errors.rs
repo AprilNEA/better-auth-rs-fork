@@ -903,7 +903,8 @@ fn http_error_conversion_preserves_method_receiver_order_and_original_failures()
         })
         .collect();
         let value = probe(FieldMap::new(), getters);
-        let result = AuthResponse::native(None, value).into_http_response();
+        // Upstream calls toResponse(value) without an endpoint status or header accumulator.
+        let result = AuthResponse::native(NativeResponseStatus::Absent, value).into_http_response();
         let count = failed_at.map_or(order.len(), |label| {
             order.iter().position(|event| *event == label).unwrap() + 1
         });
@@ -935,7 +936,7 @@ fn http_error_conversion_preserves_method_receiver_order_and_original_failures()
         let _ = fields.insert("name".into(), "APIError".into());
         let _ = fields.insert("status".into(), status);
         assert!(matches!(
-            AuthResponse::native(None, fields.into()).into_http_response(),
+            AuthResponse::native(NativeResponseStatus::Absent, fields.into()).into_http_response(),
             Err(AuthError::TypeError(_))
         ));
     }
