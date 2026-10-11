@@ -47,6 +47,7 @@ on:
           - plugin-display-values
           - memory-sorting
           - memory-query
+          - memory-gate-dependencies
           - organization-fields
           - organization-details
           - organization-transactions
@@ -88,7 +89,7 @@ env:
 
 jobs:
   check:
-    if: github.ref != 'refs/heads/codex/upstream-capture' || github.event_name == 'workflow_dispatch'
+    if: (github.ref != 'refs/heads/codex/upstream-capture' || github.event_name == 'workflow_dispatch') && inputs.stage != 'memory-gate-dependencies'
     name: ${{ github.event_name == 'workflow_dispatch' && inputs.stage != 'all' && format('Focused check - {0}', inputs.stage) || 'Full acceptance - all stages' }}
     runs-on: ubuntu-latest
     services:
@@ -253,3 +254,52 @@ jobs:
             target
             compat-tests/rust-server/target
             compat-tests/schema-consumer/target
+
+  prepare-memory-gate:
+    if: github.event_name == 'workflow_dispatch' && inputs.stage == 'memory-gate-dependencies'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+          skipPush: true
+      - name: Install devenv from the locked nixpkgs revision
+        run: |
+          devenv_nixpkgs_rev=$(python3 -c 'import json; print(json.load(open("devenv.lock"))["nodes"]["nixpkgs-src"]["locked"]["rev"])')
+          nix profile add "github:NixOS/nixpkgs/${devenv_nixpkgs_rev}#devenv"
+      - name: Resolve the shared gate dependency with Cargo
+        shell: devenv shell -- bash -e {0}
+        run: |
+          set -euo pipefail
+          cargo add --package better-auth-core parking_lot
+          python3 - <<'PY'
+          import json, pathlib, tomllib
+          core = pathlib.Path("crates/core/Cargo.toml")
+          manifest = core.read_text()
+          version = tomllib.loads(manifest)["dependencies"]["parking_lot"]
+          assert isinstance(version, str), version
+          declaration = "parking_lot = " + json.dumps(version)
+          assert manifest.count(declaration) == 1
+          core.write_text(manifest.replace(declaration, "parking_lot = { workspace = true }"))
+          root = pathlib.Path("Cargo.toml")
+          manifest = root.read_text()
+          assert "parking_lot" not in tomllib.loads(manifest)["workspace"]["dependencies"]
+          root.write_text(manifest.replace("[workspace.dependencies]\n", "[workspace.dependencies]\n" + declaration + "\n", 1))
+          PY
+          for manifest in Cargo.toml compat-tests/rust-server/Cargo.toml compat-tests/schema-consumer/Cargo.toml examples/fullstack/backend/Cargo.toml; do
+            cargo update --manifest-path "$manifest" --workspace
+          done
+          git diff --check
+          git diff --binary -- Cargo.toml crates/core/Cargo.toml Cargo.lock compat-tests/rust-server/Cargo.lock compat-tests/schema-consumer/Cargo.lock examples/fullstack/backend/Cargo.lock > "$RUNNER_TEMP/memory-gate-dependency.patch"
+          test -s "$RUNNER_TEMP/memory-gate-dependency.patch"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-gate-dependency-${{ github.sha }}
+          path: ${{ runner.temp }}/memory-gate-dependency.patch
+          if-no-files-found: error
+          retention-days: 7
