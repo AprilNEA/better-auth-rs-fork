@@ -137,10 +137,12 @@ impl FieldMap {
 
     /// Project object fields at a JSON boundary and omit undefined properties.
     pub fn json(&self) -> AuthResult<::serde_json::Map<String, JsonValue>> {
+        let mut ordered = self.clone();
+        ordered.sort_property_order();
         let mut fields = ::serde_json::Map::new();
-        for (name, value) in self {
+        for (name, value) in ordered {
             if let Some(value) = value.json()? {
-                let _ = fields.insert(name.clone(), value);
+                let _ = fields.insert(name, value);
             }
         }
         Ok(fields)

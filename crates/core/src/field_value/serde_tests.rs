@@ -104,12 +104,15 @@ fn json_reads_children_before_later_properties_and_preserves_original_errors() -
                 }),
             });
             *outer.fields()? = [
-                ("child".into(), FieldObject::from_source(child).into()),
+                (
+                    "child".into(),
+                    FieldValue::Object(FieldObject::from_source(child)),
+                ),
                 ("tail".into(), "before".into()),
                 ("drop".into(), true.into()),
             ]
             .into();
-            let value = FieldValue::from(FieldObject::from_source(outer.clone()));
+            let value = FieldValue::Object(FieldObject::from_source(outer.clone()));
             let result = if encoded {
                 value.stringify()
             } else {
@@ -156,6 +159,81 @@ fn json_reads_children_before_later_properties_and_preserves_original_errors() -
                     Some(&FieldValue::from("after"))
                 );
                 assert_eq!(outer.fields()?.get("added"), Some(&FieldValue::from(true)));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn direct_maps_visit_numeric_keys_first_without_reordering_the_input() -> AuthResult<()> {
+    let insertion = ["tail", "10", "2", "01", "4294967295", "1"];
+    let order = ["1", "2", "10", "tail", "01", "4294967295"];
+    for clone in [false, true] {
+        for fail in [false, true] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let original = Arc::new(AtomicUsize::new(0));
+            let fields: FieldMap = insertion
+                .into_iter()
+                .map(|name| {
+                    let events = events.clone();
+                    let original = original.clone();
+                    (
+                        name.into(),
+                        FieldValue::Object(FieldObject::from_source(Arc::new(Source {
+                            fields: Mutex::new([("value".into(), name.into())].into()),
+                            getter: Box::new(move |_| {
+                                events
+                                    .lock()
+                                    .map_err(|_| AuthError::internal("Map event lock poisoned"))?
+                                    .push(name);
+                                if fail && name == "2" {
+                                    let message = "numeric map getter original error".to_owned();
+                                    original.store(message.as_ptr() as usize, Ordering::SeqCst);
+                                    return Err(AuthError::internal(message));
+                                }
+                                Ok(())
+                            }),
+                        }))),
+                    )
+                })
+                .collect();
+            let result = if clone {
+                crate::StructuredCloneContext::new()
+                    .clone_map(&fields)
+                    .and_then(|fields| {
+                        assert_eq!(fields.keys().map(String::as_str).collect::<Vec<_>>(), order);
+                        fields.json()
+                    })
+            } else {
+                fields.json()
+            };
+            assert_eq!(
+                fields.keys().map(String::as_str).collect::<Vec<_>>(),
+                insertion
+            );
+            if fail {
+                assert!(matches!(result, Err(AuthError::Internal(message))
+                    if message == "numeric map getter original error" && message.as_ptr() as usize == original.load(Ordering::SeqCst)));
+                assert_eq!(
+                    *events
+                        .lock()
+                        .map_err(|_| AuthError::internal("Map event lock poisoned"))?,
+                    ["1", "2"]
+                );
+            } else {
+                let result = result?;
+                assert_eq!(result.keys().map(String::as_str).collect::<Vec<_>>(), order);
+                assert_eq!(
+                    serde_json::to_string(&result)?,
+                    r#"{"1":{"value":"1"},"2":{"value":"2"},"10":{"value":"10"},"tail":{"value":"tail"},"01":{"value":"01"},"4294967295":{"value":"4294967295"}}"#
+                );
+                assert_eq!(
+                    *events
+                        .lock()
+                        .map_err(|_| AuthError::internal("Map event lock poisoned"))?,
+                    order
+                );
             }
         }
     }

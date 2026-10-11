@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contracts assert consumer responses, callback order, and preserved error identity; setup failures propagate."
-)]
-
 use super::{ApiKeyEndpoint, ApiKeyPlugin, ApiKeyVerificationError, VerifyApiKey};
 use crate::plugins::api_key::{ApiKeyConfig, ApiKeyValidator};
 use async_trait::async_trait;
@@ -33,8 +28,8 @@ impl Failure {
             Self::Ordinary => AuthError::internal("Validator operation failed"),
             Self::CyclicJson => {
                 let object = FieldObject::from(FieldMap::new());
-                let _ = object.set("self", object.clone().into())?;
-                let result = FieldValue::from(object.clone()).stringify();
+                let _ = object.set("self", FieldValue::Object(object.clone()))?;
+                let result = FieldValue::Object(object.clone()).stringify();
                 let _ = object.delete("self")?;
                 match result {
                     Err(error @ AuthError::TypeError(_)) => error,

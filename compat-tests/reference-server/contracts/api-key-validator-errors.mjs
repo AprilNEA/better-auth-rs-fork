@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { expect, test } from "bun:test";
-import { apiKey } from "@better-auth/api-key";
+import { API_KEY_ERROR_CODES, apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -107,6 +107,17 @@ for (const kind of ["ordinary", "cyclic-json", "range", "data-clone", "api-forbi
       } else {
         expect(error).toBeUndefined();
         expect(result).toStrictEqual({
+          valid: false, key: null,
+          error: kind.startsWith("api-") ? apiErrorBody() : {
+            code: "INVALID_API_KEY", message: API_KEY_ERROR_CODES.INVALID_API_KEY,
+          },
+        });
+        if (!kind.startsWith("api-")) {
+          expect(result.error.message).toBe(API_KEY_ERROR_CODES.INVALID_API_KEY);
+          expect(Object.keys(result.error.message)).toStrictEqual(["code", "message", "toString"]);
+          expect(result.error.message.toString()).toBe("INVALID_API_KEY");
+        }
+        assert.deepStrictEqual(JSON.parse(JSON.stringify(result)), {
           valid: false, key: null,
           error: kind.startsWith("api-") ? apiErrorBody() : {
             code: "INVALID_API_KEY", message: { code: "INVALID_API_KEY", message: "Invalid API key." },

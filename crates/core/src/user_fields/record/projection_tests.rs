@@ -120,7 +120,7 @@ async fn raw_helpers_share_native_replacements_and_defer_dynamic_ids() -> AuthRe
             let mut fields = ModelFields::plugin_native_fields(role);
             let _ = fields.fields_mut().insert("name".into(), replacement);
             let storage = FieldMap::from([
-                ("id".into(), Value::from(id)),
+                ("id".into(), Value::Object(id)),
                 ("physicalName".into(), payload.clone()),
                 ("unmapped".into(), true.into()),
             ]);

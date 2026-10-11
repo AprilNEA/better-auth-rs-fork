@@ -106,8 +106,10 @@ impl StructuredCloneContext {
 
     /// Copy record fields using the same alias map as other records in this context.
     pub fn clone_map(&mut self, fields: &FieldMap) -> AuthResult<FieldMap> {
+        let mut ordered = fields.clone();
+        ordered.sort_property_order();
         let mut graph = Graph::new(self);
-        let edges = fields
+        let edges = ordered
             .iter()
             .map(|(name, value)| Ok((name.clone(), graph.visit(value)?)))
             .collect::<AuthResult<Vec<_>>>()?;

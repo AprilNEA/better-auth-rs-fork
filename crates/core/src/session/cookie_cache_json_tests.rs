@@ -91,9 +91,9 @@ async fn cache_failures_preserve_filter_version_json_order_and_original_errors()
             let mut probe = |model: &'static str| -> AuthResult<FieldValue> {
                 if stage.strip_suffix("-cycle") == Some(model) {
                     let object = FieldObject::from(FieldMap::new());
-                    let _ = object.set("self", object.clone().into())?;
+                    let _ = object.set("self", FieldValue::Object(object.clone()))?;
                     cycles.push(object.clone());
-                    return Ok(object.into());
+                    return Ok(FieldValue::Object(object));
                 }
                 let failure = if stage.strip_suffix("-getter") == Some(model) {
                     error
@@ -103,12 +103,13 @@ async fn cache_failures_preserve_filter_version_json_order_and_original_errors()
                 } else {
                     None
                 };
-                Ok(FieldObject::from_source(Arc::new(Probe {
-                    model,
-                    events: events.clone(),
-                    error: Mutex::new(failure),
-                }))
-                .into())
+                Ok(FieldValue::Object(FieldObject::from_source(Arc::new(
+                    Probe {
+                        model,
+                        events: events.clone(),
+                        error: Mutex::new(failure),
+                    },
+                ))))
             };
             let data = data(probe("session")?, probe("user")?)?;
             let mut config =

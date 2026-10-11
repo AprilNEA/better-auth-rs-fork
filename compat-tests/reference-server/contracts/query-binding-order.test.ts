@@ -12,6 +12,7 @@ import "./predicate-case-mode.mjs";
 import "./memory-operation-reentry.mjs";
 import "./memory-graph-clone.mjs";
 import "./runtime-json-getters.mjs";
+import "./direct-map-json-order.mjs";
 import "./cookie-cache-json-errors.mjs";
 import "./api-key-validator-errors.mjs";
 
