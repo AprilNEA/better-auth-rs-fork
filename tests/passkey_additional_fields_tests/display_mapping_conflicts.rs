@@ -6,6 +6,7 @@ use better_auth::{
         user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
     },
     BetterAuth,
+    plugins::passkey::PasskeyPlugin,
 };
 use std::sync::{
     Arc,
@@ -51,7 +52,9 @@ async fn accept_shared_columns<S: AuthSchema>(store: Arc<dyn AuthStore<S>>) {
                     if reversed {
                         declarations.reverse();
                     }
-                    let mut auth = BetterAuth::new(contract::config()).store_arc(store.clone());
+                    let mut auth = BetterAuth::new(contract::config())
+                        .store_arc(store.clone())
+                        .plugin(PasskeyPlugin::new());
                     if split {
                         for declaration in declarations {
                             auth = auth.plugin(contract::Fields(UserConfig {

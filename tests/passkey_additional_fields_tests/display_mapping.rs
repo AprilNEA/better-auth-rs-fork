@@ -13,6 +13,7 @@ use better_auth::{
         wire::PasskeyView,
     },
     BetterAuth,
+    plugins::passkey::PasskeyPlugin,
     seaorm::sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement},
 };
 use serde_json::{Value, json};
@@ -148,6 +149,7 @@ impl<'a, S: AuthSchema> Fixture<'a, S> {
         let events = Trace::default();
         let reader = BetterAuth::new(contract::config())
             .store_arc(raw.clone())
+            .plugin(PasskeyPlugin::new())
             .plugin(contract::Fields(policies(mapping, None, &failure)))
             .build()
             .await?;
@@ -165,6 +167,7 @@ impl<'a, S: AuthSchema> Fixture<'a, S> {
             .clone();
         let auth = BetterAuth::new(contract::config())
             .store_arc(raw)
+            .plugin(PasskeyPlugin::new())
             .plugin(contract::Fields(policies(mapping, Some(&events), &failure)))
             .build()
             .await?;

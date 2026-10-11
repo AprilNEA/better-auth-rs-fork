@@ -9,6 +9,7 @@ use better_auth::{
         PasskeyCredentialState, PasskeyStorage, UpdatePasskeyAuthentication, wire::PasskeyView,
     },
     BetterAuth,
+    plugins::passkey::PasskeyPlugin,
 };
 use policies::{Trace, policies, take};
 use serde_json::{Value, json};
@@ -76,6 +77,7 @@ impl<S: AuthSchema> Fixture<S> {
         let failure = Arc::new(AtomicU8::new(0));
         let reader = BetterAuth::new(config())
             .store_arc(raw.clone())
+            .plugin(PasskeyPlugin::new())
             .plugin(Fields(policies(None, failure.clone())))
             .build()
             .await?;
@@ -94,6 +96,7 @@ impl<S: AuthSchema> Fixture<S> {
         let events = Trace::default();
         let auth = BetterAuth::new(config())
             .store_arc(raw)
+            .plugin(PasskeyPlugin::new())
             .plugin(Fields(policies(Some(events.clone()), failure.clone())))
             .build()
             .await?;

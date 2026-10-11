@@ -75,7 +75,10 @@ async fn explicit_native_declarations_preserve_logical_and_aliased_account_owner
                     Some("sqlite") => {
                         let database = storage::sqlite().await?;
                         contract(
-                            Arc::new(SeaOrmStore::<models::Core>::new(baseline, database.clone())),
+                            Arc::new(
+                                SeaOrmStore::<models::Core>::new(baseline, database.clone())
+                                    .with_plugin_schema::<models::NativePlugins>(),
+                            ),
                             Some(&database),
                             &scenario,
                             case,

@@ -52,3 +52,33 @@ impl AuthSchema for Core {
     type Session = <core_models::Core as AuthSchema>::Session;
     type Verification = <core_models::Core as AuthSchema>::Verification;
 }
+
+#[expect(
+    unreachable_pub,
+    reason = "SeaORM derives require public fixture entity types."
+)]
+pub(super) mod declared_passkey {
+    use better_auth_seaorm::sea_orm::{self, entity::prelude::*};
+
+    #[derive(
+        Clone, Debug, PartialEq, serde::Serialize, DeriveEntityModel, better_auth_seaorm::AuthEntity,
+    )]
+    #[auth(role = "passkey", native_passkey)]
+    #[sea_orm(table_name = "key_store")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: String,
+        pub label: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+pub(super) type NativePlugins = better_auth_seaorm::PluginModels<
+    better_auth_seaorm::store::entities::api_key::Model,
+    better_auth_seaorm::store::entities::device_code::Model,
+    declared_passkey::Model,
+>;

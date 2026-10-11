@@ -6,6 +6,7 @@ use better_auth::{
         user_fields::{UserConfig, UserFieldConfig},
     },
     BetterAuth,
+    plugins::passkey::PasskeyPlugin,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -111,6 +112,7 @@ async fn missing_passkey_display_requires_explicit_shared_storage() -> TestResul
         let (store, database) = display_fixture::sqlite::<fixture::model::Model>(config()).await;
         let result = BetterAuth::new(config())
             .store(store)
+            .plugin(PasskeyPlugin::new())
             .plugin(contract::Fields(declaration))
             .build()
             .await;
@@ -144,6 +146,7 @@ async fn shared_passkey_display_accepts_native_physical_columns_without_callback
             display_fixture::sqlite::<fixture::protected::Model>(config()).await;
         let result = BetterAuth::new(config())
             .store(store)
+            .plugin(PasskeyPlugin::new())
             .plugin(contract::Fields(declaration))
             .build()
             .await;

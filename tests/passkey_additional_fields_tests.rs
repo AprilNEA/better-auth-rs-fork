@@ -25,6 +25,7 @@ use better_auth::{
         user_fields::{UserConfig, UserFieldConfig},
     },
     BetterAuth,
+    plugins::passkey::PasskeyPlugin,
 };
 use std::sync::Arc;
 
@@ -100,6 +101,7 @@ async fn passkey_additional_fields_accept_complete_declarations_for_existing_col
         };
         let result = BetterAuth::new(contract::config())
             .store(store)
+            .plugin(PasskeyPlugin::new())
             .plugin(contract::Fields(fields))
             .build()
             .await;
