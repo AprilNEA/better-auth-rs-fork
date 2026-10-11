@@ -237,6 +237,9 @@ async fn plugin_writes<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPlug
     S::Verification: SeaOrmVerificationModel,
 {
     use better_auth::__private_core::{CreateDeviceCode, UpdateDeviceCode};
+    use better_auth::plugins::organization::{
+        OrganizationConfig, OrganizationPlugin, OrganizationTeamsConfig,
+    };
     use better_auth::prelude::{CreateMember, CreateOrganization, CreateTeam, CreateTwoFactor};
 
     let serial_policy = matches!(generation, IdGeneration::Serial);
@@ -248,6 +251,13 @@ async fn plugin_writes<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPlug
                 .with_organization_schema::<O>()
                 .with_plugin_schema::<P>(),
         )
+        .plugin(OrganizationPlugin::with_config(OrganizationConfig {
+            teams: OrganizationTeamsConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        }))
         .build()
         .await
         .unwrap();

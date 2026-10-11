@@ -11,17 +11,9 @@ use better_auth_core::{
     store::{MemberUser, OrganizationDetails, OrganizationDetailsQuery, OrganizationKey},
     user_fields::UserConfig,
 };
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityName, EntityTrait, FromQueryResult, IdenStatic, Iterable,
-    QueryFilter, QuerySelect, QueryTrait, Select, Value,
-    sea_query::{Expr, ExprTrait, JoinType, Query},
-};
+use sea_orm::{EntityTrait, IdenStatic, QueryFilter, QuerySelect, Value};
 
-struct OrganizationChildren<O: SeaOrmOrganizationSchema> {
-    invitations: Vec<O::Invitation>,
-    members: Vec<O::Member>,
-    teams: Option<Vec<O::Team>>,
-}
+mod native;
 
 async fn project_sequential<M: SeaOrmOrganizationModel>(
     rows: Vec<M>,
@@ -42,124 +34,17 @@ async fn project_sequential<M: SeaOrmOrganizationModel>(
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
     S::User: SeaOrmUserModel,
+    S::Session: crate::SeaOrmSessionModel,
+    S::Account: crate::SeaOrmAccountModel,
+    S::Verification: crate::SeaOrmVerificationModel,
 {
-    async fn organization_snapshot(
-        &self,
-        query: Select<Entity<O::Organization>>,
-        include_teams: bool,
-        member_limit: f64,
-    ) -> AuthResult<Option<(O::Organization, OrganizationChildren<O>)>> {
-        let mut parent = query.into_query();
-        let _ = parent.clear_selects();
-        for column in <Entity<O::Organization> as EntityTrait>::Column::iter() {
-            let _ = parent.expr(Expr::col(column.as_column_ref()));
-        }
-        let mut query = Query::select();
-        let _ = query.from_subquery(parent, "organization");
-        super::joins::select_model::<Entity<O::Organization>>(&mut query, "organization", "O_");
-        let _ = query.join_as(
-            JoinType::LeftJoin,
-            Entity::<O::Invitation>::default().table_ref(),
-            "invitation",
-            Expr::col(("organization", O::Organization::column("id")?))
-                .equals(("invitation", O::Invitation::column("organization_id")?)),
-        );
-        super::joins::select_model::<Entity<O::Invitation>>(&mut query, "invitation", "I_");
-        let _ = query.expr_as(
-            Expr::col(("invitation", O::Invitation::column("id")?)).is_not_null(),
-            "invitation_present",
-        );
-        let _ = query.join_as(
-            JoinType::LeftJoin,
-            Entity::<O::Member>::default().table_ref(),
-            "member",
-            Expr::col(("organization", O::Organization::column("id")?))
-                .equals(("member", O::Member::column("organization_id")?)),
-        );
-        super::joins::select_model::<Entity<O::Member>>(&mut query, "member", "M_");
-        let _ = query.expr_as(
-            Expr::col(("member", O::Member::column("id")?)).is_not_null(),
-            "member_present",
-        );
-        if include_teams {
-            let _ = query.join_as(
-                JoinType::LeftJoin,
-                Entity::<O::Team>::default().table_ref(),
-                "team",
-                Expr::col(("organization", O::Organization::column("id")?))
-                    .equals(("team", O::Team::column("organization_id")?)),
-            );
-            super::joins::select_model::<Entity<O::Team>>(&mut query, "team", "T_");
-            let _ = query.expr_as(
-                Expr::col(("team", O::Team::column("id")?)).is_not_null(),
-                "team_present",
-            );
-        }
-        let rows = self
-            .connection()
-            .query_all(&query)
-            .await
-            .map_err(map_db_err)?;
-        let Some(first) = rows.first() else {
-            return Ok(None);
-        };
-        let organization = O::Organization::from_query_result(first, "O_").map_err(map_db_err)?;
-        let default_limit = self.config().advanced.database.find_many_limit();
-        let mut children = OrganizationChildren {
-            invitations: Vec::new(),
-            members: Vec::new(),
-            teams: include_teams.then(Vec::new),
-        };
-        for row in rows {
-            children
-                .invitations
-                .extend(super::joins::optional_model::<O::Invitation>(
-                    &row,
-                    "I_",
-                    "invitation_present",
-                )?);
-            children
-                .members
-                .extend(super::joins::optional_model::<O::Member>(
-                    &row,
-                    "M_",
-                    "member_present",
-                )?);
-            if let Some(teams) = &mut children.teams {
-                teams.extend(super::joins::optional_model::<O::Team>(
-                    &row,
-                    "T_",
-                    "team_present",
-                )?);
-            }
-        }
-        children.invitations = super::joins::limited_children::<Entity<O::Invitation>>(
-            children.invitations.into_iter(),
-            O::Invitation::column("id")?,
-            default_limit,
-        );
-        children.members = super::joins::limited_children::<Entity<O::Member>>(
-            children.members.into_iter(),
-            O::Member::column("id")?,
-            member_limit,
-        );
-        children.teams = children
-            .teams
-            .map(|rows| -> AuthResult<_> {
-                Ok(super::joins::limited_children::<Entity<O::Team>>(
-                    rows.into_iter(),
-                    O::Team::column("id")?,
-                    default_limit,
-                ))
-            })
-            .transpose()?;
-        Ok(Some((organization, children)))
-    }
-
     pub(super) async fn read_organization_details(
         &self,
         input: OrganizationDetailsQuery<'_>,
     ) -> AuthResult<Option<OrganizationDetails>> {
+        if self.config().advanced.database.joins == Some(true) {
+            return self.read_native_organization_details(input).await;
+        }
         let fields = self.organization_fields()?;
         let backend = self.connection().get_database_backend();
         let predicate = match input.organization {
@@ -183,19 +68,8 @@ where
         let member_limit = input
             .members_limit
             .unwrap_or(self.config().advanced.database.find_many_limit());
-        let (organization, children) = if self.config().advanced.database.joins == Some(true) {
-            let Some((organization, children)) = self
-                .organization_snapshot(query, input.include_teams, member_limit)
-                .await?
-            else {
-                return Ok(None);
-            };
-            (organization, Some(children))
-        } else {
-            let Some(organization) = query.one(self.connection()).await.map_err(map_db_err)? else {
-                return Ok(None);
-            };
-            (organization, None)
+        let Some(organization) = query.one(self.connection()).await.map_err(map_db_err)? else {
+            return Ok(None);
         };
         let organization_id = models::join_value(&organization, "id")?;
         let organization = models::record(
@@ -208,37 +82,7 @@ where
             ),
         )
         .await?;
-        let (invitations, members, teams) = if let Some(children) = children {
-            let invitations = project_sequential(
-                children.invitations,
-                &fields.invitation,
-                backend,
-                (
-                    &self.model_fields,
-                    better_auth_core::store::schema::EntityRole::Invitation,
-                ),
-            )
-            .await?;
-            let members = self
-                .project_members_with_owners(children.members, &fields.member, backend)
-                .await?;
-            let teams = match children.teams {
-                Some(rows) => Some(
-                    project_sequential(
-                        rows,
-                        &fields.team,
-                        backend,
-                        (
-                            &self.model_fields,
-                            better_auth_core::store::schema::EntityRole::Team,
-                        ),
-                    )
-                    .await?,
-                ),
-                None => None,
-            };
-            (invitations, members, teams)
-        } else {
+        let (invitations, members, teams) = {
             let limit = super::pagination::default_limit(
                 self.config(),
                 self.connection().get_database_backend(),

@@ -55,13 +55,6 @@ impl Target {
     fn value_field(self) -> &'static str {
         if self.many() { "accessToken" } else { "name" }
     }
-    fn fields(self, config: &mut AuthConfig) -> &mut indexmap::IndexMap<String, UserFieldConfig> {
-        match self {
-            Self::Account => &mut config.account.additional_fields,
-            Self::User => config.user.fields_mut(),
-            Self::Session => config.session.fields_mut(),
-        }
-    }
 }
 
 fn user(id: &str, name: &str) -> Value {
@@ -310,7 +303,11 @@ async fn check(target: Target, joins: bool, reject: bool, missing: bool) -> Test
             Ok(value)
         })
     };
-    let fields = target.fields(&mut config);
+    let fields = match target {
+        Target::Account => &mut config.account.additional_fields,
+        Target::User => config.user.fields_mut(),
+        Target::Session => config.session.fields_mut(),
+    };
     let _ = fields.insert(target.child().into(), policy(collision));
     let _ = fields.insert(
         "relationMirror".into(),

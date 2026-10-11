@@ -6,10 +6,10 @@ use crate::{
     SeaOrmSessionModel, SeaOrmUserModel, SeaOrmVerificationModel, schema::AuthSchema,
 };
 use better_auth_core::{
-    AuthRecordFields, AuthResult, FromFieldMap, MemberUserView,
+    AuthRecordFields, AuthResult, FromFieldMap, Member, MemberUserView,
     store::{MemberUser, schema::EntityRole},
 };
-use sea_orm::{QuerySelect, Select};
+use sea_orm::{DbBackend, EntityName, QuerySelect, Select};
 
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
@@ -67,7 +67,32 @@ where
                 relation.many,
                 limit,
             )?;
-            (member.model::<O::Member>()?, Some(users))
+            let member_fields = MemberUser::field_schema(&fields).adapter_fields(&[]);
+            let user_fields = self.user_field_schema().adapter_fields(&[]);
+            let backend = self.connection().get_database_backend();
+            let entity = <S::User as SeaOrmUserModel>::Entity::default();
+            let physical = self
+                .model_fields
+                .storage_model_name(EntityRole::User, entity.table_name());
+            let record = super::organization_models::raw_record::<O::Member>(
+                &member,
+                &member_fields,
+                backend,
+                (&self.model_fields, EntityRole::Member),
+            )?
+            .with_storage_property(
+                physical,
+                super::joins::raw_relation_value(
+                    &users,
+                    &user_fields,
+                    relation.many,
+                    S::User::field_column,
+                )?,
+            );
+            let mut output = member_fields
+                .organization_output_records(vec![record], backend == DbBackend::Postgres)
+                .await?;
+            (Member::from_field_values(output.remove(0))?, Some(users))
         } else {
             let member =
                 database_operation::<Entity<O::Member>, _>(self.config(), "findOne", async {
@@ -77,18 +102,15 @@ where
             let Some(member) = member else {
                 return Ok(None);
             };
+            let member = super::organization_models::record(
+                &member,
+                &fields,
+                self.connection().get_database_backend(),
+                (&self.model_fields, EntityRole::Member),
+            )
+            .await?;
             (member, None)
         };
-        let member = super::organization_models::record(
-            &member,
-            &fields,
-            self.connection().get_database_backend(),
-            (
-                &self.model_fields,
-                better_auth_core::store::schema::EntityRole::Member,
-            ),
-        )
-        .await?;
         let users = match selected_users {
             Some(users) => users,
             None => {

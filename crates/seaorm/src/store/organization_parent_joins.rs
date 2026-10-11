@@ -172,10 +172,9 @@ where
                                 pages,
                                 backend,
                                 &|row: &SqlRow| {
-                                    row.native_record::<Entity<O::Organization>>(
+                                    row.native_record(
                                         organization_fields,
                                         backend,
-                                        O::Organization::column("id")?,
                                         O::Organization::column,
                                     )
                                     .map(|record| {

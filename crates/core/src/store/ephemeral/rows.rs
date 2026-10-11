@@ -70,7 +70,40 @@ impl RecordSource {
     }
 }
 
-impl<T: AuthRecordFields + Send> crate::field_value::FieldObjectSource for RowRef<T> {
+pub(super) trait ObjectRow: AuthRecordFields {
+    fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>>;
+    fn delete_property(&mut self, name: &str) -> AuthResult<Option<FieldValue>>;
+}
+
+impl ObjectRow for FieldMap {
+    fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+        let previous = self.insert(name, value);
+        self.sort_property_order();
+        Ok(previous)
+    }
+
+    fn delete_property(&mut self, name: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(self.remove(name))
+    }
+}
+
+impl ObjectRow for crate::UserView {
+    fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+        let mut fields = self.field_values()?;
+        let previous = fields.set_property(name, value)?;
+        *self = Self::from_field_values(fields)?;
+        Ok(previous)
+    }
+
+    fn delete_property(&mut self, name: &str) -> AuthResult<Option<FieldValue>> {
+        let mut fields = self.field_values()?;
+        let previous = fields.delete_property(name)?;
+        *self = Self::from_field_values(fields)?;
+        Ok(previous)
+    }
+}
+
+impl<T: ObjectRow + Send> crate::field_value::FieldObjectSource for RowRef<T> {
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         self.read(|row| Ok(row.field_values()?.get(name).cloned()))
     }
@@ -79,18 +112,26 @@ impl<T: AuthRecordFields + Send> crate::field_value::FieldObjectSource for RowRe
         self.read(AuthRecordFields::field_values)
     }
 
+    fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+        self.write(|row| row.set_property(name, value))
+    }
+
+    fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        self.write(|row| row.delete_property(name))
+    }
+
     fn identity(&self) -> usize {
         Arc::as_ptr(&self.0) as usize
     }
 }
 
-impl<T: AuthRecordFields + Clone + Send + 'static> RowRef<T> {
+impl<T: ObjectRow + Clone + Send + 'static> RowRef<T> {
     pub(super) fn field_value(&self) -> FieldValue {
         FieldValue::Object(crate::FieldObject::from_source(Arc::new(self.clone())))
     }
 }
 
-impl<T: AuthRecordFields + Clone + Send + 'static> crate::store::JoinValue<RowRef<T>> {
+impl<T: ObjectRow + Clone + Send + 'static> crate::store::JoinValue<RowRef<T>> {
     pub(super) fn raw_value(&self) -> FieldValue {
         match self {
             Self::One(row) => row.as_ref().map_or(FieldValue::Null, RowRef::field_value),
@@ -356,6 +397,9 @@ macro_rules! row_id {
     })* };
 }
 row_id!(crate::wire::UserView);
+
+#[cfg(test)]
+mod object_tests;
 
 #[cfg(test)]
 mod tests {

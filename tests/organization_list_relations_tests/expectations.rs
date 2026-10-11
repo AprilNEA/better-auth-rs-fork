@@ -22,11 +22,11 @@ fn organization(suffix: &str, case: Case, function: &FieldValue) -> FieldMap {
     .into()
 }
 fn selected(sqlite: bool, native: bool, case: Case, index: usize) -> Vec<&'static str> {
-    if index > 0 || case == Case::NullProjection && !native {
+    if index > 0 || case == Case::FallbackKeyNull && !native {
         Vec::new()
     } else if case.many() {
         vec!["a", "b"]
-    } else if case == Case::Redirect && !native
+    } else if case == Case::FallbackKeyRedirect && !native
         || case == Case::UniqueDuplicates && sqlite && native
     {
         vec!["b"]
@@ -44,17 +44,22 @@ fn parent(parent: Parent, case: Case, index: usize, role: &str) -> FieldMap {
     } else {
         role.into()
     };
+    let role: FieldValue = match case {
+        Case::FallbackKeyRedirect => "slug-b".into(),
+        Case::FallbackKeyNull => FieldValue::Null,
+        _ => role.into(),
+    };
     let mut row: FieldMap = [("organizationId".into(), org)].into();
     if parent == Parent::Member {
         row.extend([
             ("userId".into(), "user".into()),
-            ("role".into(), role.into()),
+            ("role".into(), role),
             ("createdAt".into(), date().into()),
         ]);
     } else {
         row.extend([
             ("email".into(), "owner@list-relations.test".into()),
-            ("role".into(), role.into()),
+            ("role".into(), role),
             ("teamId".into(), FieldValue::Null),
             ("status".into(), "pending".into()),
             ("expiresAt".into(), date().into()),
@@ -150,6 +155,13 @@ pub(super) fn events(sqlite: bool, native: bool, parent: Parent, case: Case) -> 
         .into_iter()
         .map(|role| vec![field.clone().into(), role.into()].into())
         .collect::<Vec<_>>();
+    if case.fallback_key() {
+        events.extend(
+            case.parent_roles()
+                .into_iter()
+                .map(|role| vec![format!("{}.role", parent.model()).into(), role.into()].into()),
+        );
+    }
     for index in 0..case.parent_roles().len() {
         for child in selected(sqlite, native, case, index) {
             events.push(

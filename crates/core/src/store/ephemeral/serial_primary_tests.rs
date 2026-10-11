@@ -138,7 +138,20 @@ async fn serial_verification_consumption_preserves_numeric_reservation_ids() -> 
             .reserve_verification_value(verification("reserved"))
             .await?
     );
-    let reserved = required(store.get_verification_by_identifier("reserved").await?)?;
+    assert_eq!(
+        required(store.get_verification_by_identifier("reserved").await?)?.id,
+        "2"
+    );
+    // Reservations replace caller timestamps. Fix stored dates so latest selection cannot tie.
+    let mut created_at = 0.0;
+    store.lock()?.verifications.update_each(|row| {
+        created_at += 1_000.0;
+        let _ = row.insert(
+            "createdAt".into(),
+            crate::FieldDate::from_milliseconds(created_at).into(),
+        );
+        Ok(())
+    })?;
     assert_eq!(
         store
             .lock()?
@@ -149,7 +162,7 @@ async fn serial_verification_consumption_preserves_numeric_reservation_ids() -> 
             .collect::<Vec<_>>(),
         [Value::Number(1.0), Value::Number(2.0), Value::Number(3.0)]
     );
-    for (identifier, expected_id) in [("ordinary", ordinary.id), ("reserved", reserved.id)] {
+    for (identifier, expected_id) in [("ordinary", "1"), ("reserved", "3")] {
         let (first, second) = tokio::join!(
             store.consume_verification_by_identifier(identifier),
             store.consume_verification_by_identifier(identifier),

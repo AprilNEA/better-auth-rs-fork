@@ -1,6 +1,5 @@
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, FromQueryResult, IdenStatic, Iterable, ModelTrait,
-    QueryTrait, Select,
+    ColumnTrait, ConnectionTrait, EntityTrait, IdenStatic, Iterable, QueryTrait, Select,
     sea_query::{Expr, ExprTrait, JoinType, Query, SelectStatement},
 };
 
@@ -177,10 +176,7 @@ pub(super) fn raw_relation_value<C: IdenStatic>(
 ) -> AuthResult<FieldValue> {
     let mut values = rows
         .iter()
-        .map(|row| {
-            native_child_fields(fields, |name, _| row.value(column(name)?.as_str()))
-                .map(FieldValue::from)
-        })
+        .map(|row| row.native_object(fields, &column).map(FieldValue::Object))
         .collect::<AuthResult<Vec<_>>>()?;
     Ok(if many {
         values.into()
@@ -227,31 +223,6 @@ pub(super) fn select_model<E: EntityTrait>(
     }
 }
 
-pub(super) fn limited_children<E: EntityTrait>(
-    rows: impl Iterator<Item = E::Model>,
-    id: E::Column,
-    limit: f64,
-) -> Vec<E::Model> {
-    limited_by_key(rows.map(|row| (row.get(id), row)), limit)
-}
-
-fn limited_by_key<T, K: PartialEq>(rows: impl Iterator<Item = (K, T)>, limit: f64) -> Vec<T> {
-    // Kysely caps the assembled child array with slice, not a SQL LIMIT.
-    let limit = limit as usize;
-    let mut selected = Vec::new();
-    let mut ids = Vec::new();
-    for (id, row) in rows {
-        if selected.len() >= limit {
-            break;
-        }
-        if !ids.contains(&id) {
-            ids.push(id);
-            selected.push(row);
-        }
-    }
-    selected
-}
-
 pub(super) async fn joined_raw_rows(
     db: &impl ConnectionTrait,
     query: &SelectStatement,
@@ -261,38 +232,20 @@ pub(super) async fn joined_raw_rows(
         .map_err(super::map_db_err)?
         .into_iter()
         .map(|row| {
-            let present = row
-                .try_get::<bool>("", CHILD_PRESENT)
-                .map_err(super::map_db_err)?;
             let row = SqlRow::from(row);
-            Ok((row.prefixed("A_"), present.then(|| row.prefixed("B_"))))
+            Ok((
+                row.prefixed("A_"),
+                row.optional_prefixed("B_", CHILD_PRESENT)?,
+            ))
         })
         .collect()
-}
-
-pub(super) fn optional_model<M: FromQueryResult>(
-    row: &sea_orm::QueryResult,
-    prefix: &str,
-    presence_column: &str,
-) -> AuthResult<Option<M>> {
-    // SeaORM's optional decoder discards decode errors. Only SQL NULL means no child.
-    if row
-        .try_get::<bool>("", presence_column)
-        .map_err(super::map_db_err)?
-    {
-        M::from_query_result(row, prefix)
-            .map(Some)
-            .map_err(super::map_db_err)
-    } else {
-        Ok(None)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use better_auth_core::user_fields::{FieldTransforms, UserFieldTransform};
-    use sea_orm::{Database, DbErr, QueryResult};
+    use sea_orm::Database;
     use std::sync::{Arc, Mutex};
 
     #[tokio::test]
@@ -377,15 +330,6 @@ mod tests {
         Ok(())
     }
 
-    #[derive(Debug)]
-    struct DisplayDecodeFailure;
-
-    impl FromQueryResult for DisplayDecodeFailure {
-        fn from_query_result(_row: &QueryResult, _prefix: &str) -> Result<Self, DbErr> {
-            Err(DbErr::Custom("Ordinary display decoder failed".into()))
-        }
-    }
-
     #[tokio::test]
     async fn optional_child_distinguishes_absence_from_decode_failure() -> AuthResult<()> {
         let db = Database::connect("sqlite::memory:")
@@ -401,13 +345,12 @@ mod tests {
                 .ok_or_else(|| {
                     crate::error::AuthError::internal("Presence query returned no row")
                 })?;
-            let result = optional_model::<DisplayDecodeFailure>(&row, "B_", CHILD_PRESENT);
+            let result = SqlRow::from(row)
+                .optional_prefixed("B_", CHILD_PRESENT)?
+                .map(|row| row.value("missing"))
+                .transpose();
             if present {
-                assert!(result.is_err_and(|error| {
-                    error
-                        .to_string()
-                        .contains("Ordinary display decoder failed")
-                }));
+                assert!(result.is_err_and(|error| { error.to_string().contains("B_missing") }));
             } else {
                 assert!(matches!(result, Ok(None)));
             }

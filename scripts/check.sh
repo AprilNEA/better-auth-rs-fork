@@ -92,6 +92,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
         ./compat-tests/reference-server/contracts/organization-list-relations.test.ts \
         ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
+        ./compat-tests/reference-server/contracts/relation-object-mutation.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
         ./compat-tests/reference-server/contracts/organization-serial-references.test.ts \
         ./compat-tests/reference-server/contracts/organization-direct-order.test.ts \
@@ -112,7 +113,7 @@ run_stage() {
       cargo clippy --workspace --locked --features axum,seaorm2,redis-cache -- -D warnings || organization_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test organization_id_input_tests --test account_id_input_tests \
-        --test verification_field_queries_tests --test plugin_model_fields_tests --test sql_relation_property_tests --test model_alias_order_tests \
+        --test verification_field_queries_tests --test plugin_model_fields_tests --test sql_relation_property_tests --test relation_object_mutation_tests --test model_alias_order_tests \
         --test organization_list_relations_tests --test organization_list_tests --test fallback_continuation_tests -- -D warnings || organization_status=1
       cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib || organization_status=1
       cargo test --locked -p better-auth-api --lib -- \
@@ -130,7 +131,7 @@ run_stage() {
         --test organization_field_alias_tests --test organization_async_field_tests \
         --test organization_join_continuation_tests --test organization_serial_reference_tests \
         --test organization_list_relations_tests --test organization_list_tests --test fallback_continuation_tests \
-        --test sql_relation_property_tests --test organization_member_join_reference_tests --test session_field_queries_tests \
+        --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests --test session_field_queries_tests \
         --test account_id_input_tests --test account_owner_batch_tests --test model_alias_order_tests \
         --test account_live_output_tests --test memory_account_live_page_tests \
         --test verification_field_queries_tests --test verification_live_output_tests \
@@ -547,8 +548,8 @@ run_stage() {
     schema-joins)
       cargo fmt --all -- --check
       cargo clippy --locked --keep-going -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings
-      cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests --test organization_list_relations_tests -- -D warnings
-      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- store::joins:: store::ephemeral::user_serial_tests:: store::ephemeral::organization_joins::detail_dependencies_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils::
+      cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests --test organization_list_relations_tests -- -D warnings
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- field_value:: schema_value:: user_fields::record:: store::joins:: store::plugin_rows::native_snapshot_tests:: store::ephemeral::rows::object_tests:: store::ephemeral::user_serial_tests:: store::ephemeral::organization_joins::detail_dependencies_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils::
       cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin::
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test schema_join_reference_tests --test join_binding_tests \
@@ -556,7 +557,7 @@ run_stage() {
         --test nullable_user_update_tests --test database_hook_updates_tests --test missing_user_transaction_tests \
         --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests \
         --test schema_join_reference_conflict_tests --test schema_preflight_tests \
-        --test sql_relation_property_tests --test organization_member_join_reference_tests \
+        --test sql_relation_property_tests --test relation_object_mutation_tests --test organization_member_join_reference_tests \
         --test organization_native_join_tests --test organization_serial_reference_tests \
         --test organization_list_relations_tests \
         --test fallback_join_tests --test native_core_join_tests \
@@ -576,7 +577,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
         ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
         ./compat-tests/reference-server/contracts/organization-list-relations.test.ts \
-        ./compat-tests/reference-server/contracts/sql-relation-property.test.ts
+        ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
+        ./compat-tests/reference-server/contracts/relation-object-mutation.test.ts
       ;;
     passkey)
       cargo fmt --all -- --check

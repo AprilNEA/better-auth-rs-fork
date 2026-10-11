@@ -65,6 +65,8 @@ enum Case {
     Many,
     UniqueDuplicates,
     NullProjection,
+    FallbackKeyRedirect,
+    FallbackKeyNull,
     NoRefs,
     NoRefsEmpty,
     MultipleRefs,
@@ -74,12 +76,14 @@ enum Case {
     FunctionHidden,
 }
 impl Case {
-    const ALL: [Self; 12] = [
+    const ALL: [Self; 14] = [
         Self::MappedMissing,
         Self::Redirect,
         Self::Many,
         Self::UniqueDuplicates,
         Self::NullProjection,
+        Self::FallbackKeyRedirect,
+        Self::FallbackKeyNull,
         Self::NoRefs,
         Self::NoRefsEmpty,
         Self::MultipleRefs,
@@ -97,6 +101,9 @@ impl Case {
     fn many(self) -> bool {
         matches!(self, Self::Many | Self::ManyEmptySchema)
     }
+    fn fallback_key(self) -> bool {
+        matches!(self, Self::FallbackKeyRedirect | Self::FallbackKeyNull)
+    }
     fn empty(self) -> bool {
         matches!(self, Self::NoRefsEmpty | Self::MultipleRefsEmpty)
     }
@@ -112,7 +119,7 @@ impl Case {
             vec!["linked", "missing"]
         } else if self == Self::UniqueDuplicates {
             vec!["linked"]
-        } else if self == Self::Redirect {
+        } else if matches!(self, Self::Redirect | Self::FallbackKeyRedirect) {
             vec!["slug-a"]
         } else {
             vec!["org-a"]

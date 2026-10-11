@@ -71,7 +71,11 @@ pub(super) async fn auth<S: AuthSchema>(
         let references = (!matches!(case, Case::NoRefs | Case::NoRefsEmpty)).then(|| {
             reference(
                 "organization",
-                if case == Case::Redirect { "slug" } else { "id" },
+                if matches!(case, Case::Redirect | Case::FallbackKeyRedirect) {
+                    "slug"
+                } else {
+                    "id"
+                },
             )
         });
         let _ = parent_fields.fields_mut().insert(
@@ -104,6 +108,27 @@ pub(super) async fn auth<S: AuthSchema>(
                     output: Some(UserFieldTransform::new(move |value| {
                         events.push(&name, value.clone())?;
                         Ok(value)
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+    }
+    if case.fallback_key() {
+        let events = events.clone();
+        let name = format!("{}.role", parent.model());
+        let _ = parent_fields.fields_mut().insert(
+            "role".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(UserFieldTransform::new(move |value| {
+                        events.push(&name, value)?;
+                        Ok(if case == Case::FallbackKeyRedirect {
+                            "slug-b".into()
+                        } else {
+                            FieldValue::Null
+                        })
                     })),
                     ..Default::default()
                 }),

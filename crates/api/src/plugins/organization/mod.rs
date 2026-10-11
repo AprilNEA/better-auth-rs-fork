@@ -549,6 +549,7 @@ fn shape_invitation_output(
     config: &OrganizationConfig,
 ) -> AuthResult<()> {
     if response.status >= 400
+        || fields::invitation_team_id_is_declared(config)
         || !matches!(
             path,
             "/organization/invite-member"
@@ -563,35 +564,45 @@ fn shape_invitation_output(
     {
         return Ok(());
     }
-    let mut value: serde_json::Value = serde_json::from_slice(&response.body.bytes()?)?;
-    let shape = |invitation: &mut serde_json::Value| {
-        if !fields::invitation_team_id_is_declared(config)
-            && let Some(object) = invitation.as_object_mut()
-        {
-            let _ = object.remove("teamId");
+    fn shape(invitation: &better_auth_core::FieldValue) -> AuthResult<()> {
+        if let Some(object) = invitation.as_object() {
+            let _ = object.delete("teamId")?;
         }
-    };
-    match path {
-        "/organization/list-invitations" | "/organization/list-user-invitations" => {
-            if let Some(invitations) = value.as_array_mut() {
-                invitations.iter_mut().for_each(shape);
+        Ok(())
+    }
+    fn shape_list(value: &better_auth_core::FieldValue) -> AuthResult<()> {
+        if let Some(invitations) = value.as_array() {
+            for invitation in invitations {
+                shape(invitation)?;
             }
         }
+        Ok(())
+    }
+    let value = response.body.field_value()?;
+    match path {
+        "/organization/list-invitations" | "/organization/list-user-invitations" => {
+            shape_list(&value)?;
+        }
         "/organization/get-full-organization" => {
-            if let Some(invitations) = value
-                .get_mut("invitations")
-                .and_then(serde_json::Value::as_array_mut)
+            if let Some(object) = value.as_object()
+                && let Some(invitations) = object.get("invitations")?
             {
-                invitations.iter_mut().for_each(shape);
+                shape_list(&invitations)?;
             }
         }
         "/organization/accept-invitation" | "/organization/reject-invitation" => {
-            if let Some(invitation) = value.get_mut("invitation") {
-                shape(invitation);
+            if let Some(object) = value.as_object()
+                && let Some(invitation) = object.get("invitation")?
+            {
+                shape(&invitation)?;
             }
         }
-        _ => shape(&mut value),
+        _ => shape(&value)?,
     }
-    response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&value)?);
+    if matches!(response.body, better_auth_core::ResponseBody::Bytes(_)) {
+        response.body = better_auth_core::ResponseBody::Bytes(
+            value.stringify()?.unwrap_or_default().into_bytes(),
+        );
+    }
     Ok(())
 }

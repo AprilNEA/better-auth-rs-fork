@@ -9,7 +9,7 @@ use better_auth_core::{
     store::{ResolvedJoin, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{DbBackend, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect};
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -32,7 +32,9 @@ where
             )?)
             .limit(super::pagination::default_limit(self.config(), backend)?);
         let membership_fields = self.model_fields.plugin_fields(EntityRole::TeamMember);
-        let team_fields = self.organization_query_schema(EntityRole::Team)?;
+        let team_fields = self
+            .organization_query_schema(EntityRole::Team)?
+            .adapter_fields(&[]);
         let runtime = self.model_fields.organization_join_schema(self.config());
         let relation = ResolvedJoin::resolve(
             (EntityRole::TeamMember, "teamMember", &membership_fields),
@@ -70,7 +72,28 @@ where
         } else {
             (plugin_rows::all(self.connection(), parent).await?, None)
         };
-        let records = self.team_member_records(&memberships, backend)?;
+        let mut records = self.team_member_records(&memberships, backend)?;
+        if let Some(children) = &children {
+            let entity = Entity::<O::Team>::default();
+            let physical = self
+                .model_fields
+                .storage_model_name(EntityRole::Team, entity.table_name());
+            records = records
+                .into_iter()
+                .zip(children)
+                .map(|(record, teams)| {
+                    Ok(record.with_storage_property(
+                        physical,
+                        super::joins::raw_relation_value(
+                            teams,
+                            &team_fields,
+                            relation.many,
+                            O::Team::column,
+                        )?,
+                    ))
+                })
+                .collect::<AuthResult<Vec<_>>>()?;
+        }
         let pages = if let Some(children) = children {
             membership_fields
                 .organization_output_records_batches_then(
@@ -96,15 +119,13 @@ where
                                 pages,
                                 backend,
                                 &|row: &SqlRow| {
-                                    row.native_record::<Entity<O::Team>>(
-                                        team_fields,
-                                        backend,
-                                        O::Team::column("id")?,
-                                        O::Team::column,
-                                    )
-                                    .map(|record| {
-                                        record.with_id_output(&self.model_fields, EntityRole::Team)
-                                    })
+                                    row.native_record(team_fields, backend, O::Team::column)
+                                        .map(|record| {
+                                            record.with_id_output(
+                                                &self.model_fields,
+                                                EntityRole::Team,
+                                            )
+                                        })
                                 },
                             )
                             .await?;

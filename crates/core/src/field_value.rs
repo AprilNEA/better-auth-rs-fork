@@ -430,11 +430,28 @@ impl FieldValue {
     }
 
     pub(crate) fn contains_live_object(&self) -> bool {
+        self.contains_live_object_with_seen(&mut HashSet::new())
+    }
+
+    fn contains_live_object_with_seen(&self, seen: &mut HashSet<ObjectIdentity>) -> bool {
         match self {
-            Self::Object(object) => object
-                .owned_fields()
-                .is_none_or(|fields| fields.values().any(Self::contains_live_object)),
-            Self::Array(values) => values.iter().any(Self::contains_live_object),
+            Self::Object(object) => {
+                if object.is_live() {
+                    return true;
+                }
+                if !seen.insert(object.identity()) {
+                    return false;
+                }
+                // An inaccessible owned map cannot be decoded as an ordinary JSON value.
+                object.snapshot_fields().map_or(true, |fields| {
+                    fields
+                        .values()
+                        .any(|value| value.contains_live_object_with_seen(seen))
+                })
+            }
+            Self::Array(values) => values
+                .iter()
+                .any(|value| value.contains_live_object_with_seen(seen)),
             _ => false,
         }
     }
@@ -594,6 +611,8 @@ impl StructuredCloneContext {
     }
 }
 
+#[cfg(test)]
+mod object_tests;
 #[cfg(test)]
 mod tests;
 

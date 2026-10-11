@@ -22,7 +22,7 @@ struct NativeRelationship {
     ids: Vec<Vec<Value>>,
 }
 
-fn raw_relation<T: AuthRecordFields + Clone + Send + 'static>(
+fn raw_relation<T: super::rows::ObjectRow + Clone + Send + 'static>(
     rows: &[RowRef<T>],
     many: bool,
 ) -> Value {

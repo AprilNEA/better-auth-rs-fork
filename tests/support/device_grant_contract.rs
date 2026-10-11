@@ -186,8 +186,8 @@ pub(crate) async fn request<S: AuthSchema>(
         let _ = headers.insert("cookie".into(), cookie.into());
     }
     let response = match transport {
-        Transport::Native => {
-            auth.call_endpoint(
+        Transport::Native => auth
+            .call_endpoint(
                 method,
                 path,
                 EndpointInput {
@@ -198,7 +198,7 @@ pub(crate) async fn request<S: AuthSchema>(
                 },
             )
             .await?
-        }
+            .into_http_response()?,
         Transport::Http => {
             let _ = headers.insert("origin".into(), ORIGIN.into());
             let _ = headers.insert("accept".into(), "application/json".into());

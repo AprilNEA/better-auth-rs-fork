@@ -1,6 +1,7 @@
 use super::server_catalog_support::TestResult;
 use better_auth::{
-    AuthConfig, AuthSchema, FieldMap,
+    AuthConfig, AuthSchema, BetterAuth, FieldMap,
+    plugins::TwoFactorPlugin,
     prelude::{
         AuthUser, CreateTwoFactor, CreateUser, TwoFactor, TwoFactorStorage, UpdateTwoFactor,
         UpdateUser, UserView,
@@ -14,7 +15,6 @@ use better_auth::{
             sea_query::Expr,
         },
     },
-    store::AuthStore,
 };
 use serde_json::{Map, Value, json};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -72,8 +72,12 @@ where
 {
     let mut config = AuthConfig::default();
     config.telemetry.enabled = false;
-    let store = SeaOrmStore::<S>::new(config, database.clone()).with_plugin_schema::<P>();
-    let store: &dyn AuthStore<S> = &store;
+    let auth = BetterAuth::<S>::new(config.clone())
+        .store(SeaOrmStore::<S>::new(config, database.clone()).with_plugin_schema::<P>())
+        .plugin(TwoFactorPlugin::new())
+        .build()
+        .await?;
+    let store = auth.store();
     assert_eq!(P::TwoFactor::two_factor_storage(), TwoFactorStorage::Native);
     let mut owner_input = CreateUser::new()
         .with_name("TwoFactor catalog owner")

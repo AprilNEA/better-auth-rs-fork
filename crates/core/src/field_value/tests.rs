@@ -43,6 +43,14 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
             Err(AuthError::internal("object source read failed"))
         }
 
+        fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+            Err(AuthError::internal("object source write failed"))
+        }
+
+        fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+            Err(AuthError::internal("object source write failed"))
+        }
+
         fn identity(&self) -> usize {
             std::ptr::from_ref(self) as usize
         }
@@ -99,6 +107,14 @@ fn cyclic_live_objects_fail_at_explicit_conversion_boundaries() -> AuthResult<()
 
         fn snapshot_fields(&self) -> AuthResult<FieldMap> {
             Ok(self.fields()?.clone())
+        }
+
+        fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
+            Ok(self.fields()?.insert(name, value))
+        }
+
+        fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+            Ok(self.fields()?.remove(name))
         }
 
         fn identity(&self) -> usize {

@@ -259,7 +259,10 @@ async fn check<S: AuthSchema>(
         .store()
         .create_session(CreateSession {
             user_id: "user-a".into(),
-            expires_at: (chrono::Utc::now() + chrono::Duration::hours(1)).into(),
+            expires_at: "2100-01-01T00:00:00Z"
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .map_err(|error| AuthError::internal(error.to_string()))?
+                .into(),
             active_organization_id: Some(org.into()),
             inherited_fields: Default::default(),
             additional_fields: Default::default(),

@@ -83,13 +83,8 @@ where
         let fields = self.user_field_schema().adapter_fields(&[]);
         let backend = self.connection().get_database_backend();
         let pages = super::joins::project_child_pages(&fields, pages, backend, &|row| {
-            row.native_record::<<S::User as SeaOrmUserModel>::Entity>(
-                &fields,
-                backend,
-                S::User::id_column(),
-                S::User::field_column,
-            )
-            .map(|record| record.with_id_output(&self.model_fields, EntityRole::User))
+            row.native_record(&fields, backend, S::User::field_column)
+                .map(|record| record.with_id_output(&self.model_fields, EntityRole::User))
         })
         .await?;
         Ok(pages

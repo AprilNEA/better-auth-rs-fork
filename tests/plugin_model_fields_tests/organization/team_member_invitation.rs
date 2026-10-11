@@ -163,7 +163,10 @@ pub(super) async fn session_headers<S: AuthSchema>(
         .create_session(CreateSession {
             inherited_fields: Default::default(),
             user_id: "user-a".into(),
-            expires_at: (chrono::Utc::now() + chrono::Duration::hours(1)).into(),
+            expires_at: "2100-01-01T00:00:00Z"
+                .parse::<chrono::DateTime<chrono::Utc>>()
+                .map_err(|error| AuthError::internal(error.to_string()))?
+                .into(),
             active_organization_id: Some("organization".into()),
             ip_address: None,
             user_agent: None,

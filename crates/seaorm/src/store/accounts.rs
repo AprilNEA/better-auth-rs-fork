@@ -265,12 +265,7 @@ where
         let fields = self.config().account.field_schema();
         let backend = self.connection().get_database_backend();
         let record = account
-            .native_record::<<S::Account as SeaOrmAccountModel>::Entity>(
-                &fields,
-                backend,
-                S::Account::id_column(),
-                S::Account::field_column,
-            )?
+            .native_record(&fields, backend, S::Account::field_column)?
             .with_id_output(&self.model_fields, EntityRole::Account);
         // Projection preserves the one selected child.
         Ok(AccountView::from_adapter_fields(

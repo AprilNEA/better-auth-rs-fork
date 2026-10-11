@@ -2,9 +2,9 @@ use super::{
     SeaOrmStore, map_db_err,
     organization_models::{self as models, Entity, values},
 };
+use crate::SeaOrmOrganizationSchema;
 use crate::schema::AuthSchema;
 use crate::types_org::{CreateInvitation, Invitation, InvitationStatus};
-use crate::{SeaOrmOrganizationModel, SeaOrmOrganizationSchema};
 use async_trait::async_trait;
 use better_auth_core::{
     AuthResult,

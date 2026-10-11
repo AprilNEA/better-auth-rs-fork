@@ -100,7 +100,19 @@ impl<T: SchemaField> SchemaValue<T> {
         if value.is_undefined() {
             Self::Undefined
         } else {
-            T::from_field(value).map_or_else(Self::Dynamic, Self::Typed)
+            let has_identity = matches!(
+                value,
+                FieldValue::Date(_)
+                    | FieldValue::Array(_)
+                    | FieldValue::Object(_)
+                    | FieldValue::Function(_)
+            );
+            match T::from_field(value.clone()) {
+                Ok(typed) if !has_identity || typed.clone().into_field().strict_equals(&value) => {
+                    Self::Typed(typed)
+                }
+                _ => Self::Dynamic(value),
+            }
         }
     }
 

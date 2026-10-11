@@ -4,13 +4,14 @@ use super::{
 };
 use crate::AuthResult;
 use crate::store::schema::resolve_field_name;
-use crate::{FieldMap, FieldValue as Value};
+use crate::{FieldMap, FieldObject, FieldValue as Value};
 use std::sync::Arc;
 
 /// Raw logical fields and mapped storage fields, before adapter output policies run.
 pub struct AdapterRecord {
     output: FieldMap,
     storage: FieldMap,
+    storage_object: Option<FieldObject>,
     raw_storage: Option<FieldOutputCapabilities>,
     output_initializer: Option<Box<dyn FnOnce() -> AuthResult<()> + Send + Sync>>,
 }
@@ -21,7 +22,23 @@ impl AdapterRecord {
         Self {
             output: core,
             storage,
+            storage_object: None,
             raw_storage: None,
+            output_initializer: None,
+        }
+    }
+
+    /// Read raw physical properties from one shared snapshot at each field's output boundary.
+    /// Object mutations become visible to later fields, including the adapter-owned ID.
+    pub fn from_storage_object(
+        storage: FieldObject,
+        capabilities: FieldOutputCapabilities,
+    ) -> Self {
+        Self {
+            output: FieldMap::new(),
+            storage: FieldMap::new(),
+            storage_object: Some(storage),
+            raw_storage: Some(capabilities),
             output_initializer: None,
         }
     }
@@ -45,10 +62,22 @@ impl AdapterRecord {
     }
 
     fn begin_output(&mut self) -> AuthResult<()> {
+        if let Some(object) = &self.storage_object {
+            for (name, value) in std::mem::take(&mut self.storage) {
+                let _ = object.set(name, value)?;
+            }
+        }
         if let Some(initialize) = self.output_initializer.take() {
             initialize()?;
         }
         Ok(())
+    }
+
+    fn storage_value(&self, name: &str) -> AuthResult<Value> {
+        match &self.storage_object {
+            Some(object) => Ok(object.get(name)?.unwrap_or_default()),
+            None => Ok(self.storage.get(name).cloned().unwrap_or_default()),
+        }
     }
 
     /// Restore raw adapter values before output policies. `None` retains the extracted value.
@@ -655,11 +684,7 @@ async fn project_organization_field(
     supports_native_json: bool,
 ) -> AuthResult<()> {
     record.begin_output()?;
-    let value = record
-        .storage
-        .get(resolve_field_name(field.field_name.as_deref(), name))
-        .cloned()
-        .unwrap_or_default();
+    let value = record.storage_value(resolve_field_name(field.field_name.as_deref(), name))?;
     let value = if name == "id" {
         if value.is_null() || value.is_undefined() {
             value
@@ -725,13 +750,18 @@ async fn project_adapter_field_with_capabilities(
 ) -> AuthResult<()> {
     record.begin_output()?;
     if name == "id" {
+        if record.storage_object.is_some() {
+            let value = record.storage_value("id")?;
+            let value = if value.is_null() || value.is_undefined() {
+                value
+            } else {
+                value.display_utf16()?.into()
+            };
+            let _ = record.output.insert(name.into(), value);
+        }
         return Ok(());
     }
-    let value = record
-        .storage
-        .get(resolve_field_name(field.field_name.as_deref(), name))
-        .cloned()
-        .unwrap_or_default();
+    let value = record.storage_value(resolve_field_name(field.field_name.as_deref(), name))?;
     let value = if let Some(capabilities) = record.raw_storage {
         field.adapter_output_from_raw(value, capabilities).await?
     } else {
@@ -759,6 +789,9 @@ pub(crate) async fn project_adapter_value(
         )
         .await
 }
+
+#[cfg(test)]
+mod object_tests;
 
 #[cfg(test)]
 mod tests {

@@ -11,7 +11,9 @@ use better_auth_core::{
     store::{ResolvedJoin, TeamDetails, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{Condition, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{
+    Condition, ConnectionTrait, DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect,
+};
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -54,7 +56,10 @@ where
         let backend = conn.get_database_backend();
         let parent = Entity::<O::Team>::find().filter(condition).limit(1);
         let team_fields = self.organization_query_schema(EntityRole::Team)?;
-        let member_fields = self.model_fields.plugin_fields(EntityRole::TeamMember);
+        let member_fields = self
+            .model_fields
+            .plugin_fields(EntityRole::TeamMember)
+            .adapter_fields(&[]);
         let runtime = self.model_fields.organization_join_schema(self.config());
         let relation = include_members
             .then(|| {
@@ -103,16 +108,36 @@ where
         let Some((row, native_members)) = selected else {
             return Ok(None);
         };
+        let mut record = models::raw_record::<O::Team>(
+            &row,
+            &team_fields,
+            backend,
+            (&self.model_fields, EntityRole::Team),
+        )?;
+        if let Some(members) = &native_members {
+            let entity = Entity::<O::TeamMember>::default();
+            let physical = self
+                .model_fields
+                .storage_model_name(EntityRole::TeamMember, entity.table_name());
+            record = record.with_storage_property(
+                physical,
+                super::joins::raw_relation_value(
+                    members,
+                    &member_fields,
+                    relation
+                        .as_ref()
+                        .ok_or_else(|| {
+                            better_auth_core::AuthError::internal(
+                                "Team query lost its member relationship",
+                            )
+                        })?
+                        .many,
+                    O::TeamMember::column,
+                )?,
+            );
+        }
         let output = team_fields
-            .organization_output_records(
-                vec![models::raw_record::<O::Team>(
-                    &row,
-                    &team_fields,
-                    backend,
-                    (&self.model_fields, EntityRole::Team),
-                )?],
-                backend == DbBackend::Postgres,
-            )
+            .organization_output_records(vec![record], backend == DbBackend::Postgres)
             .await?
             .remove(0);
         let output = plugin_rows::ordered_output(&team_fields, output);
@@ -131,12 +156,7 @@ where
                 backend,
                 &|row: &SqlRow| {
                     let record = if native {
-                        row.native_record::<Entity<O::TeamMember>>(
-                            &member_fields,
-                            backend,
-                            O::TeamMember::column("id")?,
-                            O::TeamMember::column,
-                        )?
+                        row.native_record(&member_fields, backend, O::TeamMember::column)?
                     } else {
                         row.record::<Entity<O::TeamMember>>(
                             &member_fields,

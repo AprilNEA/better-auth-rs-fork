@@ -10,18 +10,19 @@ const { getOrgAdapter } = await import(new URL("../node_modules/better-auth/dist
 type Parent = "member" | "invitation";
 type Backend = "memory" | "sqlite";
 type Fields = Record<string, unknown>;
-const cases = ["mapped-missing", "redirect", "many", "unique-duplicates", "null-projection", "no-refs", "no-refs-empty", "multiple-refs", "multiple-refs-empty", "many-empty-schema", "function-unfiltered", "function-hidden"] as const;
+const cases = ["mapped-missing", "redirect", "many", "unique-duplicates", "null-projection", "fallback-key-redirect", "fallback-key-null", "no-refs", "no-refs-empty", "multiple-refs", "multiple-refs-empty", "many-empty-schema", "function-unfiltered", "function-hidden"] as const;
 type Scenario = typeof cases[number];
 const date = () => new Date("2030-01-01T00:00:00.000Z");
 const reverse = (scenario: Scenario) => scenario === "many" || scenario === "unique-duplicates" || scenario === "many-empty-schema";
 const many = (scenario: Scenario) => scenario === "many" || scenario === "many-empty-schema";
 const functionName = (scenario: Scenario) => scenario === "function-unfiltered" || scenario === "function-hidden";
+const fallbackKey = (scenario: Scenario) => scenario === "fallback-key-redirect" || scenario === "fallback-key-null";
 function parentRoles(scenario: Scenario): string[] {
   if (scenario === "no-refs-empty" || scenario === "multiple-refs-empty") return [];
   if (scenario === "mapped-missing") return ["org-a", "missing"];
   if (many(scenario)) return ["linked", "missing"];
   if (scenario === "unique-duplicates") return ["linked"];
-  if (scenario === "redirect") return ["slug-a"];
+  if (scenario === "redirect" || scenario === "fallback-key-redirect") return ["slug-a"];
   return ["org-a"];
 }
 function schemaError(parent: Parent, scenario: Scenario) {
@@ -38,7 +39,7 @@ function policies(parent: Parent, scenario: Scenario, events: unknown[][], name:
   if (!reverse(scenario)) {
     parentFields.organizationId = outputField({
       type: "string", fieldName: "role", unique: true,
-      ...(scenario === "no-refs" || scenario === "no-refs-empty" ? {} : { references: { model: "organization", field: scenario === "redirect" ? "slug" : "id" } }),
+      ...(scenario === "no-refs" || scenario === "no-refs-empty" ? {} : { references: { model: "organization", field: scenario === "redirect" || scenario === "fallback-key-redirect" ? "slug" : "id" } }),
     }, value => {
       events.push([`${parent}.organizationId`, value]);
       return scenario === "redirect" ? "slug-b" : scenario === "null-projection" ? null : value;
@@ -46,6 +47,10 @@ function policies(parent: Parent, scenario: Scenario, events: unknown[][], name:
   } else {
     parentFields.role = outputField({ type: "string" }, value => { events.push([`${parent}.role`, value]); return value; });
   }
+  if (fallbackKey(scenario)) parentFields.role = outputField({ type: "string" }, value => {
+    events.push([`${parent}.role`, value]);
+    return scenario === "fallback-key-redirect" ? "slug-b" : null;
+  });
   if (scenario === "multiple-refs" || scenario === "multiple-refs-empty") {
     parentFields.role = { type: "string", references: { model: "organization", field: "slug" } };
   }
@@ -95,9 +100,10 @@ async function setup(backend: Backend, parent: Parent, scenario: Scenario, joins
 }
 
 function selected(backend: Backend, joins: boolean, scenario: Scenario, index: number) {
-  if (index > 0 || scenario === "null-projection" && !joins) return [];
+  if (index > 0 || scenario === "fallback-key-null" && !joins) return [];
   if (many(scenario)) return ["a", "b"];
-  if (scenario === "redirect" && !joins || scenario === "unique-duplicates" && backend === "sqlite" && joins) return ["b"];
+  // The factory resolves the physical key "role" as its own declaration before checking aliases.
+  if (scenario === "fallback-key-redirect" && !joins || scenario === "unique-duplicates" && backend === "sqlite" && joins) return ["b"];
   return ["a"];
 }
 function expectedOrganization(suffix: string, scenario: Scenario, name: () => string) {
@@ -105,8 +111,9 @@ function expectedOrganization(suffix: string, scenario: Scenario, name: () => st
 }
 function expectedParent(parent: Parent, scenario: Scenario, index: number, role: string) {
   const organizationId = reverse(scenario) ? "org-a" : scenario === "redirect" ? "slug-b" : scenario === "null-projection" ? null : role;
-  return parent === "member" ? { organizationId, userId: "user", role, createdAt: date(), id: `parent-${index}` }
-    : { organizationId, email: "owner@list-relations.test", role, teamId: null, status: "pending", expiresAt: date(), createdAt: date(), inviterId: "user", id: `parent-${index}` };
+  const projectedRole = scenario === "fallback-key-redirect" ? "slug-b" : scenario === "fallback-key-null" ? null : role;
+  return parent === "member" ? { organizationId, userId: "user", role: projectedRole, createdAt: date(), id: `parent-${index}` }
+    : { organizationId, email: "owner@list-relations.test", role: projectedRole, teamId: null, status: "pending", expiresAt: date(), createdAt: date(), inviterId: "user", id: `parent-${index}` };
 }
 function expectedResult(backend: Backend, joins: boolean, parent: Parent, scenario: Scenario, publicOutput: boolean, name: () => string) {
   return parentRoles(scenario).map((role, index) => {
@@ -123,6 +130,7 @@ function expectedEvents(backend: Backend, joins: boolean, parent: Parent, scenar
   if (schemaError(parent, scenario)) return [];
   return [
     ...parentRoles(scenario).map(role => [`${parent}.${reverse(scenario) ? "role" : "organizationId"}`, role]),
+    ...(fallbackKey(scenario) ? parentRoles(scenario).map(role => [`${parent}.role`, role]) : []),
     ...parentRoles(scenario).flatMap((_, index) => selected(backend, joins, scenario, index).map(suffix => ["organization.name", `Organization ${suffix}`])),
   ];
 }

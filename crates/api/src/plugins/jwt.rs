@@ -420,7 +420,7 @@ impl JwtPlugin {
                     },
                 ),
             ]);
-            keys::spread(&mut value, keys::parse_json(&key.public_key.field_value())?);
+            keys::spread(&mut value, keys::parse_json(&key.public_key.field_value())?)?;
             let _ = value.insert("kid".into(), key.id.field_value());
             public.push(FieldValue::from(value));
         }

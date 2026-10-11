@@ -416,7 +416,7 @@ mod tests {
             json!({"implicit":"supplied", "label":"raw", "protected":"client", "unknown":true});
         let parsed = schema
             .parse_organization_input(
-                input.as_object().unwrap().owned_fields().unwrap(),
+                &input.as_object().unwrap().snapshot_fields().unwrap(),
                 "body",
                 false,
             )
@@ -426,9 +426,8 @@ mod tests {
             json!({"implicit":"supplied", "label":"raw"})
                 .as_object()
                 .unwrap()
-                .owned_fields()
+                .snapshot_fields()
                 .unwrap()
-                .clone()
         );
         let stored = schema.storage_fields(parsed, true).await.unwrap();
         assert_eq!(
@@ -436,9 +435,8 @@ mod tests {
             json!({"implicit":"supplied", "stored_label":"raw:in", "protected":"server"})
                 .as_object()
                 .unwrap()
-                .owned_fields()
+                .snapshot_fields()
                 .unwrap()
-                .clone()
         );
         assert!(
             schema
@@ -490,18 +488,18 @@ mod tests {
         assert_eq!(
             schema
                 .parse_organization_input(
-                    valid.as_object().unwrap().owned_fields().unwrap(),
+                    &valid.as_object().unwrap().snapshot_fields().unwrap(),
                     "body.data",
                     true
                 )
                 .unwrap(),
-            valid.as_object().unwrap().owned_fields().unwrap().clone()
+            valid.as_object().unwrap().snapshot_fields().unwrap()
         );
         let invalid = json!({"required":null,"tags":["valid",4]});
         assert!(
             schema
                 .parse_organization_input(
-                    invalid.as_object().unwrap().owned_fields().unwrap(),
+                    in&valid.as_object().unwrap().snapshot_fields().unwrap(),
                     "body.data",
                     true
                 )

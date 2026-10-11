@@ -1,24 +1,27 @@
 //! Read driver values before plugin output policies or typed model conversion.
 
 use better_auth_core::{
-    AuthError, AuthResult, FieldMap, FieldValue,
+    AuthError, AuthResult, FieldMap, FieldObject, FieldValue,
     user_fields::{AdapterRecord, UserConfig},
 };
 use sea_orm::sqlx::{Row, TypeInfo, ValueRef};
 use sea_orm::{
-    ConnectionTrait, DbBackend, EntityTrait, FromQueryResult, IdenStatic, Iterable, QueryResult,
-    QuerySelect, QueryTrait, Select,
+    ConnectionTrait, DbBackend, EntityTrait, IdenStatic, Iterable, QueryResult, QuerySelect,
+    QueryTrait, Select,
 };
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::SeaOrmPluginModel;
 
 mod drivers;
+#[cfg(test)]
+mod native_snapshot_tests;
 
 #[derive(Debug, Clone)]
 pub(super) struct SqlRow {
     row: Arc<QueryResult>,
     prefix: &'static str,
+    native_object: Arc<Mutex<Option<FieldObject>>>,
 }
 
 impl From<QueryResult> for SqlRow {
@@ -26,6 +29,7 @@ impl From<QueryResult> for SqlRow {
         Self {
             row: Arc::new(row),
             prefix: "",
+            native_object: Default::default(),
         }
     }
 }
@@ -35,6 +39,7 @@ impl SqlRow {
         Self {
             row: self.row.clone(),
             prefix,
+            native_object: Default::default(),
         }
     }
 
@@ -42,8 +47,15 @@ impl SqlRow {
         value(&self.row, &format!("{}{column}", self.prefix))
     }
 
-    pub(super) fn model<M: FromQueryResult>(&self) -> AuthResult<M> {
-        M::from_query_result(&self.row, self.prefix).map_err(super::map_db_err)
+    pub(super) fn optional_prefixed(
+        &self,
+        prefix: &'static str,
+        presence_column: &str,
+    ) -> AuthResult<Option<Self>> {
+        self.row
+            .try_get::<bool>("", presence_column)
+            .map(|present| present.then(|| self.prefixed(prefix)))
+            .map_err(super::map_db_err)
     }
 
     pub(super) fn record<E: EntityTrait>(
@@ -58,23 +70,35 @@ impl SqlRow {
         })
     }
 
-    pub(super) fn native_record<E: EntityTrait>(
+    pub(super) fn native_object<C: IdenStatic>(
+        &self,
+        fields: &UserConfig,
+        column: impl Fn(&str) -> AuthResult<C>,
+    ) -> AuthResult<FieldObject> {
+        let mut object = self.native_object.lock().map_err(|_| {
+            AuthError::internal("Native SQL relationship snapshot lock is poisoned")
+        })?;
+        if let Some(object) = &*object {
+            return Ok(object.clone());
+        }
+        let fields = super::joins::native_child_fields(&fields.adapter_fields(&[]), |name, _| {
+            self.value(column(name)?.as_str())
+        })?;
+        let fields = FieldObject::from(fields);
+        *object = Some(fields.clone());
+        Ok(fields)
+    }
+
+    pub(super) fn native_record<C: IdenStatic>(
         &self,
         fields: &UserConfig,
         backend: DbBackend,
-        primary: E::Column,
-        column: impl Fn(&str) -> AuthResult<E::Column>,
+        column: impl Fn(&str) -> AuthResult<C>,
     ) -> AuthResult<AdapterRecord> {
-        let storage = super::joins::native_child_fields(fields, |name, _| {
-            self.value(column(name)?.as_str())
-        })?;
-        let mut record = self.record::<E>(fields, backend, primary, column)?;
-        record.map_storage_fields(
-            fields,
+        Ok(AdapterRecord::from_storage_object(
+            self.native_object(fields, column)?,
             super::field_output::capabilities(backend),
-            |name, _| Ok(Some(storage.get(name).cloned().unwrap_or_default())),
-        )?;
-        Ok(record)
+        ))
     }
 }
 
