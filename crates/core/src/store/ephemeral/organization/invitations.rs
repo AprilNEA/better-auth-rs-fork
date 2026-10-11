@@ -96,7 +96,7 @@ impl InvitationStore for EphemeralStore {
             .organization_query(EntityRole::Invitation, "id", id.clone())?
             .field_value();
         let patch = self
-            .prepare_record_patch(
+            .prepare_increment_one_patch(
                 EntityRole::Invitation,
                 [("status".into(), status.into_field())]
                     .into_iter()
@@ -104,22 +104,24 @@ impl InvitationStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let source = {
-            let state = self.lock()?;
-            let selected = state.invitations.select_refs(|row| {
-                crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&Value::Undefined),
-                    &id,
-                )
-            })?;
-            for source in &selected {
-                source.write(|row| {
-                    patch.clone().apply_to(row);
-                    Ok(())
+        let source = self
+            .raw("invitation", "incrementOne", |state| {
+                let selected = state.invitations.select_refs(|row| {
+                    crate::query::field_matches_equality(
+                        row.get("id").unwrap_or(&Value::Undefined),
+                        &id,
+                    )
                 })?;
-            }
-            selected.into_iter().next()
-        };
+                let source = selected.into_iter().next();
+                if let Some(source) = &source {
+                    source.write(|row| {
+                        patch.apply_to(row);
+                        Ok(())
+                    })?;
+                }
+                Ok(source)
+            })
+            .await?;
         match source {
             Some(source) => Ok(self
                 .output_record_refs(EntityRole::Invitation, vec![source])

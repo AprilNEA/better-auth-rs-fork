@@ -81,6 +81,37 @@ function identity(field: string, events: Events): DBFieldAttribute {
   } };
 }
 
+for (const backend of ["memory", "sqlite"] as const) {
+  for (const limited of [false, true]) {
+    test(`${backend} Team sync rejects transformed empty updates before ${limited ? "limited" : "unlimited"} capacity`, async () => {
+      const fixture = await setup(backend, {});
+      const events: Events = [];
+      try {
+        const teams = fixture.rawTeams();
+        const members = fixture.rawMembers();
+        const reader = await fixture.reader({ userId: identity("teamMember.userId", events) }, {
+          memberCount: { type: "number", transform: {
+            input(value) { events.push(["team.memberCount", "input", value]); return undefined; },
+            output(value) { events.push(["team.memberCount", "output", value]); return value; },
+          } },
+          updatedAt: { type: "date" },
+        });
+        const data = { teamId: "team-a", userId: "user-a" };
+        const operation = limited
+          ? reader.addTeamMemberWithLimit({ ...data, maximumMembersPerTeam: 1 })
+          : reader.findOrCreateTeamMember(data);
+        await expect(operation).rejects.toMatchObject({
+          name: "BetterAuthError",
+          message: "incrementOne resolved to an empty update: every increment/set field was unknown to the schema or transformed away.",
+        });
+        expect(events).toStrictEqual([["team.memberCount", "input", 0]]);
+        expect(fixture.rawTeams()).toStrictEqual(teams);
+        expect(fixture.rawMembers()).toStrictEqual(members);
+      } finally { fixture.close(); }
+    });
+  }
+}
+
 function assertServiceDates(values: unknown[], started: number, ended: number) {
   for (const value of values) {
     expect(value).toBeInstanceOf(Date);

@@ -299,6 +299,17 @@ impl EphemeralStore {
         Ok(PreparedOrganizationFields { fields })
     }
 
+    pub(super) async fn prepare_increment_one_patch(
+        &self,
+        role: EntityRole,
+        core: FieldMap,
+        extras: FieldMap,
+    ) -> AuthResult<PreparedOrganizationFields> {
+        let patch = self.prepare_record_patch(role, core, extras).await?;
+        crate::store::validate_increment_one_update(false, !patch.fields.is_empty())?;
+        Ok(patch)
+    }
+
     pub(super) async fn create_record<T: AuthRecordFields + Send>(
         &self,
         role: EntityRole,

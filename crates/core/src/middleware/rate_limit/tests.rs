@@ -155,12 +155,24 @@ async fn ordered_rules_receive_plugin_values_and_normalize_only_the_counter_key(
     let request = make_request("/sign-in/email", "192.0.2.30").with_url(
         url::Url::parse("https://auth.example/custom/auth/sign-in/email///?attempt=1").unwrap(),
     );
-    let denied = limiter.before_request(&request).await.unwrap().unwrap();
-    assert_eq!(denied.status, 429);
-    assert_eq!(
-        denied.headers.get("X-Retry-After").map(String::as_str),
-        Some("7.5")
-    );
+    let mut denied = limiter.before_request(&request).await.unwrap().unwrap();
+    for _ in 0..3 {
+        assert!(!denied.is_native());
+        assert_eq!(denied.status, 429);
+        assert_eq!(
+            denied
+                .headers
+                .iter()
+                .map(|(name, value)| (name.as_str(), value.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("x-retry-after", "7.5")]
+        );
+        assert_eq!(
+            denied.body.bytes().unwrap().as_ref(),
+            br#"{"message":"Too many requests. Please try again later."}"#
+        );
+        denied = denied.into_http_response().unwrap();
+    }
     let entries = storage.0.lock().unwrap();
     assert_eq!(entries.len(), 2);
     assert_eq!(

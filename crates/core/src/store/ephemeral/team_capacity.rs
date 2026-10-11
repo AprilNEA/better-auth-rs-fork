@@ -279,7 +279,7 @@ impl EphemeralStore {
             .organization_query(EntityRole::Team, "memberCount", Value::from(actual))?
             .field_value();
         let patch = self
-            .prepare_record_patch(
+            .prepare_increment_one_patch(
                 EntityRole::Team,
                 [("memberCount".into(), Value::from(actual))]
                     .into_iter()

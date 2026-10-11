@@ -188,20 +188,17 @@ impl Middleware for RateLimitMiddleware {
         if decision.allowed {
             return Ok(None);
         }
-        Ok(Some(
-            AuthResponse::json(
-                429,
-                &crate::types::ErrorCodeMessageResponse {
-                    code: None,
-                    message: "Too many requests. Please try again later.".to_owned(),
-                },
-            )?
-            .with_header("content-type", "text/plain;charset=utf-8")
-            .with_header(
-                "X-Retry-After",
-                crate::schema_value::number_string(decision.retry_after.unwrap_or(rule.window)),
-            ),
-        ))
+        let mut response = AuthResponse::new(429).with_header(
+            "x-retry-after",
+            crate::schema_value::number_string(decision.retry_after.unwrap_or(rule.window)),
+        );
+        response.body = crate::ResponseBody::Bytes(serde_json::to_vec(
+            &crate::types::ErrorCodeMessageResponse {
+                code: None,
+                message: "Too many requests. Please try again later.".to_owned(),
+            },
+        )?);
+        Ok(Some(response))
     }
 }
 

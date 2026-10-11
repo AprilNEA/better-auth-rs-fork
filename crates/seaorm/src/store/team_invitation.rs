@@ -12,7 +12,7 @@ use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema:
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
 use sea_orm::{
-    EntityTrait, QueryFilter, TransactionTrait,
+    EntityTrait, QueryFilter,
     sea_query::{Expr, ExprTrait},
 };
 use std::sync::{Arc, Mutex};
@@ -39,7 +39,7 @@ where
         Option<better_auth_core::wire::SessionView>,
     )> {
         let invitation = self
-            .transition_invitation(invitation_id, "pending", "accepted")
+            .transition_invitation(invitation_id, Some("pending"), "accepted")
             .await?
             .ok_or_else(|| AuthError::bad_request("Invitation not found"))?;
         match self
@@ -56,23 +56,26 @@ where
             Ok((member, session)) => Ok((member, invitation, session)),
             Err(error) => {
                 let _ = self
-                    .transition_invitation(invitation_id, "accepted", "pending")
+                    .transition_invitation(invitation_id, Some("accepted"), "pending")
                     .await?;
                 Err(error)
             }
         }
     }
 
-    async fn transition_invitation(
+    pub(super) async fn transition_invitation(
         &self,
         id: &FieldValue,
-        from: &str,
+        from: Option<&str>,
         status: &str,
     ) -> AuthResult<Option<Invitation>> {
         let config = self.organization_fields()?.invitation;
         let id = self.bind_organization_query_field(EntityRole::Invitation, "id", id)?;
-        let from =
-            self.bind_organization_query_field(EntityRole::Invitation, "status", &from.into())?;
+        let from = from
+            .map(|from| {
+                self.bind_organization_query_field(EntityRole::Invitation, "status", &from.into())
+            })
+            .transpose()?;
         let active = models::active::<O::Invitation>(
             values([("status", status.to_owned().into_field())]),
             Default::default(),
@@ -95,27 +98,30 @@ where
                     EntityRole::Invitation,
                     id,
                 )?;
-                let (status_column, from) = self
-                    .resolve_organization_query_field::<O::Invitation>(
-                        EntityRole::Invitation,
-                        from,
-                    )?;
-                let predicates = vec![
-                    super::value_filter::QueryPredicate::equals(id_column, id),
-                    super::value_filter::QueryPredicate::equals(status_column, from),
-                ];
-                let tx = self.connection().begin().await.map_err(map_db_err)?;
-                let row = super::updates::increment_returning_raw_with_connection::<
-                    Entity<O::Invitation>,
-                    _,
-                >(&tx, active, predicates)
-                .await?;
-                tx.commit().await.map_err(map_db_err)?;
-                Ok(row)
+                let from = from
+                    .map(|from| {
+                        self.resolve_organization_query_field::<O::Invitation>(
+                            EntityRole::Invitation,
+                            from,
+                        )
+                    })
+                    .transpose()?;
+                let predicates =
+                    std::iter::once(super::value_filter::QueryPredicate::equals(id_column, id))
+                        .chain(from.map(|(column, value)| {
+                            super::value_filter::QueryPredicate::equals(column, value)
+                        }))
+                        .collect();
+                super::updates::increment_returning_raw::<Entity<O::Invitation>>(
+                    self.connection(),
+                    active,
+                    predicates,
+                )
+                .await
             },
         )
         .await?;
-        // Output transforms run after the claim is committed, before the member transaction starts.
+        // Output failures leave the committed status available to the next operation.
         match row {
             Some(row) => models::record::<O::Invitation>(
                 &row.into(),

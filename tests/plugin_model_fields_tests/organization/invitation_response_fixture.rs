@@ -175,7 +175,7 @@ pub(super) fn update_expected(
     case: Case,
     snapshot: &mut Snapshot,
 ) -> AuthResult<()> {
-    if case.deletes() {
+    if case.deletes() || case == Case::AcceptRestoreDeletedEmpty {
         for model in ["member", "invitation", "organization"] {
             snapshot
                 .get_mut(model)
@@ -183,7 +183,10 @@ pub(super) fn update_expected(
                 .clear();
         }
     }
-    if matches!(case, Case::Accept | Case::Reject | Case::Cancel) {
+    if matches!(
+        case,
+        Case::Accept | Case::Reject | Case::Cancel | Case::AcceptRestoreEmpty
+    ) {
         let rows = snapshot
             .get_mut("invitation")
             .ok_or_else(|| AuthError::internal("Missing Invitation snapshot"))?;

@@ -68,7 +68,7 @@ impl EphemeralStore {
         let bound_id =
             self.organization_query(EntityRole::Invitation, "id", invitation_id.clone())?;
         let patch = self
-            .prepare_record_patch(
+            .prepare_increment_one_patch(
                 EntityRole::Invitation,
                 [("status".into(), InvitationStatus::Accepted.into_field())]
                     .into_iter()
@@ -119,6 +119,13 @@ impl EphemeralStore {
     }
 
     async fn restore_pending_invitation(&self, claim: &InvitationClaim) -> AuthResult<()> {
+        let patch = self
+            .prepare_increment_one_patch(
+                EntityRole::Invitation,
+                [("status".into(), InvitationStatus::Pending.into_field())].into(),
+                FieldMap::new(),
+            )
+            .await?;
         {
             let state = self.lock()?;
             if !state.invitations.contains_ref(&claim.row)
@@ -130,13 +137,6 @@ impl EphemeralStore {
                 return Ok(());
             }
         }
-        let patch = self
-            .prepare_record_patch(
-                EntityRole::Invitation,
-                [("status".into(), InvitationStatus::Pending.into_field())].into(),
-                FieldMap::new(),
-            )
-            .await?;
         let restored = {
             let state = self.lock()?;
             if state.invitations.contains_ref(&claim.row) {

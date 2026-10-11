@@ -9,7 +9,7 @@ import { serializeSignedCookie } from "better-call";
 import { date, storedDate, team, type Backend, type Events, type Fields, type Policies } from "./organization-team-member-contract";
 
 type Route = "get" | "list" | "list-user" | "accept" | "reject" | "cancel";
-type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean; teamIds?: string; dynamicAccessControl?: boolean };
+type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean; teamIds?: string; dynamicAccessControl?: boolean; emptyStatus?: "accepted" | "pending" | "rejected" | "canceled"; deleteDuringMember?: boolean };
 const cases: Scenario[] = [
   { name: "get-collision", route: "get" },
   { name: "get-clone-before-inviter", route: "get", cloneError: true },
@@ -24,6 +24,12 @@ const cases: Scenario[] = [
   { name: "cancel-deleted", route: "cancel", deleteBefore: true },
   { name: "reject-deleted-after-error", route: "reject", deleteBefore: true, afterError: true },
   { name: "cancel-deleted-after-error", route: "cancel", deleteBefore: true, afterError: true },
+  { name: "accept-transformed-empty", route: "accept", emptyStatus: "accepted" },
+  { name: "accept-compensation-transformed-empty", route: "accept", emptyStatus: "pending" },
+  { name: "reject-transformed-empty", route: "reject", emptyStatus: "rejected" },
+  { name: "cancel-transformed-empty", route: "cancel", emptyStatus: "canceled" },
+  { name: "reject-deleted-transformed-empty", route: "reject", deleteBefore: true, emptyStatus: "rejected" },
+  { name: "cancel-deleted-transformed-empty", route: "cancel", deleteBefore: true, emptyStatus: "canceled" },
 ];
 export const baseURL = "http://team-member-fields.test";
 const models = ["user", "session", "account", "verification", "organization", "member", "invitation", "team", "teamMember"] as const;
@@ -107,9 +113,9 @@ function responseAuth(options: BetterAuthOptions, scenario: Scenario, events: Ev
   const invitationFields: Policies = {
     createdAt: outputField("invitation.createdAt", events, () => values.invitationFunction, { type: "date" }),
   };
-  if (scenario.deleteBefore) invitationFields.status = { type: "string", transform: { input(value) {
+  if (scenario.deleteBefore || scenario.emptyStatus) invitationFields.status = { type: "string", transform: { input(value) {
     events.push(["invitation.status", "input", value]);
-    return value;
+    return scenario.emptyStatus === value ? undefined : value;
   } } };
   for (const [name, value] of [
     ["probeUndefined", undefined], ["probeNull", null], ["organizationName", "shadow-name"],
@@ -127,6 +133,11 @@ function responseAuth(options: BetterAuthOptions, scenario: Scenario, events: Ev
       output(value) { events.push(["member.createdAt", "output", value]); return date(0); },
     } },
   };
+  if (scenario.emptyStatus === "pending") memberFields.role = { type: "string", transform: { async input(value) {
+    events.push(["member.role", "input", value]);
+    if (scenario.deleteDuringMember) await deleteOrganizationRecords();
+    throw new Error("invitation-member-input-failed");
+  } } };
   for (const [name, value] of [
     ["probeUndefined", undefined], ["probeNull", null], ["probeFunction", values.memberFunction],
   ] as const) memberFields[name] = outputField(`member.${name}`, events, () => value, {
@@ -219,6 +230,20 @@ function expectedEvents(backend: Backend, scenario: Scenario, values: NativeValu
   const organizationEvents = [["organization.name", "output", "Organization"]];
   const organization = { slug: "organization", logo: null, createdAt: date(0), metadata: "{}", id: "organization" };
   const beforeHook = { invitation: visibleInvitation(values), user: user("user-b"), organization };
+  if (scenario.emptyStatus) {
+    const action = scenario.route === "accept" ? "Accept" : scenario.route === "reject" ? "Reject" : "Cancel";
+    return [
+      ...invitationEvents,
+      ...(scenario.route === "cancel" ? outputEvents(backend, "member", "owner") : []),
+      ...organizationEvents,
+      [`before${action}Invitation`, "hook", scenario.route === "cancel"
+        ? { invitation: visibleInvitation(values), cancelledBy: user("user-a"), organization } : beforeHook],
+      ["invitation.status", "input", scenario.emptyStatus === "pending" ? "accepted" : scenario.emptyStatus],
+      ...(scenario.emptyStatus === "pending" ? [
+        ...invitationEvents, ["member.role", "input", "member"], ["invitation.status", "input", "pending"],
+      ] : []),
+    ];
+  }
   switch (scenario.route) {
     case "get": return [...invitationEvents, ...organizationEvents, ["organization.slug", "output", "organization"],
       ...(scenario.cloneError ? [] : outputEvents(backend, "member", "owner"))];
@@ -275,7 +300,10 @@ function httpRequest(route: Route, headers: Headers) {
 }
 
 for (const backend of ["memory", "sqlite"] as const) {
-  for (const scenario of cases) {
+  const scenarios: Scenario[] = backend === "memory" ? [...cases, {
+    name: "accept-compensation-deleted-transformed-empty", route: "accept", emptyStatus: "pending", deleteDuringMember: true,
+  }] : cases;
+  for (const scenario of scenarios) {
     for (const entry of ["native", "http"] as const) {
       test(`${backend} Invitation response ${entry} preserves ${scenario.name}`, async () => {
         const fixture = await setup(backend, scenario);
@@ -288,7 +316,12 @@ for (const backend of ["memory", "sqlite"] as const) {
           const headers = new Headers({ cookie, origin: baseURL, "content-type": "application/json" });
           const expected = expectedResponse(scenario, values);
           if (entry === "native") {
-            if (scenario.cloneError) {
+            if (scenario.emptyStatus) {
+              await expect(nativeCall(auth, scenario.route, headers)).rejects.toMatchObject({
+                name: "BetterAuthError",
+                message: "incrementOne resolved to an empty update: every increment/set field was unknown to the schema or transformed away.",
+              });
+            } else if (scenario.cloneError) {
               let caught: unknown;
               try { await nativeCall(auth, scenario.route, headers); } catch (error) { caught = error; }
               expect(caught).toMatchObject({ name: "DataCloneError", message: "The object can not be cloned." });
@@ -300,21 +333,23 @@ for (const backend of ["memory", "sqlite"] as const) {
           }
           else {
             const response = await auth.handler(httpRequest(scenario.route, headers));
-            expect(response.status).toBe(scenario.cloneError || scenario.afterError ? 500 : 200);
-            if (scenario.cloneError || scenario.afterError) expect(await response.text()).toBe("");
+            expect(response.status).toBe(scenario.cloneError || scenario.afterError || scenario.emptyStatus ? 500 : 200);
+            if (scenario.cloneError || scenario.afterError || scenario.emptyStatus) expect(await response.text()).toBe("");
             else {
               expect(response.headers.get("content-type")).toContain("application/json");
               expect(await response.text()).toBe(JSON.stringify(expected));
             }
           }
           expect(events).toStrictEqual(expectedEvents(backend, scenario, values));
-          if (scenario.deleteBefore) {
+          if (scenario.deleteBefore || scenario.deleteDuringMember) {
             for (const model of ["member", "invitation", "organization"]) before[model] = [];
-          } else if (scenario.route === "accept" || scenario.route === "reject" || scenario.route === "cancel") {
+          } else if (scenario.emptyStatus === "pending") {
+            before.invitation = [fixture.stored(invitation("accepted"))];
+          } else if (!scenario.emptyStatus && (scenario.route === "accept" || scenario.route === "reject" || scenario.route === "cancel")) {
             const status = scenario.route === "accept" ? "accepted" : scenario.route === "reject" ? "rejected" : "canceled";
             before.invitation = [fixture.stored(invitation(status))];
           }
-          if (scenario.route === "accept") {
+          if (scenario.route === "accept" && !scenario.emptyStatus) {
             before.member = [fixture.stored(member("member-a", "user-b", "member")), ...before.member];
             before.session = before.session.map(session => ({ ...session, activeOrganizationId: "organization" }));
           }

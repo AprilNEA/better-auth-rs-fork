@@ -193,15 +193,8 @@ where
         id: &FieldValue,
         status: InvitationStatus,
     ) -> AuthResult<Option<Invitation>> {
-        self.update_organization_model_optional::<O::Invitation>(
-            self.connection(),
-            better_auth_core::store::schema::EntityRole::Invitation,
-            id,
-            values([("status", (status.to_string()).into_field())]),
-            Default::default(),
-            &self.organization_fields()?.invitation,
-        )
-        .await
+        self.transition_invitation(id, None, &status.to_string())
+            .await
     }
     async fn update_invitation_expiry(
         &self,

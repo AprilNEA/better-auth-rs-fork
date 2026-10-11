@@ -890,6 +890,7 @@ run_stage() {
       cargo fmt --all -- --check
       local rate_limit_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/rate-limit-http.test.ts \
         ./compat-tests/reference-server/contracts/rate-limit-declaration-priority.test.ts \
         ./compat-tests/reference-server/contracts/openapi-rate-limit-model.test.ts \
         ./compat-tests/reference-server/contracts/telemetry-rate-limit-model.test.ts \
@@ -898,14 +899,14 @@ run_stage() {
         ./compat-tests/reference-server/consumer-contracts/rate-limit-server-runtime.test.ts || rate_limit_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || rate_limit_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test rate_limit_database_tests --test rate_cleanup_background_tests \
+        --test rate_limit_database_tests --test rate_limit_options_tests --test rate_cleanup_background_tests \
         --test openapi_rate_limit_model_tests --test telemetry_options_tests -- -D warnings || rate_limit_status=1
       cargo test --locked -p better-auth-core --lib -- \
         plugin_runtime::fields:: middleware::rate_limit:: \
         store::ephemeral::serial_primary_tests::session_plugins:: \
         store::ephemeral::transactions:: || rate_limit_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
-        --test rate_limit_database_tests --test rate_cleanup_background_tests \
+        --test rate_limit_database_tests --test rate_limit_options_tests --test rate_cleanup_background_tests \
         --test openapi_rate_limit_model_tests --test telemetry_options_tests || rate_limit_status=1
       ./scripts/consumer-check.sh --lib --test generated_server_catalog -- \
         rate_limit --include-ignored || rate_limit_status=1

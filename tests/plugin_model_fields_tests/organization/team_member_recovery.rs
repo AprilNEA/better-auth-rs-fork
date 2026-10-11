@@ -258,6 +258,89 @@ async fn lookup<S: AuthSchema>(
     Ok(())
 }
 
+async fn empty_capacity_update<S: AuthSchema>(
+    raw: Arc<dyn AuthStore<S>>,
+    storage: Storage,
+    limited: bool,
+) -> AuthResult<()> {
+    let events = Events::default();
+    let input = events.clone();
+    let output = events.clone();
+    let fields = declaration([
+        (
+            "memberCount",
+            UserFieldConfig {
+                field_type: UserFieldType::Number,
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new(move |value| {
+                        input.push("team.memberCount", "input", value)?;
+                        Ok(FieldValue::Undefined)
+                    })),
+                    output: Some(UserFieldTransform::new(move |value| {
+                        output.push("team.memberCount", "output", value.clone())?;
+                        Ok(value)
+                    })),
+                }),
+                ..Default::default()
+            },
+        ),
+        (
+            "updatedAt",
+            UserFieldConfig {
+                field_type: UserFieldType::Date,
+                ..Default::default()
+            },
+        ),
+    ]);
+    let teams = storage.rows(EntityRole::Team).await?;
+    let members = storage.rows(EntityRole::TeamMember).await?;
+    let auth = reader(
+        raw,
+        declaration([("userId", identity("teamMember.userId", &events))]),
+        Some(fields),
+        false,
+        false,
+        "member-a",
+    )
+    .await?;
+    let result = auth
+        .store()
+        .add_team_member(&"team-a".into(), "user-a", limited.then_some(1))
+        .await;
+    original_error(
+        required(
+            result.err(),
+            "Empty Team sync must fail before reserving a seat",
+        )?,
+        "incrementOne resolved to an empty update: every increment/set field was unknown to the schema or transformed away.",
+    );
+    assert_eq!(
+        events.take()?,
+        [event("team.memberCount", "input", 0.into())]
+    );
+    assert_eq!(storage.rows(EntityRole::Team).await?, teams);
+    assert_eq!(storage.rows(EntityRole::TeamMember).await?, members);
+    Ok(())
+}
+
+#[tokio::test]
+async fn memory_team_sync_rejects_transformed_empty_updates_before_capacity() -> AuthResult<()> {
+    for limited in [false, true] {
+        let (raw, storage) = memory_fixture().await?;
+        empty_capacity_update(raw, storage, limited).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_team_sync_rejects_transformed_empty_updates_before_capacity() -> AuthResult<()> {
+    for limited in [false, true] {
+        let (raw, storage) = sqlite_fixture().await?;
+        empty_capacity_update(raw, storage, limited).await?;
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn memory_team_member_creation_preserves_original_failure_rereads_and_capacity()
 -> AuthResult<()> {

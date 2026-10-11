@@ -311,7 +311,7 @@ pub(super) async fn auth<S: AuthSchema>(
         },
     )]);
     let mut invitation = record_fields(events, "invitation", values)?;
-    if case.deletes() {
+    if case.deletes() || case.empty_status().is_some() {
         let events = events.clone();
         let _ = invitation.fields_mut().insert(
             "status".into(),
@@ -319,7 +319,36 @@ pub(super) async fn auth<S: AuthSchema>(
                 transform: Some(FieldTransforms {
                     input: Some(UserFieldTransform::new(move |value| {
                         events.push("invitation.status", "input", value.clone())?;
-                        Ok(value)
+                        Ok(if case.empty_status() == value.as_str() {
+                            FieldValue::Undefined
+                        } else {
+                            value
+                        })
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+    }
+    let mut member = record_fields(events, "member", values)?;
+    if case.restores_empty() {
+        let events = events.clone();
+        let raw = raw.clone();
+        let _ = member.fields_mut().insert(
+            "role".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new_async(move |value| {
+                        let events = events.clone();
+                        let raw = raw.clone();
+                        async move {
+                            events.push("member.role", "input", value)?;
+                            if case == Case::AcceptRestoreDeletedEmpty {
+                                raw.delete_organization_records("organization").await?;
+                            }
+                            Err(AuthError::internal("invitation-member-input-failed"))
+                        }
                     })),
                     ..Default::default()
                 }),
@@ -332,7 +361,7 @@ pub(super) async fn auth<S: AuthSchema>(
         .plugin(OrganizationPlugin::with_config(options))
         .plugin(Fields(vec![
             (EntityRole::Invitation, invitation),
-            (EntityRole::Member, record_fields(events, "member", values)?),
+            (EntityRole::Member, member),
             (EntityRole::Organization, organization),
             (EntityRole::Session, session),
         ]))

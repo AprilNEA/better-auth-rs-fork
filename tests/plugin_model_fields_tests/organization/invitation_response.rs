@@ -24,10 +24,17 @@ enum Case {
     CancelDeleted,
     RejectDeletedAfterError,
     CancelDeletedAfterError,
+    AcceptEmpty,
+    AcceptRestoreEmpty,
+    AcceptRestoreDeletedEmpty,
+    RejectEmpty,
+    CancelEmpty,
+    RejectDeletedEmpty,
+    CancelDeletedEmpty,
 }
 
 impl Case {
-    const ALL: [Self; 13] = [
+    const ALL: [Self; 19] = [
         Self::Get,
         Self::GetClone,
         Self::List,
@@ -41,6 +48,12 @@ impl Case {
         Self::CancelDeleted,
         Self::RejectDeletedAfterError,
         Self::CancelDeletedAfterError,
+        Self::AcceptEmpty,
+        Self::AcceptRestoreEmpty,
+        Self::RejectEmpty,
+        Self::CancelEmpty,
+        Self::RejectDeletedEmpty,
+        Self::CancelDeletedEmpty,
     ];
     fn user_list(self) -> bool {
         matches!(
@@ -62,19 +75,30 @@ impl Case {
             Self::UserFunction | Self::UserFunctionJoin | Self::UserUndefined => {
                 ("list-user-invitations", HttpMethod::Get)
             }
-            Self::Accept => ("accept-invitation", HttpMethod::Post),
-            Self::Reject | Self::RejectDeleted | Self::RejectDeletedAfterError => {
-                ("reject-invitation", HttpMethod::Post)
-            }
-            Self::Cancel | Self::CancelDeleted | Self::CancelDeletedAfterError => {
-                ("cancel-invitation", HttpMethod::Post)
-            }
+            Self::Accept
+            | Self::AcceptEmpty
+            | Self::AcceptRestoreEmpty
+            | Self::AcceptRestoreDeletedEmpty => ("accept-invitation", HttpMethod::Post),
+            Self::Reject
+            | Self::RejectDeleted
+            | Self::RejectDeletedAfterError
+            | Self::RejectEmpty
+            | Self::RejectDeletedEmpty => ("reject-invitation", HttpMethod::Post),
+            Self::Cancel
+            | Self::CancelDeleted
+            | Self::CancelDeletedAfterError
+            | Self::CancelEmpty
+            | Self::CancelDeletedEmpty => ("cancel-invitation", HttpMethod::Post),
         }
     }
     fn cancel(self) -> bool {
         matches!(
             self,
-            Self::Cancel | Self::CancelDeleted | Self::CancelDeletedAfterError
+            Self::Cancel
+                | Self::CancelDeleted
+                | Self::CancelDeletedAfterError
+                | Self::CancelEmpty
+                | Self::CancelDeletedEmpty
         )
     }
     fn deletes(self) -> bool {
@@ -84,6 +108,8 @@ impl Case {
                 | Self::CancelDeleted
                 | Self::RejectDeletedAfterError
                 | Self::CancelDeletedAfterError
+                | Self::RejectDeletedEmpty
+                | Self::CancelDeletedEmpty
         )
     }
     fn after_error(self) -> bool {
@@ -94,11 +120,31 @@ impl Case {
     }
     fn status(self) -> &'static str {
         match self {
-            Self::Accept => "accepted",
-            Self::Reject => "rejected",
-            Self::Cancel => "canceled",
+            Self::Accept
+            | Self::AcceptEmpty
+            | Self::AcceptRestoreEmpty
+            | Self::AcceptRestoreDeletedEmpty => "accepted",
+            Self::Reject | Self::RejectEmpty => "rejected",
+            Self::Cancel | Self::CancelEmpty => "canceled",
             _ => "pending",
         }
+    }
+
+    fn empty_status(self) -> Option<&'static str> {
+        match self {
+            Self::AcceptEmpty => Some("accepted"),
+            Self::AcceptRestoreEmpty | Self::AcceptRestoreDeletedEmpty => Some("pending"),
+            Self::RejectEmpty | Self::RejectDeletedEmpty => Some("rejected"),
+            Self::CancelEmpty | Self::CancelDeletedEmpty => Some("canceled"),
+            _ => None,
+        }
+    }
+
+    fn restores_empty(self) -> bool {
+        matches!(
+            self,
+            Self::AcceptRestoreEmpty | Self::AcceptRestoreDeletedEmpty
+        )
     }
 }
 
@@ -176,11 +222,16 @@ fn expected_response(case: Case, values: &support::Values) -> FieldValue {
             );
             vec![invitation.into()].into()
         }
-        Case::Accept | Case::Reject => FieldMap::from_iter([
+        Case::Accept
+        | Case::Reject
+        | Case::AcceptEmpty
+        | Case::AcceptRestoreEmpty
+        | Case::AcceptRestoreDeletedEmpty
+        | Case::RejectEmpty => FieldMap::from_iter([
             ("invitation".into(), invitation.into()),
             (
                 "member".into(),
-                if case == Case::Accept {
+                if matches!(case, Case::Accept | Case::AcceptEmpty) || case.restores_empty() {
                     visible_member(values).into()
                 } else {
                     FieldValue::Null
@@ -188,13 +239,17 @@ fn expected_response(case: Case, values: &support::Values) -> FieldValue {
             ),
         ])
         .into(),
-        Case::Cancel => invitation.into(),
-        Case::RejectDeleted | Case::RejectDeletedAfterError => FieldMap::from_iter([
-            ("invitation".into(), FieldValue::Null),
-            ("member".into(), FieldValue::Null),
-        ])
-        .into(),
-        Case::CancelDeleted | Case::CancelDeletedAfterError => FieldValue::Null,
+        Case::Cancel | Case::CancelEmpty => invitation.into(),
+        Case::RejectDeleted | Case::RejectDeletedAfterError | Case::RejectDeletedEmpty => {
+            FieldMap::from_iter([
+                ("invitation".into(), FieldValue::Null),
+                ("member".into(), FieldValue::Null),
+            ])
+            .into()
+        }
+        Case::CancelDeleted | Case::CancelDeletedAfterError | Case::CancelDeletedEmpty => {
+            FieldValue::Null
+        }
     }
 }
 
@@ -272,9 +327,20 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
         }
     } else if !case.user_list() {
         let action = match case {
-            Case::Accept => "Accept",
-            Case::Reject | Case::RejectDeleted | Case::RejectDeletedAfterError => "Reject",
-            Case::Cancel | Case::CancelDeleted | Case::CancelDeletedAfterError => "Cancel",
+            Case::Accept
+            | Case::AcceptEmpty
+            | Case::AcceptRestoreEmpty
+            | Case::AcceptRestoreDeletedEmpty => "Accept",
+            Case::Reject
+            | Case::RejectDeleted
+            | Case::RejectDeletedAfterError
+            | Case::RejectEmpty
+            | Case::RejectDeletedEmpty => "Reject",
+            Case::Cancel
+            | Case::CancelDeleted
+            | Case::CancelDeletedAfterError
+            | Case::CancelEmpty
+            | Case::CancelDeletedEmpty => "Cancel",
             _ => unreachable!(),
         };
         events.push(event(
@@ -282,6 +348,24 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
             "hook",
             expected_hook(case, values, "pending", false),
         ));
+        if let Some(status) = case.empty_status() {
+            events.push(event(
+                "invitation.status",
+                "input",
+                if case.restores_empty() {
+                    "accepted"
+                } else {
+                    status
+                }
+                .into(),
+            ));
+            if case.restores_empty() {
+                events.extend(invitation);
+                events.push(event("member.role", "input", "member".into()));
+                events.push(event("invitation.status", "input", "pending".into()));
+            }
+            return events;
+        }
         if case.deletes() {
             events.push(event(
                 "invitation.status",
@@ -401,6 +485,29 @@ async fn check<S: AuthSchema>(
         );
         auth.handle_request(request).await
     };
+    if case.empty_status().is_some() {
+        if native {
+            original_error(
+                required(
+                    response.err(),
+                    "Transformed empty Invitation update must fail",
+                )?,
+                "incrementOne resolved to an empty update: every increment/set field was unknown to the schema or transformed away.",
+            );
+        } else {
+            let response = response?;
+            assert_eq!(response.status, 500, "{case:?}");
+            assert!(response.body.bytes()?.is_empty(), "{case:?}");
+        }
+        assert_eq!(
+            events.take()?,
+            expected_events(&storage, case, &values),
+            "{case:?}"
+        );
+        fixture::update_expected(&storage, case, &mut before)?;
+        assert_eq!(fixture::snapshot(&storage).await?, before, "{case:?}");
+        return Ok(());
+    }
     if case == Case::GetClone {
         if native {
             let error = required(
@@ -465,7 +572,10 @@ async fn check<S: AuthSchema>(
 #[tokio::test]
 async fn memory_invitation_routes_preserve_native_values_order_hooks_and_storage() -> AuthResult<()>
 {
-    for case in Case::ALL {
+    for case in Case::ALL
+        .into_iter()
+        .chain([Case::AcceptRestoreDeletedEmpty])
+    {
         for native in [false, true] {
             let store = EphemeralStore::new(Arc::new(config()));
             let raw: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(store.clone());
