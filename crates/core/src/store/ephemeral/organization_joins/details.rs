@@ -1,4 +1,3 @@
-use super::super::rows::Rows;
 use super::*;
 use crate::plugin_runtime::ModelFields;
 use crate::store::ResolvedJoin;
@@ -10,7 +9,6 @@ struct DetailRelation {
     fields: UserConfig,
     join: ResolvedJoin,
     limit: f64,
-    table: fn(&State) -> &Rows<FieldMap>,
 }
 
 struct DetailChildren {
@@ -59,13 +57,11 @@ impl EphemeralStore {
                     } else {
                         "findOne"
                     },
-                    |state| {
-                        let rows = (relation.table)(state).select_refs(|row| {
-                            crate::query::field_matches_equality(
-                                row.get(&physical).unwrap_or(&Value::Undefined),
-                                &value.field_value(),
-                            )
-                        })?;
+                    |_| {
+                        let rows = self.select_organization_rows(
+                            relation.role,
+                            &[(physical.clone(), value.field_value())],
+                        )?;
                         Ok(if relation.join.many {
                             crate::query::paginate_memory(rows, Some(relation.limit), None)
                         } else {
@@ -110,7 +106,7 @@ impl EphemeralStore {
         let value = self.organization_query(EntityRole::Organization, field, value)?;
         let runtime = self.model_fields.organization_join_schema();
         let default_limit = self.config.advanced.database.find_many_limit();
-        let relation = |role, model, limit, table| -> AuthResult<DetailRelation> {
+        let relation = |role, model, limit| -> AuthResult<DetailRelation> {
             let child_fields = self.field_config(role)?;
             let join = ResolvedJoin::resolve(
                 (EntityRole::Organization, "organization", &fields),
@@ -124,59 +120,44 @@ impl EphemeralStore {
                 fields: child_fields,
                 join,
                 limit,
-                table,
             })
         };
-        let invitations = relation(
-            EntityRole::Invitation,
-            "invitation",
-            default_limit,
-            |state: &State| &state.invitations,
-        )?;
+        let invitations = relation(EntityRole::Invitation, "invitation", default_limit)?;
         let members = relation(
             EntityRole::Member,
             "member",
             query.members_limit.unwrap_or(default_limit),
-            |state: &State| &state.members,
         )?;
         let teams = query
             .include_teams
-            .then(|| {
-                relation(EntityRole::Team, "team", default_limit, |state: &State| {
-                    &state.teams
-                })
-            })
+            .then(|| relation(EntityRole::Team, "team", default_limit))
             .transpose()?;
         let native = self.config.advanced.database.joins == Some(true);
         let selected = self
-            .raw("organization", "findOne", |state| {
-                let parents = state.organizations.select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        &organization_value(row, &fields, field),
-                        &value.field_value(),
-                    )
-                })?;
+            .raw("organization", "findOne", |op| {
+                let parents = self.select_organization_rows(
+                    EntityRole::Organization,
+                    &[(fields.record_storage_key(field).into(), value.field_value())],
+                )?;
                 let Some(first) = parents.first() else {
                     return Ok(None);
                 };
                 if !native {
                     return Ok(Some((RecordSource::Live(first.clone()), None)));
                 }
-                let parents = parents
-                    .iter()
-                    .map(|parent| parent.read(|row| Ok(row.clone())))
-                    .collect::<AuthResult<Vec<_>>>()?;
+                let parents = parents.iter().cloned().map(RecordSource::Live).collect();
                 let relations = [&invitations, &members]
                     .into_iter()
                     .chain(teams.as_ref())
-                    .map(|relation| ((relation.table)(state), &relation.join, relation.limit))
+                    .map(|relation| (relation.role, &relation.join, relation.limit))
                     .collect::<Vec<_>>();
-                let group = native_relationships(parents, &relations)?
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| {
-                        AuthError::internal("Organization grouping lost its selected parent")
-                    })?;
+                let group =
+                    native_relationships(parents, &relations, |role| op.capture_table(role))?
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| {
+                            AuthError::internal("Organization grouping lost its selected parent")
+                        })?;
                 let mut pages = group.children.into_iter();
                 let children = DetailChildren {
                     invitations: pages.next().ok_or_else(|| {
@@ -257,12 +238,11 @@ impl EphemeralStore {
                 .memory_primary_id_query(&owners.into())?
                 .decode::<Vec<Value>>()?;
             let rows = self
-                .raw("user", "findMany", |state| {
+                .raw("user", "findMany", |op| {
                     Ok(crate::query::paginate_memory(
-                        state.users.select_refs(|user| {
-                            owners
-                                .iter()
-                                .any(|owner| user.id.field_value().same_value_zero(owner))
+                        op.capture_users()?.select_refs(|user| {
+                            let id = user.field("id")?.unwrap_or_default();
+                            Ok(owners.iter().any(|owner| id.same_value_zero(owner)))
                         })?,
                         Some(query.users_limit),
                         None,

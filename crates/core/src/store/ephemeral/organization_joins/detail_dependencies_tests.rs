@@ -158,14 +158,17 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
         if mapped { "stored_member" } else { "member" }.into(),
         "stale-team-key".into(),
     );
-    {
-        let mut state = store.lock()?;
-        state.organizations.push(stored_parent);
-        state.invitations.push(invitation.clone());
-        state.members.push(member.clone());
-        state.teams.push(team.clone());
-        state.users.push(UserView::from_field_values(user.clone())?);
-    }
+    store.operation(|op| {
+        let state = op.capture_state()?;
+        state.organizations.push(stored_parent)?;
+        state.invitations.push(invitation.clone())?;
+        state.members.push(member.clone())?;
+        state.teams.push(team.clone())?;
+        state
+            .users
+            .push(UserView::from_field_values(user.clone())?)?;
+        Ok(())
+    })?;
     let roles = [
         EntityRole::Organization,
         EntityRole::Invitation,

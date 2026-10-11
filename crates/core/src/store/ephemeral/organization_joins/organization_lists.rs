@@ -1,13 +1,11 @@
 //! Member and Invitation lists share relation resolution and retain complete Organization output.
 
-use super::super::rows::Rows;
 use super::*;
 use crate::store::{InvitationOrganization, ResolvedJoin};
 
 struct ParentModel {
     role: EntityRole,
     name: &'static str,
-    rows: fn(&State) -> &Rows<FieldMap>,
 }
 
 impl EphemeralStore {
@@ -20,7 +18,6 @@ impl EphemeralStore {
                 ParentModel {
                     role: EntityRole::Member,
                     name: "member",
-                    rows: |state| &state.members,
                 },
                 ("userId", user_id.clone()),
             )
@@ -38,7 +35,6 @@ impl EphemeralStore {
             ParentModel {
                 role: EntityRole::Invitation,
                 name: "invitation",
-                rows: |state| &state.invitations,
             },
             ("email", email.to_lowercase().into()),
         )
@@ -72,13 +68,14 @@ impl EphemeralStore {
         let limit = self.config.advanced.database.find_many_limit();
         let native = self.config.advanced.database.joins == Some(true);
         let (sources, children) = self
-            .raw(parent.name, "findMany", |state| {
-                let rows = (parent.rows)(state).select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        &organization_value(row, &fields, selector),
-                        &value.field_value(),
-                    )
-                })?;
+            .raw(parent.name, "findMany", |op| {
+                let rows = self.select_organization_rows(
+                    parent.role,
+                    &[(
+                        fields.record_storage_key(selector).into(),
+                        value.field_value(),
+                    )],
+                )?;
                 if !native {
                     let sources = crate::query::paginate_memory(rows, Some(limit), None)
                         .into_iter()
@@ -86,12 +83,12 @@ impl EphemeralStore {
                         .collect::<Vec<_>>();
                     return Ok((sources, None));
                 }
-                let rows = rows
-                    .iter()
-                    .map(|row| row.read(|row| Ok(row.clone())))
-                    .collect::<AuthResult<Vec<_>>>()?;
-                let groups =
-                    native_relationships(rows, &[(&state.organizations, &relation, limit)])?;
+                let rows = rows.iter().cloned().map(RecordSource::Live).collect();
+                let groups = native_relationships(
+                    rows,
+                    &[(EntityRole::Organization, &relation, limit)],
+                    |role| op.capture_table(role),
+                )?;
                 let (sources, children) = crate::query::paginate_memory(groups, Some(limit), None)
                     .into_iter()
                     .map(|mut group| {
@@ -159,13 +156,11 @@ impl EphemeralStore {
                                     .raw(
                                         "organization",
                                         if relation.many { "findMany" } else { "findOne" },
-                                        |state| {
-                                            let rows = state.organizations.select_refs(|row| {
-                                                crate::query::field_matches_equality(
-                                                    row.get(&physical).unwrap_or(&Value::Undefined),
-                                                    &value.field_value(),
-                                                )
-                                            })?;
+                                        |_| {
+                                            let rows = store.select_organization_rows(
+                                                EntityRole::Organization,
+                                                &[(physical.clone(), value.field_value())],
+                                            )?;
                                             Ok(if relation.many {
                                                 crate::query::paginate_memory(
                                                     rows,

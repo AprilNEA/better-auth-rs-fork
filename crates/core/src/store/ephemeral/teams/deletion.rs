@@ -12,8 +12,8 @@ impl EphemeralStore {
         let member_team =
             self.organization_query(EntityRole::TeamMember, "teamId", requested_id.clone())?;
         let id = self.organization_query(EntityRole::Team, "id", requested_id.clone())?;
-        let (stored_owner, public_id, selectors, rows, snapshot) = {
-            let state = self.lock()?;
+        let (stored_owner, public_id, selectors, rows, snapshot) = self.operation(|op| {
+            let state = op.capture_state()?;
             let team = state.teams.get(&id)?;
             // The stored owner guards concurrent changes independently of the caller's invitation scope.
             let stored_owner = team
@@ -28,15 +28,15 @@ impl EphemeralStore {
                 (None, None) => return Err(AuthError::not_found("Team not found")),
             };
             let selectors = self.pending_invitation_selectors(&organization_id, None)?;
-            let rows = state
-                .invitations
+            let rows = op
+                .capture_table(EntityRole::Invitation)?
                 .select_refs(|row| Self::matches_pending_invitation(row, &selectors))?;
             let snapshot = rows
                 .iter()
-                .map(|row| row.read(|row| Ok(row.clone())))
+                .map(|row| row.shallow_fields())
                 .collect::<AuthResult<Vec<_>>>()?;
-            (stored_owner, public_id, selectors, rows, snapshot)
-        };
+            Ok((stored_owner, public_id, selectors, rows, snapshot))
+        })?;
         let pending = self.project_pending_invitation_rows(rows).await?;
         let mut updates = Vec::new();
         for invitation in pending {
@@ -67,60 +67,67 @@ impl EphemeralStore {
             let invitation_id =
                 self.organization_query(EntityRole::Invitation, "id", invitation.id.field_value())?;
             let current = self
-                .lock()?
-                .invitations
-                .get(&invitation_id)?
+                .operation(|op| {
+                    op.capture_table(EntityRole::Invitation)?
+                        .get(&invitation_id)
+                })?
                 .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
             let _ = self.output_invitation(patch.clone().apply(current)).await?;
             updates.push((invitation_id, patch));
         }
-        let mut state = self.lock()?;
-        let team = state.teams.get(&id)?;
-        let pending: Vec<_> = state
-            .invitations
-            .snapshot()?
-            .into_iter()
-            .filter(|row| Self::matches_pending_invitation(row, &selectors))
-            .collect();
-        let unchanged = pending.len() == snapshot.len()
-            && pending.iter().zip(&snapshot).all(|(a, b)| {
-                super::super::organization_rows::id(a) == super::super::organization_rows::id(b)
-                    && ["teamId", "expiresAt"].iter().all(|name| {
-                        organization_value(a, &invitation_schema, name)
-                            == organization_value(b, &invitation_schema, name)
-                    })
-            });
-        let current_owner = team
-            .as_ref()
-            .map(|team| organization_value(team, &team_schema, "organizationId"));
-        let same_owner = match (&stored_owner, &current_owner) {
-            (Some(before), Some(current)) => before.strict_equals(current),
-            (None, None) => true,
-            _ => false,
-        };
-        if !same_owner || !unchanged {
-            return Err(AuthError::conflict(
-                "Team invitations changed while field transforms were pending",
-            ));
-        }
-        let updates = updates
-            .into_iter()
-            .map(|(id, patch)| {
-                let row = state
-                    .invitations
-                    .get(&id)?
-                    .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
-                Ok((id, patch.apply(row)))
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        let _ = state.teams.remove(&id)?;
-        state.team_members.retain(|member| {
-            !organization_value(member, &membership_schema, "teamId")
-                .strict_equals(&member_team.field_value())
-        })?;
-        for (id, invitation) in updates {
-            let _ = state.invitations.replace(&id, invitation)?;
-        }
-        Ok(())
+        self.operation(|op| {
+            let mut state = op.shallow_snapshot()?;
+            let team = state.teams.get(&id)?;
+            let pending = state
+                .invitations
+                .select_refs(|row| Self::matches_pending_invitation(row, &selectors))?
+                .iter()
+                .map(|row| row.shallow_fields())
+                .collect::<AuthResult<Vec<_>>>()?;
+            let unchanged = pending.len() == snapshot.len()
+                && pending.iter().zip(&snapshot).all(|(a, b)| {
+                    super::super::organization_rows::id(a) == super::super::organization_rows::id(b)
+                        && ["teamId", "expiresAt"].iter().all(|name| {
+                            organization_value(a, &invitation_schema, name)
+                                == organization_value(b, &invitation_schema, name)
+                        })
+                });
+            let current_owner = team
+                .as_ref()
+                .map(|team| organization_value(team, &team_schema, "organizationId"));
+            let same_owner = match (&stored_owner, &current_owner) {
+                (Some(before), Some(current)) => before.strict_equals(current),
+                (None, None) => true,
+                _ => false,
+            };
+            if !same_owner || !unchanged {
+                return Err(AuthError::conflict(
+                    "Team invitations changed while field transforms were pending",
+                ));
+            }
+            let updates = updates
+                .into_iter()
+                .map(|(id, patch)| {
+                    let row = state
+                        .invitations
+                        .get(&id)?
+                        .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
+                    Ok((id, patch.apply(row)))
+                })
+                .collect::<AuthResult<Vec<_>>>()?;
+            let _ = state.teams.remove(&id)?;
+            let removed = state.team_members.select_refs(|row| {
+                Ok(
+                    super::super::organization_rows::field(row, &membership_schema, "teamId")?
+                        .strict_equals(&member_team.field_value()),
+                )
+            })?;
+            state.team_members = state.team_members.without_refs(&removed)?;
+            for (id, invitation) in updates {
+                let _ = state.invitations.replace(&id, invitation)?;
+            }
+            op.replace_table(EntityRole::Team, state.teams)?;
+            op.replace_table(EntityRole::TeamMember, state.team_members)
+        })
     }
 }

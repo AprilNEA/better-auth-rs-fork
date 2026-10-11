@@ -5,6 +5,7 @@ use std::future::Future;
 
 use serde_json::{Map, Value};
 
+use crate::field_value::PrimitiveHint;
 use crate::{AuthResponse, AuthResult, FieldValue};
 
 /// Resolve the adapter operator before field binding, using equality for an unknown name.
@@ -214,6 +215,9 @@ pub fn field_number(value: &FieldValue) -> AuthResult<f64> {
         FieldValue::Bool(value) => Ok(if *value { 1.0 } else { 0.0 }),
         FieldValue::Number(value) => Ok(*value),
         FieldValue::Date(value) => Ok(value.milliseconds()),
+        FieldValue::Object(_) | FieldValue::Array(_) => {
+            field_number(&value.primitive(PrimitiveHint::Number)?)
+        }
         value => {
             let Ok(text) = value.display_utf16()?.to_utf8() else {
                 return Ok(f64::NAN);
@@ -244,7 +248,7 @@ pub fn field_date(value: &FieldValue) -> AuthResult<crate::FieldDate> {
         FieldValue::Date(date) => {
             return Ok(crate::FieldDate::from_milliseconds(date.milliseconds()));
         }
-        FieldValue::Array(_) | FieldValue::Object(_) => FieldValue::from(value.display_utf16()?),
+        FieldValue::Array(_) | FieldValue::Object(_) => value.primitive(PrimitiveHint::Default)?,
         value => value.clone(),
     };
     Ok(match primitive {
@@ -257,17 +261,8 @@ pub fn field_date(value: &FieldValue) -> AuthResult<crate::FieldDate> {
 
 /// Apply JavaScript addition, including string concatenation after primitive conversion.
 pub fn field_add(left: &FieldValue, right: &FieldValue) -> AuthResult<FieldValue> {
-    let primitive = |value: &FieldValue| -> AuthResult<FieldValue> {
-        match value {
-            FieldValue::Date(_)
-            | FieldValue::Array(_)
-            | FieldValue::Object(_)
-            | FieldValue::Function(_) => Ok(value.display_utf16()?.into()),
-            value => Ok(value.clone()),
-        }
-    };
-    let left = primitive(left)?;
-    let right = primitive(right)?;
+    let left = left.primitive(PrimitiveHint::Default)?;
+    let right = right.primitive(PrimitiveHint::Default)?;
     if field_string_units(&left).is_some() || field_string_units(&right).is_some() {
         let mut units = left.display_utf16()?.as_utf16().to_vec();
         units.extend_from_slice(right.display_utf16()?.as_utf16());
@@ -291,17 +286,8 @@ pub fn field_compare(
     left: &FieldValue,
     right: &FieldValue,
 ) -> AuthResult<Option<std::cmp::Ordering>> {
-    let primitive = |value: &FieldValue| -> AuthResult<FieldValue> {
-        Ok(match value {
-            FieldValue::Date(value) => FieldValue::Number(value.milliseconds()),
-            FieldValue::Array(_) | FieldValue::Object(_) | FieldValue::Function(_) => {
-                FieldValue::from(value.display_utf16()?)
-            }
-            value => value.clone(),
-        })
-    };
-    let left = primitive(left)?;
-    let right = primitive(right)?;
+    let left = left.primitive(PrimitiveHint::Number)?;
+    let right = right.primitive(PrimitiveHint::Number)?;
     if let (Some(left), Some(right)) = (field_string_units(&left), field_string_units(&right)) {
         return Ok(Some(left.cmp(&right)));
     }

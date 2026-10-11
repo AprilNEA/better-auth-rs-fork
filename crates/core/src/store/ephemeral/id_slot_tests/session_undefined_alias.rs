@@ -98,7 +98,7 @@ async fn memory_session_undefined_id_alias_matches_complete_upstream_observation
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric())
     );
-    let rows = store.lock()?.sessions.snapshot()?;
+    let rows = store.storage_rows(EntityRole::Session)?;
     assert_eq!(rows.len(), 1);
     let stored = required(rows.first())?;
     let mut expected_stored = created.clone();
@@ -129,7 +129,7 @@ async fn memory_session_undefined_id_alias_matches_complete_upstream_observation
     assert_eq!(updated.token, created.token);
     assert_eq!(updated.created_at, created.created_at);
     assert_eq!(updated.updated_at, date(CHANGED_AT)?);
-    let rows = store.lock()?.sessions.snapshot()?;
+    let rows = store.storage_rows(EntityRole::Session)?;
     assert_eq!(rows.len(), 1);
     let stored = required(rows.first())?;
     assert!(matches!(stored.get("id"), Some(Value::Number(number)) if number.is_nan()));

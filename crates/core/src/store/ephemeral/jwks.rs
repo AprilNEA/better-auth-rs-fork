@@ -34,9 +34,9 @@ impl crate::store::JwksStore for EphemeralStore {
 
     async fn list_jwk_records(&self) -> AuthResult<Vec<FieldMap>> {
         let selected = self
-            .raw("jwks", "findMany", |state| {
+            .raw("jwks", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    state.jwks.select_refs(|_| true)?,
+                    op.capture_table(EntityRole::Jwk)?.snapshot_refs()?,
                     Some(self.config.advanced.database.find_many_limit()),
                     None,
                 ))

@@ -126,13 +126,14 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
         Relation::MembershipTeam => &mut membership,
     };
     let _ = parent.insert(physical.clone(), "stored-parent-property".into());
-    {
-        let mut state = writer.lock()?;
-        state.members.push(member);
-        state.users.push(UserView::from_field_values(user)?);
-        state.teams.push(team);
-        state.team_members.push(membership);
-    }
+    writer.operation(|op| {
+        let state = op.capture_state()?;
+        state.members.push(member)?;
+        state.users.push(UserView::from_field_values(user)?)?;
+        state.teams.push(team)?;
+        state.team_members.push(membership)?;
+        Ok(())
+    })?;
     let before_parent = writer.storage_rows(parent_role)?;
     let before_child = writer.storage_rows(child_role)?.remove(0);
     let mut after_child = before_child.clone();
@@ -201,12 +202,14 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
                     }
                     Relation::TeamMembers => {
                         // The public TeamMember store exposes no update operation; model a backend writer.
-                        let state = writer.lock()?;
-                        let mut row = state
-                            .team_members
-                            .get_mut("membership")?
-                            .ok_or_else(|| AuthError::internal("Expected membership"))?;
-                        let _ = row.insert("userId".into(), "After".into());
+                        writer.operation(|op| {
+                            let row = op
+                                .capture_table(EntityRole::TeamMember)?
+                                .get_ref("membership")?
+                                .ok_or_else(|| AuthError::internal("Expected membership"))?;
+                            let _ = row.set_field("userId".into(), "After".into())?;
+                            Ok(())
+                        })?;
                     }
                 }
                 events
@@ -470,8 +473,8 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
             .fields_mut()
             .insert("name".into(), trace("team", None));
         store.configure_organization_fields(fields)?;
-        {
-            let mut state = store.lock()?;
+        store.operation(|op| {
+            let state = op.capture_state()?;
             state.organizations.push(
                 [
                     ("id".into(), "organization".into()),
@@ -482,7 +485,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                     ("member".into(), "stored-member-property".into()),
                 ]
                 .into(),
-            );
+            )?;
             for suffix in ["a", "b"] {
                 let id = format!("user-{suffix}");
                 state.users.push(UserView::from_field_values(
@@ -496,7 +499,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                         ("updatedAt".into(), date().into()),
                     ]
                     .into(),
-                )?);
+                )?)?;
                 state.members.push(
                     [
                         ("id".into(), format!("member-{suffix}").into()),
@@ -506,7 +509,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                         ("createdAt".into(), date().into()),
                     ]
                     .into(),
-                );
+                )?;
                 state.invitations.push(
                     [
                         ("id".into(), format!("invitation-{suffix}").into()),
@@ -520,7 +523,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                         ("expiresAt".into(), date().into()),
                     ]
                     .into(),
-                );
+                )?;
                 state.teams.push(
                     [
                         ("id".into(), format!("team-{suffix}").into()),
@@ -531,9 +534,10 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                         ("updatedAt".into(), date().into()),
                     ]
                     .into(),
-                );
+                )?;
             }
-        }
+            Ok(())
+        })?;
         let roles = [
             EntityRole::Organization,
             EntityRole::Invitation,

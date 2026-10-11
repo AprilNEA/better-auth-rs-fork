@@ -25,9 +25,7 @@ async fn serial_device_queries_preserve_claim_and_consumption_bindings() -> Auth
     assert_eq!(second.id, "2");
     assert_eq!(
         store
-            .lock()?
-            .device_codes
-            .snapshot()?
+            .storage_rows(EntityRole::DeviceCode)?
             .iter()
             .map(|row| row.get("id").cloned().unwrap_or_default())
             .collect::<Vec<_>>(),
@@ -117,7 +115,7 @@ async fn serial_device_queries_preserve_claim_and_consumption_bindings() -> Auth
     );
     assert_eq!(store.create_device_code(device("third")).await?.id, "1");
     store.delete_device_code(&padded).await?;
-    assert!(store.lock()?.device_codes.snapshot()?.is_empty());
+    assert!(store.storage_rows(EntityRole::DeviceCode)?.is_empty());
     Ok(())
 }
 
@@ -148,7 +146,7 @@ async fn serial_device_transaction_rejects_changed_owner_and_commits_unchanged_o
         store.commit_transaction(base, isolated, queue).await,
         Err(AuthError::Internal(message)) if message == "Device code changed before transaction commit"
     ));
-    let raw = required(store.lock()?.device_codes.snapshot()?.first()).cloned()?;
+    let raw = required(store.storage_rows(EntityRole::DeviceCode)?.first()).cloned()?;
     assert_eq!(
         raw.get("id").cloned().unwrap_or_default(),
         Value::Number(1.0)

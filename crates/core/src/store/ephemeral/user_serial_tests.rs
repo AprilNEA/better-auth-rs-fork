@@ -24,7 +24,7 @@ fn user(name: &str) -> CreateUser {
 
 fn stored_ids(store: &EphemeralStore) -> AuthResult<Vec<Value>> {
     Ok(store
-        .lock()?
+        .operation(|op| op.capture_state())?
         .users
         .snapshot()?
         .into_iter()
@@ -344,14 +344,15 @@ async fn native_user_update_preserves_undefined_null_and_string_selectors() -> A
     for name in ["first", "second", "null", "string"] {
         let _ = store.create_user(user(name)).await?;
     }
-    store.lock()?.users.update_each(|user| {
-        user.id = crate::SchemaValue::from_field(match user.name.typed()?.as_deref() {
+    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+        let user = source.snapshot()?;
+        let id = match user.name.typed()?.as_deref() {
             Some("first" | "second") => Value::Undefined,
             Some("null") => Value::Null,
             _ => Value::from("undefined"),
-        });
-        Ok(())
-    })?;
+        };
+        let _ = source.set_field("id".into(), id)?;
+    }
     for (id, name, expected_names) in [
         (
             Value::Undefined,
@@ -388,7 +389,7 @@ async fn native_user_update_preserves_undefined_null_and_string_selectors() -> A
                 "first@serial-user.test"
             })
         );
-        let rows = store.lock()?.users.snapshot()?;
+        let rows = store.operation(|op| op.capture_users()?.snapshot())?;
         assert_eq!(
             rows.iter()
                 .map(|user| user.name.typed().map(|value| value.as_deref()))
@@ -406,15 +407,15 @@ async fn serial_user_batches_convert_the_whole_array_once() -> AuthResult<()> {
     for name in ["zero", "one", "nan"] {
         let _ = store.create_user(user(name)).await?;
     }
-    store.lock()?.users.update_each(|user| {
-        user.id =
-            crate::SchemaValue::from_field(Value::Number(match user.name.typed()?.as_deref() {
-                Some("zero") => 0.0,
-                Some("one") => 1.0,
-                _ => f64::NAN,
-            }));
-        Ok(())
-    })?;
+    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+        let user = source.snapshot()?;
+        let id = Value::Number(match user.name.typed()?.as_deref() {
+            Some("zero") => 0.0,
+            Some("one") => 1.0,
+            _ => f64::NAN,
+        });
+        let _ = source.set_field("id".into(), id)?;
+    }
     for (ids, expected) in [
         (
             vec![Value::from("01"), true.into(), vec![1.into()].into()],
@@ -458,12 +459,12 @@ async fn native_user_batches_distinguish_stored_primitive_ids() -> AuthResult<()
     for (name, _) in &cases {
         let _ = store.create_user(user(name)).await?;
     }
-    store.lock()?.users.update_each(|user| {
+    for source in store.operation(|op| op.capture_users()?.snapshot_refs())? {
+        let user = source.snapshot()?;
         let name = user.name.typed()?.as_deref();
         let (_, id) = required(cases.iter().find(|(candidate, _)| Some(*candidate) == name))?;
-        user.id = crate::SchemaValue::from_field(id.clone());
-        Ok(())
-    })?;
+        let _ = source.set_field("id".into(), id.clone())?;
+    }
     for (name, id) in cases {
         let rows = store
             .list_users_by_id_values(&[id.clone(), id], 10.0)

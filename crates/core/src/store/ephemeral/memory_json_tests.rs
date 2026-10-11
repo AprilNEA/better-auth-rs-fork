@@ -160,11 +160,13 @@ impl Fixture {
         model: &str,
         id: &crate::SchemaValue<String>,
     ) -> AuthResult<JsonValue> {
-        let state = self.store.lock()?;
+        let state = self.store.operation(|op| op.capture_state())?;
         let fields = match model {
             "user" => state
                 .users
-                .find(|row| row.id == *id)?
+                .snapshot()?
+                .into_iter()
+                .find(|row| row.id == *id)
                 .map(|row| row.additional_fields),
             "session" => state.sessions.get(id)?,
             "organization" => state.organizations.get(id)?,

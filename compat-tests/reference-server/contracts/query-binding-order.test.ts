@@ -9,6 +9,7 @@ import { deviceAuthorization, organization } from "better-auth/plugins";
 import { walletPlugin } from "./wallet-additional-fields";
 import "./plugin-selector-binding.mjs";
 import "./predicate-case-mode.mjs";
+import "./memory-operation-reentry.mjs";
 
 test("SQLite incrementOne preserves expression phases and unchanged storage", async () => {
   await checkIncrementBindingPhases("sqlite");
@@ -387,8 +388,7 @@ for (const model of ["user", "member"] as const) {
 }
 
 for (const rejectSecond of [false, true]) {
-  // Rust does not yet invoke callable coercion methods. Preserve the upstream observations separately.
-  test(`Upstream-only Memory User callable first clause ${rejectSecond ? "preserves its second error" : "uses both comparisons before output and count"}`, async () => {
+  test(`Memory User callable first clause ${rejectSecond ? "preserves its second error" : "uses both comparisons before output and count"}`, async () => {
     const memory = memoryWhereRows("user", true);
     const before = structuredClone(memory);
     const events: string[] = [];

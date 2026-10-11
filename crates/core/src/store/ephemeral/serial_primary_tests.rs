@@ -1,4 +1,5 @@
 use super::*;
+use crate::store::schema::EntityRole;
 
 mod device;
 mod fixture;
@@ -42,9 +43,7 @@ async fn serial_account_primary_ids_bind_padded_queries_and_project_strings() ->
     }
     assert_eq!(
         store
-            .lock()?
-            .accounts
-            .snapshot()?
+            .storage_rows(EntityRole::Account)?
             .into_iter()
             .map(|row| row.get("id").cloned().unwrap_or_default())
             .collect::<Vec<_>>(),
@@ -110,16 +109,14 @@ async fn serial_verification_deletion_uses_numeric_reservation_ids() -> AuthResu
     );
     assert_eq!(
         store
-            .lock()?
-            .verifications
-            .snapshot()?
+            .storage_rows(EntityRole::Verification)?
             .into_iter()
             .map(|row| row.get("id").cloned().unwrap_or_default())
             .collect::<Vec<_>>(),
         [Value::Number(2.0), Value::Number(2.0)]
     );
     store.delete_verification(reserved.id.typed()?).await?;
-    assert!(store.lock()?.verifications.snapshot()?.is_empty());
+    assert!(store.storage_rows(EntityRole::Verification)?.is_empty());
     Ok(())
 }
 
@@ -144,19 +141,22 @@ async fn serial_verification_consumption_preserves_numeric_reservation_ids() -> 
     );
     // Reservations replace caller timestamps. Fix stored dates so latest selection cannot tie.
     let mut created_at = 0.0;
-    store.lock()?.verifications.update_each(|row| {
-        created_at += 1_000.0;
-        let _ = row.insert(
-            "createdAt".into(),
-            crate::FieldDate::from_milliseconds(created_at).into(),
-        );
+    store.operation(|op| {
+        for row in op
+            .capture_table(EntityRole::Verification)?
+            .snapshot_refs()?
+        {
+            created_at += 1_000.0;
+            let _ = row.set_field(
+                "createdAt".into(),
+                crate::FieldDate::from_milliseconds(created_at).into(),
+            )?;
+        }
         Ok(())
     })?;
     assert_eq!(
         store
-            .lock()?
-            .verifications
-            .snapshot()?
+            .storage_rows(EntityRole::Verification)?
             .into_iter()
             .map(|row| row.get("id").cloned().unwrap_or_default())
             .collect::<Vec<_>>(),
@@ -171,6 +171,6 @@ async fn serial_verification_consumption_preserves_numeric_reservation_ids() -> 
         assert_eq!(consumed.len(), 1);
         assert_eq!(required(consumed.first())?.id, expected_id);
     }
-    assert!(store.lock()?.verifications.snapshot()?.is_empty());
+    assert!(store.storage_rows(EntityRole::Verification)?.is_empty());
     Ok(())
 }

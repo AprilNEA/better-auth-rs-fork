@@ -54,19 +54,22 @@ async fn enabled_callbacks_preserve_earlier_fields_and_read_later_live_fields() 
             let mutate = move |value: FieldValue| {
                 observed.fetch_add(1, Ordering::SeqCst);
                 assert_eq!(value, FieldValue::Number(5.25));
-                let source = writer
-                    .lock()?
-                    .api_keys
-                    .first_ref(|row| row.get("id") == Some(&id.field_value()))?
-                    .expect("live key");
-                source.write(|row| {
-                    row.extend([
-                        ("name".into(), "after".into()),
-                        ("enabled".into(), false.into()),
-                        ("remaining".into(), 7.0.into()),
-                        ("marker".into(), "after".into()),
-                    ]);
-                    Ok(())
+                writer.operation(|op| {
+                    let source = op
+                        .capture_table(EntityRole::ApiKey)?
+                        .select_refs(|row| Ok(row.field("id")? == Some(id.field_value())))?
+                        .into_iter()
+                        .next()
+                        .expect("live key");
+                    source.apply_patch(
+                        [
+                            ("name".into(), "after".into()),
+                            ("enabled".into(), false.into()),
+                            ("remaining".into(), 7.0.into()),
+                            ("marker".into(), "after".into()),
+                        ]
+                        .into(),
+                    )
                 })?;
                 if fail_output {
                     Err(AuthError::internal("live enabled output"))
@@ -105,9 +108,9 @@ async fn enabled_callbacks_preserve_earlier_fields_and_read_later_live_fields() 
                 );
             }
             let stored = store
-                .lock()?
-                .api_keys
-                .find(|row| row.get("id") == Some(&seed.id.field_value()))?
+                .storage_rows(EntityRole::ApiKey)?
+                .into_iter()
+                .find(|row| row.get("id") == Some(&seed.id.field_value()))
                 .expect("stored live key");
             assert_eq!(stored.get("name"), Some(&FieldValue::from("after")));
             assert_eq!(stored.get("enabled"), Some(&FieldValue::Bool(false)));
@@ -173,9 +176,9 @@ async fn enabled_replacements_preserve_nonboolean_input_storage_and_output() -> 
         assert_eq!(key.enabled.field_value(), projected);
         assert_eq!(
             store
-                .lock()?
-                .api_keys
-                .find(|row| row.get("id") == Some(&key.id.field_value()))?
+                .storage_rows(EntityRole::ApiKey)?
+                .into_iter()
+                .find(|row| row.get("id") == Some(&key.id.field_value()))
                 .expect("stored replacement")
                 .get("enabled"),
             Some(&stored)

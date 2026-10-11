@@ -149,7 +149,7 @@ async fn memory_session_id_slot_nested_create_preserves_complete_runtime_records
             let _ = raw_outer.remove("id");
         }
         assert_eq!(
-            store.lock()?.sessions.snapshot()?,
+            store.storage_rows(EntityRole::Session)?,
             vec![FieldMap::from(expected_inner.clone()), raw_outer]
         );
         let mut inner_memory = before.clone();
@@ -213,26 +213,28 @@ async fn memory_session_id_slot_live_writer_preserves_read_and_stored_records() 
         let mut owner = user_input("owner")?;
         owner.additional_fields.clear();
         let _ = writer.create_user(owner).await?;
-        writer.lock()?.sessions.push(
-            SessionView {
-                field_order: Default::default(),
-                visible_fields: Some(Default::default()),
-                id: crate::SchemaValue::from_field(Value::Number(1.0)),
-                expires_at: date(EXPIRES_AT)?.into(),
-                token: "slot-selected".into(),
-                created_at: date(CREATED_AT)?.into(),
-                updated_at: date(CREATED_AT)?.into(),
-                ip_address: None.into(),
-                user_agent: None.into(),
-                user_id: crate::SchemaValue::from_field(Value::Number(1.0)),
-                impersonated_by: None.into(),
-                active_organization_id: None.into(),
-                active_team_id: None.into(),
-                active: true,
-                additional_fields: [("label".into(), "selected".into())].into(),
-            }
-            .into(),
-        );
+        writer.operation(|op| {
+            op.capture_table(EntityRole::Session)?.push(
+                SessionView {
+                    field_order: Default::default(),
+                    visible_fields: Some(Default::default()),
+                    id: crate::SchemaValue::from_field(Value::Number(1.0)),
+                    expires_at: date(EXPIRES_AT)?.into(),
+                    token: "slot-selected".into(),
+                    created_at: date(CREATED_AT)?.into(),
+                    updated_at: date(CREATED_AT)?.into(),
+                    ip_address: None.into(),
+                    user_agent: None.into(),
+                    user_id: crate::SchemaValue::from_field(Value::Number(1.0)),
+                    impersonated_by: None.into(),
+                    active_organization_id: None.into(),
+                    active_team_id: None.into(),
+                    active: true,
+                    additional_fields: [("label".into(), "selected".into())].into(),
+                }
+                .into(),
+            )
+        })?;
         let trace = Events::default();
         let output_trace = trace.clone();
         let output_writer = writer.clone();
@@ -285,6 +287,7 @@ async fn memory_session_id_slot_live_writer_preserves_read_and_stored_records() 
         );
         let mut reader = EphemeralStore::new(Arc::new(config));
         reader.state = writer.state.clone();
+        reader.operations = writer.operations.clone();
         let before = memory(&writer, slot)?;
         assert_eq!(before, expected["before"]);
         let selected = required(reader.get_session("slot-selected").await?)?;

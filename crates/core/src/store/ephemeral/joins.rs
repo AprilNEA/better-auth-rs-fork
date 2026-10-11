@@ -1,9 +1,8 @@
 //! Native joins retain child row references selected by the original raw query.
 
-use super::account_joins::{native_relation, user_value};
+use super::account_joins::native_relation;
 use super::rows::RecordSource;
 use super::rows::RowRef;
-use super::sessions::{session_token_matches, session_tokens_match};
 use super::*;
 use crate::session::SessionData;
 use crate::store::JoinValue;
@@ -102,25 +101,34 @@ impl EphemeralStore {
             .raw(
                 "session",
                 if single { "findOne" } else { "findMany" },
-                |state| {
+                |op| {
                     let sessions = crate::query::paginate_memory(
-                        state.sessions.try_select_refs(|session| {
-                            let token_matches = if single {
-                                session_token_matches(session, &token_column, &token_query)
-                            } else {
-                                session_tokens_match(session, &token_column, &token_query)?
-                            };
-                            Ok(token_matches
-                                && match &expiry {
-                                    Some((column, now)) => {
-                                        crate::query::field_compare(
-                                            session.get(column).unwrap_or(&Value::Undefined),
-                                            now,
-                                        )? == Some(std::cmp::Ordering::Greater)
-                                    }
-                                    None => true,
-                                })
-                        })?,
+                        op.capture_table(EntityRole::Session)?
+                            .select_refs(|session| {
+                                let clauses = std::iter::once((
+                                    &token_column,
+                                    &token_query,
+                                    if single {
+                                        crate::WhereOperator::Eq
+                                    } else {
+                                        crate::WhereOperator::In
+                                    },
+                                ))
+                                .chain(expiry.as_ref().map(|(column, value)| {
+                                    (column, value, crate::WhereOperator::Gt)
+                                }));
+                                crate::memory_query::matches_all(
+                                    clauses,
+                                    |(column, value, operator)| {
+                                        crate::memory_query::matches(
+                                            session.field(column)?.as_ref(),
+                                            value,
+                                            operator,
+                                            crate::WhereMode::Sensitive,
+                                        )
+                                    },
+                                )
+                            })?,
                         Some(if single {
                             1.0
                         } else {
@@ -137,9 +145,11 @@ impl EphemeralStore {
                             let session = source.shallow_fields()?;
                             let value = session.get(&relation.from).cloned().unwrap_or_default();
                             let users = native_relation(
-                                state.users.select_refs(|user| {
-                                    user_value(user, &relation.logical_to, &relation.to)
-                                        .strict_equals(&value)
+                                op.capture_users()?.select_refs(|user| {
+                                    Ok(user
+                                        .field(&relation.to)?
+                                        .unwrap_or_default()
+                                        .strict_equals(&value))
                                 })?,
                                 &relation,
                                 self.config.advanced.database.find_many_limit(),

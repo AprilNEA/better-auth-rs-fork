@@ -63,7 +63,7 @@ async fn serial_organization_lifecycle_binds_numbers_and_projects_public_ids() -
     }
     assert_eq!(second_team.id.field_value(), Value::from("2"));
     {
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         let ids = [
             organization_id(required(state.organizations.snapshot()?.first())?).field_value(),
             organization_id(required(state.members.snapshot()?.first())?).field_value(),
@@ -111,12 +111,12 @@ async fn serial_organization_lifecycle_binds_numbers_and_projects_public_ids() -
     let teams_before = store.storage_rows(EntityRole::Team)?;
     let roles_before = store.storage_rows(EntityRole::OrganizationRole)?;
     store.delete_organization("001").await?;
-    let state = store.lock()?;
-    assert_eq!(state.organizations.len(), 0);
-    assert_eq!(state.members.len(), 0);
-    assert_eq!(state.invitations.len(), 0);
+    let state = store.operation(|op| op.capture_state())?;
+    assert_eq!(state.organizations.len()?, 0);
+    assert_eq!(state.members.len()?, 0);
+    assert_eq!(state.invitations.len()?, 0);
     assert_eq!(state.teams.snapshot()?, teams_before);
-    assert_eq!(state.team_members.len(), 0);
+    assert_eq!(state.team_members.len()?, 0);
     assert_eq!(state.organization_roles.snapshot()?, roles_before);
     Ok(())
 }
@@ -238,7 +238,7 @@ async fn serial_organization_id_updates_keep_numeric_storage() -> AuthResult<()>
             .await?;
         assert_eq!(unchanged.id.field_value(), Value::from("3"));
     }
-    let state = store.lock()?;
+    let state = store.operation(|op| op.capture_state())?;
     assert_eq!(
         organization_id(required(state.organizations.snapshot()?.first())?).field_value(),
         Value::Number(2.0)
@@ -265,15 +265,16 @@ async fn serial_organization_joins_distinguish_native_owners_from_projected_owne
             .create_member(CreateMember::new("1", "1", "member"))
             .await?;
         let _ = store.create_invitation(invitation()).await?;
-        {
-            let state = store.lock()?;
+        store.operation(|op| {
+            let state = op.capture_state()?;
             let id = SchemaValue::from_field(Value::Number(1.0));
             let owner = Value::Array(vec![Value::Number(1.0)].into());
-            let _ = required(state.members.get_mut(&id)?)?
-                .insert("organizationId".into(), owner.clone());
-            let _ =
-                required(state.invitations.get_mut(&id)?)?.insert("organizationId".into(), owner);
-        }
+            let _ = required(state.members.get_ref(&id)?)?
+                .set_field("organizationId".into(), owner.clone())?;
+            let _ = required(state.invitations.get_ref(&id)?)?
+                .set_field("organizationId".into(), owner)?;
+            Ok(())
+        })?;
         let organizations = store.list_user_organizations("001").await?;
         assert_eq!(organizations.len(), 1);
         let organization = Value::from(required(organizations.first())?.clone());
@@ -315,13 +316,14 @@ async fn live_organization_id_projection_observes_prior_output_callbacks() -> Au
                 output: Some(UserFieldTransform::new(move |value| {
                     assert_eq!(counted.fetch_add(1, Ordering::SeqCst), 0);
                     let store = required(target.upgrade())?;
-                    let state = store.lock()?;
-                    let _ = required(
-                        state
-                            .organizations
-                            .get_mut(&SchemaValue::from_field(Value::Number(1.0)))?,
-                    )?
-                    .insert("id".into(), Value::Number(2.0));
+                    store.operation(|op| {
+                        let _ = required(
+                            op.capture_table(EntityRole::Organization)?
+                                .get_ref(&SchemaValue::from_field(Value::Number(1.0)))?,
+                        )?
+                        .set_field("id".into(), Value::Number(2.0))?;
+                        Ok(())
+                    })?;
                     Ok(value)
                 })),
                 ..Default::default()
@@ -337,7 +339,10 @@ async fn live_organization_id_projection_observes_prior_output_callbacks() -> Au
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(
-        organization_id(required(store.lock()?.organizations.snapshot()?.first())?).field_value(),
+        organization_id(required(
+            store.storage_rows(EntityRole::Organization)?.first()
+        )?)
+        .field_value(),
         Value::Number(2.0)
     );
     Ok(())
@@ -410,11 +415,13 @@ async fn serial_invitation_cookie_projects_ids_without_changing_session_update_o
             Some("42")
         );
         assert_eq!(cookie.active_team_id.typed().unwrap().as_deref(), Some("1"));
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         let raw = required(
             state
                 .sessions
-                .find(|row| row.get("token") == Some(&session.token.field_value()))?,
+                .snapshot()?
+                .into_iter()
+                .find(|row| row.get("token") == Some(&session.token.field_value())),
         )?;
         assert_eq!(raw.get("id"), Some(&Value::Number(1.0)));
         assert_eq!(

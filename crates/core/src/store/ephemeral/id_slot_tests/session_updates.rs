@@ -42,7 +42,10 @@ async fn memory_session_updates_bind_native_id_values_at_the_adapter_slot() -> A
         let _ = config.session.fields_mut().insert("id".into(), id_policy());
         let store = EphemeralStore::new(Arc::new(config));
         let mut stored = seed()?;
-        store.lock()?.sessions.push(stored.clone().into());
+        store.operation(|op| {
+            op.capture_table(EntityRole::Session)?
+                .push(stored.clone().into())
+        })?;
         let updated_at = date("2031-01-02T03:04:05.000Z")?;
         let result = required(
             store
@@ -63,7 +66,7 @@ async fn memory_session_updates_bind_native_id_values_at_the_adapter_slot() -> A
         stored.id = crate::SchemaValue::from_field(Value::Number(expected_id));
         stored.updated_at = updated_at.into();
         assert_eq!(
-            store.lock()?.sessions.snapshot()?,
+            store.storage_rows(EntityRole::Session)?,
             [FieldMap::from(stored.clone())]
         );
         stored.id = public_id.into();
@@ -138,7 +141,10 @@ async fn memory_session_id_alias_updates_preserve_storage_order_and_output() -> 
         );
         let store = EphemeralStore::new(Arc::new(config));
         let mut stored = seed()?;
-        store.lock()?.sessions.push(stored.clone().into());
+        store.operation(|op| {
+            op.capture_table(EntityRole::Session)?
+                .push(stored.clone().into())
+        })?;
         let updated_at = date("2031-01-02T03:04:05.000Z")?;
         let result = required(
             store
@@ -159,7 +165,7 @@ async fn memory_session_id_alias_updates_preserve_storage_order_and_output() -> 
         stored.updated_at = updated_at.into();
         stored.additional_fields.clear();
         assert_eq!(
-            store.lock()?.sessions.snapshot()?,
+            store.storage_rows(EntityRole::Session)?,
             [FieldMap::from(stored.clone())]
         );
         stored.id = public_id.into();
@@ -207,7 +213,10 @@ async fn memory_session_secondary_updates_apply_hook_id_after_input_fields() -> 
             Arc::new(EphemeralStore::new(config.clone()).with_hooks(vec![Arc::new(IdPatch)]));
         let user = inner.create_user(user_input("owner")?).await?;
         let mut stored = seed()?;
-        inner.lock()?.sessions.push(stored.clone().into());
+        inner.operation(|op| {
+            op.capture_table(EntityRole::Session)?
+                .push(stored.clone().into())
+        })?;
         let mut cached_session = stored.clone();
         cached_session.id = "1".into();
         cached_session.user_id = "1".into();
@@ -252,7 +261,10 @@ async fn memory_session_secondary_updates_apply_hook_id_after_input_fields() -> 
             stored.id = crate::SchemaValue::from_field(Value::Number(300.0));
             stored.updated_at = updated_at.into();
         }
-        assert_eq!(inner.lock()?.sessions.snapshot()?, [FieldMap::from(stored)]);
+        assert_eq!(
+            inner.storage_rows(EntityRole::Session)?,
+            [FieldMap::from(stored)]
+        );
     }
     Ok(())
 }

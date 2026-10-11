@@ -10,14 +10,15 @@ impl EphemeralStore {
         let schema = self.model_fields.plugin_fields(EntityRole::RateLimit);
         let column = schema.record_storage_key("key");
         let rows = self
-            .raw("rateLimit", "findMany", |state| {
+            .raw("rateLimit", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    state.rate_limits.select_refs(|row| {
-                        crate::query::field_matches_equality(
-                            row.get(column).unwrap_or(&Value::Undefined),
-                            &key,
-                        )
-                    })?,
+                    op.capture_table(EntityRole::RateLimit)?
+                        .select_refs(|row| {
+                            Ok(crate::query::field_matches_equality(
+                                &row.field(column)?.unwrap_or_default(),
+                                &key,
+                            ))
+                        })?,
                     Some(self.config.advanced.database.find_many_limit()),
                     None,
                 ))
@@ -114,33 +115,33 @@ impl EphemeralStore {
                 .await?;
             crate::store::validate_increment_one_update(!reset, !patch.is_empty())?;
             let source = self
-                .raw("rateLimit", "incrementOne", |state| {
-                    let selected = state.rate_limits.try_select_refs(|row| {
-                        crate::memory_query::matches_all(
-                            clauses.iter(),
-                            |(column, value, operator)| {
-                                crate::memory_query::matches(
-                                    row.get(column),
-                                    value,
-                                    *operator,
-                                    WhereMode::Sensitive,
-                                )
-                            },
-                        )
-                    })?;
+                .raw("rateLimit", "incrementOne", |op| {
+                    let selected = op
+                        .capture_table(EntityRole::RateLimit)?
+                        .select_refs(|row| {
+                            crate::memory_query::matches_all(
+                                clauses.iter(),
+                                |(column, value, operator)| {
+                                    crate::memory_query::matches(
+                                        row.field(column)?.as_ref(),
+                                        value,
+                                        *operator,
+                                        WhereMode::Sensitive,
+                                    )
+                                },
+                            )
+                        })?;
                     let Some(source) = selected.into_iter().next() else {
                         return Ok(None);
                     };
-                    source.write(|row| {
-                        if !reset {
-                            let column = schema.record_storage_key("count");
-                            let count = row.get(column).and_then(Value::as_f64).unwrap_or(0.0);
-                            let _ = row.insert(column.to_owned(), (count + 1.0).into());
-                        }
-                        // Memory applies set after increments, including colliding physical fields.
-                        row.extend(patch);
-                        Ok(())
-                    })?;
+                    if !reset {
+                        source.increment_number_fields(&[(
+                            schema.record_storage_key("count").to_owned(),
+                            1.0,
+                        )])?;
+                    }
+                    // Memory applies set after increments, including colliding physical fields.
+                    source.apply_patch(patch)?;
                     Ok(Some(source))
                 })
                 .await?;
@@ -188,18 +189,19 @@ impl EphemeralStore {
         )?;
         let schema = self.model_fields.plugin_fields(EntityRole::RateLimit);
         let column = schema.record_storage_key("lastRequest");
-        self.raw("rateLimit", "deleteMany", |state| {
-            state.rate_limits.try_retain(|row| {
+        self.raw("rateLimit", "deleteMany", |op| {
+            let table = op.capture_table(EntityRole::RateLimit)?;
+            let selected = table.select_refs(|row| {
                 crate::memory_query::matches_all([column], |column| {
                     crate::memory_query::matches(
-                        row.get(column),
+                        row.field(column)?.as_ref(),
                         &cutoff,
                         WhereOperator::Lt,
                         WhereMode::Sensitive,
                     )
                 })
-                .map(|expired| !expired)
-            })
+            })?;
+            op.replace_table(EntityRole::RateLimit, table.without_refs(&selected)?)
         })
         .await
     }

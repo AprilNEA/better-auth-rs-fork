@@ -15,6 +15,8 @@ pub use function::FieldFunction;
 mod object;
 pub use object::FieldObject;
 pub(crate) use object::{FieldObjectSource, ObjectIdentity};
+mod primitive;
+pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
 
 /// An immutable Date object. Clones retain identity, including for an invalid Date.
@@ -632,13 +634,7 @@ impl FieldValue {
                     "JavaScript function source is unavailable for this Rust field callback",
                 ));
             }
-            Self::Object(fields) => {
-                // Custom callable coercion requires the JavaScript receiver and invocation contract.
-                if fields.get("toString")?.is_some() {
-                    return Err(AuthError::type_error("No default value"));
-                }
-                "[object Object]".into()
-            }
+            Self::Object(_) => self.primitive(PrimitiveHint::String)?.display_utf16()?,
             Self::Date(value) => match value.to_datetime()? {
                 Some(value) => value
                     .with_timezone(&chrono::Local)

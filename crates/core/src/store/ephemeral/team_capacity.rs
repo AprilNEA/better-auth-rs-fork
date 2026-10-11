@@ -1,13 +1,36 @@
 use super::fields::PreparedOrganizationFields;
-use super::rows::{RowRef, Rows};
+use super::rows::RowRef;
+use super::table::TableRef;
 use super::*;
 use better_auth_schema_registry::EntityRole;
 
 pub(super) struct StagedTeamMember {
     pub(super) member: crate::TeamMember,
     pub(super) created: bool,
-    pub(super) base: Rows<FieldMap>,
-    pub(super) working: Rows<FieldMap>,
+    pub(super) base: TableRef<FieldMap>,
+    pub(super) working: TableRef<FieldMap>,
+}
+
+pub(super) struct TeamMemberLookup {
+    key: Vec<(String, Value)>,
+    pair: Option<Vec<(String, Value)>>,
+}
+
+impl TeamMemberLookup {
+    pub(super) fn find(&self, table: &TableRef<FieldMap>) -> AuthResult<Option<RowRef<FieldMap>>> {
+        let row = table
+            .select_refs(|row| super::organization_rows::matches(row, &self.key))?
+            .into_iter()
+            .next();
+        match (row, &self.pair) {
+            (Some(row), _) => Ok(Some(row)),
+            (None, Some(pair)) => Ok(table
+                .select_refs(|row| super::organization_rows::matches(row, pair))?
+                .into_iter()
+                .next()),
+            (None, None) => Ok(None),
+        }
+    }
 }
 
 fn increment_count(team: &FieldMap, column: &str, delta: f64) -> Value {
@@ -59,8 +82,8 @@ impl PreparedTeamSeats {
             .shallow_fields()
     }
 
-    pub(super) fn current(&self, teams: &Rows<FieldMap>) -> AuthResult<FieldMap> {
-        if !teams.contains_ref(&self.source) {
+    pub(super) fn current(&self, teams: &TableRef<FieldMap>) -> AuthResult<FieldMap> {
+        if !teams.contains_ref(&self.source)? {
             return Err(AuthError::conflict(
                 "Team changed while field transforms were pending",
             ));
@@ -68,7 +91,7 @@ impl PreparedTeamSeats {
         self.source.shallow_fields()
     }
 
-    pub(super) fn is_current(&self, teams: &Rows<FieldMap>, actual: usize) -> AuthResult<bool> {
+    pub(super) fn is_current(&self, teams: &TableRef<FieldMap>, actual: usize) -> AuthResult<bool> {
         let team = self.current(teams)?;
         let unchanged = match (team.get(&self.column), &self.count) {
             (Some(current), Some(original)) => current.same_value_zero(original),
@@ -79,8 +102,8 @@ impl PreparedTeamSeats {
     }
 
     pub(super) fn apply(
-        self,
-        teams: &Rows<FieldMap>,
+        &self,
+        teams: &TableRef<FieldMap>,
         actual: usize,
     ) -> AuthResult<(RowRef<FieldMap>, FieldMap)> {
         if !self.is_current(teams, actual)? {
@@ -89,7 +112,7 @@ impl PreparedTeamSeats {
             ));
         }
         let team = self.fields()?;
-        Ok((self.source, team))
+        Ok((self.source.clone(), team))
     }
 }
 
@@ -123,32 +146,53 @@ impl EphemeralStore {
             .collect()
     }
 
-    pub(super) fn matches_team_member(row: &FieldMap, selectors: &[(String, Value)]) -> bool {
-        selectors.iter().all(|(name, value)| {
-            row.get(name)
-                .unwrap_or(&Value::Undefined)
-                .strict_equals(value)
-        })
+    pub(super) fn matches_team_member(
+        row: &RowRef<FieldMap>,
+        selectors: &[(String, Value)],
+    ) -> AuthResult<bool> {
+        super::organization_rows::matches(row, selectors)
     }
 
     pub(super) fn team_member_by_key_or_pair(
         &self,
-        state: &State,
+        op: &super::operation::MemoryOperation<'_>,
         team_id: &Value,
         user_id: &Value,
         key: &str,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        let selectors = self.team_member_field_selectors(vec![("membershipKey", key.into())])?;
-        if let Some(row) = state
-            .team_members
-            .first_ref(|row| Self::matches_team_member(row, &selectors))?
-        {
-            return Ok(Some(row));
+        self.prepare_team_member_lookup(op, team_id, user_id, key)
+            .map(|(row, _)| row)
+    }
+
+    pub(super) fn prepare_team_member_lookup(
+        &self,
+        op: &super::operation::MemoryOperation<'_>,
+        team_id: &Value,
+        user_id: &Value,
+        key: &str,
+    ) -> AuthResult<(Option<RowRef<FieldMap>>, TeamMemberLookup)> {
+        let key = self.team_member_field_selectors(vec![("membershipKey", key.into())])?;
+        let row = op
+            .capture_table(EntityRole::TeamMember)?
+            .select_refs(|row| Self::matches_team_member(row, &key))?
+            .into_iter()
+            .next();
+        if row.is_some() {
+            return Ok((row, TeamMemberLookup { key, pair: None }));
         }
-        let selectors = self.team_member_selectors(team_id, Some(user_id))?;
-        state
-            .team_members
-            .first_ref(|row| Self::matches_team_member(row, &selectors))
+        let pair = self.team_member_selectors(team_id, Some(user_id))?;
+        let row = op
+            .capture_table(EntityRole::TeamMember)?
+            .select_refs(|row| Self::matches_team_member(row, &pair))?
+            .into_iter()
+            .next();
+        Ok((
+            row,
+            TeamMemberLookup {
+                key,
+                pair: Some(pair),
+            },
+        ))
     }
 
     pub(super) async fn find_team_member_by_key_or_pair(
@@ -157,10 +201,8 @@ impl EphemeralStore {
         user_id: &Value,
         key: &str,
     ) -> AuthResult<Option<crate::TeamMember>> {
-        let row = {
-            let state = self.lock()?;
-            self.team_member_by_key_or_pair(&state, team_id, user_id, key)?
-        };
+        let row =
+            self.operation(|op| self.team_member_by_key_or_pair(op, team_id, user_id, key))?;
         Ok(self
             .output_record_refs(EntityRole::TeamMember, row.into_iter().collect())
             .await?
@@ -178,7 +220,7 @@ impl EphemeralStore {
         let (member, created) = staged
             .create_team_member_with_key(team_id, user_id, key)
             .await?;
-        let working = staged.lock()?.team_members.clone();
+        let working = staged.operation(|op| op.capture_table(EntityRole::TeamMember))?;
         Ok(StagedTeamMember {
             member,
             created,
@@ -194,7 +236,7 @@ impl EphemeralStore {
         key: &str,
     ) -> AuthResult<(crate::TeamMember, bool)> {
         let result = async {
-            let mut fields = self
+            let fields = self
                 .organization_storage_fields(
                     EntityRole::TeamMember,
                     [
@@ -208,13 +250,7 @@ impl EphemeralStore {
                     true,
                 )
                 .await?;
-            let row = {
-                let mut state = self.lock()?;
-                if let Some(id) = self.next_serial_id(state.team_members.len()) {
-                    let _ = fields.insert("id".into(), id);
-                }
-                state.team_members.push_ref(fields)
-            };
+            let row = self.insert_organization_row(EntityRole::TeamMember, fields)?;
             self.output_record_refs(EntityRole::TeamMember, vec![row])
                 .await?
                 .into_iter()
@@ -339,31 +375,31 @@ impl EphemeralStore {
             .field_config(EntityRole::Team)?
             .record_storage_key("memberCount")
             .to_owned();
-        let source = {
-            let state = self.lock()?;
-            let Some(source) = state.teams.first_ref(|row| {
-                row.get("id")
-                    .unwrap_or(&Value::Undefined)
-                    .strict_equals(&team_id.field_value())
-            })?
-            else {
-                return Ok(());
-            };
-            let changed = source.write(|row| {
-                if !crate::query::field_compare(
-                    row.get(&column).unwrap_or(&Value::Undefined),
-                    &minimum.field_value(),
-                )?
-                .is_some_and(|order| !order.is_lt())
-                {
-                    return Ok(false);
-                }
-                let count = increment_count(row, &column, -(deleted as f64));
-                let _ = row.insert(column, count);
-                Ok(true)
-            })?;
-            changed.then_some(source)
-        };
+        let source = self.operation(|op| {
+            let selected = op
+                .capture_table(EntityRole::Team)?
+                .select_refs(|row| {
+                    crate::memory_query::matches_all([0, 1], |clause| {
+                        if clause == 0 {
+                            return Ok(row
+                                .field("id")?
+                                .unwrap_or_default()
+                                .strict_equals(&team_id.field_value()));
+                        }
+                        Ok(crate::query::field_compare(
+                            &row.field(&column)?.unwrap_or_default(),
+                            &minimum.field_value(),
+                        )?
+                        .is_some_and(|order| !order.is_lt()))
+                    })
+                })?
+                .into_iter()
+                .next();
+            if let Some(source) = &selected {
+                source.increment_number_fields(&[(column, -(deleted as f64))])?;
+            }
+            Ok(selected)
+        })?;
         let _ = self
             .output_record_refs::<FieldMap>(EntityRole::Team, source.into_iter().collect())
             .await?;
@@ -390,7 +426,7 @@ mod tests {
                     ..Default::default()
                 })
                 .await?;
-            let original = store.lock()?.teams.snapshot()?;
+            let original = store.operation(|op| op.capture_state())?.teams.snapshot()?;
             let started = Arc::new(Notify::new());
             let release = Arc::new(Notify::new());
             let calls = Arc::new(AtomicUsize::new(0));
@@ -439,8 +475,17 @@ mod tests {
                 async move { store.add_team_member(&id, "recipient", Some(1)).await }
             });
             started.notified().await;
-            assert!(store.lock()?.team_members.snapshot()?.is_empty());
-            assert_eq!(store.lock()?.teams.snapshot()?, original);
+            assert!(
+                store
+                    .operation(|op| op.capture_state())?
+                    .team_members
+                    .snapshot()?
+                    .is_empty()
+            );
+            assert_eq!(
+                store.operation(|op| op.capture_state())?.teams.snapshot()?,
+                original
+            );
             if mode == "cancel" {
                 task.abort();
                 assert!(task.await.is_err_and(|error| error.is_cancelled()));
@@ -461,9 +506,9 @@ mod tests {
                 calls.load(Ordering::SeqCst),
                 if mode == "reject" { 2 } else { 1 }
             );
-            let state = store.lock()?;
+            let state = store.operation(|op| op.capture_state())?;
             if mode == "commit" {
-                assert_eq!(state.team_members.len(), 1);
+                assert_eq!(state.team_members.len()?, 1);
                 assert_eq!(
                     state
                         .teams
@@ -472,7 +517,7 @@ mod tests {
                     Value::Number(1.0)
                 );
             } else {
-                assert_eq!(state.team_members.len(), 0);
+                assert_eq!(state.team_members.len()?, 0);
                 assert_eq!(state.teams.snapshot()?, original);
             }
         }

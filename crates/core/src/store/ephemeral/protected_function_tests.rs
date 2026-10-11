@@ -283,7 +283,9 @@ impl Harness {
     }
 
     fn storage(&self, expected: &Value) -> AuthResult<()> {
-        let rows = self.raw.lock()?.users.snapshot()?;
+        let rows = self
+            .raw
+            .operation(|op| op.capture_state()?.users.snapshot())?;
         let rows = rows
             .iter()
             .map(|row| self.row(row))

@@ -17,16 +17,13 @@ impl EphemeralStore {
             .zip(rows)
             .map(|(mut fields, source)| {
                 let order = fields.keys().cloned().collect();
-                source.read(|row| {
-                    for name in ["credential", "updatedAt"] {
-                        if !schema.fields().contains_key(name)
-                            && let Some(value) = row.get(name)
-                        {
-                            let _ = fields.insert(name.into(), value.clone());
-                        }
+                for name in ["credential", "updatedAt"] {
+                    if !schema.fields().contains_key(name)
+                        && let Some(value) = source.field(name)?
+                    {
+                        let _ = fields.insert(name.into(), value);
                     }
-                    Ok(())
-                })?;
+                }
                 let mut passkey = Passkey::from_field_values(fields)?;
                 passkey.field_order = order;
                 Ok(passkey)
@@ -53,8 +50,12 @@ impl EphemeralStore {
         predicate: impl Fn(&FieldMap) -> bool + Send,
     ) -> AuthResult<Option<Passkey>> {
         let selected = self
-            .raw("passkey", "findOne", |state| {
-                state.passkeys.first_ref(predicate)
+            .raw("passkey", "findOne", move |op| {
+                Ok(op
+                    .capture_table(EntityRole::Passkey)?
+                    .select_refs(|row| Ok(predicate(&row.shallow_fields()?)))?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -129,13 +130,13 @@ impl PasskeyStore for EphemeralStore {
         let column = schema.record_storage_key("userId");
         let value = self.plugin_query_value(EntityRole::Passkey, "userId", user_id.clone())?;
         let selected = self
-            .raw("passkey", "findMany", |state| {
+            .raw("passkey", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    state.passkeys.select_refs(|row| {
-                        crate::query::field_matches_equality(
-                            row.get(column).unwrap_or(&FieldValue::Undefined),
+                    op.capture_table(EntityRole::Passkey)?.select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(column)?.unwrap_or_default(),
                             &value,
-                        )
+                        ))
                     })?,
                     Some(self.config.advanced.database.find_many_limit()),
                     None,

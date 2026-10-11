@@ -16,9 +16,9 @@ mod team_details;
 #[cfg(test)]
 mod tests;
 
-struct NativeRelationship {
+struct NativeRelationship<T> {
     parent: FieldMap,
-    children: Vec<Vec<RowRef<FieldMap>>>,
+    children: Vec<Vec<RowRef<T>>>,
     ids: Vec<Vec<Value>>,
 }
 
@@ -33,41 +33,32 @@ fn raw_relation<T: super::rows::ObjectRow + Clone + Send + 'static>(
     }
 }
 
-fn native_relationships(
-    parents: Vec<FieldMap>,
-    relations: &[(
-        &super::rows::Rows<FieldMap>,
-        &crate::store::ResolvedJoin,
-        f64,
-    )],
-) -> AuthResult<Vec<NativeRelationship>> {
+fn native_relationships<T: super::rows::ObjectRow + Clone>(
+    parents: Vec<RecordSource>,
+    relations: &[(EntityRole, &crate::store::ResolvedJoin, f64)],
+    mut capture_table: impl FnMut(EntityRole) -> AuthResult<super::table::TableRef<T>>,
+) -> AuthResult<Vec<NativeRelationship<T>>> {
     let mut groups = indexmap::IndexMap::new();
     for parent in parents {
-        let id = parent
-            .get("id")
-            .unwrap_or(&Value::Undefined)
-            .display_utf16()?;
-        let values = relations
-            .iter()
-            .map(|(_, relation, _)| parent.get(&relation.from).cloned().unwrap_or_default())
-            .collect::<Vec<_>>();
-        let group = groups
-            .entry(id.as_utf16().to_vec())
-            .or_insert_with(|| NativeRelationship {
-                parent,
+        let id = parent.field("id")?.unwrap_or_default().display_utf16()?;
+        let group = match groups.entry(id.as_utf16().to_vec()) {
+            indexmap::map::Entry::Occupied(entry) => entry.into_mut(),
+            indexmap::map::Entry::Vacant(entry) => entry.insert(NativeRelationship {
+                parent: parent.shallow_fields()?,
                 children: vec![Vec::new(); relations.len()],
                 ids: vec![Vec::new(); relations.len()],
-            });
-        for ((((children, relation, limit), from), selected), ids) in relations
+            }),
+        };
+        for (((role, relation, limit), selected), ids) in relations
             .iter()
-            .zip(values)
             .zip(&mut group.children)
             .zip(&mut group.ids)
         {
-            let matches = children.select_refs(|row| {
-                row.get(&relation.to)
-                    .unwrap_or(&Value::Undefined)
-                    .strict_equals(&from)
+            let matches = capture_table(*role)?.select_refs(|row| {
+                Ok(row
+                    .field(&relation.to)?
+                    .unwrap_or_default()
+                    .strict_equals(&parent.field(&relation.from)?.unwrap_or_default()))
             })?;
             if !relation.many {
                 *selected = matches.into_iter().take(1).collect();
@@ -78,7 +69,7 @@ fn native_relationships(
                 if added as f64 >= *limit {
                     break;
                 }
-                let id = child.read(|row| Ok(row.get("id").cloned().unwrap_or_default()))?;
+                let id = child.field("id")?.unwrap_or_default();
                 if !ids.iter().any(|seen| seen.same_value_zero(&id)) {
                     ids.push(id);
                     selected.push(child);
@@ -103,19 +94,22 @@ impl EphemeralStore {
             |_, _| false,
         )?;
         let limit = self.config.advanced.database.find_many_limit();
-        let (members, teams) = {
-            let state = self.lock()?;
-            let rows = state
-                .team_members
-                .snapshot()?
+        let (members, teams) = self.operation(|op| {
+            let rows = op
+                .capture_table(EntityRole::TeamMember)?
+                .select_refs(|row| {
+                    Ok(
+                        super::organization_rows::field(row, &member_schema, "userId")?
+                            .strict_equals(&user_id.field_value()),
+                    )
+                })?
                 .into_iter()
-                .filter(|row| {
-                    organization_value(row, &member_schema, "userId")
-                        .strict_equals(&user_id.field_value())
-                })
+                .map(RecordSource::Live)
                 .collect();
-            let groups = native_relationships(rows, &[(&state.teams, &join, limit)])?;
-            crate::query::paginate_memory(groups, Some(limit), None)
+            let groups = native_relationships(rows, &[(EntityRole::Team, &join, limit)], |role| {
+                op.capture_table(role)
+            })?;
+            Ok(crate::query::paginate_memory(groups, Some(limit), None)
                 .into_iter()
                 .map(|mut group| {
                     let children = group.children.remove(0);
@@ -130,8 +124,8 @@ impl EphemeralStore {
                     );
                     (source, children)
                 })
-                .unzip::<_, _, Vec<_>, Vec<_>>()
-        };
+                .unzip::<_, _, Vec<_>, Vec<_>>())
+        })?;
         let teams = Arc::new(teams);
         let store = self.clone();
         let projected = self

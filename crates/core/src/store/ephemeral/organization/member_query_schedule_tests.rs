@@ -79,15 +79,17 @@ impl FieldObjectSource for Operand {
             if read == 1
                 && let Some(store) = &self.mutation
             {
-                let row = store
-                    .lock()?
-                    .members
-                    .first_ref(|row| {
-                        row.get("id").and_then(Value::as_str) == Some("following-member")
-                    })?
-                    .ok_or_else(|| AuthError::internal("Expected following Member"))?;
-                row.write(|fields| {
-                    let _ = fields.insert("role".into(), "zz".into());
+                store.operation(|op| {
+                    let row = op
+                        .capture_table(EntityRole::Member)?
+                        .select_refs(|row| {
+                            Ok(row.field("id")?.as_ref().and_then(Value::as_str)
+                                == Some("following-member"))
+                        })?
+                        .into_iter()
+                        .next()
+                        .ok_or_else(|| AuthError::internal("Expected following Member"))?;
+                    let _ = row.set_field("role".into(), "zz".into())?;
                     Ok(())
                 })?;
             }

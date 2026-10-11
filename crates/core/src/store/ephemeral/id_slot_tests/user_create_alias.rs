@@ -66,7 +66,7 @@ async fn create_alias(slot: &'static str, serial: bool) -> AuthResult<JsonValue>
     let _ = request_fields.remove("label");
     let _ = request_fields.insert("aliasId".into(), json!("A"));
     let user = store.create_user(input).await?;
-    let stored = store.lock()?.users.snapshot()?;
+    let stored = store.operation(|op| op.capture_users()?.snapshot())?;
     assert_eq!(stored.len(), 1);
     assert!(required(stored.first())?.additional_fields.is_empty());
     Ok(json!({
@@ -149,7 +149,7 @@ async fn memory_user_id_alias_reads_use_the_canonical_id_before_output_conversio
                 created.additional_fields,
                 [("aliasId".into(), expected)].into()
             );
-            let stored = store.lock()?.users.snapshot()?;
+            let stored = store.operation(|op| op.capture_users()?.snapshot())?;
             assert_eq!(stored.len(), 1);
             assert!(required(stored.first())?.additional_fields.is_empty());
             assert_eq!(required(store.get_user_by_id("null").await?)?, created);
@@ -162,7 +162,10 @@ async fn memory_user_id_alias_reads_use_the_canonical_id_before_output_conversio
                 created
             );
             assert_eq!(store.output_users(stored.clone()).await?, [created]);
-            assert_eq!(store.lock()?.users.snapshot()?, stored);
+            assert_eq!(
+                store.operation(|op| op.capture_users()?.snapshot())?,
+                stored
+            );
             assert_eq!(events(&trace)?, vec![json!("null"); 4]);
         }
     }

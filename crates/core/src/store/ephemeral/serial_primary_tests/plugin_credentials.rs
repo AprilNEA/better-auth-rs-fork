@@ -59,9 +59,7 @@ async fn serial_api_key_ids_bind_queries_sort_numerically_and_reuse_row_count() 
     }
     assert_eq!(
         store
-            .lock()?
-            .api_keys
-            .snapshot()?
+            .storage_rows(EntityRole::ApiKey)?
             .iter()
             .map(|row| row.get("id").cloned().unwrap_or_default())
             .collect::<Vec<_>>(),
@@ -113,7 +111,7 @@ async fn serial_api_key_ids_bind_queries_sort_numerically_and_reuse_row_count() 
     store.delete_api_key(&"002".to_owned().into()).await?;
     assert!(store.get_api_key_by_hash("2").await?.is_none());
     assert_eq!(store.create_api_key(api_key("reused")).await?.id, "12");
-    let before_delete = store.lock()?.api_keys.snapshot()?;
+    let before_delete = store.storage_rows(EntityRole::ApiKey)?;
     assert_eq!(
         before_delete
             .iter()
@@ -125,7 +123,7 @@ async fn serial_api_key_ids_bind_queries_sort_numerically_and_reuse_row_count() 
     assert!(store.get_api_key_by_hash("12").await?.is_none());
     assert!(store.get_api_key_by_hash("reused").await?.is_none());
     assert_eq!(
-        store.lock()?.api_keys.snapshot()?,
+        store.storage_rows(EntityRole::ApiKey)?,
         before_delete
             .into_iter()
             .filter(|row| row.get("id") != Some(&Value::Number(12.0)))
@@ -160,19 +158,20 @@ async fn serial_api_key_quota_is_atomic_and_expiration_uses_raw_ids() -> AuthRes
     let past = crate::FieldDate::from(Utc::now() - chrono::Duration::hours(1));
     expired.expires_at = Some(past.clone());
     let _ = store.create_api_key(expired).await?;
-    {
-        let mut state = store.lock()?;
-        let mut shadow = required(state.api_keys.snapshot()?.first()).cloned()?;
+    store.operation(|op| {
+        let table = op.capture_table(EntityRole::ApiKey)?;
+        let mut shadow = required(table.snapshot()?.first()).cloned()?;
         let _ = shadow.insert("id".into(), "001".into());
         let _ = shadow.insert("key".into(), "expired-string".into());
         let _ = shadow.insert("expiresAt".into(), past.into());
-        state.api_keys.push(shadow);
-    }
+        table.push(shadow)?;
+        Ok(())
+    })?;
     assert_eq!(store.delete_expired_api_keys().await?, 2);
     assert_eq!(required(store.get_api_key_by_hash("live").await?)?.id, "1");
     assert!(store.get_api_key_by_hash("expired-number").await?.is_none());
     assert!(store.get_api_key_by_hash("expired-string").await?.is_none());
-    assert_eq!(store.lock()?.api_keys.len(), 1);
+    assert_eq!(store.storage_rows(EntityRole::ApiKey)?.len(), 1);
     Ok(())
 }
 
@@ -186,13 +185,15 @@ async fn api_key_numeric_id_sort_keeps_unordered_subtractions_equal() -> AuthRes
         let store = serial_store();
         let _ = store.create_api_key(api_key("first")).await?;
         let _ = store.create_api_key(api_key("second")).await?;
-        store.lock()?.api_keys.update_each(|row| {
-            let id = Value::Number(if row.get("key") == Some(&Value::from("first")) {
-                left
-            } else {
-                right
-            });
-            let _ = row.insert("id".into(), id);
+        store.operation(|op| {
+            for row in op.capture_table(EntityRole::ApiKey)?.snapshot_refs()? {
+                let id = Value::Number(if row.field("key")? == Some(Value::from("first")) {
+                    left
+                } else {
+                    right
+                });
+                let _ = row.set_field("id".into(), id)?;
+            }
             Ok(())
         })?;
         for direction in ["asc", "desc"] {
@@ -220,9 +221,7 @@ async fn serial_passkey_ids_bind_updates_and_delete_all_reused_ids() -> AuthResu
     }
     assert_eq!(
         store
-            .lock()?
-            .passkeys
-            .snapshot()?
+            .storage_rows(EntityRole::Passkey)?
             .iter()
             .map(|row| (
                 row.get("id").cloned().unwrap_or_default(),
@@ -260,7 +259,7 @@ async fn serial_passkey_ids_bind_updates_and_delete_all_reused_ids() -> AuthResu
     );
     store.delete_passkey("002").await?;
     assert_eq!(store.create_passkey(passkey("reused")).await?.id, "3");
-    let before_delete = store.lock()?.passkeys.snapshot()?;
+    let before_delete = store.storage_rows(EntityRole::Passkey)?;
     assert_eq!(
         before_delete
             .iter()
@@ -277,7 +276,7 @@ async fn serial_passkey_ids_bind_updates_and_delete_all_reused_ids() -> AuthResu
             .is_none()
     );
     assert_eq!(
-        store.lock()?.passkeys.snapshot()?,
+        store.storage_rows(EntityRole::Passkey)?,
         before_delete
             .into_iter()
             .filter(|row| row.get("id") != Some(&Value::Number(3.0)))
@@ -306,9 +305,7 @@ async fn serial_two_factor_ids_keep_backup_code_and_lockout_guards() -> AuthResu
     assert_eq!(second.user_id, "2");
     assert_eq!(
         store
-            .lock()?
-            .two_factors
-            .snapshot()?
+            .storage_rows(EntityRole::TwoFactor)?
             .iter()
             .map(|row| Ok((
                 required(row.get("id"))?.clone(),

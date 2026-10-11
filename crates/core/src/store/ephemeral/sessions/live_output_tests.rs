@@ -109,7 +109,7 @@ fn observe_user(row: &UserView, raw: bool) -> AuthResult<JsonValue> {
 }
 
 fn observe_memory(store: &EphemeralStore, trace: &Trace) -> AuthResult<JsonValue> {
-    let state = store.lock()?;
+    let state = store.operation(|op| op.capture_state())?;
     let users = state
         .users
         .snapshot()?
@@ -175,9 +175,12 @@ fn reader(writer: &EphemeralStore, path: &str, trace: &Trace) -> EphemeralStore 
                                         "Session output must name a declared fixture row",
                                     )?;
                                     let stored = required(
-                                        writer.lock()?.sessions.find(|row| {
-                                            row.get("label").and_then(Value::as_str) == Some(label)
-                                        })?,
+                                        writer.storage_rows(EntityRole::Session)?.into_iter().find(
+                                            |row| {
+                                                row.get("label").and_then(Value::as_str)
+                                                    == Some(label)
+                                            },
+                                        ),
                                         "Callback writer must find the selected Session",
                                     )?;
                                     let stored = SessionView::from_field_values(stored)?;

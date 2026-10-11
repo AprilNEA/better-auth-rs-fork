@@ -62,9 +62,7 @@ fn observation(user: &UserView, slot: &str) -> AuthResult<JsonValue> {
 
 fn raw_rows(store: &EphemeralStore, slot: &str) -> AuthResult<Vec<JsonValue>> {
     store
-        .lock()?
-        .users
-        .snapshot()?
+        .operation(|op| op.capture_state()?.users.snapshot())?
         .iter()
         .map(|user| observation(user, slot))
         .collect()

@@ -28,16 +28,10 @@ impl InvitationStore for EphemeralStore {
         if let Some(value) = input.additional_fields.remove("inviterId") {
             invitation.inviter_id = crate::SchemaValue::Dynamic(value);
         }
-        let mut invitation = self
+        let invitation = self
             .create_record(EntityRole::Invitation, invitation, input.additional_fields)
             .await?;
-        let source = {
-            let mut state = self.lock()?;
-            if let Some(id) = self.next_serial_id(state.invitations.len()) {
-                let _ = invitation.insert("id".into(), id);
-            }
-            state.invitations.push_ref(invitation)
-        };
+        let source = self.insert_organization_row(EntityRole::Invitation, invitation)?;
         Ok(self
             .output_record_refs(EntityRole::Invitation, vec![source])
             .await?
@@ -50,9 +44,10 @@ impl InvitationStore for EphemeralStore {
         let id = self
             .organization_query(EntityRole::Invitation, "id", id.clone())?
             .field_value();
-        let row = self.lock()?.invitations.first_ref(|row| {
-            crate::query::field_matches_equality(row.get("id").unwrap_or(&Value::Undefined), &id)
-        })?;
+        let row = self
+            .select_organization_rows(EntityRole::Invitation, &[("id".into(), id)])?
+            .into_iter()
+            .next();
         match row {
             Some(row) => Ok(self
                 .output_record_refs(EntityRole::Invitation, vec![row])
@@ -105,21 +100,13 @@ impl InvitationStore for EphemeralStore {
             )
             .await?;
         let source = self
-            .raw("invitation", "incrementOne", |state| {
-                let selected = state.invitations.select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        row.get("id").unwrap_or(&Value::Undefined),
-                        &id,
-                    )
-                })?;
-                let source = selected.into_iter().next();
-                if let Some(source) = &source {
-                    source.write(|row| {
-                        patch.apply_to(row);
-                        Ok(())
-                    })?;
-                }
-                Ok(source)
+            .raw("invitation", "incrementOne", |_| {
+                self.patch_organization_rows(
+                    EntityRole::Invitation,
+                    &[("id".into(), id)],
+                    patch.apply(FieldMap::new()),
+                    true,
+                )
             })
             .await?;
         match source {
@@ -155,23 +142,14 @@ impl InvitationStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let source = {
-            let state = self.lock()?;
-            let selected = state.invitations.select_refs(|row| {
-                crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&Value::Undefined),
-                    &id,
-                )
-            })?;
-            for source in &selected {
-                source.write(|row| {
-                    patch.clone().apply_to(row);
-                    Ok(())
-                })?;
-            }
-            selected.into_iter().next()
-        }
-        .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
+        let source = self
+            .patch_organization_rows(
+                EntityRole::Invitation,
+                &[("id".into(), id)],
+                patch.apply(FieldMap::new()),
+                false,
+            )?
+            .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
         Ok(self
             .output_record_refs(EntityRole::Invitation, vec![source])
             .await?
@@ -187,9 +165,13 @@ impl InvitationStore for EphemeralStore {
     ) -> AuthResult<Vec<Invitation>> {
         let org = self.organization_query(EntityRole::Invitation, "organizationId", org.clone())?;
         let schema = self.field_config(EntityRole::Invitation)?;
-        let rows = self.lock()?.invitations.select_refs(|row| {
-            organization_value(row, &schema, "organizationId").strict_equals(&org.field_value())
-        })?;
+        let rows = self.select_organization_rows(
+            EntityRole::Invitation,
+            &[(
+                schema.record_storage_key("organizationId").into(),
+                org.field_value(),
+            )],
+        )?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
@@ -239,12 +221,10 @@ impl EphemeralStore {
     }
 
     pub(in crate::store::ephemeral) fn matches_pending_invitation(
-        row: &FieldMap,
+        row: &super::super::rows::RowRef<FieldMap>,
         selectors: &[(String, Value)],
-    ) -> bool {
-        selectors.iter().all(|(name, value)| {
-            crate::query::field_matches_equality(row.get(name).unwrap_or(&Value::Undefined), value)
-        })
+    ) -> AuthResult<bool> {
+        super::super::organization_rows::matches(row, selectors)
     }
 
     async fn pending_invitation_rows(
@@ -253,10 +233,7 @@ impl EphemeralStore {
         email: Option<&str>,
     ) -> AuthResult<Vec<Invitation>> {
         let selectors = self.pending_invitation_selectors(organization_id, email)?;
-        let rows = self
-            .lock()?
-            .invitations
-            .select_refs(|row| Self::matches_pending_invitation(row, &selectors))?;
+        let rows = self.select_organization_rows(EntityRole::Invitation, &selectors)?;
         self.project_pending_invitation_rows(rows).await
     }
 

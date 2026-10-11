@@ -132,7 +132,8 @@ impl EphemeralStore {
                     else {
                         return Ok(supplied.filter(|value| !value.is_undefined()));
                     };
-                    let row_count = self.lock()?.sessions.len();
+                    let row_count =
+                        self.operation(|op| op.capture_table(EntityRole::Session)?.len())?;
                     let value = self
                         .config
                         .advanced
@@ -144,8 +145,10 @@ impl EphemeralStore {
                 |name, field, value| {
                     let value = self.memory_plugin_field_input(field, value)?;
                     Ok(if name == "id" {
-                        self.next_serial_id(self.lock()?.sessions.len())
-                            .unwrap_or(value)
+                        self.next_serial_id(
+                            self.operation(|op| op.capture_table(EntityRole::Session)?.len())?,
+                        )
+                        .unwrap_or(value)
                     } else {
                         value
                     })
@@ -153,11 +156,12 @@ impl EphemeralStore {
             )
             .await?;
         let source = self
-            .raw("session", "create", |state| {
-                if let Some(id) = self.next_serial_id(state.sessions.len()) {
+            .raw("session", "create", |op| {
+                let table = op.capture_table(EntityRole::Session)?;
+                if let Some(id) = self.next_serial_id(table.len()?) {
                     let _ = storage.insert("id".into(), id);
                 }
-                Ok(RecordSource::Live(state.sessions.push_ref(storage)))
+                Ok(RecordSource::Live(table.push(storage)?))
             })
             .await?;
         self.output_session(source).await
@@ -266,7 +270,7 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         self.delete_sessions_with_hooks(
             || {
                 let (column, token) = self.memory_session_token_query(token.clone())?;
-                Ok(move |row: &FieldMap| Ok(session_token_matches(row, &column, &token)))
+                Ok(vec![(column, token, crate::WhereOperator::Eq)])
             },
             true,
         )
@@ -412,10 +416,17 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
     ) -> AuthResult<Option<SessionView>> {
         let (column, token) = self.memory_session_token_query(token.clone())?;
         let session = self
-            .raw("session", "findOne", |state| {
-                Ok(state
-                    .sessions
-                    .first_ref(|row| session_token_matches(row, &column, &token))?
+            .raw("session", "findOne", |op| {
+                Ok(op
+                    .capture_table(EntityRole::Session)?
+                    .select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(&column)?.unwrap_or_default(),
+                            &token,
+                        ))
+                    })?
+                    .into_iter()
+                    .next()
                     .map(RecordSource::Live))
             })
             .await?;
@@ -510,24 +521,26 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
             .then(|| self.memory_session_field_query("expiresAt", Utc::now().into()))
             .transpose()?;
         let sessions: Vec<_> = self
-            .raw("session", "findMany", |state| {
+            .raw("session", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    state
-                        .sessions
-                        .try_select_refs(|session| {
-                            let fields = session;
-                            Ok(crate::query::field_matches_equality(
-                                fields.get(&user_column).unwrap_or(&Value::Undefined),
-                                &user_id,
-                            ) && match &expiry {
-                                Some((column, now)) => {
-                                    crate::query::field_compare(
-                                        fields.get(column).unwrap_or(&Value::Undefined),
-                                        now,
-                                    )? == Some(std::cmp::Ordering::Greater)
-                                }
-                                None => true,
-                            })
+                    op.capture_table(EntityRole::Session)?
+                        .select_refs(|session| {
+                            let clauses =
+                                std::iter::once((&user_column, &user_id, crate::WhereOperator::Eq))
+                                    .chain(expiry.as_ref().map(|(column, value)| {
+                                        (column, value, crate::WhereOperator::Gt)
+                                    }));
+                            crate::memory_query::matches_all(
+                                clauses,
+                                |(column, value, operator)| {
+                                    crate::memory_query::matches(
+                                        session.field(column)?.as_ref(),
+                                        value,
+                                        operator,
+                                        crate::WhereMode::Sensitive,
+                                    )
+                                },
+                            )
                         })?
                         .into_iter()
                         .map(RecordSource::Live)
@@ -569,10 +582,17 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         let snapshot = async {
             let (column, converted) = self.memory_session_token_query(token.clone())?;
             let session = self
-                .raw("session", "findMany", |state| {
-                    Ok(state
-                        .sessions
-                        .first_ref(|row| session_token_matches(row, &column, &converted))?
+                .raw("session", "findMany", |op| {
+                    Ok(op
+                        .capture_table(EntityRole::Session)?
+                        .select_refs(|row| {
+                            Ok(crate::query::field_matches_equality(
+                                &row.field(&column)?.unwrap_or_default(),
+                                &converted,
+                            ))
+                        })?
+                        .into_iter()
+                        .next()
                         .map(RecordSource::Live))
                 })
                 .await?;
@@ -605,11 +625,15 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         }
         crate::store::database_hooks::await_adapter_lookup().await;
         let (column, converted) = self.memory_session_token_query(token.clone())?;
-        self.raw("session", "delete", |state| {
-            state
-                .sessions
-                .retain(|row| !session_token_matches(row, &column, &converted))?;
-            Ok(())
+        self.raw("session", "delete", |op| {
+            let table = op.capture_table(EntityRole::Session)?;
+            let selected = table.select_refs(|row| {
+                Ok(crate::query::field_matches_equality(
+                    &row.field(&column)?.unwrap_or_default(),
+                    &converted,
+                ))
+            })?;
+            op.replace_table(EntityRole::Session, table.without_refs(&selected)?)
         })
         .await?;
         self.after(CommittedWrite::SessionDeleted(session)).await?;
@@ -625,7 +649,7 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         self.delete_sessions_with_hooks(
             || {
                 let (column, tokens) = self.memory_session_token_query(tokens.clone())?;
-                Ok(move |row: &FieldMap| session_tokens_match(row, &column, &tokens))
+                Ok(vec![(column, tokens, crate::WhereOperator::In)])
             },
             false,
         )
@@ -642,7 +666,7 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         self.delete_sessions_with_hooks(
             || {
                 let (column, tokens) = self.memory_session_token_query(tokens.clone())?;
-                Ok(move |row: &FieldMap| session_tokens_match(row, &column, &tokens))
+                Ok(vec![(column, tokens, crate::WhereOperator::In)])
             },
             true,
         )
@@ -679,12 +703,7 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
             || {
                 let (column, user_id) =
                     self.memory_session_field_query("userId", user_id.clone())?;
-                Ok(move |row: &FieldMap| {
-                    Ok(crate::query::field_matches_equality(
-                        row.get(&column).unwrap_or(&Value::Undefined),
-                        &user_id,
-                    ))
-                })
+                Ok(vec![(column, user_id, crate::WhereOperator::Eq)])
             },
             preserve,
         )
@@ -696,15 +715,7 @@ impl SessionStore<StatelessSchema> for EphemeralStore {
         self.delete_sessions_with_hooks(
             || {
                 let (column, now) = self.memory_session_field_query("expiresAt", now.clone())?;
-                Ok(move |row: &FieldMap| {
-                    Ok(matches!(
-                        crate::query::field_compare(
-                            row.get(&column).unwrap_or(&Value::Undefined),
-                            &now
-                        )?,
-                        Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
-                    ))
-                })
+                Ok(vec![(column, now, crate::WhereOperator::Lte)])
             },
             false,
         )
@@ -907,16 +918,4 @@ pub(super) fn session_token_matches(
         fields.get(column).unwrap_or(&crate::FieldValue::Undefined),
         token,
     )
-}
-
-pub(super) fn session_tokens_match(
-    fields: &FieldMap,
-    column: &str,
-    tokens: &crate::FieldValue,
-) -> AuthResult<bool> {
-    let tokens = tokens
-        .as_array()
-        .ok_or_else(|| AuthError::internal("Value must be an array"))?;
-    let actual = fields.get(column).unwrap_or(&crate::FieldValue::Undefined);
-    Ok(tokens.iter().any(|token| actual.same_value_zero(token)))
 }

@@ -1,27 +1,102 @@
 use super::*;
 use crate::store::TeamStore;
+use crate::store::schema::EntityRole;
 
 pub(super) struct EphemeralTransaction {
     pub(super) store: EphemeralStore,
 }
 
 pub(super) struct PreparedTransactionCommit {
-    state: State,
+    store: EphemeralStore,
     consumed: Vec<super::device_codes::DeviceCodeConsumption>,
 }
 
+const FIELD_TABLES: &[EntityRole] = &[
+    EntityRole::Account,
+    EntityRole::Session,
+    EntityRole::Verification,
+    EntityRole::Organization,
+    EntityRole::Member,
+    EntityRole::Invitation,
+    EntityRole::Team,
+    EntityRole::OrganizationRole,
+    EntityRole::TwoFactor,
+    EntityRole::DeviceCode,
+    EntityRole::ApiKey,
+    EntityRole::Passkey,
+    EntityRole::RateLimit,
+    EntityRole::TeamMember,
+    EntityRole::Jwk,
+    EntityRole::WalletAddress,
+];
+
+pub(super) struct AtomicTransactionCommit {
+    users: super::table::ReconcilePlan<UserView>,
+    tables: Vec<(EntityRole, super::table::ReconcilePlan<FieldMap>)>,
+    consumed: Vec<super::device_codes::DeviceCodeConsumption>,
+}
+
+fn validate_consumed_devices(
+    op: &super::operation::MemoryOperation<'_>,
+    consumed: &[super::device_codes::DeviceCodeConsumption],
+) -> AuthResult<()> {
+    let live = op.capture_table(EntityRole::DeviceCode)?;
+    for consumed in consumed {
+        if !consumed.unchanged(&live)? {
+            return Err(AuthError::internal(
+                "Device code changed before transaction commit",
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl PreparedTransactionCommit {
-    pub(super) fn merge(self, live: &mut State, base: &State) -> AuthResult<()> {
-        for consumed in &self.consumed {
-            if !consumed.unchanged(&live.device_codes)? {
-                return Err(AuthError::internal(
-                    "Device code changed before transaction commit",
-                ));
+    pub(super) fn plan(
+        self,
+        op: &super::operation::MemoryOperation<'_>,
+        base: &State,
+    ) -> AuthResult<AtomicTransactionCommit> {
+        validate_consumed_devices(op, &self.consumed)?;
+        let live = op.capture_users()?;
+        let working = self.store.operation(|op| op.capture_users())?;
+        let (_, users) = live.reconcile_with_plan(&base.users, &working)?;
+        let mut tables = Vec::new();
+        for &role in FIELD_TABLES {
+            let live = op.capture_table(role)?;
+            let working = self.store.operation(|op| op.capture_table(role))?;
+            let (_, plan) = live.reconcile_with_plan(base.table(role)?, &working)?;
+            if !plan.is_empty() {
+                tables.push((role, plan));
             }
         }
-        let mut merged = live.clone();
-        merged.merge(base, self.state)?;
-        *live = merged;
+        Ok(AtomicTransactionCommit {
+            users,
+            tables,
+            consumed: self.consumed,
+        })
+    }
+}
+
+impl AtomicTransactionCommit {
+    pub(super) fn publish(self, op: &super::operation::MemoryOperation<'_>) -> AuthResult<()> {
+        validate_consumed_devices(op, &self.consumed)?;
+        let users = if self.users.is_empty() {
+            None
+        } else {
+            Some(self.users.apply(&op.capture_users()?)?)
+        };
+        let tables = self
+            .tables
+            .into_iter()
+            .map(|(role, plan)| Ok((role, plan.apply(&op.capture_table(role)?)?)))
+            .collect::<AuthResult<Vec<_>>>()?;
+        if let Some(users) = users {
+            op.replace_users(users)?;
+        }
+        for (role, table) in tables {
+            op.replace_table(role, table)?;
+        }
         Ok(())
     }
 }
@@ -328,54 +403,22 @@ impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
     }
 }
 
-impl State {
-    fn merge(&mut self, base: &Self, working: Self) -> AuthResult<()> {
-        self.users.merge(&base.users, working.users)?;
-        self.accounts.merge(&base.accounts, working.accounts)?;
-        self.sessions.merge(&base.sessions, working.sessions)?;
-        self.verifications
-            .merge(&base.verifications, working.verifications)?;
-        self.organizations
-            .merge(&base.organizations, working.organizations)?;
-        self.members.merge(&base.members, working.members)?;
-        self.invitations
-            .merge(&base.invitations, working.invitations)?;
-        self.teams.merge(&base.teams, working.teams)?;
-        self.organization_roles
-            .merge(&base.organization_roles, working.organization_roles)?;
-        self.two_factors
-            .merge(&base.two_factors, working.two_factors)?;
-        self.device_codes
-            .merge(&base.device_codes, working.device_codes)?;
-        self.api_keys.merge(&base.api_keys, working.api_keys)?;
-        self.passkeys.merge(&base.passkeys, working.passkeys)?;
-        self.rate_limits
-            .merge(&base.rate_limits, working.rate_limits)?;
-        self.team_members
-            .merge(&base.team_members, working.team_members)?;
-        self.jwks.merge(&base.jwks, working.jwks)?;
-        self.wallets.merge(&base.wallets, working.wallets)?;
-        Ok(())
-    }
-}
-
 impl EphemeralStore {
     pub(super) fn begin_transaction(&self) -> AuthResult<(State, Self, Arc<PendingHookQueue>)> {
-        let (base, working, devices) = {
-            let live = self.lock()?;
-            let base = live.deep_clone()?;
-            let working = base.deep_clone()?;
-            let devices = super::device_codes::DeviceCodeTransaction::new(
-                &live.device_codes,
-                &working.device_codes,
-            )?;
-            (base, working, devices)
-        };
+        let (base, working, devices) = self.operation(|op| {
+            let base = op.structured_clone()?;
+            let mut devices = super::device_codes::DeviceCodeTransaction::default();
+            let working = op.structured_clone_with_device_origins(|live, isolated, before| {
+                devices.capture_origin(live, isolated, before);
+            })?;
+            Ok((base, working, devices))
+        })?;
         let queue = Arc::new(Mutex::new(Vec::new()));
         let isolated = Self {
             config: self.config.clone(),
             model_fields: self.model_fields.clone(),
             state: Arc::new(Mutex::new(working)),
+            operations: self.operations.clone(),
             rate_limit_operations: self.rate_limit_operations.clone(),
             verification_locks: self.verification_locks.clone(),
             device_code_transaction: Some(Arc::new(Mutex::new(devices))),
@@ -397,7 +440,6 @@ impl EphemeralStore {
     }
 
     pub(super) fn prepare_transaction_commit(&self) -> AuthResult<PreparedTransactionCommit> {
-        let state = self.lock()?.clone();
         let consumed = self
             .device_code_transaction
             .as_ref()
@@ -411,7 +453,10 @@ impl EphemeralStore {
             })
             .transpose()?
             .unwrap_or_default();
-        Ok(PreparedTransactionCommit { state, consumed })
+        Ok(PreparedTransactionCommit {
+            store: self.clone(),
+            consumed,
+        })
     }
 
     pub(super) async fn drain_transaction_hooks(
@@ -432,6 +477,32 @@ impl EphemeralStore {
         Ok(())
     }
 
+    async fn commit_adapter_transaction(
+        &self,
+        base: State,
+        isolated: Self,
+        pending_hooks: Arc<PendingHookQueue>,
+    ) -> AuthResult<()> {
+        let committed = isolated.prepare_transaction_commit()?;
+        self.operation(|op| {
+            validate_consumed_devices(op, &committed.consumed)?;
+            let live = op.capture_users()?;
+            let working = committed.store.operation(|op| op.capture_users())?;
+            op.replace_users(live.reconcile(&base.users, &working)?)?;
+            for &role in FIELD_TABLES {
+                if role == EntityRole::DeviceCode {
+                    validate_consumed_devices(op, &committed.consumed)?;
+                }
+                let live = op.capture_table(role)?;
+                let working = committed.store.operation(|op| op.capture_table(role))?;
+                let table = live.reconcile(base.table(role)?, &working)?;
+                op.replace_table(role, table)?;
+            }
+            Ok(())
+        })?;
+        self.drain_transaction_hooks(&pending_hooks).await
+    }
+
     pub(super) async fn commit_transaction(
         &self,
         base: State,
@@ -439,10 +510,7 @@ impl EphemeralStore {
         pending_hooks: Arc<PendingHookQueue>,
     ) -> AuthResult<()> {
         let committed = isolated.prepare_transaction_commit()?;
-        {
-            let mut live = self.lock()?;
-            committed.merge(&mut live, &base)?;
-        }
+        self.operation(|op| committed.plan(op, &base)?.publish(op))?;
         self.drain_transaction_hooks(&pending_hooks).await
     }
 }
@@ -464,7 +532,8 @@ impl TransactionStore<StatelessSchema> for EphemeralStore {
             store: isolated.clone(),
         })
         .await?;
-        self.commit_transaction(base, isolated, queue).await?;
+        self.commit_adapter_transaction(base, isolated, queue)
+            .await?;
         Ok(result)
     }
 }

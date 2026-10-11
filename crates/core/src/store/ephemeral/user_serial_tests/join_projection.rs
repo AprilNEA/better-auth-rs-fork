@@ -21,10 +21,14 @@ async fn serial_array_owners_join_only_after_fallback_projection() -> AuthResult
         assert_eq!(session.user_id, "1");
         assert_eq!(stored_ids(&store)?, [Value::Number(1.0)]);
         assert_eq!(
-            required(store.lock()?.sessions.snapshot()?.first())?
-                .get("userId")
-                .cloned()
-                .unwrap_or_default(),
+            required(
+                store
+                    .operation(|op| op.capture_state()?.sessions.snapshot())?
+                    .first()
+            )?
+            .get("userId")
+            .cloned()
+            .unwrap_or_default(),
             raw_owner
         );
         let single = required(
@@ -59,7 +63,12 @@ async fn serial_array_owners_join_only_after_fallback_projection() -> AuthResult
             .await?;
         assert_eq!(account.user_id, "1");
         assert_eq!(
-            required(store.lock()?.accounts.snapshot()?.first())?.get("userId"),
+            required(
+                store
+                    .operation(|op| op.capture_state()?.accounts.snapshot())?
+                    .first()
+            )?
+            .get("userId"),
             Some(&raw_owner)
         );
         let owner = required(store.get_account_owner("fixture", "array-owner").await?)?;
@@ -126,7 +135,15 @@ async fn member_joins_and_full_details_resolve_users_at_their_projection_stage()
             .await?;
         assert_eq!(member.user_id, "2");
         assert_eq!(
-            required(required(store.lock()?.members.snapshot()?.first())?.get("userId"))?.clone(),
+            required(
+                required(
+                    store
+                        .operation(|op| op.capture_state()?.members.snapshot())?
+                        .first()
+                )?
+                .get("userId")
+            )?
+            .clone(),
             Value::Number(1.0)
         );
         let joined = required(

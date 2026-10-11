@@ -1,6 +1,5 @@
 use super::hooks::CommittedWrite;
-use super::rows::RecordSource;
-use super::sessions::session_token_matches;
+use super::rows::{RecordSource, RowRef};
 use super::*;
 use crate::store::database_hooks::{DatabaseHookControl, PreparedRecordWrite, SessionUpdate};
 use crate::store::schema::EntityRole;
@@ -74,15 +73,15 @@ impl EphemeralStore {
         let (column, token) = self.memory_session_token_query(token.clone())?;
         let fields = self.bind_session_update_fields(update).await?;
         let session = self
-            .raw("session", "update", |state| {
-                let sources = state
-                    .sessions
-                    .select_refs(|row| session_token_matches(row, &column, &token))?;
+            .raw("session", "update", |op| {
+                let sources = op.capture_table(EntityRole::Session)?.select_refs(|row| {
+                    Ok(crate::query::field_matches_equality(
+                        &row.field(&column)?.unwrap_or_default(),
+                        &token,
+                    ))
+                })?;
                 for source in &sources {
-                    source.write(|session| {
-                        session.extend(fields.clone());
-                        Ok(())
-                    })?;
+                    source.apply_patch(fields.clone())?;
                 }
                 Ok(sources.into_iter().next().map(RecordSource::Live))
             })
@@ -123,43 +122,40 @@ impl EphemeralStore {
         Ok(fields)
     }
 
-    pub(super) async fn delete_sessions_with_hooks<P>(
+    pub(super) async fn delete_sessions_with_hooks(
         &self,
-        bind: impl Fn() -> AuthResult<P> + Send + Sync,
+        bind: impl Fn() -> AuthResult<Vec<(String, Value, crate::WhereOperator)>> + Send + Sync,
         preserve: bool,
-    ) -> AuthResult<Option<usize>>
-    where
-        P: Fn(&FieldMap) -> AuthResult<bool> + Send + Sync,
-    {
+    ) -> AuthResult<Option<usize>> {
         let expiry = preserve.then(|| Value::from(Utc::now()));
         let bind_matches = || -> AuthResult<_> {
-            let predicate = bind()?;
+            let mut clauses = bind()?;
             let expiry = expiry
                 .as_ref()
                 .map(|value| self.memory_session_field_query("expiresAt", value.clone()))
                 .transpose()?;
-            Ok(move |row: &FieldMap| {
-                Ok(predicate(row)?
-                    && match &expiry {
-                        Some((column, now)) => {
-                            crate::query::field_compare(
-                                row.get(column).unwrap_or(&Value::Undefined),
-                                now,
-                            )? == Some(std::cmp::Ordering::Greater)
-                        }
-                        None => true,
-                    })
+            if let Some((column, now)) = expiry {
+                clauses.push((column, now, crate::WhereOperator::Gt));
+            }
+            Ok(move |row: &RowRef<FieldMap>| {
+                crate::memory_query::matches_all(clauses.iter(), |(column, value, operator)| {
+                    crate::memory_query::matches(
+                        row.field(column)?.as_ref(),
+                        value,
+                        *operator,
+                        crate::WhereMode::Sensitive,
+                    )
+                })
             })
         };
         // Upstream deleteManyWithHooks catches snapshot query and projection failures before the write.
         let sessions = async {
             let matches = bind_matches()?;
             let sessions = self
-                .raw("session", "findMany", |state| {
+                .raw("session", "findMany", |op| {
                     Ok(crate::query::paginate_memory(
-                        state
-                            .sessions
-                            .try_select_refs(matches)?
+                        op.capture_table(EntityRole::Session)?
+                            .select_refs(matches)?
                             .into_iter()
                             .map(RecordSource::Live)
                             .collect(),
@@ -197,24 +193,22 @@ impl EphemeralStore {
             let fields = self
                 .bind_session_update_fields([("expiresAt".into(), expires_at.into())].into())
                 .await?;
-            self.raw("session", "updateMany", |state| {
-                let sessions = state.sessions.try_select_refs(matches)?;
+            self.raw("session", "updateMany", |op| {
+                let sessions = op
+                    .capture_table(EntityRole::Session)?
+                    .select_refs(matches)?;
                 for source in &sessions {
-                    source.write(|session| {
-                        session.extend(fields.clone());
-                        Ok(())
-                    })?;
+                    source.apply_patch(fields.clone())?;
                 }
                 Ok(sessions.len())
             })
             .await?
         } else {
-            self.raw("session", "deleteMany", |state| {
-                let before = state.sessions.len();
-                state
-                    .sessions
-                    .try_retain(|row| matches(row).map(|matches| !matches))?;
-                Ok(before - state.sessions.len())
+            self.raw("session", "deleteMany", |op| {
+                let table = op.capture_table(EntityRole::Session)?;
+                let selected = table.select_refs(matches)?;
+                op.replace_table(EntityRole::Session, table.without_refs(&selected)?)?;
+                Ok(selected.len())
             })
             .await?
         };

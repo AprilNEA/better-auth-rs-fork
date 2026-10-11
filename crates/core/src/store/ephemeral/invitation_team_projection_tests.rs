@@ -7,6 +7,7 @@ use super::rows::RowRef;
 use super::*;
 use crate::id::IdGeneration;
 use crate::organization_fields::OrganizationFields;
+use crate::store::schema::EntityRole;
 use crate::store::{TeamMemberLimitResolver, TeamMemberLimits};
 use crate::user_fields::{
     FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -41,16 +42,18 @@ fn seed_team(
     organization: Value,
     count: f64,
 ) -> AuthResult<RowRef<FieldMap>> {
-    Ok(store.lock()?.teams.push_ref(
-        [
-            ("id".into(), id),
-            ("name".into(), name.into()),
-            ("organizationId".into(), organization),
-            ("createdAt".into(), Utc::now().into()),
-            ("memberCount".into(), Value::Number(count)),
-        ]
-        .into(),
-    ))
+    store.operation(|op| {
+        op.capture_table(EntityRole::Team)?.push(
+            [
+                ("id".into(), id),
+                ("name".into(), name.into()),
+                ("organizationId".into(), organization),
+                ("createdAt".into(), Utc::now().into()),
+                ("memberCount".into(), Value::Number(count)),
+            ]
+            .into(),
+        )
+    })
 }
 
 fn membership(id: Value, team: Value, user: &str) -> FieldMap {
@@ -149,7 +152,7 @@ async fn acceptance_reads_live_teams_and_pending_seats_without_callback_replay()
                 &format!("{first_selector},{second_selector},{duplicate}"),
             )
             .await?;
-            let original_teams = store.lock()?.teams.snapshot()?;
+            let original_teams = store.storage_rows(EntityRole::Team)?;
             let events = Events::default();
             let mut fields = OrganizationFields::default();
             let _ = fields.team.fields_mut().insert(
@@ -164,11 +167,13 @@ async fn acceptance_reads_live_teams_and_pending_seats_without_callback_replay()
                             move |value| {
                                 event(&events, "team.name", value.clone())?;
                                 if !changed.swap(true, Ordering::SeqCst) {
-                                    second.write(|row| {
-                                        let _ = row.insert("name".into(), "Second live".into());
-                                        let _ = row.insert("organizationId".into(), owner.clone());
-                                        Ok(())
-                                    })?;
+                                    second.apply_patch(
+                                        [
+                                            ("name".into(), "Second live".into()),
+                                            ("organizationId".into(), owner.clone()),
+                                        ]
+                                        .into(),
+                                    )?;
                                 }
                                 Ok(value)
                             }
@@ -208,11 +213,8 @@ async fn acceptance_reads_live_teams_and_pending_seats_without_callback_replay()
                                     return Err(AuthError::type_error("member-rejected"));
                                 }
                                 if outcome == "conflict" {
-                                    first.write(|row| {
-                                        let _ =
-                                            row.insert("memberCount".into(), Value::Number(9.0));
-                                        Ok(())
-                                    })?;
+                                    let _ = first
+                                        .set_field("memberCount".into(), Value::Number(9.0))?;
                                 }
                                 Ok(value)
                             }
@@ -309,11 +311,11 @@ async fn acceptance_reads_live_teams_and_pending_seats_without_callback_replay()
                 let _ = required(expected_teams.first_mut())?
                     .insert("memberCount".into(), Value::Number(9.0));
             }
-            let state = store.lock()?;
+            let state = store.operation(|op| op.capture_state())?;
             assert_eq!(state.teams.snapshot()?, expected_teams);
-            assert_eq!(state.members.len(), usize::from(outcome == "commit"));
+            assert_eq!(state.members.len()?, usize::from(outcome == "commit"));
             assert_eq!(
-                state.team_members.len(),
+                state.team_members.len()?,
                 if outcome == "commit" { 2 } else { 0 }
             );
             let rows = state.invitations.snapshot()?;
@@ -335,7 +337,7 @@ async fn pending_team_scope_patch_is_used_by_the_next_scoped_lookup() -> AuthRes
     let store = EphemeralStore::new(test_config());
     let _ = seed_team(&store, "first".into(), "First", "organization".into(), -1.0)?;
     let claimed = invitation(&store, "organization", "first,first").await?;
-    let original = store.lock()?.teams.snapshot()?;
+    let original = store.storage_rows(EntityRole::Team)?;
     let events = Events::default();
     let mut fields = OrganizationFields::default();
     let _ = fields.team.fields_mut().insert(
@@ -387,10 +389,10 @@ async fn pending_team_scope_patch_is_used_by_the_next_scoped_lookup() -> AuthRes
             ("count", Value::Number(1.0))
         ]
     );
-    let state = store.lock()?;
+    let state = store.operation(|op| op.capture_state())?;
     assert_eq!(state.teams.snapshot()?, original);
-    assert_eq!(state.team_members.len(), 0);
-    assert_eq!(state.members.len(), 0);
+    assert_eq!(state.team_members.len()?, 0);
+    assert_eq!(state.members.len()?, 0);
     assert_eq!(
         required(state.invitations.snapshot()?.first())?.get("status"),
         Some(&Value::from("pending"))
@@ -409,21 +411,27 @@ struct ConcurrentMembershipLimits {
 impl TeamMemberLimitResolver for ConcurrentMembershipLimits {
     async fn maximum(&self, _: &str, _: &Value) -> AuthResult<Option<usize>> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst);
-        let mut state = self.store.lock()?;
-        if self.serial && call == 1 {
-            let _ = state
-                .team_members
-                .remove_first(|row| row.get("id") == Some(&Value::Number(1.0)))?;
-            state.team_members.push(self.concurrent.clone());
-        } else if !self.serial {
-            if call == 0 {
-                state.team_members.push(self.concurrent.clone());
-            } else {
-                let _ = state
-                    .team_members
-                    .remove_first(|row| row.get("id") == Some(&Value::from("external")))?;
+        self.store.operation(|op| {
+            let table = op.capture_table(EntityRole::TeamMember)?;
+            if self.serial && call == 1 {
+                let mut selected =
+                    table.select_refs(|row| Ok(row.field("id")? == Some(Value::Number(1.0))))?;
+                selected.truncate(1);
+                let table = table.without_refs(&selected)?;
+                table.push(self.concurrent.clone())?;
+                op.replace_table(EntityRole::TeamMember, table)?;
+            } else if !self.serial {
+                if call == 0 {
+                    table.push(self.concurrent.clone())?;
+                } else {
+                    let mut selected = table
+                        .select_refs(|row| Ok(row.field("id")? == Some(Value::from("external"))))?;
+                    selected.truncate(1);
+                    op.replace_table(EntityRole::TeamMember, table.without_refs(&selected)?)?;
+                }
             }
-        }
+            Ok(())
+        })?;
         Ok(Some(1))
     }
 }
@@ -469,11 +477,14 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
             0.0,
         )?;
         if serial {
-            store.lock()?.team_members.push(membership(
-                Value::Number(1.0),
-                Value::Number(9.0),
-                "previous",
-            ));
+            store.operation(|op| {
+                op.capture_table(EntityRole::TeamMember)?.push(membership(
+                    Value::Number(1.0),
+                    Value::Number(9.0),
+                    "previous",
+                ))?;
+                Ok(())
+            })?;
         }
         let concurrent = membership(
             if serial {
@@ -510,7 +521,7 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
             let _ = result?;
         }
         assert_eq!(limits.calls.load(Ordering::SeqCst), 2);
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         let memberships = state.team_members.snapshot()?;
         if serial {
             assert_eq!(memberships, vec![concurrent]);
@@ -522,7 +533,7 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
                     .all(|row| row.get("userId") == Some(&Value::from(user)))
             );
         }
-        assert_eq!(state.members.len(), usize::from(!serial));
+        assert_eq!(state.members.len()?, usize::from(!serial));
         for team in state.teams.snapshot()? {
             assert_eq!(
                 team.get("memberCount"),
@@ -555,10 +566,11 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
         let phase = if team { "team" } else { "organization" };
         event(&self.events, "before", phase.into())?;
         let transaction = required(context.transaction)?;
-        assert_eq!(self.writer.lock()?.members.len(), 0);
-        assert_eq!(self.writer.lock()?.users.len(), 0);
+        let state = self.writer.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, 0);
+        assert_eq!(state.users.len()?, 0);
         assert_eq!(
-            required(self.writer.lock()?.teams.snapshot()?.first())?.get("memberCount"),
+            required(state.teams.snapshot()?.first())?.get("memberCount"),
             Some(&Value::Number(0.0))
         );
         assert_eq!(
@@ -607,8 +619,9 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
             required(user)?.email.field_value(),
             "hook@example.com".into()
         );
-        assert_eq!(self.writer.lock()?.members.len(), 1);
-        assert_eq!(self.writer.lock()?.users.len(), 1);
+        let state = self.writer.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, 1);
+        assert_eq!(state.users.len()?, 1);
         event(&self.events, "after.user", "committed".into())
     }
 
@@ -618,10 +631,11 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
         context: &crate::store::database_hooks::DatabaseHookContext<'_, StatelessSchema>,
     ) -> AuthResult<()> {
         assert!(context.transaction.is_none());
-        assert_eq!(self.writer.lock()?.members.len(), 1);
-        assert_eq!(self.writer.lock()?.team_members.len(), 1);
+        let state = self.writer.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, 1);
+        assert_eq!(state.team_members.len()?, 1);
         assert_eq!(
-            required(self.writer.lock()?.invitations.snapshot()?.first())?.get("status"),
+            required(state.invitations.snapshot()?.first())?.get("status"),
             Some(&Value::from("accepted"))
         );
         event(
@@ -667,8 +681,9 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
                 active_organization_id: None,
             })
             .await?;
-        let original = required(writer.lock()?.sessions.first_ref(|_| true)?)?;
-        let original_fields = original.read(|fields| Ok(fields.clone()))?;
+        let original =
+            writer.operation(|op| required(op.capture_table(EntityRole::Session)?.row_at(0)?))?;
+        let original_fields = original.shallow_fields()?;
         let events = Events::default();
         let mut reader = writer
             .clone()
@@ -690,11 +705,8 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
                                 return Err(AuthError::type_error("output-session"));
                             }
                             if mode == "external" && value == Value::from("team") {
-                                original.write(|fields| {
-                                    let _ =
-                                        fields.insert("userAgent".into(), "external-agent".into());
-                                    Ok(())
-                                })?;
+                                let _ = original
+                                    .set_field("userAgent".into(), "external-agent".into())?;
                             }
                             Ok(format!("{}:projected", required(value.as_str())?).into())
                         }
@@ -778,11 +790,15 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
             }
         }
         assert_eq!(events_snapshot(&events)?, expected, "{mode}");
-        let state = writer.lock()?;
-        assert_eq!(state.members.len(), usize::from(committed), "{mode}");
-        assert_eq!(state.team_members.len(), usize::from(committed), "{mode}");
-        assert_eq!(state.users.len(), usize::from(committed), "{mode}");
-        assert_eq!(state.sessions.contains_ref(&original), !committed, "{mode}");
+        let state = writer.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, usize::from(committed), "{mode}");
+        assert_eq!(state.team_members.len()?, usize::from(committed), "{mode}");
+        assert_eq!(state.users.len()?, usize::from(committed), "{mode}");
+        assert_eq!(
+            state.sessions.contains_ref(&original)?,
+            !committed,
+            "{mode}"
+        );
         assert_eq!(
             required(state.teams.snapshot()?.first())?.get("memberCount"),
             Some(&Value::Number(if committed { 1.0 } else { 0.0 })),
@@ -819,7 +835,7 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
                 }))
             );
             assert_eq!(stored.get("userAgent"), Some(&Value::from("initial-agent")));
-            assert_eq!(original.read(|fields| Ok(fields.clone()))?, original_fields);
+            assert_eq!(original.shallow_fields()?, original_fields);
         } else {
             let mut expected = original_fields;
             if mode == "external" {

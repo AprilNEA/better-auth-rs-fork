@@ -15,9 +15,7 @@ impl EphemeralStore {
             ),
             Some((organization_id, _)) => {
                 let member = self
-                    .lock()?
-                    .members
-                    .get(&id)?
+                    .operation(|op| op.capture_table(EntityRole::Member)?.get(&id))?
                     .ok_or_else(|| AuthError::not_found("Member not found"))?;
                 let member = self.output_member(member).await?;
                 (
@@ -26,7 +24,9 @@ impl EphemeralStore {
                 )
             }
             None => {
-                let Some(member) = self.lock()?.members.get(&id)? else {
+                let Some(member) =
+                    self.operation(|op| op.capture_table(EntityRole::Member)?.get(&id))?
+                else {
                     return Ok(());
                 };
                 let member = self.output_member(member).await?;
@@ -40,19 +40,21 @@ impl EphemeralStore {
         )?;
         let schema = self.field_config(EntityRole::Team)?;
         let user_id = user_id.field_value();
-        let teams = {
-            let mut state = self.lock()?;
-            let _ = state.members.remove(&id)?;
-            state
-                .teams
-                .snapshot()?
+        let teams = self.operation(|op| {
+            let mut members = op.capture_table(EntityRole::Member)?;
+            let _ = members.remove(&id)?;
+            op.replace_table(EntityRole::Member, members)?;
+            op.capture_table(EntityRole::Team)?
+                .select_refs(|row| {
+                    Ok(
+                        super::organization_rows::field(row, &schema, "organizationId")?
+                            .strict_equals(&organization_id.field_value()),
+                    )
+                })?
                 .into_iter()
-                .filter(|team| {
-                    organization_value(team, &schema, "organizationId")
-                        .strict_equals(&organization_id.field_value())
-                })
-                .collect()
-        };
+                .map(|row| row.shallow_fields())
+                .collect::<AuthResult<Vec<_>>>()
+        })?;
         let teams = crate::query::paginate_memory(
             teams,
             Some(self.config.advanced.database.find_many_limit()),
@@ -152,7 +154,11 @@ mod tests {
             );
             assert_eq!(store.count_team_members(selected.id.typed()?).await?, 1);
             assert_eq!(
-                store.lock()?.teams.get(&selected.id)?.unwrap()["memberCount"],
+                store
+                    .operation(|op| op.capture_state())?
+                    .teams
+                    .get(&selected.id)?
+                    .unwrap()["memberCount"],
                 Value::Number(1.0)
             );
         }

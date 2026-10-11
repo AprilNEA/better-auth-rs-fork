@@ -25,9 +25,7 @@ fn input(token: &str, owner: &str, additional: FieldMap) -> CreateSession {
 
 fn stored(store: &EphemeralStore) -> AuthResult<FieldMap> {
     store
-        .lock()?
-        .sessions
-        .snapshot()?
+        .storage_rows(EntityRole::Session)?
         .pop()
         .ok_or_else(|| AuthError::internal("Physical Session fixture row is missing"))
 }
@@ -291,12 +289,12 @@ async fn mapped_session_selectors_and_expiry_work_for_both_join_paths() -> AuthR
                 .is_empty()
         );
         assert_eq!(store.delete_expired_sessions().await?, 1);
-        assert_eq!(store.lock()?.sessions.len(), 0);
+        assert_eq!(store.storage_rows(EntityRole::Session)?.len(), 0);
         let _ = store
             .create_session(input("delete", owner, FieldMap::new()))
             .await?;
         store.delete_user_sessions(owner).await?;
-        assert_eq!(store.lock()?.sessions.len(), 0);
+        assert_eq!(store.storage_rows(EntityRole::Session)?.len(), 0);
     }
     Ok(())
 }
@@ -405,7 +403,7 @@ async fn batch_token_queries_convert_the_array_once_before_matching() -> AuthRes
         1
     );
     store.delete_sessions(&["7".into()]).await?;
-    assert_eq!(store.lock()?.sessions.len(), 0);
+    assert_eq!(store.storage_rows(EntityRole::Session)?.len(), 0);
     Ok(())
 }
 

@@ -67,15 +67,12 @@ impl MemberStore for EphemeralStore {
 
     async fn insert_member(&self, mut record: Member) -> AuthResult<Member> {
         let fields = std::mem::take(&mut record.additional_fields);
-        let mut record = self
+        let record = self
             .create_record(EntityRole::Member, record, fields)
             .await?;
         let source = self
-            .raw("member", "create", |state| {
-                if let Some(id) = self.next_serial_id(state.members.len()) {
-                    let _ = record.insert("id".into(), id);
-                }
-                Ok(state.members.push_ref(record))
+            .raw("member", "create", |_| {
+                self.insert_organization_row(EntityRole::Member, record)
             })
             .await?;
         Ok(self
@@ -94,15 +91,12 @@ impl MemberStore for EphemeralStore {
             role: input.role,
             created_at: (Utc::now()).into(),
         };
-        let mut member = self
+        let member = self
             .create_record(EntityRole::Member, member, input.additional_fields)
             .await?;
         let source = self
-            .raw("member", "create", |state| {
-                if let Some(id) = self.next_serial_id(state.members.len()) {
-                    let _ = member.insert("id".into(), id);
-                }
-                Ok(state.members.push_ref(member))
+            .raw("member", "create", |_| {
+                self.insert_organization_row(EntityRole::Member, member)
             })
             .await?;
         Ok(self
@@ -127,13 +121,23 @@ impl MemberStore for EphemeralStore {
         let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
         let schema = self.field_config(EntityRole::Member)?;
         let selected = self
-            .raw("member", "findOne", |state| {
-                state.members.first_ref(|row| {
-                    organization_value(row, &schema, "organizationId")
-                        .strict_equals(&organization_id.field_value())
-                        && organization_value(row, &schema, "userId")
-                            .strict_equals(&user_id.field_value())
-                })
+            .raw("member", "findOne", |_| {
+                Ok(self
+                    .select_organization_rows(
+                        EntityRole::Member,
+                        &[
+                            (
+                                schema.record_storage_key("organizationId").into(),
+                                organization_id.field_value(),
+                            ),
+                            (
+                                schema.record_storage_key("userId").into(),
+                                user_id.field_value(),
+                            ),
+                        ],
+                    )?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -144,10 +148,14 @@ impl MemberStore for EphemeralStore {
     async fn get_member_by_id(&self, id: &str) -> AuthResult<Option<Member>> {
         let id = self.organization_query(EntityRole::Member, "id", Value::from(id))?;
         let selected = self
-            .raw("member", "findOne", |state| {
-                state
-                    .members
-                    .first_ref(|row| super::super::organization_rows::id(row) == id)
+            .raw("member", "findOne", |_| {
+                Ok(self
+                    .select_organization_rows(
+                        EntityRole::Member,
+                        &[("id".into(), id.field_value())],
+                    )?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -168,20 +176,13 @@ impl MemberStore for EphemeralStore {
             )
             .await?;
         let source = self
-            .raw("member", "update", |state| {
-                let selected = state.members.select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        row.get("id").unwrap_or(&Value::Undefined),
-                        &id.field_value(),
-                    )
-                })?;
-                for source in &selected {
-                    source.write(|row| {
-                        patch.clone().apply_to(row);
-                        Ok(())
-                    })?;
-                }
-                Ok(selected.into_iter().next())
+            .raw("member", "update", |_| {
+                self.patch_organization_rows(
+                    EntityRole::Member,
+                    &[("id".into(), id.field_value())],
+                    patch.apply(FieldMap::new()),
+                    false,
+                )
             })
             .await?
             .ok_or_else(|| AuthError::not_found("Member not found"))?;
@@ -232,11 +233,14 @@ impl MemberStore for EphemeralStore {
         let org = self.organization_query(EntityRole::Member, "organizationId", org.clone())?;
         let schema = self.field_config(EntityRole::Member)?;
         let rows = self
-            .raw("member", "findMany", |state| {
-                state.members.select_refs(|row| {
-                    organization_value(row, &schema, "organizationId")
-                        .strict_equals(&org.field_value())
-                })
+            .raw("member", "findMany", |_| {
+                self.select_organization_rows(
+                    EntityRole::Member,
+                    &[(
+                        schema.record_storage_key("organizationId").into(),
+                        org.field_value(),
+                    )],
+                )
             })
             .await?;
         self.output_record_refs(EntityRole::Member, rows).await
@@ -261,48 +265,49 @@ impl MemberStore for EphemeralStore {
         let org =
             self.organization_query(EntityRole::Member, "organizationId", Value::from(org))?;
         Ok(self
-            .lock()?
-            .members
-            .snapshot()?
-            .iter()
-            .filter(|member| {
-                organization_value(member, &schema, "organizationId")
-                    .strict_equals(&org.field_value())
-            })
-            .count() as i64)
+            .select_organization_rows(
+                EntityRole::Member,
+                &[(
+                    schema.record_storage_key("organizationId").into(),
+                    org.field_value(),
+                )],
+            )?
+            .len() as i64)
     }
+
     async fn count_organization_members_value(&self, org: &Value) -> AuthResult<i64> {
         let schema = self.field_config(EntityRole::Member)?;
         let org = self.organization_query(EntityRole::Member, "organizationId", org.clone())?;
-        self.lock()?
-            .members
-            .snapshot()?
-            .iter()
-            .try_fold(0, |count, member| {
-                Ok(count
-                    + i64::from(
-                        organization_value(member, &schema, "organizationId")
-                            .strict_equals(&org.field_value()),
-                    ))
-            })
+        Ok(self
+            .select_organization_rows(
+                EntityRole::Member,
+                &[(
+                    schema.record_storage_key("organizationId").into(),
+                    org.field_value(),
+                )],
+            )?
+            .len() as i64)
     }
+
     async fn count_organization_owners(&self, org: &str) -> AuthResult<i64> {
         let schema = self.field_config(EntityRole::Member)?;
         let org =
             self.organization_query(EntityRole::Member, "organizationId", Value::from(org))?;
-        self.lock()?
-            .members
-            .snapshot()?
+        self.operation(|_| {
+            self.select_organization_rows(
+                EntityRole::Member,
+                &[(
+                    schema.record_storage_key("organizationId").into(),
+                    org.field_value(),
+                )],
+            )?
             .iter()
-            .filter(|member| {
-                organization_value(member, &schema, "organizationId")
-                    .strict_equals(&org.field_value())
-            })
             .try_fold(0, |count, member| {
-                let role = crate::SchemaValue::<String>::from_field(organization_value(
-                    member, &schema, "role",
-                ));
+                let role = crate::SchemaValue::<String>::from_field(
+                    super::super::organization_rows::field(member, &schema, "role")?,
+                );
                 Ok(count + i64::from(role.typed()?.split(',').any(|role| role == "owner")))
             })
+        })
     }
 }

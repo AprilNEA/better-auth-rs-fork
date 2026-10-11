@@ -91,9 +91,9 @@ async fn json_api_key_name_projects_after_reading_raw_storage() -> AuthResult<()
         assert_eq!(key.name.field_value(), expected);
         assert_eq!(
             store
-                .lock()?
-                .api_keys
-                .find(|row| row.get("id") == Some(&key.id.field_value()))?
+                .plugin_storage_rows(EntityRole::ApiKey)?
+                .into_iter()
+                .find(|row| row.get("id") == Some(&key.id.field_value()))
                 .unwrap()
                 .get("stored_name")
                 .cloned()
@@ -138,9 +138,9 @@ async fn json_api_key_name_distinguishes_omission_from_explicit_null() -> AuthRe
     assert_eq!(*seen.lock().unwrap(), [default, Value::Null]);
     assert_eq!(
         store
-            .lock()?
-            .api_keys
-            .find(|row| row.get("id") == Some(&explicit_null.id.field_value()))?
+            .plugin_storage_rows(EntityRole::ApiKey)?
+            .into_iter()
+            .find(|row| row.get("id") == Some(&explicit_null.id.field_value()))
             .unwrap()
             .get("name")
             .cloned()
@@ -180,7 +180,7 @@ async fn json_api_key_name_failures_preserve_the_write_boundary() -> AuthResult<
             .await
             .unwrap_err();
         assert!(error.to_string().contains("display failure"));
-        let stored = store.lock()?.api_keys.snapshot()?;
+        let stored = store.plugin_storage_rows(EntityRole::ApiKey)?;
         if fail_input {
             assert!(stored.is_empty());
         } else {
@@ -222,9 +222,9 @@ async fn json_api_key_name_callback_omission_does_not_become_null() -> AuthResul
         let key = store.create_api_key(api_key(Value::Null)).await?;
         assert!(key.name.is_undefined());
         let raw = store
-            .lock()?
-            .api_keys
-            .find(|row| row.get("id") == Some(&key.id.field_value()))?
+            .plugin_storage_rows(EntityRole::ApiKey)?
+            .into_iter()
+            .find(|row| row.get("id") == Some(&key.id.field_value()))
             .unwrap();
         assert_eq!(
             raw.get("name").cloned(),
@@ -312,9 +312,9 @@ async fn json_passkey_display_updates_preserve_credential_state() -> AuthResult<
     assert_eq!(authenticated.credential_id, "credential-id");
     assert_eq!(authenticated.public_key, "public-key");
     let stored = store
-        .lock()?
-        .passkeys
-        .find(|row| row.get("id") == Some(&key.id.field_value()))?
+        .plugin_storage_rows(EntityRole::Passkey)?
+        .into_iter()
+        .find(|row| row.get("id") == Some(&key.id.field_value()))
         .unwrap();
     assert_eq!(
         stored.get("stored_name"),

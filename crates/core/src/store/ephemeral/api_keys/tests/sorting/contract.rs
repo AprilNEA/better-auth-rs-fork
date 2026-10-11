@@ -210,22 +210,20 @@ async fn query(store: &EphemeralStore, operation: &str) -> AuthResult<Vec<ApiKey
             .await;
     }
     // The store trait has no offset argument. Exercise the same raw sort, page and projection boundaries.
-    let selected = {
-        let mut selected = store
-            .lock()?
-            .api_keys
-            .select_refs(|row| row.get("referenceId") == Some(&FieldValue::from("owner")))?
-            .into_iter()
-            .map(|source| Ok((source.read(|row| Ok(row.clone()))?, source)))
-            .collect::<AuthResult<Vec<_>>>()?;
-        crate::memory_sort::sort(&mut selected, direction == Some("desc"), |(row, _)| {
-            Ok(row.get("stored_name").cloned().unwrap_or_default())
+    let selected = store.operation(|op| {
+        let mut selected = op
+            .capture_table(EntityRole::ApiKey)?
+            .select_refs(|row| Ok(row.field("referenceId")? == Some(FieldValue::from("owner"))))?;
+        crate::memory_sort::sort(&mut selected, direction == Some("desc"), |row| {
+            Ok(row.field("stored_name")?.unwrap_or_default())
         })?;
-        crate::query::paginate_memory(selected, Some(2.0), Some(1.0))
-    };
-    store
-        .project_api_key_refs(selected.into_iter().map(|(_, source)| source).collect())
-        .await
+        Ok(crate::query::paginate_memory(
+            selected,
+            Some(2.0),
+            Some(1.0),
+        ))
+    })?;
+    store.project_api_key_refs(selected).await
 }
 
 #[test]
@@ -302,7 +300,7 @@ async fn all_name_sort_cases_match_rows_errors_callbacks_and_storage() -> AuthRe
             assert_eq!(take_events(&events)?, seed["events"], "{name}: seed events");
         }
         assert_eq!(
-            raw_rows(&store.lock()?.api_keys.snapshot()?)?,
+            raw_rows(&store.storage_rows(EntityRole::ApiKey)?)?,
             case["stored"],
             "{name}: raw seeds"
         );
@@ -349,7 +347,7 @@ async fn all_name_sort_cases_match_rows_errors_callbacks_and_storage() -> AuthRe
                 "{name}: {operation_name}: events"
             );
             assert_eq!(
-                raw_rows(&store.lock()?.api_keys.snapshot()?)?,
+                raw_rows(&store.storage_rows(EntityRole::ApiKey)?)?,
                 operation["stored"],
                 "{name}: {operation_name}: raw rows"
             );
@@ -385,8 +383,8 @@ async fn user_and_member_queries_use_locale_order_and_preserve_stable_pages() ->
                 })
                 .await?;
         }
-        let users_before = store.lock()?.users.snapshot()?;
-        let members_before = store.lock()?.members.snapshot()?;
+        let users_before = store.storage_rows(EntityRole::User)?;
+        let members_before = store.storage_rows(EntityRole::Member)?;
         for operation in array(&case["operations"])?
             .iter()
             .filter(|operation| operation["name"] != "unsorted")
@@ -439,8 +437,8 @@ async fn user_and_member_queries_use_locale_order_and_preserve_stable_pages() ->
                 "Member {}: {name}",
                 case["name"]
             );
-            assert_eq!(store.lock()?.users.snapshot()?, users_before);
-            assert_eq!(store.lock()?.members.snapshot()?, members_before);
+            assert_eq!(store.storage_rows(EntityRole::User)?, users_before);
+            assert_eq!(store.storage_rows(EntityRole::Member)?, members_before);
         }
     }
     Ok(())

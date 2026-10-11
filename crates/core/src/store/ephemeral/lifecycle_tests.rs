@@ -2,6 +2,7 @@ use super::*;
 use crate::store::database_hooks::{
     DatabaseHookContext, DatabaseHookControl, DatabaseHookUpdate, DatabaseHooks, SessionUpdate,
 };
+use crate::store::schema::EntityRole;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 struct UpdateHooks {
@@ -200,7 +201,7 @@ async fn native_credential_selectors_bind_all_fields_before_account_projection()
         created.get(2).cloned()
     );
     store.delete_user_accounts_value(&7.into()).await?;
-    let remaining = store.lock()?.accounts.snapshot()?;
+    let remaining = store.storage_rows(EntityRole::Account)?;
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].get("id"), Some(&created[2].id.field_value()));
     assert_eq!(remaining[0].get("storedOwner"), Some(&"7".into()));
@@ -268,7 +269,7 @@ async fn native_account_update_keeps_numeric_ids_and_original_hook_lifecycle() -
     assert_eq!(*observed.lock().unwrap(), ["original", "after-row"]);
     assert_eq!(store.get_credential_account("owner").await?, Some(updated));
     assert_eq!(
-        store.lock()?.accounts.snapshot()?[0].get("id"),
+        store.storage_rows(EntityRole::Account)?[0].get("id"),
         Some(&7.into())
     );
     Ok(())
@@ -321,24 +322,29 @@ async fn concurrent_consume_runs_hooks_once_and_invalidates_older_rows() {
         })
         .await
         .unwrap();
-    let _ = store
-        .lock()
-        .unwrap()
-        .verifications
-        .find_mut(|row| {
-            row.get("id")
-                .unwrap_or(&Value::Undefined)
-                .strict_equals(&old.id.field_value())
+    store
+        .operation(|op| {
+            let row = op
+                .capture_table(EntityRole::Verification)?
+                .select_refs(|row| {
+                    Ok(row
+                        .field("id")?
+                        .unwrap_or_default()
+                        .strict_equals(&old.id.field_value()))
+                })?
+                .into_iter()
+                .next()
+                .unwrap();
+            let _ = row.set_field(
+                "createdAt".into(),
+                crate::FieldDate::from_milliseconds(
+                    old.created_at.typed().unwrap().milliseconds() - 1000.0,
+                )
+                .into(),
+            )?;
+            Ok(())
         })
-        .unwrap()
-        .unwrap()
-        .insert(
-            "createdAt".into(),
-            crate::FieldDate::from_milliseconds(
-                old.created_at.typed().unwrap().milliseconds() - 1000.0,
-            )
-            .into(),
-        );
+        .unwrap();
     let _ = store
         .create_verification(CreateVerification {
             identifier: "once".into(),
@@ -659,7 +665,10 @@ async fn verification_creation_cancellation_skips_writer_storage_and_after_hooks
             )
             .await?;
         assert_eq!(created.is_none(), cancel);
-        assert_eq!(store.lock()?.verifications.len(), usize::from(!cancel));
+        assert_eq!(
+            store.storage_rows(EntityRole::Verification)?.len(),
+            usize::from(!cancel)
+        );
         assert_eq!(writes.load(Ordering::SeqCst), usize::from(!cancel));
         assert_eq!(after.load(Ordering::SeqCst), usize::from(!cancel));
     }
@@ -723,6 +732,6 @@ async fn native_session_updates_transform_values_before_matching_and_projection(
             .await?
             .is_none()
     );
-    assert_eq!(store.lock()?.sessions.len(), 1);
+    assert_eq!(store.storage_rows(EntityRole::Session)?.len(), 1);
     Ok(())
 }

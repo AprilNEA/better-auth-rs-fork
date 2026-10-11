@@ -63,6 +63,7 @@ futures-util = "0.3.34"
 rust_icu_ucol = { version = "5.8.0", default-features = false, features = ["renaming", "icu_version_in_env"] }
 rust_icu_ustring = { version = "5.8.0", default-features = false, features = ["renaming", "icu_version_in_env"] }
 rust_icu_sys = { version = "5.8.0", default-features = false, features = ["renaming", "icu_version_in_env"] }
+parking_lot = { workspace = true }
 
 [features]
 default = []

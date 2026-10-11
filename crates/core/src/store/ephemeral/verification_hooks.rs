@@ -2,6 +2,7 @@ use super::hooks::CommittedWrite;
 use super::rows::{RecordSource, RowRef};
 use super::*;
 use crate::store::database_hooks::{DatabaseHookControl, PreparedRecordWrite, VerificationUpdate};
+use crate::store::schema::EntityRole;
 
 impl EphemeralStore {
     pub(super) async fn update_verification_with_hooks(
@@ -32,17 +33,17 @@ impl EphemeralStore {
             .verification_storage_fields(prepared.into_fields(), false)
             .await?;
         let record = self
-            .raw("verification", "update", |state| {
-                let rows = state.verifications.select_refs(|row| {
-                    self.verification_field(row, "identifier")
-                        .unwrap_or(&Value::Undefined)
-                        .strict_equals(&bound_identifier)
-                })?;
-                for row in &rows {
-                    row.write(|record| {
-                        record.extend(patch.clone());
-                        Ok(())
+            .raw("verification", "update", |op| {
+                let rows = op
+                    .capture_table(EntityRole::Verification)?
+                    .select_refs(|row| {
+                        Ok(self
+                            .verification_field(row, "identifier")?
+                            .unwrap_or_default()
+                            .strict_equals(&bound_identifier))
                     })?;
+                for row in &rows {
+                    row.apply_patch(patch.clone())?;
                 }
                 Ok(rows.into_iter().next())
             })
@@ -59,12 +60,14 @@ impl EphemeralStore {
 
     pub(super) async fn delete_verifications_with_hooks(
         &self,
-        predicate: impl Fn(&FieldMap) -> AuthResult<bool> + Send + Sync,
+        predicate: impl Fn(&RowRef<FieldMap>) -> AuthResult<bool> + Send + Sync,
         many: bool,
     ) -> AuthResult<usize> {
         let rows: Vec<_> = self
-            .raw("verification", "findMany", |state| {
-                let matched = state.verifications.try_select_refs(&predicate)?;
+            .raw("verification", "findMany", |op| {
+                let matched = op
+                    .capture_table(EntityRole::Verification)?
+                    .select_refs(&predicate)?;
                 Ok(crate::query::paginate_memory(
                     matched,
                     Some(if many {
@@ -82,7 +85,7 @@ impl EphemeralStore {
     pub(super) async fn finish_verification_delete(
         &self,
         rows: Vec<RowRef<FieldMap>>,
-        predicate: impl Fn(&FieldMap) -> AuthResult<bool> + Send + Sync,
+        predicate: impl Fn(&RowRef<FieldMap>) -> AuthResult<bool> + Send + Sync,
         many: bool,
     ) -> AuthResult<usize> {
         // Single and batch delete both catch snapshot output errors; only batch still deletes on an empty snapshot.
@@ -117,14 +120,11 @@ impl EphemeralStore {
             .raw(
                 "verification",
                 if many { "deleteMany" } else { "delete" },
-                |state| {
-                    Ok({
-                        let count = state.verifications.len();
-                        state
-                            .verifications
-                            .try_retain(|row| predicate(row).map(|matches| !matches))?;
-                        count - state.verifications.len()
-                    })
+                |op| {
+                    let table = op.capture_table(EntityRole::Verification)?;
+                    let selected = table.select_refs(&predicate)?;
+                    op.replace_table(EntityRole::Verification, table.without_refs(&selected)?)?;
+                    Ok(selected.len())
                 },
             )
             .await?;
@@ -165,29 +165,37 @@ impl EphemeralStore {
         }
         let id = self.verification_query("id", snapshot.id.field_value())?;
         let Some(consumed) = self
-            .raw("verification", "consumeOne", |state| {
-                state.verifications.remove_first(|row| {
-                    row.get("id")
-                        .unwrap_or(&Value::Undefined)
-                        .strict_equals(&id)
-                })
+            .raw("verification", "consumeOne", |op| {
+                let table = op.capture_table(EntityRole::Verification)?;
+                let selected = table.select_refs(|row| {
+                    Ok(row.field("id")?.unwrap_or_default().strict_equals(&id))
+                })?;
+                let selected = selected.into_iter().next();
+                if let Some(row) = &selected {
+                    op.replace_table(
+                        EntityRole::Verification,
+                        table.without_refs(std::slice::from_ref(row))?,
+                    )?;
+                }
+                Ok(selected)
             })
             .await?
         else {
             return Ok(None);
         };
         let consumed = self
-            .output_verification(RecordSource::Snapshot(Box::new(consumed)))
+            .output_verification(RecordSource::Live(consumed))
             .await?;
         let bound_identifier = self.verification_query("identifier", identifier)?;
-        self.raw("verification", "deleteMany", |state| {
-            state.verifications.retain(|row| {
-                !self
-                    .verification_field(row, "identifier")
-                    .unwrap_or(&Value::Undefined)
-                    .strict_equals(&bound_identifier)
+        self.raw("verification", "deleteMany", |op| {
+            let table = op.capture_table(EntityRole::Verification)?;
+            let selected = table.select_refs(|row| {
+                Ok(self
+                    .verification_field(row, "identifier")?
+                    .unwrap_or_default()
+                    .strict_equals(&bound_identifier))
             })?;
-            Ok(())
+            op.replace_table(EntityRole::Verification, table.without_refs(&selected)?)
         })
         .await?;
         self.after(CommittedWrite::VerificationDeleted(consumed.clone()))

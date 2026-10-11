@@ -1,5 +1,5 @@
-use super::rows::{RowRef, Rows};
-use super::sessions::session_token_matches;
+use super::rows::RowRef;
+use super::table::TableRef;
 use super::*;
 use crate::SchemaValue;
 use crate::store::database_hooks::SessionUpdate;
@@ -13,18 +13,14 @@ struct InvitationClaim {
 }
 
 fn validate_membership_allocations(
-    live: &Rows<FieldMap>,
+    live: &TableRef<FieldMap>,
     allocated: &[RowRef<FieldMap>],
 ) -> AuthResult<()> {
     for pending in allocated {
-        let id = pending.read(|row| Ok(row.get("id").cloned().unwrap_or_default()))?;
-        if live
-            .first_ref(|row| {
-                row.get("id")
-                    .unwrap_or(&Value::Undefined)
-                    .same_value_zero(&id)
-            })?
-            .is_some()
+        let id = pending.field("id")?.unwrap_or_default();
+        if !live
+            .select_refs(|row| Ok(row.field("id")?.unwrap_or_default().same_value_zero(&id)))?
+            .is_empty()
         {
             return Err(AuthError::conflict(
                 "Member allocation changed while field transforms were pending",
@@ -36,22 +32,22 @@ fn validate_membership_allocations(
 
 impl InvitationClaim {
     fn validate(&self, state: &State, changed_message: &'static str) -> AuthResult<()> {
-        if !state.invitations.contains_ref(&self.row) {
+        if !state.invitations.contains_ref(&self.row)? {
             return Err(AuthError::bad_request("Invitation not found"));
         }
-        self.row.read(|fields| {
-            if !organization_value(fields, &self.schema, "status").strict_equals(&"accepted".into())
+        if !super::organization_rows::field(&self.row, &self.schema, "status")?
+            .strict_equals(&"accepted".into())
+        {
+            return Err(AuthError::bad_request("Invitation not found"));
+        }
+        for name in ["teamId", "organizationId", "role"] {
+            if super::organization_rows::field(&self.row, &self.schema, name)?
+                != organization_value(&self.fields, &self.schema, name)
             {
-                return Err(AuthError::bad_request("Invitation not found"));
-            }
-            if ["teamId", "organizationId", "role"].iter().any(|name| {
-                organization_value(fields, &self.schema, name)
-                    != organization_value(&self.fields, &self.schema, name)
-            }) {
                 return Err(AuthError::conflict(changed_message));
             }
-            Ok(())
-        })
+        }
+        Ok(())
     }
 }
 
@@ -77,26 +73,26 @@ impl EphemeralStore {
             )
             .await?;
         let schema = self.field_config(EntityRole::Invitation)?;
-        let claim = {
-            let state = self.lock()?;
-            let row = state
-                .invitations
-                .first_ref(|row| {
-                    organization_id(row) == bound_id
-                        && organization_value(row, &schema, "status")
-                            .strict_equals(&"pending".into())
-                })?
+        let claim = self.operation(|_| {
+            let row = self
+                .select_organization_rows(
+                    EntityRole::Invitation,
+                    &[
+                        ("id".into(), bound_id.field_value()),
+                        (schema.record_storage_key("status").into(), "pending".into()),
+                    ],
+                )?
+                .into_iter()
+                .next()
                 .ok_or_else(|| AuthError::bad_request("Invitation not found"))?;
-            let fields = row.write(|fields| {
-                *fields = patch.apply(fields.clone());
-                Ok(fields.clone())
-            })?;
-            InvitationClaim {
+            row.apply_patch(patch.apply(FieldMap::new()))?;
+            let fields = row.shallow_fields()?;
+            Ok(InvitationClaim {
                 row,
                 fields,
                 schema,
-            }
-        };
+            })
+        })?;
         // Claim output follows the committed claim and precedes the compensation boundary.
         let accepted = self.output_invitation(claim.fields.clone()).await?;
         match self
@@ -126,34 +122,19 @@ impl EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        {
-            let state = self.lock()?;
-            if !state.invitations.contains_ref(&claim.row)
-                || !claim.row.read(|row| {
-                    Ok(organization_value(row, &claim.schema, "status")
-                        .strict_equals(&"accepted".into()))
-                })?
+        let restored = self.operation(|op| {
+            if op
+                .capture_table(EntityRole::Invitation)?
+                .contains_ref(&claim.row)?
+                && super::organization_rows::field(&claim.row, &claim.schema, "status")?
+                    .strict_equals(&"accepted".into())
             {
-                return Ok(());
-            }
-        }
-        let restored = {
-            let state = self.lock()?;
-            if state.invitations.contains_ref(&claim.row) {
-                claim.row.write(|row| {
-                    if organization_value(row, &claim.schema, "status")
-                        .strict_equals(&"accepted".into())
-                    {
-                        *row = patch.apply(row.clone());
-                        Ok(Some(row.clone()))
-                    } else {
-                        Ok(None)
-                    }
-                })?
+                claim.row.apply_patch(patch.apply(FieldMap::new()))?;
+                Ok(Some(claim.row.shallow_fields()?))
             } else {
-                None
+                Ok(None)
             }
-        };
+        })?;
         if let Some(row) = restored {
             let _ = self.output_invitation(row).await?;
         }
@@ -230,28 +211,30 @@ impl EphemeralStore {
                 .await?;
             let key = crate::organization_fields::team_membership_key_values(&selector, user_id)?;
             // Rebase only pending writes; observed live rows must not become transaction inserts.
-            let observed = self.lock()?.team_members.clone();
-            if !reservations.is_empty()
-                && matches!(
+            self.operation(|op| {
+                let observed = op.capture_table(EntityRole::TeamMember)?.shallow_copy()?;
+                if !reservations.is_empty()
+                    && matches!(
+                        self.config.advanced.database.generate_id(),
+                        crate::id::IdGeneration::Serial
+                    )
+                    && observed.len()? != membership_base.len()?
+                {
+                    return Err(AuthError::conflict(
+                        "Member allocation changed while field transforms were pending",
+                    ));
+                }
+                if matches!(
                     self.config.advanced.database.generate_id(),
                     crate::id::IdGeneration::Serial
-                )
-                && observed.len() != membership_base.len()
-            {
-                return Err(AuthError::conflict(
-                    "Member allocation changed while field transforms were pending",
-                ));
-            }
-            if matches!(
-                self.config.advanced.database.generate_id(),
-                crate::id::IdGeneration::Serial
-            ) {
-                validate_membership_allocations(&observed, &allocated_memberships)?;
-            }
-            let mut memberships = observed.clone();
-            memberships.merge(&membership_base, staged.lock()?.team_members.clone())?;
-            membership_base = observed;
-            staged.lock()?.team_members = memberships;
+                ) {
+                    validate_membership_allocations(&observed, &allocated_memberships)?;
+                }
+                let working = staged.operation(|op| op.capture_table(EntityRole::TeamMember))?;
+                let memberships = observed.reconcile(&membership_base, &working)?;
+                membership_base = observed;
+                staged.operation(|op| op.replace_table(EntityRole::TeamMember, memberships))
+            })?;
             if staged
                 .find_team_member_by_key_or_pair(&selector, user_id, &key)
                 .await?
@@ -260,29 +243,32 @@ impl EphemeralStore {
                 continue;
             }
             let selectors = self.team_member_selectors(&selector, None)?;
-            let (team, actual) = {
-                let state = self.lock()?;
-                let team = state
-                    .teams
-                    .first_ref(|row| {
-                        organization_id(row) == bound_team_id
-                            && organization_value(row, &team_schema, "organizationId")
-                                .strict_equals(&team_org.field_value())
-                    })?
+            let (team, actual) = self.operation(|_| {
+                let team = self
+                    .select_organization_rows(
+                        EntityRole::Team,
+                        &[
+                            ("id".into(), bound_team_id.field_value()),
+                            (
+                                team_schema.record_storage_key("organizationId").into(),
+                                team_org.field_value(),
+                            ),
+                        ],
+                    )?
+                    .into_iter()
+                    .next()
                     .ok_or_else(|| AuthError::bad_request("Team not found"))?;
-                let actual = state
-                    .team_members
-                    .snapshot()?
-                    .iter()
-                    .filter(|row| Self::matches_team_member(row, &selectors))
-                    .count();
-                (team, actual)
-            };
+                let actual = self
+                    .select_organization_rows(EntityRole::TeamMember, &selectors)?
+                    .len();
+                Ok((team, actual))
+            })?;
             let mut prepared = self.prepare_team_reservation(team, actual, limit).await?;
             if !prepared.reserved {
                 return Err(AuthError::forbidden("Team member limit reached"));
             }
-            let before_create = staged.lock()?.team_members.clone();
+            let before_create =
+                staged.operation(|op| op.capture_table(EntityRole::TeamMember)?.shallow_copy())?;
             let (_, created) = match staged
                 .create_team_member_with_key(&selector, user_id, &key)
                 .await
@@ -295,14 +281,10 @@ impl EphemeralStore {
                     return Err(error);
                 }
             };
-            allocated_memberships.extend(
-                staged
-                    .lock()?
-                    .team_members
-                    .select_refs(|_| true)?
-                    .into_iter()
-                    .filter(|row| !before_create.contains_ref(row)),
-            );
+            allocated_memberships.extend(staged.operation(|op| {
+                op.capture_table(EntityRole::TeamMember)?
+                    .select_refs(|row| Ok(!before_create.contains_ref(row)?))
+            })?);
             if limit.is_some() && !created {
                 self.release_prepared_team_seat(&mut prepared).await?;
             } else if limit.is_none() && created {
@@ -310,56 +292,84 @@ impl EphemeralStore {
             }
             reservations.push((team_id.clone(), prepared, limit));
         }
-        let member_count = {
-            let state = self.lock()?;
+        let member_selectors = [
+            (
+                member_schema.record_storage_key("organizationId").into(),
+                member_org.field_value(),
+            ),
+            (
+                member_schema.record_storage_key("userId").into(),
+                member_user.field_value(),
+            ),
+        ];
+        let member_count = self.operation(|op| {
+            let state = op.capture_state()?;
             claim.validate(
                 &state,
                 "Invitation changed while capacity was being resolved",
             )?;
-            if state.members.snapshot()?.iter().any(|row| {
-                organization_value(row, &member_schema, "organizationId")
-                    .strict_equals(&member_org.field_value())
-                    && organization_value(row, &member_schema, "userId")
-                        .strict_equals(&member_user.field_value())
-            }) {
+            if !state
+                .members
+                .select_refs(|row| super::organization_rows::matches(row, &member_selectors))?
+                .is_empty()
+            {
                 return Err(AuthError::bad_request("User is already a member"));
             }
             if let Some((column, token)) = &session_selector {
                 let _ = state
                     .sessions
-                    .find(|row| session_token_matches(row, column, token))?
+                    .select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(column)?.unwrap_or_default(),
+                            token,
+                        ))
+                    })?
+                    .into_iter()
+                    .next()
                     .ok_or(AuthError::SessionNotFound)?;
             }
             state.members.len()
-        };
-        let mut copies = crate::StructuredCloneContext::new();
-        for (_, prepared, _) in &reservations {
-            let (source, patch) = prepared.pending_write();
-            let fields = source.shallow_fields()?;
-            let mut fields = copies.clone_map(&fields)?;
-            fields.extend(patch);
-            let id = fields.get("id").cloned().unwrap_or_default();
-            let mut state = staged.lock()?;
-            match state.teams.first_ref(|row| {
-                row.get("id")
-                    .unwrap_or(&Value::Undefined)
-                    .same_value_zero(&id)
-            })? {
-                Some(source) => source.write(|row| {
-                    *row = fields;
-                    Ok(())
-                })?,
-                None => state.teams.push(fields),
+        })?;
+        self.operation(|_| {
+            let mut copies = crate::StructuredCloneContext::new();
+            for (_, prepared, _) in &reservations {
+                let (source, patch) = prepared.pending_write();
+                let fields = source.shallow_fields()?;
+                let mut fields = copies.clone_map(&fields)?;
+                fields.extend(patch);
+                let id = fields.get("id").cloned().unwrap_or_default();
+                staged.operation(|op| {
+                    let table = op.capture_table(EntityRole::Team)?;
+                    let source = table
+                        .select_refs(|row| {
+                            Ok(row.field("id")?.unwrap_or_default().same_value_zero(&id))
+                        })?
+                        .into_iter()
+                        .next();
+                    match source {
+                        Some(source) => source.replace(fields),
+                        None => table.push(fields).map(|_| ()),
+                    }
+                })?;
             }
-        }
+            Ok(())
+        })?;
         let prepared_session = if let Some((column, token)) = &session_selector {
-            let source = self
-                .lock()?
-                .sessions
-                .first_ref(|row| session_token_matches(row, column, token))?
-                .ok_or(AuthError::SessionNotFound)?;
-            let original = source.shallow_fields()?;
-            Some((source, original))
+            Some(self.operation(|op| {
+                let source = op
+                    .capture_table(EntityRole::Session)?
+                    .select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(column)?.unwrap_or_default(),
+                            token,
+                        ))
+                    })?
+                    .into_iter()
+                    .next()
+                    .ok_or(AuthError::SessionNotFound)?;
+                let original = source.shallow_fields()?;
+                Ok((source, original))
+            })?)
         } else {
             None
         };
@@ -402,16 +412,10 @@ impl EphemeralStore {
             role: invitation.role.clone(),
             created_at: Utc::now().into(),
         };
-        let mut member = staged
+        let member = staged
             .create_record(EntityRole::Member, member, FieldMap::new())
             .await?;
-        let member = {
-            let mut state = staged.lock()?;
-            if let Some(id) = staged.next_serial_id(state.members.len()) {
-                let _ = member.insert("id".into(), id);
-            }
-            state.members.push_ref(member)
-        };
+        let member = staged.insert_organization_row(EntityRole::Member, member)?;
         let output = staged
             .output_record_refs(EntityRole::Member, vec![member])
             .await?
@@ -436,65 +440,97 @@ impl EphemeralStore {
                 .await?;
         }
         let committed = staged.prepare_transaction_commit()?;
-        {
-            let mut state = self.lock()?;
-            claim.validate(
-                &state,
-                "Invitation changed while field transforms were pending",
-            )?;
-            if state.members.snapshot()?.iter().any(|row| {
-                organization_value(row, &member_schema, "organizationId")
-                    .strict_equals(&member_org.field_value())
-                    && organization_value(row, &member_schema, "userId")
-                        .strict_equals(&member_user.field_value())
-            }) {
-                return Err(AuthError::bad_request("User is already a member"));
-            }
-            if let Some((source, original)) = &prepared_session {
-                if !state.sessions.contains_ref(source) {
-                    return Err(AuthError::SessionNotFound);
+        self.operation(|op| {
+            let validate_common = |state: &State| -> AuthResult<()> {
+                claim.validate(
+                    state,
+                    "Invitation changed while field transforms were pending",
+                )?;
+                if !state
+                    .members
+                    .select_refs(|row| super::organization_rows::matches(row, &member_selectors))?
+                    .is_empty()
+                {
+                    return Err(AuthError::bad_request("User is already a member"));
                 }
-                let unchanged = source.read(|row| {
-                    Ok(row.keys().eq(original.keys())
-                        && row.iter().all(|(name, value)| {
+                if let Some((source, original)) = &prepared_session {
+                    if !state.sessions.contains_ref(source)? {
+                        return Err(AuthError::SessionNotFound);
+                    }
+                    let row = source.shallow_fields()?;
+                    if !row.keys().eq(original.keys())
+                        || !row.iter().all(|(name, value)| {
                             original
                                 .get(name)
                                 .is_some_and(|original| value.same_value_zero(original))
-                        }))
-                })?;
-                if !unchanged {
-                    return Err(AuthError::conflict(
-                        "Session changed while field transforms were pending",
-                    ));
+                        })
+                    {
+                        return Err(AuthError::conflict(
+                            "Session changed while field transforms were pending",
+                        ));
+                    }
                 }
-            }
-            let current_members = state.team_members.snapshot()?;
+                Ok(())
+            };
+            let validate_allocations = |state: &State| -> AuthResult<()> {
+                if matches!(
+                    self.config.advanced.database.generate_id(),
+                    crate::id::IdGeneration::Serial
+                ) {
+                    if state.members.len()? != member_count
+                        || state.team_members.len()? != membership_base.len()?
+                    {
+                        return Err(AuthError::conflict(
+                            "Member allocation changed while field transforms were pending",
+                        ));
+                    }
+                    validate_membership_allocations(&state.team_members, &allocated_memberships)?;
+                }
+                Ok(())
+            };
+            validate_common(&op.capture_state()?)?;
+            let mut existing_guards = Vec::new();
             for (id, team_id) in &team_checks {
-                let team = state
-                    .teams
-                    .first_ref(|team| {
-                        organization_id(team) == *team_id
-                            && organization_value(team, &team_schema, "organizationId")
-                                .strict_equals(&team_org.field_value())
+                let team = op
+                    .capture_table(EntityRole::Team)?
+                    .select_refs(|row| {
+                        super::organization_rows::matches(
+                            row,
+                            &[
+                                ("id".into(), team_id.field_value()),
+                                (
+                                    team_schema.record_storage_key("organizationId").into(),
+                                    team_org.field_value(),
+                                ),
+                            ],
+                        )
                     })?
+                    .into_iter()
+                    .next()
                     .ok_or_else(|| AuthError::bad_request("Team not found"))?;
                 let selector = Value::from(id.as_str());
                 let key =
                     crate::organization_fields::team_membership_key_values(&selector, user_id)?;
-                if !reservations
+                let lookup = if !reservations
                     .iter()
                     .any(|(_, prepared, _)| prepared.same_team(&team))
-                    && self
-                        .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
-                        .is_none()
                 {
-                    return Err(AuthError::conflict(
-                        "Team membership changed while field transforms were pending",
-                    ));
-                }
+                    let (existing, lookup) =
+                        self.prepare_team_member_lookup(op, &selector, user_id, &key)?;
+                    if existing.is_none() {
+                        return Err(AuthError::conflict(
+                            "Team membership changed while field transforms were pending",
+                        ));
+                    }
+                    Some(lookup)
+                } else {
+                    None
+                };
+                existing_guards.push(lookup);
             }
-            for (id, prepared, maximum) in reservations {
-                let team = prepared.current(&state.teams)?;
+            let mut reservation_guards = Vec::new();
+            for (id, prepared, maximum) in &reservations {
+                let team = prepared.current(&op.capture_table(EntityRole::Team)?)?;
                 if !organization_value(&team, &team_schema, "organizationId")
                     .strict_equals(&team_org.field_value())
                 {
@@ -502,16 +538,15 @@ impl EphemeralStore {
                 }
                 let selector = Value::from(id.as_str());
                 let selectors = self.team_member_selectors(&selector, None)?;
-                let actual = current_members
-                    .iter()
-                    .filter(|row| Self::matches_team_member(row, &selectors))
-                    .count();
+                let actual = op
+                    .capture_table(EntityRole::TeamMember)?
+                    .select_refs(|row| Self::matches_team_member(row, &selectors))?
+                    .len();
                 let key =
                     crate::organization_fields::team_membership_key_values(&selector, user_id)?;
-                if self
-                    .team_member_by_key_or_pair(&state, &selector, user_id, &key)?
-                    .is_some()
-                {
+                let (existing, lookup) =
+                    self.prepare_team_member_lookup(op, &selector, user_id, &key)?;
+                if existing.is_some() {
                     return Err(AuthError::conflict(
                         "Team membership changed while field transforms were pending",
                     ));
@@ -519,28 +554,74 @@ impl EphemeralStore {
                 if maximum.is_some_and(|limit| actual >= limit) {
                     return Err(AuthError::forbidden("Team member limit reached"));
                 }
-                let _ = prepared.apply(&state.teams, actual)?;
+                let _ = prepared.apply(&op.capture_table(EntityRole::Team)?, actual)?;
+                reservation_guards.push((selectors, lookup));
             }
-            // Validate the complete staged result before publishing any member, seat, or session delta.
-            if matches!(
-                self.config.advanced.database.generate_id(),
-                crate::id::IdGeneration::Serial
-            ) && (state.members.len() != member_count
-                || state.team_members.len() != membership_base.len())
+            validate_allocations(&op.capture_state()?)?;
+            transaction_base.team_members = membership_base.clone();
+            let plan = committed.plan(op, &transaction_base)?;
+            // Bound selectors and identity checks below do not invoke conversion or application callbacks.
+            let current = op.capture_state()?;
+            validate_common(&current)?;
+            for ((_, team_id), lookup) in team_checks.iter().zip(existing_guards) {
+                let team = current
+                    .teams
+                    .select_refs(|row| {
+                        super::organization_rows::matches(
+                            row,
+                            &[
+                                ("id".into(), team_id.field_value()),
+                                (
+                                    team_schema.record_storage_key("organizationId").into(),
+                                    team_org.field_value(),
+                                ),
+                            ],
+                        )
+                    })?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| AuthError::bad_request("Team not found"))?;
+                if let Some(lookup) = lookup {
+                    if lookup.find(&current.team_members)?.is_none() {
+                        return Err(AuthError::conflict(
+                            "Team membership changed while field transforms were pending",
+                        ));
+                    }
+                } else if !reservations
+                    .iter()
+                    .any(|(_, prepared, _)| prepared.same_team(&team))
+                {
+                    return Err(AuthError::conflict(
+                        "Team changed while field transforms were pending",
+                    ));
+                }
+            }
+            for ((_, prepared, maximum), (selectors, lookup)) in
+                reservations.iter().zip(reservation_guards)
             {
-                return Err(AuthError::conflict(
-                    "Member allocation changed while field transforms were pending",
-                ));
+                let team = prepared.current(&current.teams)?;
+                if !organization_value(&team, &team_schema, "organizationId")
+                    .strict_equals(&team_org.field_value())
+                {
+                    return Err(AuthError::bad_request("Team not found"));
+                }
+                let actual = current
+                    .team_members
+                    .select_refs(|row| Self::matches_team_member(row, &selectors))?
+                    .len();
+                if lookup.find(&current.team_members)?.is_some() {
+                    return Err(AuthError::conflict(
+                        "Team membership changed while field transforms were pending",
+                    ));
+                }
+                if maximum.is_some_and(|limit| actual >= limit) {
+                    return Err(AuthError::forbidden("Team member limit reached"));
+                }
+                let _ = prepared.apply(&current.teams, actual)?;
             }
-            if matches!(
-                self.config.advanced.database.generate_id(),
-                crate::id::IdGeneration::Serial
-            ) {
-                validate_membership_allocations(&state.team_members, &allocated_memberships)?;
-            }
-            transaction_base.team_members = membership_base;
-            committed.merge(&mut state, &transaction_base)?;
-        }
+            validate_allocations(&current)?;
+            plan.publish(op)
+        })?;
         self.drain_transaction_hooks(&pending_hooks).await?;
         Ok((output, cookie_session))
     }
@@ -629,8 +710,8 @@ mod tests {
         assert_eq!(member.role, "visible-member");
         assert!(matches!(rejected, Err(AuthError::Conflict(_))));
         assert_eq!(calls.load(Ordering::SeqCst), 2);
-        let state = store.lock()?;
-        assert_eq!(state.members.len(), 1);
+        let state = store.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, 1);
         assert_eq!(state.members.snapshot()?[0]["id"], Value::Number(1.0));
         assert_eq!(state.members.snapshot()?[0]["role"], Value::from("member"));
         let invitations = state.invitations.snapshot()?;
@@ -648,8 +729,8 @@ mod tests {
                 .count(),
             1
         );
-        assert_eq!(state.team_members.len(), 0);
-        assert_eq!(state.sessions.len(), 0);
+        assert_eq!(state.team_members.len()?, 0);
+        assert_eq!(state.sessions.len()?, 0);
         Ok(())
     }
 
@@ -688,8 +769,14 @@ mod tests {
                     active_organization_id: None,
                 })
                 .await?;
-            let original = writer.lock()?.sessions.snapshot()?;
-            let original_team = writer.lock()?.teams.snapshot()?;
+            let original = writer
+                .operation(|op| op.capture_state())?
+                .sessions
+                .snapshot()?;
+            let original_team = writer
+                .operation(|op| op.capture_state())?
+                .teams
+                .snapshot()?;
             let calls = Arc::new(AtomicUsize::new(0));
             let mut reader = writer.clone();
             let _ = reader.session_config.fields_mut().insert(
@@ -714,20 +801,24 @@ mod tests {
                                 if !replace {
                                     return Ok(value);
                                 }
-                                let mut state = writer.lock()?;
-                                let source = state
-                                    .sessions
-                                    .first_ref(|row| {
-                                        row.get("token") == Some(&Value::from("invitation-session"))
-                                    })?
-                                    .ok_or(AuthError::SessionNotFound)?;
-                                let mut replacement = state
-                                    .sessions
-                                    .remove_ref(&source)?
-                                    .ok_or(AuthError::SessionNotFound)?;
-                                let _ = replacement
-                                    .insert("ipAddress".into(), "concurrent-writer".into());
-                                state.sessions.push(replacement);
+                                writer.operation(|op| {
+                                    let table = op.capture_table(EntityRole::Session)?;
+                                    let source = table
+                                        .select_refs(|row| {
+                                            Ok(row.field("token")?
+                                                == Some(Value::from("invitation-session")))
+                                        })?
+                                        .into_iter()
+                                        .next()
+                                        .ok_or(AuthError::SessionNotFound)?;
+                                    let mut replacement = source.shallow_fields()?;
+                                    let _ = replacement
+                                        .insert("ipAddress".into(), "concurrent-writer".into());
+                                    let replacement_table =
+                                        table.without_refs(std::slice::from_ref(&source))?;
+                                    let _ = replacement_table.push(replacement)?;
+                                    op.replace_table(EntityRole::Session, replacement_table)
+                                })?;
                                 Ok(value)
                             }
                         })),
@@ -756,9 +847,9 @@ mod tests {
                 calls.load(Ordering::SeqCst),
                 if mode == "team-failure" { 1 } else { 2 }
             );
-            let state = writer.lock()?;
-            assert_eq!(state.members.len(), 0);
-            assert_eq!(state.team_members.len(), 0);
+            let state = writer.operation(|op| op.capture_state())?;
+            assert_eq!(state.members.len()?, 0);
+            assert_eq!(state.team_members.len()?, 0);
             assert_eq!(state.teams.snapshot()?, original_team);
             let mut expected = original;
             if replace {

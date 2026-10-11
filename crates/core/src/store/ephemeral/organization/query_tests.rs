@@ -46,10 +46,9 @@ async fn native_json_policies_transform_raw_text_without_reencoding_reads() -> A
     );
     assert_eq!(
         store
-            .lock()
-            .unwrap()
-            .organizations
-            .get(&organization.id)?
+            .operation(|op| op
+                .capture_table(EntityRole::Organization)?
+                .get(&organization.id))?
             .unwrap()
             .get("metadata")
             .unwrap()
@@ -90,10 +89,9 @@ async fn native_json_policies_transform_raw_text_without_reencoding_reads() -> A
     );
     assert_eq!(
         store
-            .lock()
-            .unwrap()
-            .organization_roles
-            .get(&role.id)?
+            .operation(|op| op
+                .capture_table(EntityRole::OrganizationRole)?
+                .get(&role.id))?
             .unwrap()
             .get("permission")
             .unwrap()
@@ -281,7 +279,7 @@ async fn member_sort_preserves_equal_dates_and_page_positions() -> AuthResult<()
     }
     assert_eq!(created, fixture.created);
     assert_eq!(
-        store.lock()?.members.snapshot()?,
+        store.storage_rows(EntityRole::Member)?,
         fixture
             .stored
             .iter()
@@ -302,7 +300,7 @@ async fn member_sort_preserves_equal_dates_and_page_positions() -> AuthResult<()
         assert_eq!(members, operation.rows, "{} rows", operation.name);
         assert_eq!(total, operation.total, "{} total", operation.name);
         assert_eq!(
-            store.lock()?.members.snapshot()?,
+            store.storage_rows(EntityRole::Member)?,
             operation
                 .stored
                 .iter()

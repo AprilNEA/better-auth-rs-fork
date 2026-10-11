@@ -1,4 +1,4 @@
-use super::super::rows::Rows;
+use super::super::table::TableRef;
 use super::*;
 use crate::store::database_hooks::{DatabaseHookContext, DatabaseHooks};
 use crate::store::transaction;
@@ -48,38 +48,45 @@ fn account(id: &str, password: &str) -> AccountView {
 
 #[test]
 fn merge_preserves_private_changes_and_concurrent_rows_without_resurrecting_deletes() {
-    let mut base = Rows::default();
+    let base = TableRef::new(Arc::default());
     for id in ["private", "untouched", "removed"] {
-        base.push(account(id, "before").field_values().unwrap());
+        base.push(account(id, "before").field_values().unwrap())
+            .unwrap();
     }
     let mut live = base
         .deep_clone(&mut crate::StructuredCloneContext::new())
         .unwrap();
     let _ = live
-        .get_mut("untouched")
+        .get_ref("untouched")
         .unwrap()
         .unwrap()
-        .insert("password".into(), "concurrent".into());
+        .set_field("password".into(), "concurrent".into())
+        .unwrap();
     let _ = live.remove("removed").unwrap();
-    live.push(account("new-live", "concurrent").field_values().unwrap());
-    let mut working = base
+    live.push(account("new-live", "concurrent").field_values().unwrap())
+        .unwrap();
+    let working = base
         .deep_clone(&mut crate::StructuredCloneContext::new())
         .unwrap();
     let _ = working
-        .get_mut("private")
+        .get_ref("private")
         .unwrap()
         .unwrap()
-        .insert("password".into(), "committed".into());
+        .set_field("password".into(), "committed".into())
+        .unwrap();
     let _ = working
-        .get_mut("removed")
+        .get_ref("removed")
         .unwrap()
         .unwrap()
-        .insert("password".into(), "must-not-resurrect".into());
-    working.push(
-        account("new-transaction", "committed")
-            .field_values()
-            .unwrap(),
-    );
+        .set_field("password".into(), "must-not-resurrect".into())
+        .unwrap();
+    working
+        .push(
+            account("new-transaction", "committed")
+                .field_values()
+                .unwrap(),
+        )
+        .unwrap();
 
     // Wire serialization omits password; transaction comparison must include it.
     assert_eq!(
@@ -92,7 +99,7 @@ fn merge_preserves_private_changes_and_concurrent_rows_without_resurrecting_dele
         )
         .unwrap()
     );
-    live.merge(&base, working).unwrap();
+    live = live.reconcile(&base, &working).unwrap();
     assert_eq!(
         AccountView::from_field_values(live.get("private").unwrap().unwrap())
             .unwrap()
@@ -141,16 +148,17 @@ fn merge_keeps_private_passkey_credential_updates() {
         aaguid: None.into(),
         credential: "private-before".into(),
     };
-    let mut base = Rows::default();
-    base.push(key.field_values().unwrap());
+    let base = TableRef::new(Arc::default());
+    base.push(key.field_values().unwrap()).unwrap();
     let working = base
         .deep_clone(&mut crate::StructuredCloneContext::new())
         .unwrap();
     let _ = working
-        .get_mut("key")
+        .get_ref("key")
         .unwrap()
         .unwrap()
-        .insert("credential".into(), "private-after".into());
+        .set_field("credential".into(), "private-after".into())
+        .unwrap();
     assert_eq!(
         serde_json::to_value(
             Passkey::from_field_values(base.get("key").unwrap().unwrap()).unwrap()
@@ -164,7 +172,7 @@ fn merge_keeps_private_passkey_credential_updates() {
     let mut live = base
         .deep_clone(&mut crate::StructuredCloneContext::new())
         .unwrap();
-    live.merge(&base, working).unwrap();
+    live = live.reconcile(&base, &working).unwrap();
     assert_eq!(
         live.get("key").unwrap().unwrap()["credential"],
         "private-after".into()

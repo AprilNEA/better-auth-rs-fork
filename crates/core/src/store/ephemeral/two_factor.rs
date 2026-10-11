@@ -2,7 +2,7 @@ use super::rows::RowRef;
 use super::*;
 use crate::query::{field_compare, field_matches_equality};
 use crate::store::schema::EntityRole;
-use crate::{FieldDate, FieldValue, FromFieldMap, SchemaValue};
+use crate::{FieldDate, FieldValue, FromFieldMap, SchemaValue, WhereMode, WhereOperator};
 
 impl EphemeralStore {
     async fn project_two_factor_refs(
@@ -19,22 +19,21 @@ impl EphemeralStore {
     async fn write_two_factor_row(
         &self,
         operation: &str,
-        predicate: impl Fn(&FieldMap) -> AuthResult<bool> + Send,
-        write: impl Fn(&mut FieldMap) + Send,
+        predicate: impl Fn(&RowRef<FieldMap>) -> AuthResult<bool> + Send,
+        write: impl Fn(&RowRef<FieldMap>) -> AuthResult<()> + Send,
     ) -> AuthResult<Option<TwoFactor>> {
         let selected = self
-            .raw("twoFactor", operation, move |state| {
-                let matches = state.two_factors.try_select_refs(predicate)?;
+            .raw("twoFactor", operation, move |op| {
+                let matches = op
+                    .capture_table(EntityRole::TwoFactor)?
+                    .select_refs(predicate)?;
                 let writes = if operation == "incrementOne" {
                     1
                 } else {
                     matches.len()
                 };
                 for source in matches.iter().take(writes) {
-                    source.write(|row| {
-                        write(row);
-                        Ok(())
-                    })?;
+                    write(source)?;
                 }
                 Ok(matches.into_iter().next())
             })
@@ -99,13 +98,17 @@ impl TwoFactorStore for EphemeralStore {
         let schema = self.model_fields.plugin_fields(EntityRole::TwoFactor);
         let column = schema.record_storage_key("userId");
         let selected = self
-            .raw("twoFactor", "findOne", |state| {
-                state.two_factors.first_ref(|row| {
-                    field_matches_equality(
-                        row.get(column).unwrap_or(&FieldValue::Undefined),
-                        &value,
-                    )
-                })
+            .raw("twoFactor", "findOne", |op| {
+                Ok(op
+                    .capture_table(EntityRole::TwoFactor)?
+                    .select_refs(|row| {
+                        Ok(field_matches_equality(
+                            &row.field(column)?.unwrap_or_default(),
+                            &value,
+                        ))
+                    })?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -133,11 +136,11 @@ impl TwoFactorStore for EphemeralStore {
             "update",
             |row| {
                 Ok(field_matches_equality(
-                    row.get(column).unwrap_or(&FieldValue::Undefined),
+                    &row.field(column)?.unwrap_or_default(),
                     &owner,
                 ))
             },
-            |row| row.extend(patch.clone()),
+            |row| row.apply_patch(patch.clone()),
         )
         .await?
         .ok_or_else(|| AuthError::not_found("Two-factor settings not found"))
@@ -165,15 +168,17 @@ impl TwoFactorStore for EphemeralStore {
         self.write_two_factor_row(
             "incrementOne",
             |row| {
-                Ok(
-                    field_matches_equality(row.get("id").unwrap_or(&FieldValue::Undefined), &id)
-                        && field_matches_equality(
-                            row.get(column).unwrap_or(&FieldValue::Undefined),
-                            &previous,
-                        ),
+                crate::memory_query::matches_all(
+                    [("id", &id), (column, &previous)],
+                    |(name, value)| {
+                        Ok(field_matches_equality(
+                            &row.field(name)?.unwrap_or_default(),
+                            value,
+                        ))
+                    },
                 )
             },
-            |row| row.extend(patch.clone()),
+            |row| row.apply_patch(patch.clone()),
         )
         .await
         .map(|row| row.is_some())
@@ -193,14 +198,11 @@ impl TwoFactorStore for EphemeralStore {
                 "incrementOne",
                 |row| {
                     Ok(field_matches_equality(
-                        row.get("id").unwrap_or(&FieldValue::Undefined),
+                        &row.field("id")?.unwrap_or_default(),
                         &queried_id,
                     ))
                 },
-                |row| {
-                    let count = row.get(column).and_then(FieldValue::as_f64).unwrap_or(0.0) + 1.0;
-                    let _ = row.insert(column.to_owned(), count.into());
-                },
+                |row| row.increment_number_fields(&[(column.to_owned(), 1.0)]),
             )
             .await?;
         let count = row
@@ -234,16 +236,22 @@ impl TwoFactorStore for EphemeralStore {
                 .write_two_factor_row(
                     "incrementOne",
                     |row| {
-                        Ok(field_matches_equality(
-                            row.get("id").unwrap_or(&FieldValue::Undefined),
-                            &queried_id,
-                        ) && field_compare(
-                            row.get(column).unwrap_or(&FieldValue::Undefined),
-                            &maximum,
-                        )?
-                        .is_some_and(|order| order.is_ge()))
+                        crate::memory_query::matches_all(
+                            [
+                                ("id", &queried_id, WhereOperator::Eq),
+                                (column, &maximum, WhereOperator::Gte),
+                            ],
+                            |(name, value, operator)| {
+                                crate::memory_query::matches(
+                                    row.field(name)?.as_ref(),
+                                    value,
+                                    operator,
+                                    WhereMode::Sensitive,
+                                )
+                            },
+                        )
                     },
-                    |row| row.extend(patch.clone()),
+                    |row| row.apply_patch(patch.clone()),
                 )
                 .await?;
         }
@@ -283,20 +291,21 @@ impl TwoFactorStore for EphemeralStore {
                     "update"
                 },
                 |row| {
-                    if !field_matches_equality(row.get("id").unwrap_or(&FieldValue::Undefined), &id)
-                    {
-                        return Ok(false);
-                    }
-                    match &cutoff {
-                        Some(cutoff) => Ok(field_compare(
-                            row.get(column).unwrap_or(&FieldValue::Undefined),
-                            cutoff,
-                        )?
-                        .is_some_and(|order| order.is_le())),
-                        None => Ok(true),
-                    }
+                    let clauses = std::iter::once(("id", &id, WhereOperator::Eq)).chain(
+                        cutoff
+                            .as_ref()
+                            .map(|value| (column, value, WhereOperator::Lte)),
+                    );
+                    crate::memory_query::matches_all(clauses, |(name, value, operator)| {
+                        crate::memory_query::matches(
+                            row.field(name)?.as_ref(),
+                            value,
+                            operator,
+                            WhereMode::Sensitive,
+                        )
+                    })
                 },
-                |row| row.extend(patch.clone()),
+                |row| row.apply_patch(patch.clone()),
             )
             .await?;
         Ok(())
@@ -310,11 +319,15 @@ impl TwoFactorStore for EphemeralStore {
             self.plugin_query_value(EntityRole::TwoFactor, "userId", user_id.field_value())?;
         let schema = self.model_fields.plugin_fields(EntityRole::TwoFactor);
         let column = schema.record_storage_key("userId");
-        self.raw("twoFactor", "delete", |state| {
-            state.two_factors.retain(|row| {
-                !field_matches_equality(row.get(column).unwrap_or(&FieldValue::Undefined), &owner)
+        self.raw("twoFactor", "delete", |op| {
+            let table = op.capture_table(EntityRole::TwoFactor)?;
+            let selected = table.select_refs(|row| {
+                Ok(field_matches_equality(
+                    &row.field(column)?.unwrap_or_default(),
+                    &owner,
+                ))
             })?;
-            Ok(())
+            op.replace_table(EntityRole::TwoFactor, table.without_refs(&selected)?)
         })
         .await
     }

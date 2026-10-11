@@ -204,9 +204,7 @@ async fn verification_output_reads_live_fields_after_awaited_writer_updates() ->
             assert_eq!(
                 serde_json::to_value(
                     writer
-                        .lock()?
-                        .verifications
-                        .snapshot()?
+                        .operation(|op| op.capture_state()?.verifications.snapshot())?
                         .iter()
                         .map(FieldMap::json)
                         .collect::<AuthResult<Vec<_>>>()?
@@ -259,9 +257,7 @@ async fn verification_consumed_output_retains_the_detached_record_when_its_id_is
     assert_eq!(
         serde_json::to_value(
             writer
-                .lock()?
-                .verifications
-                .snapshot()?
+                .operation(|op| op.capture_state()?.verifications.snapshot())?
                 .iter()
                 .map(FieldMap::json)
                 .collect::<AuthResult<Vec<_>>>()?
@@ -314,7 +310,11 @@ async fn verification_reservation_rethrows_the_original_output_error_after_reent
         observed(&events)?,
         vec![json!(["identifier", "subject"]), json!(["deleted"])]
     );
-    assert!(writer.lock()?.verifications.snapshot()?.is_empty());
+    assert!(
+        writer
+            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .is_empty()
+    );
     Ok(())
 }
 
@@ -396,7 +396,10 @@ async fn verification_consumption_binds_projected_ids_without_raw_identity_fallb
                 physical.push(raw);
                 let _ = writer.create_verification(input).await?;
             }
-            assert_eq!(writer.lock()?.verifications.snapshot()?, physical);
+            assert_eq!(
+                writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+                physical
+            );
             let events = Events::default();
             let reader = writer.clone().with_hooks(vec![Arc::new(ConsumeHooks {
                 events: events.clone(),
@@ -424,7 +427,10 @@ async fn verification_consumption_binds_projected_ids_without_raw_identity_fallb
             } else {
                 &physical[..]
             };
-            assert_eq!(writer.lock()?.verifications.snapshot()?, remaining);
+            assert_eq!(
+                writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+                remaining
+            );
         }
     }
     Ok(())
@@ -558,7 +564,7 @@ async fn verification_consumption_uses_the_id_projected_before_delete_hooks() ->
         }
         assert_eq!(observed(&events)?, trace);
         assert_eq!(
-            writer.lock()?.verifications.snapshot()?,
+            writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
             [subject.fields()?, retained.fields()?],
             "The consume transaction must keep its writes isolated"
         );
@@ -575,7 +581,10 @@ async fn verification_consumption_uses_the_id_projected_before_delete_hooks() ->
             let _ = moved.insert("id".into(), "moved".into());
             remaining.push(moved);
         }
-        assert_eq!(writer.lock()?.verifications.snapshot()?, remaining);
+        assert_eq!(
+            writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+            remaining
+        );
     }
     Ok(())
 }

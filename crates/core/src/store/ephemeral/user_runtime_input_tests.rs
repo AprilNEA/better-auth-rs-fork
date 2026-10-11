@@ -128,16 +128,16 @@ impl<S: AuthSchema> DatabaseHooks<S> for Hook {
 fn raw(config: &AuthConfig, create: bool) -> AuthResult<Arc<EphemeralStore>> {
     let store = Arc::new(EphemeralStore::new(Arc::new(config.clone())));
     if !create {
-        store
-            .lock()?
-            .users
-            .push(UserView::try_from(contract::native_user())?);
+        let _ = store.operation(|op| {
+            op.capture_users()?
+                .push(UserView::try_from(contract::native_user())?)
+        })?;
     }
     Ok(store)
 }
 
 fn stored_user(store: &EphemeralStore) -> AuthResult<Option<FieldMap>> {
-    let rows = store.lock()?.users.snapshot()?;
+    let rows = store.operation(|op| op.capture_users()?.snapshot())?;
     assert!(rows.len() <= 1);
     Ok(rows.into_iter().next().map(FieldMap::from))
 }

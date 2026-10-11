@@ -48,9 +48,7 @@ async fn name_sort_skips_conversion_when_only_nullish_names_can_be_compared() ->
                 );
                 assert_eq!(
                     store
-                        .lock()?
-                        .api_keys
-                        .snapshot()?
+                        .storage_rows(EntityRole::ApiKey)?
                         .iter()
                         .map(|row| row.get("name").cloned().unwrap_or_default())
                         .collect::<Vec<_>>(),
@@ -199,7 +197,7 @@ async fn date_and_boolean_name_sorts_match_pinned_unpaginated_rows() -> AuthResu
                 .await?;
             assert_eq!(observe_typed_names(&[row])?, json!([seed["result"]]));
         }
-        let stored = store.lock()?.api_keys.snapshot()?;
+        let stored = store.storage_rows(EntityRole::ApiKey)?;
         assert_eq!(observe_stored_names(&stored)?, case["stored"]);
         let operations = case["operations"]
             .as_array()
@@ -219,7 +217,7 @@ async fn date_and_boolean_name_sorts_match_pinned_unpaginated_rows() -> AuthResu
                 expected["rows"],
                 "{name}: {operation}"
             );
-            assert_eq!(store.lock()?.api_keys.snapshot()?, stored);
+            assert_eq!(store.storage_rows(EntityRole::ApiKey)?, stored);
         }
     }
     Ok(())
@@ -231,7 +229,7 @@ async fn date_name_sort_does_not_require_chrono_string_conversion() -> AuthResul
     let later = FieldValue::Date(FieldDate::from_milliseconds(8_640_000_000_000_000.0));
     let names = [later.clone(), earlier.clone()];
     let store = create_names(&names).await?;
-    let stored = store.lock()?.api_keys.snapshot()?;
+    let stored = store.storage_rows(EntityRole::ApiKey)?;
     for (direction, expected) in [
         ("asc", [earlier.clone(), later.clone()]),
         ("desc", [later, earlier]),
@@ -245,7 +243,7 @@ async fn date_name_sort_does_not_require_chrono_string_conversion() -> AuthResul
                 .collect::<Vec<_>>(),
             expected
         );
-        assert_eq!(store.lock()?.api_keys.snapshot()?, stored);
+        assert_eq!(store.storage_rows(EntityRole::ApiKey)?, stored);
     }
     Ok(())
 }
@@ -297,9 +295,9 @@ async fn number_sort_preserves_signed_zero_nan_and_infinity_ties_from_pinned_row
                 .ok_or_else(|| AuthError::internal("Missing API Key number sort case"))?;
             let store = EphemeralStore::default();
             for row in number_sort_rows(&case["input"])? {
-                store.lock()?.api_keys.push(row);
+                store.operation(|op| op.capture_table(EntityRole::ApiKey)?.push(row))?;
             }
-            assert_number_sort_rows(&store.lock()?.api_keys.snapshot()?, &case["stored"])?;
+            assert_number_sort_rows(&store.storage_rows(EntityRole::ApiKey)?, &case["stored"])?;
             let operations = case["operations"]
                 .as_array()
                 .ok_or_else(|| AuthError::internal("Expected API Key number sort operations"))?;
@@ -320,7 +318,10 @@ async fn number_sort_preserves_signed_zero_nan_and_infinity_ties_from_pinned_row
                     &operation["rows"],
                 )?;
                 assert_eq!(json!(rows.len()), operation["total"]);
-                assert_number_sort_rows(&store.lock()?.api_keys.snapshot()?, &operation["stored"])?;
+                assert_number_sort_rows(
+                    &store.storage_rows(EntityRole::ApiKey)?,
+                    &operation["stored"],
+                )?;
             }
         }
     }

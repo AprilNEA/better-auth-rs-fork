@@ -169,7 +169,7 @@ async fn schema_history_memory_input_failure_preserves_callback_and_mutation() {
         owner_schema(&store.clone()),
         expected["observations"][2]["result"]
     );
-    assert_eq!(store.lock().unwrap().users.len(), 0);
+    assert_eq!(store.operation(|op| op.capture_users()?.len()).unwrap(), 0);
     let fresh = store
         .with_runtime(Arc::new(config), Vec::new(), Default::default())
         .unwrap();
@@ -197,7 +197,7 @@ async fn schema_history_memory_verification_cleanup_keeps_the_adapter_runtime() 
     assert_eq!(owner_schema(&store), JsonValue::Null);
     assert!(
         store
-            .lock()
+            .operation(|op| op.capture_state())
             .unwrap()
             .verifications
             .snapshot()

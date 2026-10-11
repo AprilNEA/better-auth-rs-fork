@@ -6,6 +6,8 @@
 use super::*;
 use crate::field_value::FieldObjectSource;
 use crate::store::ephemeral::EphemeralStore;
+use crate::store::ephemeral::table::TableRef;
+use crate::store::schema::EntityRole;
 use std::sync::Weak;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -14,24 +16,24 @@ fn required<T>(value: Option<T>) -> AuthResult<T> {
 }
 
 fn detached<T: ObjectRow + FromFieldMap + Clone + Send + 'static>() -> AuthResult<()> {
-    let mut rows = Rows::default();
-    let original = rows.push_ref(T::from_field_values(
+    let mut rows = TableRef::new(Arc::default());
+    let original = rows.push(T::from_field_values(
         [
             ("id".into(), "same-id".into()),
             ("name".into(), "original".into()),
         ]
         .into(),
-    )?);
+    )?)?;
     let retained = original.field_value();
     let handle = required(retained.as_object())?;
-    let _ = rows.remove_ref(&original)?;
-    let replacement = rows.push_ref(T::from_field_values(
+    rows = rows.without_refs(std::slice::from_ref(&original))?;
+    let replacement = rows.push(T::from_field_values(
         [
             ("id".into(), "same-id".into()),
             ("name".into(), "replacement".into()),
         ]
         .into(),
-    )?);
+    )?)?;
     assert_eq!(handle.set("name", false.into())?, Some("original".into()));
     assert_eq!(handle.delete("id")?, Some("same-id".into()));
     assert_eq!(handle.set("id", FieldValue::Undefined)?, None);
@@ -39,11 +41,11 @@ fn detached<T: ObjectRow + FromFieldMap + Clone + Send + 'static>() -> AuthResul
     assert_eq!(handle.delete("id")?, Some(FieldValue::Undefined));
     assert_eq!(handle.get("id")?, None);
     assert_eq!(
-        original.read(AuthRecordFields::field_values)?,
+        original.shallow_fields()?,
         [("name".into(), false.into())].into()
     );
     assert_eq!(
-        replacement.read(AuthRecordFields::field_values)?,
+        replacement.shallow_fields()?,
         [
             ("id".into(), "same-id".into()),
             ("name".into(), "replacement".into()),
@@ -63,19 +65,21 @@ fn retained_map_and_user_handles_do_not_rebind_after_deletion() -> AuthResult<()
 #[tokio::test]
 async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> AuthResult<()> {
     let store = EphemeralStore::default();
-    let live = store.lock()?.accounts.push_ref(
-        [
-            ("id".into(), "account".into()),
-            (
-                "payload".into(),
-                FieldMap::from([("value".into(), 0.into())]).into(),
-            ),
-        ]
-        .into(),
-    );
-    let original = live.read(AuthRecordFields::field_values)?;
+    let live = store.operation(|op| {
+        op.capture_table(EntityRole::Account)?.push(
+            [
+                ("id".into(), "account".into()),
+                (
+                    "payload".into(),
+                    FieldMap::from([("value".into(), 0.into())]).into(),
+                ),
+            ]
+            .into(),
+        )
+    })?;
+    let original = live.shallow_fields()?;
     let (base, rollback, queue) = store.begin_adapter_transaction()?;
-    let row = required(rollback.lock()?.accounts.first_ref(|_| true)?)?;
+    let row = required(rollback.operation(|op| op.capture_table(EntityRole::Account)?.row_at(0))?)?;
     let retained = row.field_value();
     let object = required(retained.as_object())?;
     let payload = required(object.get("payload")?)?;
@@ -83,20 +87,24 @@ async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> Aut
     let _ = object.set("phase", "rolled-back".into())?;
     drop((base, rollback, queue));
     let _ = object.set("phase", "retained-after-rollback".into())?;
-    assert_eq!(live.read(AuthRecordFields::field_values)?, original);
+    assert_eq!(live.shallow_fields()?, original);
 
     let (base, commit, queue) = store.begin_adapter_transaction()?;
-    let committed = required(commit.lock()?.accounts.first_ref(|_| true)?)?;
+    let committed =
+        required(commit.operation(|op| op.capture_table(EntityRole::Account)?.row_at(0))?)?;
     let value = committed.field_value();
     let payload = required(required(value.as_object())?.get("payload")?)?;
     let _ = required(payload.as_object())?.set("value", 2.into())?;
     store.commit_transaction(base, commit, queue).await?;
-    assert!(store.lock()?.accounts.contains_ref(&committed));
-    assert!(!store.lock()?.accounts.contains_ref(&live));
+    assert!(store.operation(|op| {
+        op.capture_table(EntityRole::Account)?
+            .contains_ref(&committed)
+    })?);
+    assert!(!store.operation(|op| op.capture_table(EntityRole::Account)?.contains_ref(&live))?);
     let _ = required(value.as_object())?.set("phase", "after-commit".into())?;
     assert_eq!(
-        required(store.lock()?.accounts.first_ref(|_| true)?)?
-            .read(AuthRecordFields::field_values)?,
+        required(store.operation(|op| op.capture_table(EntityRole::Account)?.row_at(0))?)?
+            .shallow_fields()?,
         [
             ("id".into(), "account".into()),
             (
@@ -107,7 +115,7 @@ async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> Aut
         ]
         .into()
     );
-    assert_eq!(live.read(AuthRecordFields::field_values)?, original);
+    assert_eq!(live.shallow_fields()?, original);
     Ok(())
 }
 
@@ -160,16 +168,18 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
         let sources: Vec<_> = ["first", "second"]
             .into_iter()
             .map(|id| {
-                Ok(store.lock()?.teams.push_ref(
-                    [
-                        ("id".into(), id.into()),
-                        ("name".into(), "Shared graph".into()),
-                        ("organizationId".into(), "organization".into()),
-                        ("createdAt".into(), Utc::now().into()),
-                        ("memberCount".into(), 0.into()),
-                    ]
-                    .into(),
-                ))
+                store.operation(|op| {
+                    op.capture_table(EntityRole::Team)?.push(
+                        [
+                            ("id".into(), id.into()),
+                            ("name".into(), "Shared graph".into()),
+                            ("organizationId".into(), "organization".into()),
+                            ("createdAt".into(), Utc::now().into()),
+                            ("memberCount".into(), 0.into()),
+                        ]
+                        .into(),
+                    )
+                })
             })
             .collect::<AuthResult<_>>()?;
         let failure = "Invitation graph source failed".to_owned();
@@ -181,11 +191,13 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
         });
         let shared = FieldValue::Object(crate::FieldObject::from_source(graph.clone()));
         for row in &sources {
-            row.write(|fields| {
-                let _ = fields.insert("graph".into(), shared.clone());
-                let _ = fields.insert("alias".into(), shared.clone());
-                Ok(())
-            })?;
+            row.apply_patch(
+                [
+                    ("graph".into(), shared.clone()),
+                    ("alias".into(), shared.clone()),
+                ]
+                .into(),
+            )?;
         }
         let mut input = crate::CreateInvitation::new(
             "organization",
@@ -216,10 +228,10 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
             assert_eq!(accepted.status.field_value(), "accepted".into());
             assert!(session.is_none());
         }
-        let state = store.lock()?;
-        assert_eq!(state.members.len(), usize::from(!fail_copy));
-        assert_eq!(state.team_members.len(), if fail_copy { 0 } else { 2 });
-        assert_eq!(state.sessions.len(), 0);
+        let state = store.operation(|op| op.capture_state())?;
+        assert_eq!(state.members.len()?, usize::from(!fail_copy));
+        assert_eq!(state.team_members.len()?, if fail_copy { 0 } else { 2 });
+        assert_eq!(state.sessions.len()?, 0);
         assert_eq!(
             required(state.invitations.snapshot()?.first())?.get("status"),
             Some(&FieldValue::from(if fail_copy {
@@ -242,7 +254,7 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
                 team.get("memberCount"),
                 Some(&FieldValue::from(if fail_copy { 0 } else { 1 }))
             );
-            assert_eq!(state.teams.contains_ref(original), fail_copy);
+            assert_eq!(state.teams.contains_ref(original)?, fail_copy);
             for name in ["graph", "alias"] {
                 let value = required(required(team.get(name))?.as_object())?;
                 assert!(cloned.same_object(value));

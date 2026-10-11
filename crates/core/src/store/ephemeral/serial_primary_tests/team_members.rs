@@ -85,9 +85,9 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
             .await?;
         let original_session = required(
             store
-                .lock()?
-                .sessions
-                .find(|row| row.get("token") == Some(&session.token.field_value()))?,
+                .storage_rows(EntityRole::Session)?
+                .into_iter()
+                .find(|row| row.get("token") == Some(&session.token.field_value())),
         )?;
         let mut fields = OrganizationFields::default();
         for (name, output) in [
@@ -139,7 +139,7 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
                 Value::from("2")
             );
         }
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         let claimed = required(state.invitations.get(
             &crate::SchemaValue::<String>::from_field(Value::Number(1.0)),
         )?)?;
@@ -153,12 +153,14 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
             required(claimed.get("status"))? == &Value::from("pending"),
             maximum == 0
         );
-        assert_eq!(state.members.len(), maximum);
-        assert_eq!(state.team_members.len(), maximum);
+        assert_eq!(state.members.len()?, maximum);
+        assert_eq!(state.team_members.len()?, maximum);
         let persisted = required(
             state
                 .sessions
-                .find(|row| row.get("token") == Some(&session.token.field_value()))?,
+                .snapshot()?
+                .into_iter()
+                .find(|row| row.get("token") == Some(&session.token.field_value())),
         )?;
         if maximum == 0 {
             assert_eq!(persisted, original_session);
@@ -230,9 +232,7 @@ async fn serial_team_membership_binds_owner_queries_and_isolates_removal() -> Au
         );
         assert_eq!(
             store
-                .lock()?
-                .team_members
-                .snapshot()?
+                .storage_rows(EntityRole::TeamMember)?
                 .into_iter()
                 .map(|member| required(member.get("userId")).cloned())
                 .collect::<AuthResult<Vec<_>>>()?,
@@ -258,7 +258,7 @@ async fn serial_team_membership_binds_owner_queries_and_isolates_removal() -> Au
         );
         store.remove_team_member("001", "0002").await?;
         assert_eq!(store.list_team_members("001").await?, vec![invalid]);
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         assert!(matches!(
             required(required(state.team_members.snapshot()?.iter().find(|row| {
                 row.get("teamId").is_some_and(|id| id.strict_equals(&Value::Number(1.0)))
@@ -318,7 +318,8 @@ async fn serial_invitation_reuses_existing_numeric_team_owner_at_capacity() -> A
     assert_eq!(store.list_team_members("001").await?, vec![existing]);
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert_eq!(
-        required(required(store.lock()?.team_members.snapshot()?.first())?.get("userId"))?.clone(),
+        required(required(store.storage_rows(EntityRole::TeamMember)?.first())?.get("userId"))?
+            .clone(),
         Value::Number(1.0)
     );
     Ok(())
@@ -392,10 +393,10 @@ async fn serial_invitation_rejects_same_owner_added_during_output_callback() -> 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(store.list_team_members("001").await?, vec![concurrent]);
     assert!(required(store.get_invitation_by_id("001").await?)?.is_pending());
-    let state = store.lock()?;
-    assert_eq!(state.members.len(), 0);
-    assert_eq!(state.team_members.len(), 1);
-    assert_eq!(state.sessions.len(), 0);
+    let state = store.operation(|op| op.capture_state())?;
+    assert_eq!(state.members.len()?, 0);
+    assert_eq!(state.team_members.len()?, 1);
+    assert_eq!(state.sessions.len()?, 0);
     assert_eq!(
         required(required(state.team_members.snapshot()?.first())?.get("userId"))?.clone(),
         Value::Number(1.0)

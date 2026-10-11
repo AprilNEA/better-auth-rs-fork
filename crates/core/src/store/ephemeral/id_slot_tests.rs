@@ -1,5 +1,6 @@
 use super::*;
 use crate::id::{IdGeneration, IdGenerator};
+use crate::store::schema::EntityRole;
 use crate::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform};
 use serde_json::{Value as JsonValue, json};
 use std::sync::OnceLock;
@@ -93,11 +94,11 @@ fn session_fields(session: &SessionView, slot: &str) -> FieldMap {
 }
 
 fn memory(store: &EphemeralStore, slot: &str) -> AuthResult<JsonValue> {
-    let state = store.lock()?;
-    assert_eq!(state.accounts.len(), 0);
-    assert_eq!(state.verifications.len(), 0);
-    assert_eq!(state.jwks.len(), 0);
-    assert_eq!(state.wallets.len(), 0);
+    let state = store.operation(|op| op.capture_state())?;
+    assert_eq!(state.accounts.len()?, 0);
+    assert_eq!(state.verifications.len()?, 0);
+    assert_eq!(state.jwks.len()?, 0);
+    assert_eq!(state.wallets.len()?, 0);
     let users = state
         .users
         .snapshot()?
@@ -279,8 +280,8 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
             .insert("label".into(), UserFieldConfig::default());
         let writer = EphemeralStore::new(Arc::new(writer_config));
         let _ = writer.create_user(user_input("selected")?).await?;
-        let source = required(writer.lock()?.users.first_ref(|_| true)?)?;
-        let before = source.read(|row| Ok(row.clone()))?;
+        let source = writer.operation(|op| required(op.capture_users()?.row_at(0)?))?;
+        let before = source.snapshot()?;
         let target = source.clone();
         let mut config = (*writer.config).clone();
         config.user.additional_fields = None;
@@ -290,10 +291,7 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
             UserFieldConfig {
                 transform: Some(FieldTransforms {
                     output: Some(UserFieldTransform::new(move |value| {
-                        target.write(|row| {
-                            row.id = crate::SchemaValue::from_field(Value::Number(101.0));
-                            Ok(())
-                        })?;
+                        let _ = target.set_field("id".into(), Value::Number(101.0))?;
                         Ok(format!("{}:out", required(value.as_str())?).into())
                     })),
                     ..Default::default()
@@ -303,6 +301,7 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
         );
         let mut reader = EphemeralStore::new(Arc::new(config));
         reader.state = writer.state.clone();
+        reader.operations = writer.operations.clone();
         let output = required(reader.get_user_by_id("1").await?)?;
         let mut expected = before.clone();
         expected.id = if slot == "before-label" { "1" } else { "101" }.into();
@@ -312,7 +311,7 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
         assert_eq!(user_fields(&output, slot)?, user_fields(&expected, slot)?);
         let mut expected_raw = before;
         expected_raw.id = crate::SchemaValue::from_field(Value::Number(101.0));
-        assert_eq!(source.read(|row| Ok(row.clone()))?, expected_raw);
+        assert_eq!(source.snapshot()?, expected_raw);
     }
     Ok(())
 }

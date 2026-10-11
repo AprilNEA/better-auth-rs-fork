@@ -19,16 +19,10 @@ impl OrganizationStore for EphemeralStore {
 
     async fn insert_organization(&self, mut record: Organization) -> AuthResult<Organization> {
         let fields = std::mem::take(&mut record.additional_fields);
-        let mut record = self
+        let record = self
             .create_record(EntityRole::Organization, record, fields)
             .await?;
-        let source = {
-            let mut state = self.lock()?;
-            if let Some(id) = self.next_serial_id(state.organizations.len()) {
-                let _ = record.insert("id".into(), id);
-            }
-            state.organizations.push_ref(record)
-        };
+        let source = self.insert_organization_row(EntityRole::Organization, record)?;
         Ok(self
             .output_record_refs(EntityRole::Organization, vec![source])
             .await?
@@ -38,19 +32,30 @@ impl OrganizationStore for EphemeralStore {
         let member_schema = self.field_config(EntityRole::Member)?;
         let member_org =
             self.organization_query(EntityRole::Member, "organizationId", Value::from(id))?;
-        self.lock()?.members.retain(|record| {
-            !organization_value(record, &member_schema, "organizationId")
-                .strict_equals(&member_org.field_value())
-        })?;
+        let _ = self.delete_organization_rows(
+            EntityRole::Member,
+            &[(
+                member_schema.record_storage_key("organizationId").into(),
+                member_org.field_value(),
+            )],
+        )?;
         let invitation_schema = self.field_config(EntityRole::Invitation)?;
         let invitation_org =
             self.organization_query(EntityRole::Invitation, "organizationId", Value::from(id))?;
-        self.lock()?.invitations.retain(|record| {
-            !organization_value(record, &invitation_schema, "organizationId")
-                .strict_equals(&invitation_org.field_value())
-        })?;
+        let _ = self.delete_organization_rows(
+            EntityRole::Invitation,
+            &[(
+                invitation_schema
+                    .record_storage_key("organizationId")
+                    .into(),
+                invitation_org.field_value(),
+            )],
+        )?;
         let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
-        let _ = self.lock()?.organizations.remove(&id)?;
+        let _ = self.delete_organization_rows(
+            EntityRole::Organization,
+            &[("id".into(), id.field_value())],
+        )?;
         Ok(())
     }
 
@@ -70,14 +75,16 @@ impl OrganizationStore for EphemeralStore {
         let schema = self.field_config(EntityRole::Organization)?;
         let slug =
             self.organization_query(EntityRole::Organization, "slug", input.slug.field_value())?;
+        let selector = [(
+            schema.record_storage_key("slug").to_owned(),
+            slug.field_value(),
+        )];
+        if !self
+            .select_organization_rows(EntityRole::Organization, &selector)?
+            .is_empty()
         {
-            let state = self.lock()?;
-            if state.organizations.snapshot()?.iter().any(|org| {
-                organization_value(org, &schema, "slug").strict_equals(&slug.field_value())
-            }) {
-                return Err(AuthError::bad_request("Organization already exists"));
-            }
-        };
+            return Err(AuthError::bad_request("Organization already exists"));
+        }
         let metadata = crate::organization_fields::metadata_input(
             (!input.metadata.is_undefined()).then(|| input.metadata.field_value()),
             true,
@@ -94,21 +101,19 @@ impl OrganizationStore for EphemeralStore {
             metadata,
             created_at: (Utc::now()).into(),
         };
-        let mut org = self
+        let org = self
             .create_record(EntityRole::Organization, org, input.additional_fields)
             .await?;
-        let source = {
-            let mut state = self.lock()?;
-            if state.organizations.snapshot()?.iter().any(|org| {
-                organization_value(org, &schema, "slug").strict_equals(&slug.field_value())
-            }) {
+        let source = self.operation(|op| {
+            if !op
+                .capture_table(EntityRole::Organization)?
+                .select_refs(|row| super::organization_rows::matches(row, &selector))?
+                .is_empty()
+            {
                 return Err(AuthError::bad_request("Organization already exists"));
             }
-            if let Some(id) = self.next_serial_id(state.organizations.len()) {
-                let _ = org.insert("id".into(), id);
-            }
-            state.organizations.push_ref(org)
-        };
+            self.insert_organization_row(EntityRole::Organization, org)
+        })?;
         Ok(self
             .output_record_refs(EntityRole::Organization, vec![source])
             .await?
@@ -121,9 +126,10 @@ impl OrganizationStore for EphemeralStore {
         let id = self
             .organization_query(EntityRole::Organization, "id", id.clone())?
             .field_value();
-        let row = self.lock()?.organizations.first_ref(|row| {
-            crate::query::field_matches_equality(row.get("id").unwrap_or(&Value::Undefined), &id)
-        })?;
+        let row = self
+            .select_organization_rows(EntityRole::Organization, &[("id".into(), id)])?
+            .into_iter()
+            .next();
         match row {
             Some(row) => Ok(self
                 .output_record_refs(EntityRole::Organization, vec![row])
@@ -142,9 +148,13 @@ impl OrganizationStore for EphemeralStore {
     ) -> AuthResult<Option<Organization>> {
         let schema = self.field_config(EntityRole::Organization)?;
         let slug = self.organization_query(EntityRole::Organization, "slug", slug.clone())?;
-        let row = self.lock()?.organizations.first_ref(|row| {
-            organization_value(row, &schema, "slug").strict_equals(&slug.field_value())
-        })?;
+        let row = self
+            .select_organization_rows(
+                EntityRole::Organization,
+                &[(schema.record_storage_key("slug").into(), slug.field_value())],
+            )?
+            .into_iter()
+            .next();
         match row {
             Some(row) => Ok(self
                 .output_record_refs(EntityRole::Organization, vec![row])
@@ -160,11 +170,14 @@ impl OrganizationStore for EphemeralStore {
                 self.organization_query(EntityRole::Organization, "id", Value::from(id.as_str()))
             })
             .collect::<AuthResult<Vec<_>>>()?;
-        let rows = self.lock()?.organizations.select_refs(|org| {
-            ids.iter().any(|id| {
-                id.field_value()
-                    .same_value_zero(&organization_id(org).field_value())
-            })
+        let rows = self.operation(|op| {
+            op.capture_table(EntityRole::Organization)?
+                .select_refs(|row| {
+                    let actual = row.field("id")?.unwrap_or_default();
+                    Ok(ids
+                        .iter()
+                        .any(|id| id.field_value().same_value_zero(&actual)))
+                })
         })?;
         self.output_record_refs(EntityRole::Organization, rows)
             .await
@@ -207,23 +220,14 @@ impl OrganizationStore for EphemeralStore {
         let patch = self
             .prepare_record_patch(EntityRole::Organization, patch, update.additional_fields)
             .await?;
-        let source = {
-            let state = self.lock()?;
-            let selected = state.organizations.select_refs(|row| {
-                crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&Value::Undefined),
-                    &id,
-                )
-            })?;
-            for source in &selected {
-                source.write(|row| {
-                    patch.clone().apply_to(row);
-                    Ok(())
-                })?;
-            }
-            selected.into_iter().next()
-        }
-        .ok_or_else(|| AuthError::not_found("Organization not found"))?;
+        let source = self
+            .patch_organization_rows(
+                EntityRole::Organization,
+                &[("id".into(), id)],
+                patch.apply(FieldMap::new()),
+                false,
+            )?
+            .ok_or_else(|| AuthError::not_found("Organization not found"))?;
         Ok(self
             .output_record_refs(EntityRole::Organization, vec![source])
             .await?

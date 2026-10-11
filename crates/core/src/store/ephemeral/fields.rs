@@ -647,7 +647,7 @@ async fn builtin_policies_transform_typed_records_once_and_preserve_adapter_id()
     assert!(organization.additional_fields.is_empty());
     assert_eq!(
         store
-            .lock()
+            .operation(|op| op.capture_state())
             .unwrap()
             .organizations
             .get(&organization.id)
@@ -815,7 +815,7 @@ async fn invalid_builtin_transform_cannot_partially_update_a_memory_record() {
             .await
             .is_err()
     );
-    let state = store.lock().unwrap();
+    let state = store.operation(|op| op.capture_state()).unwrap();
     assert_eq!(
         state.organizations.get(&organization.id).unwrap().unwrap()["name"],
         Value::from("original")
@@ -883,7 +883,7 @@ async fn memory_core_fields_keep_dynamic_values_and_output_omission() {
     assert!(serde_json::to_value(omitted).unwrap().get("name").is_none());
     assert_eq!(
         store
-            .lock()
+            .operation(|op| op.capture_state())
             .unwrap()
             .organizations
             .get(&organization.id)

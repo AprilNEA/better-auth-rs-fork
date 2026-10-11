@@ -41,17 +41,18 @@ impl Control {
     fn inject_detail(&self) -> AuthResult<()> {
         self.changed.store(true, Ordering::Relaxed);
         let store = self.store.lock().unwrap().upgrade().unwrap();
-        let state = store.lock()?;
-        let (model, detail) = if self.path == "invitations" {
-            let mut row = state.invitations.get_mut("invitation-a")?.unwrap();
-            let _ = row.insert("detail".into(), Value::from("I-A-detail-after"));
-            ("invitation", "I-A-detail-after")
-        } else {
-            let mut row = state.members.get_mut("member-a")?.unwrap();
-            let _ = row.insert("detail".into(), Value::from("M-A-detail-after"));
-            ("member", "M-A-detail-after")
-        };
-        drop(state);
+        let (model, detail) = store.operation(|op| {
+            let state = op.capture_state()?;
+            if self.path == "invitations" {
+                let row = state.invitations.get_ref("invitation-a")?.unwrap();
+                let _ = row.set_field("detail".into(), Value::from("I-A-detail-after"))?;
+                Ok(("invitation", "I-A-detail-after"))
+            } else {
+                let row = state.members.get_ref("member-a")?.unwrap();
+                let _ = row.set_field("detail".into(), Value::from("M-A-detail-after"))?;
+                Ok(("member", "M-A-detail-after"))
+            }
+        })?;
         // This test changes backend display data; it does not simulate an adapter update API.
         self.event(json!(["display-write", model, {"detail": detail}]));
         Ok(())
@@ -355,7 +356,7 @@ async fn check_case(fixture: &JsonValue) -> AuthResult<()> {
     }
     let events = control.events.lock().unwrap().clone();
     assert_eq!(json!(events), fixture["events"], "{fixture}");
-    let state = store.lock()?;
+    let state = store.operation(|op| op.capture_state())?;
     assert_eq!(
         json!({
             "memberDetail":state.members.get("member-a")?.unwrap()["detail"].json()?,

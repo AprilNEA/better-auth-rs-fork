@@ -18,8 +18,12 @@ impl EphemeralStore {
         predicate: impl Fn(&crate::FieldMap) -> bool + Send,
     ) -> AuthResult<Option<ApiKey>> {
         let selected = self
-            .raw("apikey", "findOne", |state| {
-                state.api_keys.first_ref(predicate)
+            .raw("apikey", "findOne", move |op| {
+                Ok(op
+                    .capture_table(EntityRole::ApiKey)?
+                    .select_refs(|row| Ok(predicate(&row.shallow_fields()?)))?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self

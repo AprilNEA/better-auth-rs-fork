@@ -492,18 +492,32 @@ impl<'a> PreparedUserQuery<'a> {
         Ok(self)
     }
 
-    fn memory_value(&self, (user, raw): (&UserView, &FieldMap), name: &str) -> AuthResult<Value> {
-        let name = if name == "_id" { "id" } else { name };
-        let storage = declared_field(name, self.fields).map_or(name, |(logical, field)| {
-            resolve_field_name(field.field_name.as_deref(), logical)
-        });
+    fn memory_value(
+        &self,
+        (user, raw): (&UserView, &FieldMap),
+        storage: &str,
+    ) -> AuthResult<Value> {
         if UserView::NATIVE_FIELDS.contains(&storage) {
             return Ok(user.field_values()?.remove(storage).unwrap_or_default());
         }
         Ok(raw.get(storage).cloned().unwrap_or_default())
     }
 
+    fn memory_storage_name<'n>(&'n self, name: &'n str) -> &'n str {
+        let name = if name == "_id" { "id" } else { name };
+        declared_field(name, self.fields).map_or(name, |(logical, field)| {
+            resolve_field_name(field.field_name.as_deref(), logical)
+        })
+    }
+
     fn matches_memory(&self, record: (&UserView, &FieldMap)) -> AuthResult<bool> {
+        self.matches_memory_fields(|name| self.memory_value(record, name))
+    }
+
+    pub(crate) fn matches_memory_fields(
+        &self,
+        mut field: impl FnMut(&str) -> AuthResult<Value>,
+    ) -> AuthResult<bool> {
         let search_value = self
             .params
             .search_value
@@ -541,8 +555,8 @@ impl<'a> PreparedUserQuery<'a> {
             });
         crate::memory_query::matches_all(
             search.into_iter().chain(filter),
-            |(field, expected, operator)| {
-                matches_memory_value(&self.memory_value(record, field)?, expected, operator)
+            |(name, expected, operator)| {
+                matches_memory_value(&field(self.memory_storage_name(name))?, expected, operator)
             },
         )
     }
@@ -571,6 +585,14 @@ impl<'a> PreparedUserQuery<'a> {
                 selected.push(user);
             }
         }
+        self.page_memory(selected, |user, name| self.memory_value(record(user), name))
+    }
+
+    pub(crate) fn page_memory<T>(
+        &self,
+        mut selected: Vec<T>,
+        field: impl Fn(&T, &str) -> AuthResult<Value>,
+    ) -> AuthResult<(Vec<T>, usize)> {
         if selected.len() > 1 {
             self.validate_sort()?;
         }
@@ -588,7 +610,7 @@ impl<'a> PreparedUserQuery<'a> {
                 .unwrap_or("asc")
                 != "asc";
             crate::memory_sort::sort(&mut selected, descending, |user| {
-                self.memory_value(record(user), name)
+                field(user, self.memory_storage_name(name))
             })?;
         }
         let total = selected.len();

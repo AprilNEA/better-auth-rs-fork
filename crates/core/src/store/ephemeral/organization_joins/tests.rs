@@ -129,15 +129,16 @@ async fn native_user_team_joins_group_duplicate_parent_ids_before_projection() -
             team("team-a", "Team A", true),
             team("team-b", "Team B", true),
         ];
-        {
-            let mut state = store.lock()?;
+        store.operation(|op| {
+            let state = op.capture_state()?;
             for row in &members {
-                state.team_members.push(row.clone());
+                state.team_members.push(row.clone())?;
             }
             for row in &teams {
-                state.teams.push(row.clone());
+                state.teams.push(row.clone())?;
             }
-        }
+            Ok(())
+        })?;
         let actual = store
             .list_user_teams("user-a")
             .await?
@@ -251,13 +252,14 @@ async fn team_details_null_query_matches_missing_id_without_coercing_native_join
                     }
                     fields
                 });
-                {
-                    let mut state = store.lock()?;
-                    state.teams.push(parent.clone());
+                store.operation(|op| {
+                    let state = op.capture_state()?;
+                    state.teams.push(parent.clone())?;
                     for child in &children {
-                        state.team_members.push(child.clone());
+                        state.team_members.push(child.clone())?;
                     }
-                }
+                    Ok(())
+                })?;
                 let found = missing_id || selector.is_null();
                 let result = store.get_team_details_value(&selector, None, true).await?;
                 let mut expected_events = Vec::new();
@@ -304,6 +306,92 @@ async fn team_details_null_query_matches_missing_id_without_coercing_native_join
                 assert_eq!(store.storage_rows(EntityRole::TeamMember)?, children);
             }
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_member_user_join_groups_duplicate_parent_ids_before_projection() -> AuthResult<()> {
+    for native in [false, true] {
+        let events = Events::default();
+        let mut config = (*test_config()).clone();
+        config.advanced.database.joins = Some(native);
+        let _ = config.user.fields_mut().insert(
+            "name".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(callback("user.name", &events)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let store = EphemeralStore::new(Arc::new(config));
+        let mut schema = OrganizationFields::default();
+        let _ = schema.member.fields_mut().insert(
+            "role".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(callback("member.role", &events)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        store.configure_organization_fields(schema)?;
+        let members = ["user-a", "user-b"].map(|user| {
+            FieldMap::from([
+                ("id".into(), "member-a".into()),
+                ("organizationId".into(), "organization".into()),
+                ("userId".into(), user.into()),
+                ("role".into(), "member".into()),
+                ("createdAt".into(), date(0).into()),
+            ])
+        });
+        let users = [("user-a", "Alice"), ("user-b", "Bob")].map(|(id, name)| {
+            FieldMap::from([
+                ("id".into(), id.into()),
+                ("name".into(), name.into()),
+                ("email".into(), format!("{id}@example.test").into()),
+                ("emailVerified".into(), true.into()),
+                ("image".into(), Value::Null),
+                ("createdAt".into(), date(0).into()),
+                ("updatedAt".into(), date(0).into()),
+            ])
+        });
+        store.operation(|op| {
+            for member in &members {
+                let _ = op.capture_table(EntityRole::Member)?.push(member.clone())?;
+            }
+            for user in &users {
+                let _ = op
+                    .capture_users()?
+                    .push(UserView::from_field_values(user.clone())?)?;
+            }
+            Ok(())
+        })?;
+        let before_users = store.storage_rows(EntityRole::User)?;
+        let found = store
+            .get_member_by_id_with_user("member-a")
+            .await?
+            .ok_or_else(|| AuthError::internal("Member join returned no row"))?;
+        assert_eq!(found.member.field_values()?, members[0]);
+        let expected = UserView::from_field_values(users[usize::from(native)].clone())?;
+        assert_eq!(
+            found.user.field_values()?,
+            crate::MemberUserView::from_user(&expected).field_values()?
+        );
+        assert_eq!(
+            *events
+                .lock()
+                .map_err(|error| AuthError::internal(error.to_string()))?,
+            vec![
+                event("member.role", "member".into()),
+                event("user.name", if native { "Bob" } else { "Alice" }.into()),
+            ]
+        );
+        assert_eq!(store.storage_rows(EntityRole::Member)?, members);
+        assert_eq!(store.storage_rows(EntityRole::User)?, before_users);
     }
     Ok(())
 }

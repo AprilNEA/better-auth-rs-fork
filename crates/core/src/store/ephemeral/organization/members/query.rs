@@ -57,25 +57,22 @@ impl EphemeralStore {
     }
 
     fn select_member_query(&self, query: &MemberQuery) -> AuthResult<Vec<RowRef<FieldMap>>> {
-        let members = self.lock()?.members.select_refs(|_| true)?;
-        let mut selected = Vec::with_capacity(members.len());
-        for member in members {
-            if crate::memory_query::matches_all(
-                query.clauses.iter(),
-                |(field, operator, expected)| {
-                    let actual = member.read(|row| Ok(row.get(field).cloned()))?;
-                    crate::memory_query::matches(
-                        actual.as_ref(),
-                        expected,
-                        *operator,
-                        crate::WhereMode::Sensitive,
-                    )
-                },
-            )? {
-                selected.push(member);
-            }
-        }
-        Ok(selected)
+        self.operation(|op| {
+            op.capture_table(EntityRole::Member)?.select_refs(|member| {
+                crate::memory_query::matches_all(
+                    query.clauses.iter(),
+                    |(field, operator, expected)| {
+                        let actual = member.field(field)?;
+                        crate::memory_query::matches(
+                            actual.as_ref(),
+                            expected,
+                            *operator,
+                            crate::WhereMode::Sensitive,
+                        )
+                    },
+                )
+            })
+        })
     }
 
     pub(super) async fn member_query_page(
@@ -88,20 +85,25 @@ impl EphemeralStore {
             "member",
             "findMany",
             async {
-                let mut members = self.select_member_query(&query)?;
-                if let Some(field) = params.sort_by.as_deref().filter(|field| !field.is_empty()) {
-                    let descending = params.sort_direction.as_deref() == Some("desc");
-                    crate::memory_sort::sort(&mut members, descending, |member| {
-                        // The Memory adapter resolves sort fields only when its comparator runs.
-                        let field = declared_field(&query.schema, field)?;
-                        member.read(|row| Ok(organization_value(row, &query.schema, field)))
-                    })?;
-                }
-                Ok(crate::query::paginate_memory(
-                    members,
-                    params.limit,
-                    params.offset,
-                ))
+                self.operation(|_| {
+                    let mut members = self.select_member_query(&query)?;
+                    if let Some(field) = params.sort_by.as_deref().filter(|field| !field.is_empty())
+                    {
+                        let descending = params.sort_direction.as_deref() == Some("desc");
+                        crate::memory_sort::sort(&mut members, descending, |member| {
+                            // The Memory adapter resolves sort fields only when its comparator runs.
+                            let field = declared_field(&query.schema, field)?;
+                            Ok(member
+                                .field(query.schema.record_storage_key(field))?
+                                .unwrap_or_default())
+                        })?;
+                    }
+                    Ok(crate::query::paginate_memory(
+                        members,
+                        params.limit,
+                        params.offset,
+                    ))
+                })
             },
         )
         .await;

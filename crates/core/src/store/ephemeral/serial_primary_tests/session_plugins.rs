@@ -74,7 +74,7 @@ impl Model {
     }
 
     fn raw_ids(self, store: &EphemeralStore) -> AuthResult<JsonValue> {
-        let state = store.lock()?;
+        let state = store.operation(|op| op.capture_state())?;
         let ids = match self {
             Self::Session => state
                 .sessions
@@ -347,7 +347,7 @@ async fn serial_session_string_id_updates_match_upstream_id_contract() -> AuthRe
         let seeded = Model::Session.create(&store, "first").await?;
         let seed_events = take_events(&events)?;
         let token = required(
-            required(store.lock()?.sessions.snapshot()?.first())?
+            required(store.storage_rows(EntityRole::Session)?.first())?
                 .get("token")
                 .and_then(Value::as_str),
         )?
@@ -521,9 +521,7 @@ async fn serial_wallet_owner_binding_matches_complete_upstream_rows() -> AuthRes
         *required(first.get("result"))?
     );
     let raw = store
-        .lock()?
-        .wallets
-        .snapshot()?
+        .storage_rows(EntityRole::WalletAddress)?
         .iter()
         .map(observe_fields)
         .collect::<AuthResult<Vec<_>>>()?;
@@ -562,16 +560,14 @@ async fn serial_rate_limit_consumption_keeps_numeric_ids_and_reuses_existing_rec
             .await?
             .allowed
     );
-    let state = store.lock()?;
+    let rows = store.storage_rows(EntityRole::RateLimit)?;
     let first = required(
-        state
-            .rate_limits
-            .find(|row| row.get("key") == Some(&"first".into()))?,
+        rows.iter()
+            .find(|row| row.get("key") == Some(&"first".into())),
     )?;
     let second = required(
-        state
-            .rate_limits
-            .find(|row| row.get("key") == Some(&"second".into()))?,
+        rows.iter()
+            .find(|row| row.get("key") == Some(&"second".into())),
     )?;
     assert_eq!(
         (first.get("id"), first.get("count")),
@@ -581,7 +577,7 @@ async fn serial_rate_limit_consumption_keeps_numeric_ids_and_reuses_existing_rec
         (second.get("id"), second.get("count")),
         (Some(&Value::Number(2.0)), Some(&Value::Number(1.0)))
     );
-    assert_eq!(state.rate_limits.len(), 2);
+    assert_eq!(rows.len(), 2);
     Ok(())
 }
 

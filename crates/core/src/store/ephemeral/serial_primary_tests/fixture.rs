@@ -77,7 +77,7 @@ fn observe_fields(fields: &FieldMap) -> AuthResult<JsonValue> {
 }
 
 fn raw_memory(store: &EphemeralStore) -> AuthResult<JsonValue> {
-    let state = store.lock()?;
+    let state = store.operation(|op| op.capture_state())?;
     let users = state
         .users
         .snapshot()?

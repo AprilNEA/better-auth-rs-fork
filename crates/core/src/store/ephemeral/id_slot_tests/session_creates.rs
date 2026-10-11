@@ -72,7 +72,7 @@ async fn memory_session_create_hooks_resolve_supplied_ids_before_generation() ->
         if expected.is_undefined() {
             let _ = expected_storage.remove("id");
         }
-        assert_eq!(store.lock()?.sessions.snapshot()?, [expected_storage]);
+        assert_eq!(store.storage_rows(EntityRole::Session)?, [expected_storage]);
         assert_eq!(
             required(store.get_session(created.token.typed().unwrap()).await?)?,
             created
@@ -188,7 +188,7 @@ async fn memory_session_create_aliases_share_the_physical_id_slot() -> AuthResul
                 stored.user_id = crate::SchemaValue::from_field(Value::Number(1.0));
             }
             assert_eq!(
-                store.lock()?.sessions.snapshot()?,
+                store.storage_rows(EntityRole::Session)?,
                 [FieldMap::from(stored.clone())]
             );
             // The Store owns token and clock fields; normalize only those generated values for the adapter observation.
@@ -287,7 +287,10 @@ async fn memory_session_failed_nested_create_retains_its_forced_uuid_policy() ->
             let mut stored = super::session_updates::seed()?;
             stored.id = "7".into();
             stored.user_id = "owner".into();
-            store.lock()?.sessions.push(stored.clone().into());
+            store.operation(|op| {
+                op.capture_table(EntityRole::Session)?
+                    .push(stored.clone().into())
+            })?;
             let changed_at = date("2031-01-02T03:04:05.000Z")?;
             let updated = required(
                 store
@@ -312,7 +315,10 @@ async fn memory_session_failed_nested_create_retains_its_forced_uuid_policy() ->
             stored.updated_at = changed_at.into();
             stored.additional_fields = [("label".into(), "outer".into())].into();
             assert_eq!(updated, stored);
-            assert_eq!(store.lock()?.sessions.snapshot()?, [FieldMap::from(stored)]);
+            assert_eq!(
+                store.storage_rows(EntityRole::Session)?,
+                [FieldMap::from(stored)]
+            );
             let mut expected = vec![json!(["input", "outer"]), json!(["hook", false])];
             if !hook_failure {
                 expected.push(json!(["input", "inner"]));

@@ -1,7 +1,9 @@
 //! Process-local adapter used when an application does not configure a database.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
+#[cfg(test)]
+use std::sync::MutexGuard;
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 use crate::{AuthRecordFields, FieldMap, FieldValue as Value, FromFieldMap, SchemaField};
 use async_trait::async_trait;
@@ -50,6 +52,9 @@ mod memory_json_tests;
 mod memory_query_tests;
 #[cfg(test)]
 mod native_relation_property_tests;
+mod operation;
+#[cfg(test)]
+mod operation_contract_tests;
 mod organization;
 #[cfg(test)]
 mod organization_async_tests;
@@ -74,6 +79,7 @@ mod serial_primary_tests;
 mod session_hooks;
 mod sessions;
 mod state;
+mod table;
 mod team_capacity;
 mod teams;
 mod transactions;
@@ -91,6 +97,7 @@ mod wallets;
 
 use crate::store::database_hooks::DatabaseHooks;
 use hooks::{PendingHook, PendingHookQueue};
+use operation::{MemoryGate, MemoryOperation};
 use organization_rows::{OrganizationRows, id as organization_id, value as organization_value};
 use state::State;
 use transactions::EphemeralTransaction;
@@ -111,6 +118,7 @@ pub struct EphemeralStore {
     config: Arc<AuthConfig>,
     model_fields: crate::plugin_runtime::ModelFields,
     state: Arc<Mutex<State>>,
+    operations: MemoryGate,
     rate_limit_operations: Arc<tokio::sync::Mutex<()>>,
     verification_locks: Arc<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>>,
     device_code_transaction: Option<Arc<Mutex<device_codes::DeviceCodeTransaction>>>,
@@ -137,11 +145,13 @@ impl EphemeralStore {
 
     /// Construct an empty adapter. Restarting the process discards all records.
     pub fn new(config: Arc<AuthConfig>) -> Self {
+        let operations = MemoryGate::default();
         Self {
             model_fields: Default::default(),
             session_config: config.session.clone(),
             config,
-            state: Arc::default(),
+            state: Arc::new(Mutex::new(State::new(operations.clone()))),
+            operations,
             rate_limit_operations: Arc::default(),
             verification_locks: Arc::default(),
             device_code_transaction: None,
@@ -163,24 +173,22 @@ impl EphemeralStore {
         &self,
         model: &str,
         operation: &str,
-        action: impl FnOnce(&mut State) -> AuthResult<T> + Send,
+        action: impl FnOnce(&MemoryOperation<'_>) -> AuthResult<T> + Send,
     ) -> AuthResult<T> {
         crate::observability::database::with_database_operation(
             &self.config,
             model,
             operation,
-            async {
-                let mut state = self.lock()?;
-                action(&mut state)
-            },
+            async { self.operation(action) },
         )
         .await
     }
 
-    fn lock(&self) -> AuthResult<MutexGuard<'_, State>> {
-        self.state
-            .lock()
-            .map_err(|_| AuthError::internal("Ephemeral state lock poisoned"))
+    fn operation<T>(
+        &self,
+        action: impl FnOnce(&MemoryOperation<'_>) -> AuthResult<T>,
+    ) -> AuthResult<T> {
+        MemoryOperation::run(self, action)
     }
 
     fn organization_fields(&self) -> AuthResult<crate::organization_fields::OrganizationFields> {

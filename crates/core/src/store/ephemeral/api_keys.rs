@@ -95,36 +95,23 @@ impl ApiKeyStore for EphemeralStore {
         let reference =
             self.plugin_query_value(EntityRole::ApiKey, "referenceId", reference_id.clone())?;
         let rows = self
-            .raw("apikey", "findMany", |state| {
-                let mut keys: Vec<_> = state
-                    .api_keys
-                    .select_refs(|key| {
-                        crate::query::field_matches_equality(
-                            key.get(column).unwrap_or(&FieldValue::Undefined),
-                            &reference,
-                        )
-                    })?
-                    .into_iter()
-                    .map(|source| {
-                        let snapshot = source.read(|row| Ok(row.clone()))?;
-                        Ok((snapshot, source))
-                    })
-                    .collect::<AuthResult<Vec<_>>>()?;
+            .raw("apikey", "findMany", |op| {
+                let mut keys = op.capture_table(EntityRole::ApiKey)?.select_refs(|key| {
+                    Ok(crate::query::field_matches_equality(
+                        &key.field(column)?.unwrap_or_default(),
+                        &reference,
+                    ))
+                })?;
                 if let Some((field, direction)) = sort.filter(|_| keys.len() > 1) {
-                    crate::memory_sort::sort(&mut keys, direction == "desc", |(key, _)| {
-                        schema
-                            .fields()
-                            .get(field)
-                            .map(|_| {
-                                key.get(schema.record_storage_key(field))
-                                    .cloned()
-                                    .unwrap_or_default()
-                            })
-                            .ok_or_else(|| {
-                                AuthError::config(format!(
-                                    "Field {field} not found in model apikey"
-                                ))
-                            })
+                    crate::memory_sort::sort(&mut keys, direction == "desc", |key| {
+                        if !schema.fields().contains_key(field) {
+                            return Err(AuthError::config(format!(
+                                "Field {field} not found in model apikey"
+                            )));
+                        }
+                        Ok(key
+                            .field(schema.record_storage_key(field))?
+                            .unwrap_or_default())
                     })?;
                 }
                 Ok(crate::query::paginate_memory(
@@ -134,8 +121,7 @@ impl ApiKeyStore for EphemeralStore {
                 ))
             })
             .await?;
-        self.project_api_key_refs(rows.into_iter().map(|(_, source)| source).collect())
-            .await
+        self.project_api_key_refs(rows).await
     }
 
     async fn count_api_keys_by_reference_value(
@@ -146,18 +132,16 @@ impl ApiKeyStore for EphemeralStore {
         let column = schema.record_storage_key("referenceId");
         let reference =
             self.plugin_query_value(EntityRole::ApiKey, "referenceId", reference_id.clone())?;
-        self.raw("apikey", "count", |state| {
-            Ok(state
-                .api_keys
-                .snapshot()?
-                .iter()
-                .filter(|key| {
-                    crate::query::field_matches_equality(
-                        key.get(column).unwrap_or(&FieldValue::Undefined),
+        self.raw("apikey", "count", |op| {
+            Ok(op
+                .capture_table(EntityRole::ApiKey)?
+                .select_refs(|key| {
+                    Ok(crate::query::field_matches_equality(
+                        &key.field(column)?.unwrap_or_default(),
                         &reference,
-                    )
-                })
-                .count() as u64)
+                    ))
+                })?
+                .len() as u64)
         })
         .await
     }
@@ -190,7 +174,7 @@ impl ApiKeyStore for EphemeralStore {
         id: &crate::SchemaValue<String>,
         write: ApiKeyUsageWrite,
     ) -> AuthResult<Option<ApiKey>> {
-        use crate::query::{field_compare, field_matches_equality};
+        use crate::{WhereMode, WhereOperator};
         let id = self.plugin_query_value(EntityRole::ApiKey, "id", id.field_value())?;
         let query = |name, value| self.plugin_query_value(EntityRole::ApiKey, name, value);
         let previous = match &write {
@@ -229,43 +213,45 @@ impl ApiKeyStore for EphemeralStore {
                 !fields.is_empty(),
             )?;
         }
+        let mut clauses = vec![("id", &id, WhereOperator::Eq)];
+        match &write {
+            ApiKeyUsageWrite::Refill { .. } => {
+                clauses.push(("lastRefillAt", &previous, WhereOperator::Eq))
+            }
+            ApiKeyUsageWrite::Decrement => clauses.push(("remaining", &maximum, WhereOperator::Gt)),
+            ApiKeyUsageWrite::StartWindow {
+                previous_before, ..
+            } => clauses.push((
+                "lastRequest",
+                &previous,
+                if previous_before.is_some() {
+                    WhereOperator::Lte
+                } else {
+                    WhereOperator::Eq
+                },
+            )),
+            ApiKeyUsageWrite::IncrementWindow { .. } => {
+                clauses.push(("lastRequest", &previous, WhereOperator::Gt));
+                clauses.push(("requestCount", &maximum, WhereOperator::Lt));
+            }
+            ApiKeyUsageWrite::LastRequest(_) | ApiKeyUsageWrite::UpdatedAt(_) => {}
+        }
         let row = self
-            .raw("apikey", write.operation(), |state| {
-                let matches = state.api_keys.try_select_refs(|key| {
-                    if !field_matches_equality(key.get("id").unwrap_or(&FieldValue::Undefined), &id)
-                    {
-                        return Ok(false);
-                    }
-                    let value = |name| {
-                        key.get(schema.record_storage_key(name))
-                            .cloned()
-                            .unwrap_or_default()
-                    };
-                    match &write {
-                        ApiKeyUsageWrite::Refill { .. } => {
-                            Ok(field_matches_equality(&value("lastRefillAt"), &previous))
-                        }
-                        ApiKeyUsageWrite::Decrement => {
-                            Ok(field_compare(&value("remaining"), &maximum)?
-                                .is_some_and(|order| order.is_gt()))
-                        }
-                        ApiKeyUsageWrite::StartWindow {
-                            previous_before, ..
-                        } => match previous_before {
-                            None => Ok(field_matches_equality(&value("lastRequest"), &previous)),
-                            Some(_) => Ok(field_compare(&value("lastRequest"), &previous)?
-                                .is_some_and(|order| order.is_le())),
-                        },
-                        ApiKeyUsageWrite::IncrementWindow { .. } => {
-                            Ok(field_compare(&value("lastRequest"), &previous)?
-                                .is_some_and(|order| order.is_gt())
-                                && field_compare(&value("requestCount"), &maximum)?
-                                    .is_some_and(|order| order.is_lt()))
-                        }
-                        ApiKeyUsageWrite::LastRequest(_) | ApiKeyUsageWrite::UpdatedAt(_) => {
-                            Ok(true)
-                        }
-                    }
+            .raw("apikey", write.operation(), |op| {
+                let matches = op.capture_table(EntityRole::ApiKey)?.select_refs(|key| {
+                    crate::memory_query::matches_all(clauses.iter(), |(name, value, operator)| {
+                        let column = if *name == "id" {
+                            "id"
+                        } else {
+                            schema.record_storage_key(name)
+                        };
+                        crate::memory_query::matches(
+                            key.field(column)?.as_ref(),
+                            value,
+                            *operator,
+                            WhereMode::Sensitive,
+                        )
+                    })
                 })?;
                 let writes = if write.operation() == "incrementOne" {
                     1
@@ -273,21 +259,18 @@ impl ApiKeyStore for EphemeralStore {
                     matches.len()
                 };
                 for source in matches.iter().take(writes) {
-                    source.write(|key| {
-                        let increment = match &write {
-                            ApiKeyUsageWrite::Decrement => Some(("remaining", -1.0)),
-                            ApiKeyUsageWrite::IncrementWindow { .. } => Some(("requestCount", 1.0)),
-                            _ => None,
-                        };
-                        if let Some((name, delta)) = increment {
-                            let column = schema.record_storage_key(name);
-                            let value =
-                                key.get(column).and_then(FieldValue::as_f64).unwrap_or(0.0) + delta;
-                            let _ = key.insert(column.to_owned(), value.into());
-                        }
-                        key.extend(fields.clone());
-                        Ok(())
-                    })?;
+                    let increment = match &write {
+                        ApiKeyUsageWrite::Decrement => Some(("remaining", -1.0)),
+                        ApiKeyUsageWrite::IncrementWindow { .. } => Some(("requestCount", 1.0)),
+                        _ => None,
+                    };
+                    if let Some((name, delta)) = increment {
+                        source.increment_number_fields(&[(
+                            schema.record_storage_key(name).to_owned(),
+                            delta,
+                        )])?;
+                    }
+                    source.apply_patch(fields.clone())?;
                 }
                 Ok(matches.into_iter().next())
             })
@@ -308,16 +291,27 @@ impl ApiKeyStore for EphemeralStore {
         self.model_fields.begin_id_query(EntityRole::ApiKey)?;
         let schema = self.model_fields.plugin_fields(EntityRole::ApiKey);
         let column = schema.record_storage_key("expiresAt");
-        self.raw("apikey", "deleteMany", |state| {
+        self.raw("apikey", "deleteMany", |op| {
             let current: FieldValue = now().into();
-            let before = state.api_keys.len();
-            state.api_keys.try_retain(|key| {
-                let value = key.get(column).cloned().unwrap_or_default();
-                Ok(value.is_null()
-                    || !crate::query::field_compare(&value, &current)?
-                        .is_some_and(|order| order.is_lt()))
+            let table = op.capture_table(EntityRole::ApiKey)?;
+            let selected = table.select_refs(|key| {
+                crate::memory_query::matches_all(
+                    [
+                        (&current, crate::WhereOperator::Lt),
+                        (&FieldValue::Null, crate::WhereOperator::Ne),
+                    ],
+                    |(value, operator)| {
+                        crate::memory_query::matches(
+                            key.field(column)?.as_ref(),
+                            value,
+                            operator,
+                            crate::WhereMode::Sensitive,
+                        )
+                    },
+                )
             })?;
-            Ok(before - state.api_keys.len())
+            op.replace_table(EntityRole::ApiKey, table.without_refs(&selected)?)?;
+            Ok(selected.len())
         })
         .await
     }
@@ -380,14 +374,18 @@ mod tests {
             .unwrap()
             .with_timezone(&Utc)
             .into();
-        let _ = store
-            .lock()
-            .unwrap()
-            .api_keys
-            .find_mut(|row| row.get("id") == Some(&key.id.field_value()))
-            .unwrap()
-            .unwrap()
-            .insert("updatedAt".into(), unchanged.clone().into());
+        store
+            .operation(|op| {
+                let row = op
+                    .capture_table(EntityRole::ApiKey)?
+                    .select_refs(|row| Ok(row.field("id")? == Some(key.id.field_value())))?
+                    .into_iter()
+                    .next()
+                    .unwrap();
+                row.set_field("updatedAt".into(), unchanged.clone().into())?;
+                Ok(())
+            })
+            .unwrap();
         for remaining in [1.0, 0.0] {
             assert!(matches!(
                 consume(&store, &key.id, true).await.unwrap(),

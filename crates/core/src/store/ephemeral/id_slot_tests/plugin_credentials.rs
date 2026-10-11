@@ -66,12 +66,7 @@ impl Model {
     }
 
     fn source(self, store: &EphemeralStore) -> AuthResult<super::super::rows::RowRef<FieldMap>> {
-        let state = store.lock()?;
-        required(match self {
-            Self::ApiKey => state.api_keys.first_ref(|_| true)?,
-            Self::Passkey => state.passkeys.first_ref(|_| true)?,
-            Self::TwoFactor => state.two_factors.first_ref(|_| true)?,
-        })
+        store.operation(|op| required(op.capture_table(self.role())?.row_at(0)?))
     }
 
     async fn typed_fields(self, store: &EphemeralStore, id: &str) -> AuthResult<FieldMap> {
@@ -103,7 +98,7 @@ async fn memory_plugin_id_slot_reads_primary_key_at_its_position() -> AuthResult
                 .create(&writer, [("label".into(), "selected".into())].into())
                 .await?;
             let source = model.source(&writer)?;
-            let mut expected_raw = source.read(|row| Ok(row.clone()))?;
+            let mut expected_raw = source.shallow_fields()?;
             let target = source.clone();
             let calls = Arc::new(AtomicUsize::new(0));
             let output_calls = calls.clone();
@@ -115,10 +110,7 @@ async fn memory_plugin_id_slot_reads_primary_key_at_its_position() -> AuthResult
                     transform: Some(FieldTransforms {
                         output: Some(UserFieldTransform::new(move |value| {
                             let _ = output_calls.fetch_add(1, Ordering::SeqCst);
-                            target.write(|row| {
-                                let _ = row.insert("id".into(), Value::Number(101.0));
-                                Ok(())
-                            })?;
+                            let _ = target.set_field("id".into(), Value::Number(101.0))?;
                             Ok(format!("{}:out", required(value.as_str())?).into())
                         })),
                         ..Default::default()
@@ -128,6 +120,7 @@ async fn memory_plugin_id_slot_reads_primary_key_at_its_position() -> AuthResult
             );
             let mut reader = EphemeralStore::new(writer.config.clone());
             reader.state = writer.state.clone();
+            reader.operations = writer.operations.clone();
             reader.model_fields.register(model.role(), fields);
             let output = required(model.read(&reader, "1".into()).await?)?;
             let _ = expected.insert(
@@ -137,7 +130,7 @@ async fn memory_plugin_id_slot_reads_primary_key_at_its_position() -> AuthResult
             let _ = expected.insert("label".into(), "selected:out".into());
             let _ = expected_raw.insert("id".into(), Value::Number(101.0));
             assert_eq!(output, expected, "{model:?} {slot}");
-            assert_eq!(source.read(|row| Ok(row.clone()))?, expected_raw);
+            assert_eq!(source.shallow_fields()?, expected_raw);
             assert_eq!(calls.load(Ordering::SeqCst), 1);
         }
     }
@@ -252,10 +245,10 @@ async fn memory_plugin_primary_id_filters_distinguish_null_from_undefined() -> A
                 )
                 .await?;
             let source = model.source(&store)?;
-            source.write(|row| {
-                let _ = row.shift_remove("id");
+            store.operation(|_| {
+                let _ = source.delete_field("id")?;
                 if let Some(id) = stored_id {
-                    let _ = row.insert("id".into(), id);
+                    let _ = source.set_field("id".into(), id)?;
                 }
                 Ok(())
             })?;

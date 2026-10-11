@@ -30,39 +30,49 @@ impl EphemeralStore {
         let limit = self.config.advanced.database.find_many_limit();
         let native = self.config.advanced.database.joins == Some(true) && include_members;
         let selected = self
-            .raw("team", "findOne", |state| {
-                let mut parents = Vec::new();
-                for row in state.teams.select_refs(|_| true)? {
+            .raw("team", "findOne", |op| {
+                let rows = op.capture_table(EntityRole::Team)?;
+                let selected = rows.select_refs(|row| {
                     let mut source = RecordSource::Live(row.clone());
-                    for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(&row)) {
+                    for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(row)) {
                         source = source.with_patch(patch.clone());
                     }
-                    let fields = source.shallow_fields()?;
-                    if crate::query::field_matches_equality(
-                        fields.get("id").unwrap_or(&Value::Undefined),
-                        &team_id.field_value(),
-                    ) && organization_id.as_ref().is_none_or(|id| {
-                        crate::query::field_matches_equality(
-                            &organization_value(&fields, &team_fields, "organizationId"),
-                            &id.field_value(),
-                        )
-                    }) {
-                        parents.push(source);
+                    let mut selectors = vec![("id", team_id.field_value())];
+                    if let Some(id) = &organization_id {
+                        selectors.push((
+                            team_fields.record_storage_key("organizationId"),
+                            id.field_value(),
+                        ));
                     }
-                }
+                    crate::memory_query::matches_all(selectors.iter(), |(name, expected)| {
+                        Ok(crate::query::field_matches_equality(
+                            &source.field(name)?.unwrap_or_default(),
+                            expected,
+                        ))
+                    })
+                })?;
+                let parents = selected
+                    .into_iter()
+                    .map(|row| {
+                        let mut source = RecordSource::Live(row.clone());
+                        for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(&row))
+                        {
+                            source = source.with_patch(patch.clone());
+                        }
+                        source
+                    })
+                    .collect::<Vec<_>>();
                 if native {
                     let relation = relation.as_ref().ok_or_else(|| {
                         AuthError::internal("Native Team relationship is missing")
                     })?;
-                    let snapshots = parents
-                        .iter()
-                        .map(RecordSource::shallow_fields)
-                        .collect::<AuthResult<Vec<_>>>()?;
-                    let Some(mut group) =
-                        native_relationships(snapshots, &[(&state.team_members, relation, limit)])?
-                            .into_iter()
-                            .next()
-                    else {
+                    let Some(mut group) = native_relationships(
+                        parents,
+                        &[(EntityRole::TeamMember, relation, limit)],
+                        |role| op.capture_table(role),
+                    )?
+                    .into_iter()
+                    .next() else {
                         return Ok(None);
                     };
                     let children = group.children.remove(0);
@@ -109,13 +119,11 @@ impl EphemeralStore {
                     self.raw(
                         "teamMember",
                         if relation.many { "findMany" } else { "findOne" },
-                        |state| {
-                            let rows = state.team_members.select_refs(|row| {
-                                crate::query::field_matches_equality(
-                                    row.get(&physical).unwrap_or(&Value::Undefined),
-                                    &value.field_value(),
-                                )
-                            })?;
+                        |_| {
+                            let rows = self.select_organization_rows(
+                                EntityRole::TeamMember,
+                                &[(physical.clone(), value.field_value())],
+                            )?;
                             Ok(if relation.many {
                                 crate::query::paginate_memory(rows, Some(limit), None)
                             } else {

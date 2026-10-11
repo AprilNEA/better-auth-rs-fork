@@ -32,25 +32,27 @@ async fn access(
 }
 
 fn raw_owners(store: &EphemeralStore, session_owner: &str) -> AuthResult<(Vec<Value>, Vec<Value>)> {
-    let state = store.lock()?;
-    let sessions = state
-        .sessions
-        .snapshot()?
-        .into_iter()
-        .map(|session| {
-            if session_owner != "userId" {
-                assert!(!session.contains_key("userId"));
-            }
-            session.get(session_owner).cloned().unwrap_or_default()
-        })
-        .collect();
-    let accounts = state
-        .accounts
-        .snapshot()?
-        .into_iter()
-        .map(|account| Ok(required(account.get("userId"))?.clone()))
-        .collect::<AuthResult<_>>()?;
-    Ok((sessions, accounts))
+    store.operation(|op| {
+        let state = op.capture_state()?;
+        let sessions = state
+            .sessions
+            .snapshot()?
+            .into_iter()
+            .map(|session| {
+                if session_owner != "userId" {
+                    assert!(!session.contains_key("userId"));
+                }
+                session.get(session_owner).cloned().unwrap_or_default()
+            })
+            .collect();
+        let accounts = state
+            .accounts
+            .snapshot()?
+            .into_iter()
+            .map(|account| Ok(required(account.get("userId"))?.clone()))
+            .collect::<AuthResult<_>>()?;
+        Ok((sessions, accounts))
+    })
 }
 
 #[tokio::test]
@@ -178,7 +180,11 @@ async fn serial_unproven_user_verification_cleans_access_once_through_aliases() 
     let verified = required(store.verify_user_and_revoke_unproven_access("0x1").await?)?;
     assert_eq!(verified.id, "1");
     assert!(*verified.email_verified.typed()?);
-    assert!(store.lock()?.verifications.snapshot()?.is_empty());
+    assert!(
+        store
+            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .is_empty()
+    );
     assert!(
         !*required(store.get_user_by_id("2").await?)?
             .email_verified
@@ -208,7 +214,11 @@ async fn serial_unproven_user_verification_cleans_access_once_through_aliases() 
         required(store.get_session(proven.token.typed().unwrap()).await?)?.user_id,
         "1"
     );
-    assert!(store.lock()?.verifications.snapshot()?.is_empty());
+    assert!(
+        store
+            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .is_empty()
+    );
     assert_eq!(
         raw_owners(&store, "userId")?,
         (

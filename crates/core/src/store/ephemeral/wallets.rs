@@ -47,18 +47,25 @@ impl crate::store::WalletStore for EphemeralStore {
         let address_column = schema.record_storage_key("address");
         let chain_column = schema.record_storage_key("chainId");
         let selected = self
-            .raw("walletAddress", "findOne", |state| {
-                state.wallets.first_ref(|row| {
-                    crate::query::field_matches_equality(
-                        row.get(address_column).unwrap_or(&FieldValue::Undefined),
-                        &address,
-                    ) && chain_id.as_ref().is_none_or(|chain| {
-                        crate::query::field_matches_equality(
-                            row.get(chain_column).unwrap_or(&FieldValue::Undefined),
-                            chain,
-                        )
-                    })
-                })
+            .raw("walletAddress", "findOne", |op| {
+                Ok(op
+                    .capture_table(EntityRole::WalletAddress)?
+                    .select_refs(|row| {
+                        let address_matches = crate::query::field_matches_equality(
+                            &row.field(address_column)?.unwrap_or_default(),
+                            &address,
+                        );
+                        let chain_matches = match chain_id.as_ref() {
+                            Some(chain) => crate::query::field_matches_equality(
+                                &row.field(chain_column)?.unwrap_or_default(),
+                                chain,
+                            ),
+                            None => true,
+                        };
+                        Ok(address_matches && chain_matches)
+                    })?
+                    .into_iter()
+                    .next())
             })
             .await?;
         self.project_plugin_refs(EntityRole::WalletAddress, selected.into_iter().collect())

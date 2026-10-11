@@ -1,4 +1,5 @@
-use super::rows::{RowRef, Rows};
+use super::rows::RowRef;
+use super::table::TableRef;
 use super::*;
 use crate::store::schema::{EntityRole, resolve_field_name};
 
@@ -20,25 +21,17 @@ pub(super) struct DeviceCodeTransaction {
 }
 
 impl DeviceCodeTransaction {
-    pub(super) fn new(live: &Rows<FieldMap>, isolated: &Rows<FieldMap>) -> AuthResult<Self> {
-        let live = live.select_refs(|_| true)?;
-        let isolated = isolated.select_refs(|_| true)?;
-        let origins = live
-            .into_iter()
-            .zip(isolated)
-            .map(|(live, isolated)| {
-                let before = live.read(|row| Ok(row.clone()))?;
-                Ok(DeviceCodeOrigin {
-                    isolated,
-                    live,
-                    before,
-                })
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        Ok(Self {
-            origins,
-            consumed: Vec::new(),
-        })
+    pub(super) fn capture_origin(
+        &mut self,
+        live: RowRef<FieldMap>,
+        isolated: RowRef<FieldMap>,
+        before: FieldMap,
+    ) {
+        self.origins.push(DeviceCodeOrigin {
+            isolated,
+            live,
+            before,
+        });
     }
 }
 
@@ -50,25 +43,28 @@ pub(super) struct DeviceCodeConsumption {
 }
 
 impl DeviceCodeConsumption {
-    pub(super) fn unchanged(&self, live: &Rows<FieldMap>) -> AuthResult<bool> {
+    pub(super) fn unchanged(&self, live: &TableRef<FieldMap>) -> AuthResult<bool> {
         let Some(origin) = &self.origin else {
-            // Rows created inside this transaction have no pre-transaction owner.
             return Ok(true);
         };
-        if !live.contains_ref(&origin.live) {
+        if !live.contains_ref(&origin.live)? {
             return Ok(false);
         }
-        origin.live.read(|row| {
-            Ok(self
-                .binding_fields
-                .iter()
-                .chain(self.ownership_field.iter())
-                .all(|name| match (row.get(name), origin.before.get(name)) {
-                    (Some(actual), Some(before)) => actual.same_value_zero(before),
-                    (None, None) => true,
-                    _ => false,
-                }))
-        })
+        for name in self
+            .binding_fields
+            .iter()
+            .chain(self.ownership_field.iter())
+        {
+            let same = match (origin.live.field(name)?, origin.before.get(name)) {
+                (Some(actual), Some(before)) => actual.same_value_zero(before),
+                (None, None) => true,
+                _ => false,
+            };
+            if !same {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 }
 
@@ -99,10 +95,17 @@ impl EphemeralStore {
         let operand = self.plugin_query_value(EntityRole::DeviceCode, field, operand)?;
         let column = self.device_column(field);
         let selected = self
-            .raw("deviceCode", "findOne", |state| {
-                state.device_codes.first_ref(|row| {
-                    crate::query::field_matches_equality(value(row, &column), &operand)
-                })
+            .raw("deviceCode", "findOne", |op| {
+                Ok(op
+                    .capture_table(EntityRole::DeviceCode)?
+                    .select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(&column)?.unwrap_or_default(),
+                            &operand,
+                        ))
+                    })?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -118,7 +121,9 @@ impl EphemeralStore {
         let bindings = sources
             .iter()
             .map(|source| {
-                source.read(|row| Ok(self.model_fields.device_code_storage_bindings(row)))
+                Ok(self
+                    .model_fields
+                    .device_code_storage_bindings(&source.shallow_fields()?))
             })
             .collect::<AuthResult<Vec<_>>>()?;
         let projected = self
@@ -129,15 +134,6 @@ impl EphemeralStore {
             .zip(bindings)
             .map(|(fields, bindings)| DeviceCode::from(fields).with_storage_bindings(bindings))
             .collect())
-    }
-
-    async fn project_device_code_snapshots(
-        &self,
-        rows: Vec<FieldMap>,
-    ) -> AuthResult<Vec<DeviceCode>> {
-        let mut sources = Rows::default();
-        let refs = rows.into_iter().map(|row| sources.push_ref(row)).collect();
-        self.project_device_code_refs(refs).await
     }
 
     async fn update_device_code_guarded(
@@ -166,25 +162,25 @@ impl EphemeralStore {
             .raw(
                 "deviceCode",
                 if unclaimed { "incrementOne" } else { "update" },
-                |state| {
-                    let selected = state.device_codes.first_ref(|row| {
-                        crate::query::field_matches_equality(value(row, "id"), &id)
-                            && crate::query::field_matches_equality(
-                                value(row, &status_column),
-                                &status,
-                            )
-                            && owner.as_ref().is_none_or(|owner| {
-                                crate::query::field_matches_equality(
-                                    value(row, &owner_column),
-                                    owner,
-                                )
+                |op| {
+                    let mut clauses = vec![("id", &id), (status_column.as_str(), &status)];
+                    if let Some(owner) = &owner {
+                        clauses.push((owner_column.as_str(), owner));
+                    }
+                    let selected = op
+                        .capture_table(EntityRole::DeviceCode)?
+                        .select_refs(|row| {
+                            crate::memory_query::matches_all(clauses.iter(), |(name, expected)| {
+                                Ok(crate::query::field_matches_equality(
+                                    &row.field(name)?.unwrap_or_default(),
+                                    expected,
+                                ))
                             })
-                    })?;
+                        })?
+                        .into_iter()
+                        .next();
                     if let Some(source) = &selected {
-                        source.write(|row| {
-                            row.extend(patch);
-                            Ok(())
-                        })?;
+                        source.apply_patch(patch)?;
                     }
                     Ok(selected)
                 },
@@ -312,40 +308,50 @@ impl DeviceCodeStore for EphemeralStore {
         let names = ["id", "deviceCode", "clientId", "userId", "status"];
         let columns = names.map(|name| self.device_column(name));
         let row = self
-            .raw("deviceCode", "consumeOne", |state| {
-                let mut selected = None;
-                // Evaluate ownership for every row before deletion; another row can still fail the operation.
-                for source in state.device_codes.select_refs(|_| true)? {
-                    let matches = source.read(|row| {
-                        let owns = crate::memory_query::matches(
-                            row.get(&query.field),
-                            &query.value,
-                            query.operator,
-                            query.mode,
-                        )?;
-                        Ok(unchanged
-                            && owns
-                            && names.iter().zip(&columns).all(|(name, column)| {
-                                value(row, column).strict_equals(value(bindings, name))
-                            })
-                            && !value(row, &columns[3]).is_null()
-                            && !value(row, &columns[3]).is_undefined()
+            .raw("deviceCode", "consumeOne", |op| {
+                let table = op.capture_table(EntityRole::DeviceCode)?;
+                let selected = table
+                    .select_refs(|source| {
+                        let owns = crate::memory_query::matches_all([&query], |query| {
+                            crate::memory_query::matches(
+                                source.field(&query.field)?.as_ref(),
+                                &query.value,
+                                query.operator,
+                                query.mode,
+                            )
+                        })?;
+                        if !unchanged || !owns {
+                            return Ok(false);
+                        }
+                        for (name, column) in names.iter().zip(&columns) {
+                            if !source
+                                .field(column)?
+                                .unwrap_or_default()
+                                .strict_equals(value(bindings, name))
+                            {
+                                return Ok(false);
+                            }
+                        }
+                        Ok(!source.field(&columns[3])?.unwrap_or_default().is_null()
+                            && !source
+                                .field(&columns[3])?
+                                .unwrap_or_default()
+                                .is_undefined()
                             && crate::query::field_matches_equality(
-                                value(row, &columns[4]),
+                                &source.field(&columns[4])?.unwrap_or_default(),
                                 &approved,
                             ))
-                    })?;
-                    if selected.is_none() && matches {
-                        selected = Some(source);
-                    }
-                }
+                    })?
+                    .into_iter()
+                    .next();
                 let Some(selected) = selected else {
                     return Ok(None);
                 };
-                let row = state.device_codes.remove_ref(&selected)?;
-                if row.is_some()
-                    && let Some(transaction) = &self.device_code_transaction
-                {
+                op.replace_table(
+                    EntityRole::DeviceCode,
+                    table.without_refs(std::slice::from_ref(&selected))?,
+                )?;
+                if let Some(transaction) = &self.device_code_transaction {
                     let mut transaction = transaction.lock().map_err(|_| {
                         AuthError::internal("Ephemeral device consumption write set poisoned")
                     })?;
@@ -364,11 +370,11 @@ impl DeviceCodeStore for EphemeralStore {
                         .then(|| query.field.clone()),
                     });
                 }
-                Ok(row)
+                Ok(Some(selected))
             })
             .await?;
         Ok(self
-            .project_device_code_snapshots(row.into_iter().collect())
+            .project_device_code_refs(row.into_iter().collect())
             .await?
             .pop())
     }
@@ -385,13 +391,21 @@ impl DeviceCodeStore for EphemeralStore {
         let id = self.plugin_query_value(EntityRole::DeviceCode, "id", id.field_value())?;
         let status = self.plugin_query_value(EntityRole::DeviceCode, "status", status.into())?;
         let column = self.device_column("status");
-        self.raw("deviceCode", "delete", |state| {
-            let before = state.device_codes.len();
-            state.device_codes.retain(|row| {
-                !(crate::query::field_matches_equality(value(row, "id"), &id)
-                    && crate::query::field_matches_equality(value(row, &column), &status))
+        self.raw("deviceCode", "delete", |op| {
+            let table = op.capture_table(EntityRole::DeviceCode)?;
+            let selected = table.select_refs(|row| {
+                crate::memory_query::matches_all(
+                    [("id", &id), (column.as_str(), &status)],
+                    |(name, expected)| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field(name)?.unwrap_or_default(),
+                            expected,
+                        ))
+                    },
+                )
             })?;
-            Ok(state.device_codes.len() != before)
+            op.replace_table(EntityRole::DeviceCode, table.without_refs(&selected)?)?;
+            Ok(!selected.is_empty())
         })
         .await
     }

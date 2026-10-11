@@ -14,7 +14,7 @@ pub(super) fn user_value(user: &UserView, _logical: &str, physical: &str) -> Val
         .unwrap_or_default()
 }
 
-pub(super) fn native_relation<T>(
+pub(super) fn native_relation<T: Clone>(
     rows: Vec<RowRef<T>>,
     relation: &ResolvedJoin,
     limit: f64,
@@ -29,7 +29,7 @@ pub(super) fn native_relation<T>(
         if selected.len() as f64 >= limit {
             break;
         }
-        let id = row.read(|row| Ok(id(row)))?;
+        let id = id(&row.snapshot()?);
         if !seen.iter().any(|seen: &Value| seen.same_value_zero(&id)) {
             seen.push(id);
             selected.push(row);
@@ -84,28 +84,35 @@ impl EphemeralStore {
         let native = self.config.advanced.database.joins == Some(true);
         let (mut user, accounts) = if native {
             let selected = self
-                .raw("user", "findOne", |state| {
-                    let Some(user) = state.users.find(|user| {
-                        user.email
-                            .field_value()
-                            .strict_equals(&Value::from(email.to_lowercase()))
-                    })?
+                .raw("user", "findOne", |op| {
+                    let Some(user) = op
+                        .capture_users()?
+                        .select_refs(|user| {
+                            Ok(user
+                                .field("email")?
+                                .unwrap_or_default()
+                                .strict_equals(&Value::from(email.to_lowercase())))
+                        })?
+                        .into_iter()
+                        .next()
                     else {
                         return Ok(None);
                     };
-                    let value = user_value(&user, &relation.logical_from, &relation.from);
+                    let user = user.shallow_fields()?;
+                    let value = user.get(&relation.from).cloned().unwrap_or_default();
                     let accounts = native_relation(
-                        state.accounts.select_refs(|row| {
-                            row.get(&relation.to)
-                                .unwrap_or(&Value::Undefined)
-                                .strict_equals(&value)
+                        op.capture_table(EntityRole::Account)?.select_refs(|row| {
+                            Ok(row
+                                .field(&relation.to)?
+                                .unwrap_or_default()
+                                .strict_equals(&value))
                         })?,
                         relation,
                         self.config.advanced.database.find_many_limit(),
                         |row| row.get("id").cloned().unwrap_or_default(),
                     )?;
                     let source = RecordSource::joined(
-                        FieldMap::from(user),
+                        user,
                         [(
                             self.model_fields
                                 .storage_model_name(EntityRole::Account, "account")
@@ -179,12 +186,13 @@ impl EphemeralStore {
         self.raw(
             "account",
             if relation.many { "findMany" } else { "findOne" },
-            |state| {
+            |op| {
                 Ok(fallback_relation(
-                    state.accounts.select_refs(|row| {
-                        row.get(&physical)
-                            .unwrap_or(&Value::Undefined)
-                            .strict_equals(&value)
+                    op.capture_table(EntityRole::Account)?.select_refs(|row| {
+                        Ok(row
+                            .field(&physical)?
+                            .unwrap_or_default()
+                            .strict_equals(&value))
                     })?,
                     relation.many,
                     self.config.advanced.database.find_many_limit(),
@@ -205,15 +213,14 @@ impl EphemeralStore {
         let (records, users) = if native {
             let selectors = self.account_identity_selectors(provider, account_id)?;
             let rows = self
-                .raw("account", "findMany", |state| {
+                .raw("account", "findMany", |op| {
                     let mut selected = Vec::new();
                     let mut parent_ids = Vec::new();
-                    for account in state
-                        .accounts
-                        .snapshot()?
-                        .into_iter()
-                        .filter(|row| Self::account_matches_selectors(row, &selectors))
+                    for account in op
+                        .capture_table(EntityRole::Account)?
+                        .select_refs(|row| Self::account_matches_selectors(row, &selectors))?
                     {
+                        let account = account.shallow_fields()?;
                         let id = account.get("id").cloned().unwrap_or_default();
                         if parent_ids
                             .iter()
@@ -224,9 +231,11 @@ impl EphemeralStore {
                         parent_ids.push(id);
                         let value = account.get(&relation.from).cloned().unwrap_or_default();
                         let users = native_relation(
-                            state.users.select_refs(|user| {
-                                user_value(user, &relation.logical_to, &relation.to)
-                                    .strict_equals(&value)
+                            op.capture_users()?.select_refs(|user| {
+                                Ok(user
+                                    .field(&relation.to)?
+                                    .unwrap_or_default()
+                                    .strict_equals(&value))
                             })?,
                             relation,
                             self.config.advanced.database.find_many_limit(),
@@ -336,10 +345,13 @@ impl EphemeralStore {
         self.raw(
             "user",
             if relation.many { "findMany" } else { "findOne" },
-            |state| {
+            |op| {
                 Ok(fallback_relation(
-                    state.users.select_refs(|user| {
-                        user_value(user, &logical, &physical).strict_equals(&value)
+                    op.capture_users()?.select_refs(|user| {
+                        Ok(user
+                            .field(&physical)?
+                            .unwrap_or_default()
+                            .strict_equals(&value))
                     })?,
                     relation.many,
                     self.config.advanced.database.find_many_limit(),

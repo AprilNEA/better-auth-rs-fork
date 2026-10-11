@@ -1,41 +1,9 @@
 use super::{
-    EphemeralStore, State,
-    rows::{RecordSource, RowRef, Rows},
+    EphemeralStore,
+    rows::{RecordSource, RowRef},
 };
 use crate::store::schema::EntityRole;
-use crate::{AuthError, AuthRecordFields, AuthResult, FieldMap, FieldValue, SchemaValue};
-
-impl State {
-    fn plugin_rows(&self, role: EntityRole) -> AuthResult<&Rows<FieldMap>> {
-        match role {
-            EntityRole::ApiKey => Ok(&self.api_keys),
-            EntityRole::Passkey => Ok(&self.passkeys),
-            EntityRole::DeviceCode => Ok(&self.device_codes),
-            EntityRole::TwoFactor => Ok(&self.two_factors),
-            EntityRole::Jwk => Ok(&self.jwks),
-            EntityRole::WalletAddress => Ok(&self.wallets),
-            EntityRole::RateLimit => Ok(&self.rate_limits),
-            _ => Err(AuthError::config(format!(
-                "Plugin record storage is not implemented for {role:?}"
-            ))),
-        }
-    }
-
-    fn plugin_rows_mut(&mut self, role: EntityRole) -> AuthResult<&mut Rows<FieldMap>> {
-        match role {
-            EntityRole::ApiKey => Ok(&mut self.api_keys),
-            EntityRole::Passkey => Ok(&mut self.passkeys),
-            EntityRole::DeviceCode => Ok(&mut self.device_codes),
-            EntityRole::TwoFactor => Ok(&mut self.two_factors),
-            EntityRole::Jwk => Ok(&mut self.jwks),
-            EntityRole::WalletAddress => Ok(&mut self.wallets),
-            EntityRole::RateLimit => Ok(&mut self.rate_limits),
-            _ => Err(AuthError::config(format!(
-                "Plugin record storage is not implemented for {role:?}"
-            ))),
-        }
-    }
-}
+use crate::{AuthError, AuthResult, FieldMap, FieldValue, SchemaValue};
 
 fn model(role: EntityRole) -> AuthResult<&'static str> {
     match role {
@@ -111,7 +79,7 @@ impl EphemeralStore {
                     };
                     let generation = self.config.advanced.database.generate_id();
                     if create {
-                        let count = self.lock()?.plugin_rows(role)?.len();
+                        let count = self.operation(|op| op.capture_table(role)?.len())?;
                         let id = generation.adapter_create_id_input(
                             model(role)?,
                             supplied.take(),
@@ -152,11 +120,12 @@ impl EphemeralStore {
     ) -> AuthResult<RowRef<FieldMap>> {
         let mut storage = self.prepare_plugin_fields(role, input, true).await?;
         storage.extend(internal);
-        self.raw(model(role)?, "create", |state| {
-            if let Some(id) = self.next_serial_id(state.plugin_rows(role)?.len()) {
+        self.raw(model(role)?, "create", |op| {
+            let table = op.capture_table(role)?;
+            if let Some(id) = self.next_serial_id(table.len()?) {
                 let _ = storage.insert("id".into(), id);
             }
-            Ok(state.plugin_rows_mut(role)?.push_ref(storage))
+            table.push(storage)
         })
         .await
     }
@@ -168,13 +137,17 @@ impl EphemeralStore {
     ) -> AuthResult<Option<FieldMap>> {
         let id = self.plugin_query_value(role, "id", id.field_value())?;
         let selected = self
-            .raw(model(role)?, "findOne", |state| {
-                state.plugin_rows(role)?.first_ref(|row| {
-                    crate::query::field_matches_equality(
-                        row.get("id").unwrap_or(&FieldValue::Undefined),
-                        &id,
-                    )
-                })
+            .raw(model(role)?, "findOne", |op| {
+                Ok(op
+                    .capture_table(role)?
+                    .select_refs(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            &row.field("id")?.unwrap_or_default(),
+                            &id,
+                        ))
+                    })?
+                    .into_iter()
+                    .next())
             })
             .await?;
         Ok(self
@@ -207,18 +180,15 @@ impl EphemeralStore {
         let id = self.plugin_query_value(role, "id", id.field_value())?;
         let mut patch = self.prepare_plugin_fields(role, input, false).await?;
         patch.extend(internal);
-        self.raw(model(role)?, "update", |state| {
-            let matches = state.plugin_rows(role)?.select_refs(|row| {
-                crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&FieldValue::Undefined),
+        self.raw(model(role)?, "update", |op| {
+            let matches = op.capture_table(role)?.select_refs(|row| {
+                Ok(crate::query::field_matches_equality(
+                    &row.field("id")?.unwrap_or_default(),
                     &id,
-                )
+                ))
             })?;
             for source in &matches {
-                source.write(|row| {
-                    row.extend(patch.clone());
-                    Ok(())
-                })?;
+                source.apply_patch(patch.clone())?;
             }
             Ok(matches.into_iter().next())
         })
@@ -231,14 +201,15 @@ impl EphemeralStore {
         id: &SchemaValue<String>,
     ) -> AuthResult<()> {
         let id = self.plugin_query_value(role, "id", id.field_value())?;
-        self.raw(model(role)?, "delete", |state| {
-            state.plugin_rows_mut(role)?.retain(|row| {
-                !crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&FieldValue::Undefined),
+        self.raw(model(role)?, "delete", |op| {
+            let table = op.capture_table(role)?;
+            let selected = table.select_refs(|row| {
+                Ok(crate::query::field_matches_equality(
+                    &row.field("id")?.unwrap_or_default(),
                     &id,
-                )
+                ))
             })?;
-            Ok(())
+            op.replace_table(role, table.without_refs(&selected)?)
         })
         .await
     }
@@ -252,24 +223,14 @@ impl EphemeralStore {
     /// Observe complete physical records without applying query limits or output callbacks.
     #[doc(hidden)]
     pub fn storage_rows(&self, role: EntityRole) -> AuthResult<Vec<FieldMap>> {
-        let state = self.lock()?;
-        match role {
-            EntityRole::User => state
-                .users
-                .snapshot()?
+        self.operation(|op| match role {
+            EntityRole::User => op
+                .capture_users()?
+                .snapshot_refs()?
                 .iter()
-                .map(AuthRecordFields::field_values)
+                .map(RowRef::shallow_fields)
                 .collect(),
-            EntityRole::Session => state.sessions.snapshot(),
-            EntityRole::Account => state.accounts.snapshot(),
-            EntityRole::Verification => state.verifications.snapshot(),
-            EntityRole::Organization => state.organizations.snapshot(),
-            EntityRole::Member => state.members.snapshot(),
-            EntityRole::Invitation => state.invitations.snapshot(),
-            EntityRole::Team => state.teams.snapshot(),
-            EntityRole::TeamMember => state.team_members.snapshot(),
-            EntityRole::OrganizationRole => state.organization_roles.snapshot(),
-            _ => state.plugin_rows(role)?.snapshot(),
-        }
+            _ => op.capture_table(role)?.snapshot(),
+        })
     }
 }

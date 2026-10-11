@@ -32,16 +32,8 @@ fn mapped(column: &str) -> UserFieldConfig {
 }
 
 fn stored(store: &EphemeralStore, role: EntityRole) -> AuthResult<FieldMap> {
-    let state = store.lock()?;
-    let rows = match role {
-        EntityRole::Organization => &state.organizations,
-        EntityRole::Member => &state.members,
-        EntityRole::Invitation => &state.invitations,
-        EntityRole::Team => &state.teams,
-        EntityRole::OrganizationRole => &state.organization_roles,
-        _ => unreachable!("The fixture contains only Organization models"),
-    };
-    rows.snapshot()?
+    store
+        .storage_rows(role)?
         .pop()
         .ok_or_else(|| AuthError::internal("Physical fixture row is missing"))
 }

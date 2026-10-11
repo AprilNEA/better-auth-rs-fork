@@ -1,5 +1,5 @@
 use super::hooks::CommittedWrite;
-use super::rows::RecordSource;
+use super::rows::{RecordSource, RowRef};
 use super::*;
 use crate::id::AdapterIdInput;
 use crate::store::database_hooks::{DatabaseHookControl, DatabaseUpdateResult};
@@ -56,14 +56,14 @@ impl EphemeralStore {
     }
 
     pub(super) fn account_matches_selectors(
-        record: &FieldMap,
+        record: &RowRef<FieldMap>,
         selectors: &[(String, Value)],
-    ) -> bool {
-        selectors.iter().all(|(field, expected)| {
-            crate::query::field_matches_equality(
-                record.get(field).unwrap_or(&Value::Undefined),
+    ) -> AuthResult<bool> {
+        crate::memory_query::matches_all(selectors.iter(), |(field, expected)| {
+            Ok(crate::query::field_matches_equality(
+                &record.field(field)?.unwrap_or_default(),
                 expected,
-            )
+            ))
         })
     }
 
@@ -86,9 +86,9 @@ impl EphemeralStore {
         account_id: &str,
     ) -> AuthResult<Vec<RecordSource>> {
         let selectors = self.account_identity_selectors(provider, account_id)?;
-        self.raw("account", "findMany", |state| {
-            Ok(state
-                .accounts
+        self.raw("account", "findMany", |op| {
+            Ok(op
+                .capture_table(EntityRole::Account)?
                 .select_refs(|record| Self::account_matches_selectors(record, &selectors))?
                 .into_iter()
                 .take(2)
@@ -103,10 +103,9 @@ impl EphemeralStore {
         let fields = self.config.account.field_schema();
         let selectors = [self.account_field_selector(&fields, "userId", user_id.clone())?];
         let records: Vec<_> = self
-            .raw("account", "findMany", |state| {
+            .raw("account", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
-                    state
-                        .accounts
+                    op.capture_table(EntityRole::Account)?
                         .select_refs(|record| Self::account_matches_selectors(record, &selectors))?
                         .into_iter()
                         .map(RecordSource::Live)
@@ -172,11 +171,12 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         }
         let mut fields = self.account_storage_fields(input.fields()?, true).await?;
         let record = self
-            .raw("account", "create", |state| {
-                if let Some(id) = self.next_serial_id(state.accounts.len()) {
+            .raw("account", "create", |op| {
+                let table = op.capture_table(EntityRole::Account)?;
+                if let Some(id) = self.next_serial_id(table.len()?) {
                     let _ = fields.insert("id".into(), id);
                 }
-                Ok(state.accounts.push_ref(fields))
+                table.push(fields)
             })
             .await?;
         // The input is durable before output transformation; output errors suppress only later after hooks.
@@ -232,10 +232,12 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             self.account_field_selector(&fields, "accountId", user_id.clone())?,
         ];
         let record = self
-            .raw("account", "findOne", |state| {
-                state
-                    .accounts
-                    .first_ref(|record| Self::account_matches_selectors(record, &selectors))
+            .raw("account", "findOne", |op| {
+                Ok(op
+                    .capture_table(EntityRole::Account)?
+                    .select_refs(|record| Self::account_matches_selectors(record, &selectors))?
+                    .into_iter()
+                    .next())
             })
             .await?;
         match record {
@@ -299,18 +301,15 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             .account_storage_fields(prepared.into_fields(), false)
             .await?;
         let record = self
-            .raw("account", "update", |state| {
-                let records = state.accounts.select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        row.get("id").unwrap_or(&Value::Undefined),
+            .raw("account", "update", |op| {
+                let records = op.capture_table(EntityRole::Account)?.select_refs(|row| {
+                    Ok(crate::query::field_matches_equality(
+                        &row.field("id")?.unwrap_or_default(),
                         &id,
-                    )
+                    ))
                 })?;
                 for record in &records {
-                    record.write(|fields| {
-                        fields.extend(patch.clone());
-                        Ok(())
-                    })?;
+                    record.apply_patch(patch.clone())?;
                 }
                 Ok(records.into_iter().next())
             })
@@ -360,16 +359,14 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             .account_storage_fields(prepared.into_fields(), false)
             .await?;
         let count = self
-            .raw("account", "updateMany", |state| {
-                let mut count = 0;
-                state.accounts.update_each(|row| {
-                    if Self::account_matches_selectors(row, &selectors) {
-                        row.extend(patch.clone());
-                        count += 1;
-                    }
-                    Ok(())
-                })?;
-                Ok(count)
+            .raw("account", "updateMany", |op| {
+                let rows = op
+                    .capture_table(EntityRole::Account)?
+                    .select_refs(|row| Self::account_matches_selectors(row, &selectors))?;
+                for row in &rows {
+                    row.apply_patch(patch.clone())?;
+                }
+                Ok(rows.len() as u64)
             })
             .await?;
         self.after(CommittedWrite::AccountUpdated(DatabaseUpdateResult::Many(
@@ -393,13 +390,17 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             self.model_fields.begin_id_query(EntityRole::Account)?;
             let id = self.memory_primary_id_query(id)?;
             let record = self
-                .raw("account", "findMany", |state| {
-                    state.accounts.first_ref(|row| {
-                        crate::query::field_matches_equality(
-                            row.get("id").unwrap_or(&Value::Undefined),
-                            &id,
-                        )
-                    })
+                .raw("account", "findMany", |op| {
+                    Ok(op
+                        .capture_table(EntityRole::Account)?
+                        .select_refs(|row| {
+                            Ok(crate::query::field_matches_equality(
+                                &row.field("id")?.unwrap_or_default(),
+                                &id,
+                            ))
+                        })?
+                        .into_iter()
+                        .next())
                 })
                 .await?;
             match record {
@@ -434,14 +435,15 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         crate::store::database_hooks::await_adapter_lookup().await;
         self.model_fields.begin_id_query(EntityRole::Account)?;
         let id = self.memory_primary_id_query(id)?;
-        self.raw("account", "delete", |state| {
-            state.accounts.retain(|row| {
-                !crate::query::field_matches_equality(
-                    row.get("id").unwrap_or(&Value::Undefined),
+        self.raw("account", "delete", |op| {
+            let table = op.capture_table(EntityRole::Account)?;
+            let selected = table.select_refs(|row| {
+                Ok(crate::query::field_matches_equality(
+                    &row.field("id")?.unwrap_or_default(),
                     &id,
-                )
+                ))
             })?;
-            Ok(())
+            op.replace_table(EntityRole::Account, table.without_refs(&selected)?)
         })
         .await?;
         self.after(CommittedWrite::AccountDeleted(account)).await
@@ -477,11 +479,11 @@ impl EphemeralStore {
         self.model_fields.begin_id_query(EntityRole::Account)?;
         let schema = self.config.account.field_schema();
         let selectors = [self.account_field_selector(&schema, "userId", user_id.clone())?];
-        self.raw("account", "deleteMany", |state| {
-            state
-                .accounts
-                .retain(|record| !Self::account_matches_selectors(record, &selectors))?;
-            Ok(())
+        self.raw("account", "deleteMany", |op| {
+            let table = op.capture_table(EntityRole::Account)?;
+            let selected =
+                table.select_refs(|record| Self::account_matches_selectors(record, &selectors))?;
+            op.replace_table(EntityRole::Account, table.without_refs(&selected)?)
         })
         .await?;
         for account in accounts {

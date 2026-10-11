@@ -268,7 +268,7 @@ run_stage() {
         --test plugin_model_fields_tests --test query_binding_order_tests \
         --test nullable_user_update_tests --test telemetry_options_tests -- -D warnings || query_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: || query_status=1
+        store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: field_value:: query:: || query_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test device_runtime_transaction_tests --test device_where_tests \
         --test organization_query_limits_tests --test organization_native_fields_tests \
@@ -627,7 +627,8 @@ run_stage() {
         "${atomic_tests[@]}" --test plugin_model_fields_tests -- -D warnings || atomic_status=1
       cargo test --locked -p better-auth-seaorm --lib -- \
         store::record_write::tests:: store::record_bindings:: store::updates:: \
-        team_capacity device_code_consume async_capacity_output_failure || atomic_status=1
+        team_capacity device_code_consume async_capacity_output_failure \
+        store::session_delete::token_tests:: || atomic_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         "${atomic_tests[@]}" || atomic_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \

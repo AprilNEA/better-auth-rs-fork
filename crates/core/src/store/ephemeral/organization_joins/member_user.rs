@@ -1,15 +1,16 @@
 use super::*;
 
-use super::super::account_joins::{native_relation, user_value};
-
 fn selected_users(
-    state: &State,
+    op: &super::super::operation::MemoryOperation<'_>,
     fields: (&str, &str),
     value: &Value,
 ) -> AuthResult<Vec<RowRef<UserView>>> {
-    state
-        .users
-        .select_refs(|user| user_value(user, fields.0, fields.1).strict_equals(value))
+    op.capture_users()?.select_refs(|user| {
+        Ok(user
+            .field(fields.1)?
+            .unwrap_or_default()
+            .strict_equals(value))
+    })
 }
 
 impl EphemeralStore {
@@ -26,42 +27,42 @@ impl EphemeralStore {
         let selected = {
             let join = &join;
             let fields = &fields;
-            self.raw("member", "findOne", move |state| {
-                let mut selected = None;
-                for row in state.members.select_refs(|_| true)? {
-                    if row.read(|stored| {
-                        predicate(&super::super::organization_rows::view(stored, fields)?)
-                    })? {
-                        selected = Some(row);
-                        break;
-                    }
-                }
-                let Some(member) = selected else {
-                    return Ok(None);
-                };
+            self.raw("member", "findOne", move |op| {
+                let selected = op.capture_table(EntityRole::Member)?.select_refs(|row| {
+                    predicate(&super::super::organization_rows::view(
+                        &row.shallow_fields()?,
+                        fields,
+                    )?)
+                })?;
                 let (source, users) = if native {
-                    let parent = member.read(|row| Ok(row.clone()))?;
-                    let users = native_relation(
-                        selected_users(
-                            state,
-                            (&join.logical_to, &join.to),
-                            &parent.get(&join.from).cloned().unwrap_or_default(),
-                        )?,
-                        join,
-                        limit,
-                        |user| user.id.field_value(),
+                    let groups = native_relationships(
+                        selected.into_iter().map(RecordSource::Live).collect(),
+                        &[(EntityRole::User, join, limit)],
+                        |_| op.capture_users(),
                     )?;
+                    let Some(mut group) = groups.into_iter().next() else {
+                        return Ok(None);
+                    };
+                    let users = group.children.remove(0);
                     let source = RecordSource::joined(
-                        parent,
+                        group.parent,
                         [(
                             self.model_fields
                                 .storage_model_name(EntityRole::User, "user")
                                 .to_owned(),
-                            users.raw_value(),
+                            raw_relation(&users, join.many),
                         )],
                     );
+                    let users = if join.many {
+                        JoinValue::Many(users)
+                    } else {
+                        JoinValue::One(users.into_iter().next())
+                    };
                     (source, Some(users))
                 } else {
+                    let Some(member) = selected.into_iter().next() else {
+                        return Ok(None);
+                    };
                     (RecordSource::Live(member), None)
                 };
                 Ok(Some((source, users)))
@@ -101,9 +102,9 @@ impl EphemeralStore {
                     self.raw(
                         "user",
                         if join.many { "findMany" } else { "findOne" },
-                        |state| {
+                        |op| {
                             Ok(crate::query::paginate_memory(
-                                selected_users(state, (&logical, &physical), &value)?,
+                                selected_users(op, (&logical, &physical), &value)?,
                                 Some(if join.many { limit } else { 1.0 }),
                                 None,
                             ))
