@@ -13,7 +13,7 @@ impl TeamStore for EphemeralStore {
         organization_id: Option<&Value>,
         include_members: bool,
     ) -> AuthResult<Option<crate::store::TeamDetails>> {
-        self.read_team_details(team_id, organization_id, include_members)
+        self.read_team_details(team_id, organization_id, include_members, &[])
             .await
     }
     async fn create_team(&self, mut input: CreateTeam) -> AuthResult<Team> {

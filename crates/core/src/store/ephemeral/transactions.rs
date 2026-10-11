@@ -23,6 +23,16 @@ impl AuthTransaction<StatelessSchema> for EphemeralTransaction {
     async fn get_team_value(&self, id: &Value) -> AuthResult<Option<crate::Team>> {
         self.store.get_team_value(id).await
     }
+    async fn get_team_details_value(
+        &self,
+        team_id: &Value,
+        organization_id: Option<&Value>,
+        include_members: bool,
+    ) -> AuthResult<Option<crate::store::TeamDetails>> {
+        self.store
+            .get_team_details_value(team_id, organization_id, include_members)
+            .await
+    }
     async fn count_organization_members_value(&self, id: &Value) -> AuthResult<i64> {
         self.store.count_organization_members_value(id).await
     }

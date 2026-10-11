@@ -113,6 +113,17 @@ pub trait AuthTransaction<S: AuthSchema>:
             "The store must support transactional organization operations",
         ))
     }
+    /// Bind scoped Team predicates and project relationships through the active transaction.
+    async fn get_team_details_value(
+        &self,
+        _team_id: &crate::FieldValue,
+        _organization_id: Option<&crate::FieldValue>,
+        _include_members: bool,
+    ) -> AuthResult<Option<TeamDetails>> {
+        Err(AuthError::config(
+            "The store must support transactional scoped team relationships",
+        ))
+    }
     /// Run `count_organization_members_value` through this transaction's organization adapter.
     async fn count_organization_members_value(&self, _id: &crate::FieldValue) -> AuthResult<i64> {
         Err(AuthError::config(
@@ -643,6 +654,11 @@ pub trait UserStore<S: AuthSchema>: Send + Sync {
 /// Resolve a team's capacity inside the invitation acceptance transaction.
 #[async_trait]
 pub trait TeamMemberLimitResolver: Send + Sync {
+    /// Public Team fields apply before the capacity callback, independently of adapter declarations.
+    fn team_output_fields(&self) -> Option<&crate::user_fields::UserConfig> {
+        None
+    }
+
     async fn maximum(
         &self,
         team_id: &str,
@@ -657,6 +673,13 @@ pub enum TeamMemberLimits<'a> {
     Resolver(&'a dyn TeamMemberLimitResolver),
 }
 impl TeamMemberLimits<'_> {
+    pub fn team_output_fields(&self) -> Option<&crate::user_fields::UserConfig> {
+        match self {
+            Self::Fixed(_) => None,
+            Self::Resolver(resolver) => resolver.team_output_fields(),
+        }
+    }
+
     pub async fn maximum(
         &self,
         team_id: &str,

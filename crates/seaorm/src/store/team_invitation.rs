@@ -4,6 +4,7 @@ use super::{
 };
 use crate::SeaOrmOrganizationModel;
 use crate::schema::{AuthSchema, SeaOrmSessionModel};
+use better_auth_core::user_fields::UserConfig;
 use better_auth_core::{AuthError, AuthResult, Invitation, Member, store::schema::EntityRole};
 use better_auth_core::{FieldValue, SchemaField};
 use chrono::Utc;
@@ -15,7 +16,10 @@ use sea_orm::{
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
 where
     S: AuthSchema,
+    S::User: crate::SeaOrmUserModel,
     S::Session: SeaOrmSessionModel,
+    S::Account: crate::SeaOrmAccountModel,
+    S::Verification: crate::SeaOrmVerificationModel,
 {
     pub(super) async fn accept_team_invitation(
         &self,
@@ -134,30 +138,31 @@ where
             };
             for team_id in &team_ids {
                 let team_value = FieldValue::from(*team_id);
-                self.model_fields
-                    .begin_id_query(better_auth_core::store::schema::EntityRole::Team)?;
+                let condition = self.team_details_condition(
+                    &team_value,
+                    Some(&invitation.organization_id.field_value()),
+                )?;
                 let locked = Entity::<O::Team>::update_many()
                     .col_expr(
                         O::Team::column("member_count")?,
                         Expr::col(O::Team::column("member_count")?),
                     )
-                    .filter(super::value_filter::equals_id(
-                        O::Team::column("id")?,
-                        &team_value,
-                        self.config().advanced.database.generate_id(),
-                        self.connection().get_database_backend(),
-                    )?)
-                    .filter(self.organization_field_equals::<O::Team>(
-                        EntityRole::Team,
-                        "organizationId",
-                        &invitation.organization_id.field_value(),
-                    )?)
+                    .filter(condition.clone())
                     .exec(&tx)
                     .await
                     .map_err(map_db_err)?;
                 if locked.rows_affected == 0 {
                     return Err(AuthError::bad_request("Team not found"));
                 }
+                let details = self
+                    .read_team_details_with_condition(&tx, condition, false)
+                    .await?
+                    .ok_or_else(|| AuthError::bad_request("Team not found"))?;
+                let _ = details.into_public_parts(
+                    maximum
+                        .team_output_fields()
+                        .unwrap_or(&UserConfig::default()),
+                )?;
                 let maximum = maximum
                     .maximum(team_id, &invitation.organization_id.field_value())
                     .await?;
@@ -217,6 +222,18 @@ where
                     }
                 }
             }
+            let cookie_session = match (session_token, team_ids.as_slice()) {
+                (Some(session_token), [team_id]) => Some(
+                    self.write_session_update(
+                        &tx,
+                        session_token,
+                        [("activeTeamId".into(), (*team_id).into())].into(),
+                    )
+                    .await?
+                    .ok_or(AuthError::SessionNotFound)?,
+                ),
+                _ => None,
+            };
             let member = models::insert::<O::Member, _>(
                 &tx,
                 super::create_readback::ReadbackScope::Transaction,
@@ -238,19 +255,6 @@ where
             .await?;
             let Some(session_token) = session_token else {
                 return Ok((member, None));
-            };
-            let cookie_session = if let [team_id] = team_ids.as_slice() {
-                Some(
-                    self.write_session_update(
-                        &tx,
-                        session_token,
-                        [("activeTeamId".into(), (*team_id).into())].into(),
-                    )
-                    .await?
-                    .ok_or(AuthError::SessionNotFound)?,
-                )
-            } else {
-                None
             };
             let _ = self
                 .write_session_update(

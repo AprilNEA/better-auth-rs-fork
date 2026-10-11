@@ -36,6 +36,8 @@ mod hooks;
 #[cfg(test)]
 mod id_slot_tests;
 mod invitation_accept;
+#[cfg(test)]
+mod invitation_team_projection_tests;
 mod joins;
 mod jwks;
 #[cfg(test)]

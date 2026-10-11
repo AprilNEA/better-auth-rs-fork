@@ -9,7 +9,7 @@ import { serializeSignedCookie } from "better-call";
 import { date, storedDate, team, type Backend, type Events, type Fields, type Policies } from "./organization-team-member-contract";
 
 type Route = "get" | "list" | "list-user" | "accept" | "reject" | "cancel";
-type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean };
+type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean; teamIds?: string };
 const cases: Scenario[] = [
   { name: "get-collision", route: "get" },
   { name: "get-clone-before-inviter", route: "get", cloneError: true },
@@ -25,7 +25,7 @@ const cases: Scenario[] = [
   { name: "reject-deleted-after-error", route: "reject", deleteBefore: true, afterError: true },
   { name: "cancel-deleted-after-error", route: "cancel", deleteBefore: true, afterError: true },
 ];
-const baseURL = "http://team-member-fields.test";
+export const baseURL = "http://team-member-fields.test";
 const models = ["user", "session", "account", "verification", "organization", "member", "invitation", "team", "teamMember"] as const;
 const user = (id: string) => ({
   id, name: id, email: `${id}@team-member-fields.test`, emailVerified: true,
@@ -35,11 +35,11 @@ const invitation = (status = "pending") => ({
   id: "invitation-a", organizationId: "organization", email: user("user-b").email, role: "member",
   teamId: null, status, expiresAt: date(30), createdAt: date(0), inviterId: "user-a",
 });
-const member = (id: string, userId: string, role: string) => ({
+export const member = (id: string, userId: string, role: string) => ({
   id, organizationId: "organization", userId, role, createdAt: date(0),
 });
 
-async function setup(backend: Backend, scenario: Scenario) {
+export async function setup(backend: Backend, scenario: Scenario) {
   const memory: Record<string, Fields[]> = Object.fromEntries(models.map(model => [model, []]));
   const database = backend === "sqlite" ? new Database(":memory:") : undefined;
   const options: BetterAuthOptions = {
@@ -60,7 +60,7 @@ async function setup(backend: Backend, scenario: Scenario) {
     for (const row of [team("team-a", "Team A"), team("team-b", "Team B")]) await create("team", row);
   }
   await create("member", member("owner-member", "user-a", "owner"));
-  await create("invitation", invitation());
+  await create("invitation", { ...invitation(), teamId: scenario.teamIds ?? null });
   const actor = scenario.route === "list" || scenario.route === "cancel" ? "user-a" : "user-b";
   await create("session", {
     id: "session-a", userId: actor, token: "invitation-response-token", createdAt: date(0), updatedAt: date(0),
@@ -68,7 +68,7 @@ async function setup(backend: Backend, scenario: Scenario) {
     activeOrganizationId: null, activeTeamId: null,
   });
   return {
-    options,
+    options, context,
     deleteOrganizationRecords: async () => {
       for (const model of ["member", "invitation", "organization"]) {
         await context.adapter.deleteMany({ model, where: [{ field: model === "organization" ? "id" : "organizationId", value: "organization" }] });
@@ -84,7 +84,7 @@ async function setup(backend: Backend, scenario: Scenario) {
   };
 }
 
-function outputField(name: string, events: Events, output: (value: unknown) => unknown, attributes: DBFieldAttribute): DBFieldAttribute {
+export function outputField(name: string, events: Events, output: (value: unknown) => unknown, attributes: DBFieldAttribute): DBFieldAttribute {
   // JavaScript plugins can return Function values outside the declared DBPrimitive type.
   Object.defineProperty(attributes, "transform", { enumerable: true, value: { output(value: unknown) {
     events.push([name, "output", value]);
@@ -244,7 +244,7 @@ function expectedEvents(backend: Backend, scenario: Scenario, values: NativeValu
   }
 }
 
-function expectOrdered(actual: unknown, expected: unknown) {
+export function expectOrdered(actual: unknown, expected: unknown) {
   expect(actual).toStrictEqual(expected);
   if (typeof expected === "function") expect(actual).toBe(expected);
   if (expected === null || typeof expected !== "object" || expected instanceof Date) return;

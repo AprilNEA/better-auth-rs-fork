@@ -7,6 +7,7 @@ impl EphemeralStore {
         team_id: &Value,
         organization_id: Option<&Value>,
         include_members: bool,
+        pending: &[(RowRef<FieldMap>, FieldMap)],
     ) -> AuthResult<Option<TeamDetails>> {
         let team_fields = self.field_config(EntityRole::Team)?;
         let team_id = self.organization_query(EntityRole::Team, "id", team_id.clone())?;
@@ -30,17 +31,26 @@ impl EphemeralStore {
         let native = self.config.advanced.database.joins == Some(true) && include_members;
         let selected = self
             .raw("team", "findOne", |state| {
-                let parents = state.teams.select_refs(|row| {
-                    crate::query::field_matches_equality(
-                        row.get("id").unwrap_or(&Value::Undefined),
-                        &team_id.field_value(),
-                    ) && organization_id.as_ref().is_none_or(|id| {
-                        crate::query::field_matches_equality(
-                            &organization_value(row, &team_fields, "organizationId"),
-                            &id.field_value(),
-                        )
-                    })
-                })?;
+                let mut parents = Vec::new();
+                for row in state.teams.select_refs(|_| true)? {
+                    let mut source = RecordSource::Live(row.clone());
+                    for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(&row)) {
+                        source = source.with_patch(patch.clone());
+                    }
+                    if source.read(|row| {
+                        Ok(crate::query::field_matches_equality(
+                            row.get("id").unwrap_or(&Value::Undefined),
+                            &team_id.field_value(),
+                        ) && organization_id.as_ref().is_none_or(|id| {
+                            crate::query::field_matches_equality(
+                                &organization_value(row, &team_fields, "organizationId"),
+                                &id.field_value(),
+                            )
+                        }))
+                    })? {
+                        parents.push(source);
+                    }
+                }
                 if native {
                     let relation = relation.as_ref().ok_or_else(|| {
                         AuthError::internal("Native Team relationship is missing")
@@ -71,7 +81,7 @@ impl EphemeralStore {
                     let Some(source) = parents.into_iter().next() else {
                         return Ok(None);
                     };
-                    Ok(Some((RecordSource::Live(source), None)))
+                    Ok(Some((source, None)))
                 }
             })
             .await?;

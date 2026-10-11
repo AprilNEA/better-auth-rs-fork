@@ -45,6 +45,16 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
     async fn get_team_value(&self, id: &crate::FieldValue) -> AuthResult<Option<crate::Team>> {
         self.inner.get_team_value(id).await
     }
+    async fn get_team_details_value(
+        &self,
+        team_id: &crate::FieldValue,
+        organization_id: Option<&crate::FieldValue>,
+        include_members: bool,
+    ) -> AuthResult<Option<crate::store::TeamDetails>> {
+        self.inner
+            .get_team_details_value(team_id, organization_id, include_members)
+            .await
+    }
     async fn count_organization_members_value(&self, id: &crate::FieldValue) -> AuthResult<i64> {
         self.inner.count_organization_members_value(id).await
     }

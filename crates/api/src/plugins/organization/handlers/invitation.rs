@@ -1004,6 +1004,10 @@ struct InvitationTeamLimits<'a> {
 }
 #[async_trait::async_trait]
 impl better_auth_core::store::TeamMemberLimitResolver for InvitationTeamLimits<'_> {
+    fn team_output_fields(&self) -> Option<&better_auth_core::user_fields::UserConfig> {
+        Some(&self.config.schema.team)
+    }
+
     async fn maximum(
         &self,
         team_id: &str,

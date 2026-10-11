@@ -11,7 +11,7 @@ use better_auth_core::{
     store::{ResolvedJoin, TeamDetails, schema::EntityRole},
     user_fields::UserConfig,
 };
-use sea_orm::{DbBackend, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{Condition, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QuerySelect};
 
 impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
     SeaOrmStore<S, O, P>
@@ -23,18 +23,36 @@ where
 {
     pub(super) async fn read_team_details(
         &self,
+        conn: &impl ConnectionTrait,
         team_id: &FieldValue,
         organization_id: Option<&FieldValue>,
         include_members: bool,
     ) -> AuthResult<Option<TeamDetails>> {
-        let backend = self.connection().get_database_backend();
+        let condition = self.team_details_condition(team_id, organization_id)?;
+        self.read_team_details_with_condition(conn, condition, include_members)
+            .await
+    }
+
+    pub(super) fn team_details_condition(
+        &self,
+        team_id: &FieldValue,
+        organization_id: Option<&FieldValue>,
+    ) -> AuthResult<Condition> {
         let mut selectors = vec![("id", team_id)];
         if let Some(organization_id) = organization_id.filter(|value| value.is_truthy()) {
             selectors.push(("organizationId", organization_id));
         }
-        let parent = Entity::<O::Team>::find()
-            .filter(self.organization_fields_equal::<O::Team>(EntityRole::Team, selectors)?)
-            .limit(1);
+        self.organization_fields_equal::<O::Team>(EntityRole::Team, selectors)
+    }
+
+    pub(super) async fn read_team_details_with_condition(
+        &self,
+        conn: &impl ConnectionTrait,
+        condition: Condition,
+        include_members: bool,
+    ) -> AuthResult<Option<TeamDetails>> {
+        let backend = conn.get_database_backend();
+        let parent = Entity::<O::Team>::find().filter(condition).limit(1);
         let team_fields = self.organization_query_schema(EntityRole::Team)?;
         let member_fields = self.model_fields.plugin_fields(EntityRole::TeamMember);
         let runtime = self.model_fields.organization_join_schema(self.config());
@@ -62,7 +80,7 @@ where
                 O::TeamMember::column("id")?,
             );
             super::joins::grouped_raw_rows(
-                super::joins::joined_raw_rows(self.connection(), &query).await?,
+                super::joins::joined_raw_rows(conn, &query).await?,
                 O::Team::column("id")?,
             )?
             .into_iter()
@@ -78,7 +96,7 @@ where
             })
             .transpose()?
         } else {
-            plugin_rows::one(self.connection(), parent)
+            plugin_rows::one(conn, parent)
                 .await?
                 .map(|team| (team, None))
         };
@@ -103,7 +121,7 @@ where
             let rows = match native_members {
                 Some(rows) => rows,
                 None => {
-                    self.fallback_team_members(&relation, &runtime, &team_fields, &output)
+                    self.fallback_team_members(conn, &relation, &runtime, &team_fields, &output)
                         .await?
                 }
             };
@@ -145,6 +163,7 @@ where
 
     async fn fallback_team_members(
         &self,
+        conn: &impl ConnectionTrait,
         relation: &ResolvedJoin,
         runtime: &better_auth_core::plugin_runtime::ModelFields,
         fields: &UserConfig,
@@ -164,15 +183,15 @@ where
         );
         if relation.many {
             plugin_rows::all(
-                self.connection(),
+                conn,
                 query.limit(super::pagination::default_limit(
                     self.config(),
-                    self.connection().get_database_backend(),
+                    conn.get_database_backend(),
                 )?),
             )
             .await
         } else {
-            plugin_rows::one(self.connection(), query)
+            plugin_rows::one(conn, query)
                 .await
                 .map(|row| row.into_iter().collect())
         }

@@ -7,6 +7,14 @@ pub(super) async fn seed<S: AuthSchema>(
     store: &dyn AuthStore<S>,
     case: Case,
 ) -> AuthResult<String> {
+    seed_with_team_ids(store, case, None).await
+}
+
+pub(super) async fn seed_with_team_ids<S: AuthSchema>(
+    store: &dyn AuthStore<S>,
+    case: Case,
+    team_ids: Option<&str>,
+) -> AuthResult<String> {
     for id in ["user-a", "user-b"] {
         let _ = store
             .create_user(CreateUser {
@@ -62,6 +70,7 @@ pub(super) async fn seed<S: AuthSchema>(
         .create_invitation(CreateInvitation {
             id: Some("invitation-a".into()),
             created_at: Some(date(0)),
+            team_id: team_ids.map(str::to_owned),
             ..CreateInvitation::new(
                 "organization",
                 "user-b@team-member-fields.test",

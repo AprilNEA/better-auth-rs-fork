@@ -337,6 +337,16 @@ where
             .get_team_value_with_connection(&self.tx, id)
             .await
     }
+    async fn get_team_details_value(
+        &self,
+        team_id: &better_auth_core::FieldValue,
+        organization_id: Option<&better_auth_core::FieldValue>,
+        include_members: bool,
+    ) -> AuthResult<Option<better_auth_core::store::TeamDetails>> {
+        self.store
+            .read_team_details(&self.tx, team_id, organization_id, include_members)
+            .await
+    }
     async fn count_organization_members_value(
         &self,
         id: &better_auth_core::FieldValue,

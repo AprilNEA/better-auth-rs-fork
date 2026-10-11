@@ -155,15 +155,16 @@ impl OrganizationPlugin {
                 message: "User is already a member of this organization",
             });
         }
-        let team = if let Some(team_id) = &team_value {
-            let team = store
-                .get_team_value(team_id)
+        if let Some(team_id) = &team_value {
+            let (team, _) = store
+                .get_team_details_value(team_id, &org_value)
                 .await?
                 .ok_or(AuthError::Upstream {
                     status: 400,
                     code: "TEAM_NOT_FOUND",
                     message: "Team not found",
-                })?;
+                })?
+                .into_public_parts(&self.config.schema.team)?;
             if !team.organization_id.field_value().strict_equals(&org_value) {
                 return Err(AuthError::Upstream {
                     status: 400,
@@ -171,10 +172,7 @@ impl OrganizationPlugin {
                     message: "Team not found",
                 });
             }
-            Some(team)
-        } else {
-            None
-        };
+        }
         let count = store.count_organization_members(&org_value).await?;
         let organization = store
             .get_organization_by_id_value(&org_value)
@@ -184,7 +182,6 @@ impl OrganizationPlugin {
                 code: "ORGANIZATION_NOT_FOUND",
                 message: "Organization not found",
             })?;
-        let org_id = organization.id.field_value();
         let organization_view =
             crate::plugins::organization::fields::organization(&organization, ctx)?;
         let user_value = FieldValue::from(user.field_values()?);
@@ -201,27 +198,23 @@ impl OrganizationPlugin {
         }
         let mut data = OrganizationMemberDraft {
             additional_fields,
-            organization_id: organization.id.clone(),
+            organization_id: better_auth_core::SchemaValue::from_field(org_value.clone()),
             user_id: user.id().into_owned(),
             role: super::input::parse_roles(&input.role)?,
-            team_id: team
-                .as_ref()
-                .map(|team| team.id.clone())
-                .unwrap_or_default(),
+            team_id: input.team_id.clone(),
             created_at: None,
         };
         if let Some(hooks) = &self.config.hooks {
             hooks.before_add_member(&mut data, event).await?;
         }
         let member = store.create_member(data.into_create()).await?;
-        if let Some(team) = team {
-            let team_id = team.id.field_value();
+        if let Some(team_id) = team_value {
             let result = async {
                 let maximum = if let Some(session) = &session {
                     self.config
                         .team_member_limit(OrganizationTeamMemberLimit {
                             team_id: &team_id,
-                            organization_id: &org_id,
+                            organization_id: &org_value,
                             session: OrganizationSession {
                                 user: &session.user,
                                 session: &session.session,
@@ -253,7 +246,7 @@ impl OrganizationPlugin {
                 store
                     .delete_member_for_user_value(
                         &member.id.field_value(),
-                        &org_id,
+                        &org_value,
                         &user.id().field_value(),
                     )
                     .await?;

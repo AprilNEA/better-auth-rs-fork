@@ -6,6 +6,8 @@ use better_auth_core::{CreateInvitation, HttpMethod, Member};
 mod fixture;
 #[path = "invitation_response_support.rs"]
 mod support;
+#[path = "team_transaction_projection.rs"]
+mod team_transaction;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Case {

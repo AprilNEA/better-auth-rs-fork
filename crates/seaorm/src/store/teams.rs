@@ -80,7 +80,7 @@ where
         organization_id: Option<&FieldValue>,
         include_members: bool,
     ) -> AuthResult<Option<better_auth_core::store::TeamDetails>> {
-        self.read_team_details(team_id, organization_id, include_members)
+        self.read_team_details(self.connection(), team_id, organization_id, include_members)
             .await
     }
     async fn update_team(&self, id: &str, update: UpdateTeam) -> AuthResult<Team> {

@@ -36,15 +36,27 @@ pub(super) struct PreparedTeamSeats {
 }
 
 impl PreparedTeamSeats {
-    fn fields(&self) -> AuthResult<FieldMap> {
-        let mut team = self.source.read(|row| Ok(row.clone()))?;
-        if let Some(patch) = &self.patch {
-            team = patch.clone().apply(team);
-        }
+    pub(super) fn same_team(&self, source: &RowRef<FieldMap>) -> bool {
+        self.source.same_row(source)
+    }
+
+    pub(super) fn pending_write(&self) -> (RowRef<FieldMap>, FieldMap) {
+        let mut fields = self
+            .patch
+            .clone()
+            .map(|patch| patch.apply(FieldMap::new()))
+            .unwrap_or_default();
         if let Some(count) = &self.next_count {
-            let _ = team.insert(self.column.clone(), count.clone());
+            let _ = fields.insert(self.column.clone(), count.clone());
         }
-        Ok(team)
+        (self.source.clone(), fields)
+    }
+
+    fn fields(&self) -> AuthResult<FieldMap> {
+        let (source, patch) = self.pending_write();
+        super::rows::RecordSource::Live(source)
+            .with_patch(patch)
+            .read(|fields| Ok(fields.clone()))
     }
 
     pub(super) fn current(&self, teams: &Rows<FieldMap>) -> AuthResult<FieldMap> {

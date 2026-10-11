@@ -21,10 +21,28 @@ pub(super) struct RowRef<T>(Arc<Mutex<T>>);
 #[derive(Clone)]
 pub(super) enum RecordSource {
     Live(RowRef<FieldMap>),
+    LiveWithPatch(RowRef<FieldMap>, Box<FieldMap>),
     Snapshot(Box<FieldMap>),
 }
 
 impl RecordSource {
+    pub(super) fn with_patch(self, patch: FieldMap) -> Self {
+        if patch.is_empty() {
+            return self;
+        }
+        match self {
+            Self::Live(source) => Self::LiveWithPatch(source, Box::new(patch)),
+            Self::LiveWithPatch(source, mut fields) => {
+                fields.extend(patch);
+                Self::LiveWithPatch(source, fields)
+            }
+            Self::Snapshot(mut fields) => {
+                fields.extend(patch);
+                Self::Snapshot(fields)
+            }
+        }
+    }
+
     pub(super) fn joined(
         mut parent: FieldMap,
         relations: impl IntoIterator<Item = (String, FieldValue)>,
@@ -37,6 +55,16 @@ impl RecordSource {
     pub(super) fn read<T>(&self, read: impl FnOnce(&FieldMap) -> AuthResult<T>) -> AuthResult<T> {
         match self {
             Self::Live(source) => source.read(read),
+            Self::LiveWithPatch(source, patch) => source.read(|fields| {
+                // Pending writes override only their own columns; each read observes other live fields.
+                let mut fields = fields.clone();
+                fields.extend(
+                    patch
+                        .iter()
+                        .map(|(name, value)| (name.clone(), value.clone())),
+                );
+                read(&fields)
+            }),
             Self::Snapshot(record) => read(record),
         }
     }

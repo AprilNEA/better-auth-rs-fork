@@ -453,6 +453,93 @@ async fn organization_relations_rebind_stored_keys_through_the_write_policy() ->
 }
 
 #[tokio::test]
+async fn transactional_team_details_keep_parent_and_members_on_the_transaction() -> AuthResult<()> {
+    use better_auth_core::{
+        CreateOrganization, CreateTeam,
+        store::{OrganizationStore, TeamStore},
+    };
+
+    for joins in [false, true] {
+        let database = database("UTF-8").await?;
+        let mut config = AuthConfig::new("a-secret-that-is-at-least-32-characters");
+        config.advanced.database.joins = Some(joins);
+        let store = SeaOrmStore::<BundledSchema>::new(config, database.clone());
+        let _ = store
+            .create_user(CreateUser {
+                id: Some("transaction-member".into()),
+                email: Some("transaction-member@example.test".into()),
+                ..Default::default()
+            })
+            .await?;
+        let mut organization = CreateOrganization::new("Organization", "transaction-organization");
+        organization.id = Some("transaction-organization".into());
+        let _ = store.create_organization(organization).await?;
+        let _ = store
+            .create_team(CreateTeam {
+                id: Some("transaction-team".into()),
+                organization_id: "transaction-organization".into(),
+                name: "Transaction Team".into(),
+                ..Default::default()
+            })
+            .await?;
+
+        let result: AuthResult<()> = transaction(&store, |tx| {
+            Box::pin(async move {
+                let created = required(
+                    tx.add_team_member_value(
+                        &"transaction-team".into(),
+                        &"transaction-member".into(),
+                        Some(1),
+                    )
+                    .await?,
+                )?;
+                assert!(
+                    tx.get_team_details_value(
+                        &"transaction-team".into(),
+                        Some(&"other-organization".into()),
+                        true,
+                    )
+                    .await?
+                    .is_none()
+                );
+                let (team, members) = required(
+                    tx.get_team_details_value(
+                        &"transaction-team".into(),
+                        Some(&"transaction-organization".into()),
+                        true,
+                    )
+                    .await?,
+                )?
+                .into_public_parts(&Default::default())?;
+                assert_eq!(team.id, "transaction-team");
+                assert!(!team.additional_fields.contains_key("memberCount"));
+                assert_eq!(required(members)?, [created]);
+                Err(AuthError::forbidden("Rollback observed Team details"))
+            })
+        })
+        .await;
+        assert_eq!(
+            result.map_err(|error| error.to_string()),
+            Err(AuthError::forbidden("Rollback observed Team details").to_string())
+        );
+        assert!(
+            store
+                .list_team_members("transaction-team")
+                .await?
+                .is_empty()
+        );
+        assert_eq!(
+            required(store.get_team("transaction-team").await?)?
+                .additional_fields
+                .get("memberCount"),
+            Some(&0.into())
+        );
+        database.close().await.map_err(map_db_err)?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn rate_limit_key_bindings_preserve_atomic_increments_and_window_resets() -> AuthResult<()> {
     use crate::store::entities::rate_limit;
     use better_auth_core::{middleware::EndpointRateLimit, store::RateLimitStore};

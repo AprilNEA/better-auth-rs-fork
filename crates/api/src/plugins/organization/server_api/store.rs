@@ -1,7 +1,7 @@
 use super::EndpointContext;
 use better_auth_core::FieldValue;
 use better_auth_core::{
-    AuthResult, AuthSchema, CreateMember, Member, Organization, Team, TeamMember, UserView,
+    AuthResult, AuthSchema, CreateMember, Member, Organization, TeamMember, UserView,
 };
 
 pub(super) struct MemberAdapter<'a, 'b, S: AuthSchema>(&'a EndpointContext<'b, S>);
@@ -45,10 +45,24 @@ impl<'a, 'b, S: AuthSchema> MemberAdapter<'a, 'b, S> {
             None => self.0.auth.database.get_organization_by_id_value(id).await,
         }
     }
-    pub(super) async fn get_team_value(&self, id: &FieldValue) -> AuthResult<Option<Team>> {
+    pub(super) async fn get_team_details_value(
+        &self,
+        id: &FieldValue,
+        organization_id: &FieldValue,
+    ) -> AuthResult<Option<better_auth_core::store::TeamDetails>> {
         match self.0.transaction {
-            Some(transaction) => transaction.get_team_value(id).await,
-            None => self.0.auth.database.get_team_value(id).await,
+            Some(transaction) => {
+                transaction
+                    .get_team_details_value(id, Some(organization_id), false)
+                    .await
+            }
+            None => {
+                self.0
+                    .auth
+                    .database
+                    .get_team_details_value(id, Some(organization_id), false)
+                    .await
+            }
         }
     }
     pub(super) async fn count_organization_members(&self, id: &FieldValue) -> AuthResult<i64> {
