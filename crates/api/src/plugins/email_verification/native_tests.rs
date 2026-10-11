@@ -136,7 +136,7 @@ async fn verification_uses_email_selector_and_preserves_raw_nullable_hooks() -> 
                 Box::pin(async move {
                     let _ = writer
                         .update_user_by_id_value(
-                            user.model_property("id")?,
+                            &user.model_property("id")?,
                             better_auth_core::UpdateUser {
                                 additional_fields: FieldMap::from([(
                                     "id".into(),
