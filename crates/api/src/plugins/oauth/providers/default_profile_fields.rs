@@ -6,6 +6,15 @@ use super::{
     coalesce, index_zero, literal, name_coalesce, name_or, optional_property, or, placeholder,
 };
 
+pub(super) fn google(profile: &FieldValue) -> AuthResult<FieldMap> {
+    Ok(literal([
+        ("name", profile.model_property("name")?),
+        ("email", profile.model_property("email")?),
+        ("image", profile.model_property("picture")?),
+        ("emailVerified", profile.model_property("email_verified")?),
+    ]))
+}
+
 pub(super) fn discord(profile: &FieldValue) -> AuthResult<FieldMap> {
     Ok(literal([
         ("name", name_or(profile, "global_name", "username")?),

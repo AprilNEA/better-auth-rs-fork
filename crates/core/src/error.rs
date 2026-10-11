@@ -187,9 +187,13 @@ impl AuthError {
 
     /// Construct an upstream coded API error with `message` before `code` in the native body.
     /// Use `AuthResponse::native(Some(status), body).into()` to preserve an explicit error body instead.
-    pub fn from_code(status: u16, code: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn from_code(
+        status: impl Into<FieldValue>,
+        code: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
         match Self::try_api_error(ApiErrorInit {
-            status: f64::from(status).into(),
+            status: status.into(),
             body: FieldMap::from([
                 ("message".into(), message.into().into()),
                 ("code".into(), code.into().into()),

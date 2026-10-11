@@ -855,6 +855,7 @@ impl AuthRequest {
     }
 }
 
+mod native_headers;
 mod request_headers;
 mod response;
 

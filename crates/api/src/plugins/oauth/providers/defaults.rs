@@ -1,7 +1,8 @@
-use super::{OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::{OAuthUserInfo, OAuthUserInfoRequest};
 use better_auth_core::{AuthError, AuthResult, FieldValue, SchemaValue};
-use serde::Deserialize;
 use serde_json::Value;
+
+use crate::plugins::oauth::{OAuthProfileMapper, social_profile::ProviderProfile};
 
 #[path = "default_profile.rs"]
 mod native;
@@ -192,7 +193,6 @@ impl ProviderKind {
             Self::Microsoft { .. } => super::microsoft::decode_profile,
             Self::Paybin { .. } => super::paybin::decode_profile,
             Self::PayPal => super::paypal::decode_profile,
-            Self::Google { .. } => google_profile,
             Self::Twitch(_) => super::twitch::decode_profile,
             Self::Line { .. } => line_profile,
             Self::Twitter => super::twitter::decode_profile,
@@ -217,12 +217,6 @@ pub(in crate::plugins::oauth) fn profile_email(
         .transpose()
         .map(|value| value.map(SchemaValue::Typed).unwrap_or_default())
         .map_err(|error| format!("Invalid provider email: {error}"))
-}
-
-fn google_profile(v: Value) -> Result<OAuthUserInfo, String> {
-    let verified = SchemaValue::from_json(v.get("email_verified").cloned())
-        .map_err(|error| error.to_string())?;
-    openid_profile(v, "Google", verified)
 }
 
 fn line_profile(profile: Value) -> Result<OAuthUserInfo, String> {
@@ -301,20 +295,12 @@ pub(super) fn prepare_discord_profile(profile: &mut Value) -> Result<(), String>
     Ok(())
 }
 
-#[derive(Debug, Deserialize)]
-struct GitHubEmailAddress {
-    email: String,
-    #[serde(default)]
-    primary: bool,
-    #[serde(default)]
-    verified: bool,
-}
-
 pub(in crate::plugins::oauth) async fn github_profile(
     user_url: &str,
     emails_url: &str,
     request: &OAuthUserInfoRequest,
-) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    mapper: Option<&dyn OAuthProfileMapper>,
+) -> AuthResult<Option<ProviderProfile>> {
     let client = reqwest::Client::new();
     let get = |url: &str| {
         Ok::<_, AuthError>(
@@ -331,76 +317,12 @@ pub(in crate::plugins::oauth) async fn github_profile(
                 .header("User-Agent", "better-auth"),
         )
     };
-    let Some(mut profile) =
-        super::super::social_profile::fetch_http_profile(get(user_url)?).await?
-    else {
+    let profile = super::super::social_profile::fetch_native_profile(get(user_url)?).await?;
+    if profile.error.is_truthy() {
         return Ok(None);
-    };
-    let emails = super::super::social_profile::fetch_http_profile(get(emails_url)?)
-        .await?
-        .filter(|value| !value.is_null())
-        .map(serde_json::from_value::<Vec<GitHubEmailAddress>>)
-        .transpose()?;
-
-    let mut email = profile_email(&profile).map_err(AuthError::internal)?;
-    if super::profile_email(&email)?.is_none_or(str::is_empty)
-        && let Some(emails) = &emails
-        && let Some(profile_object) = profile.as_object_mut()
-    {
-        if let Some(record) = emails
-            .iter()
-            .find(|record| record.primary)
-            .or_else(|| emails.first())
-        {
-            let _ = profile_object.insert("email".to_string(), Value::String(record.email.clone()));
-            email = SchemaValue::Typed(Some(record.email.clone()));
-        } else {
-            let _ = profile_object.remove("email");
-            email = SchemaValue::Undefined;
-        }
     }
-
-    let resolved_email = super::profile_email(&email)?;
-    let email_verified = emails
-        .as_ref()
-        .and_then(|emails| {
-            emails
-                .iter()
-                .find(|record| Some(record.email.as_str()) == resolved_email)
-        })
-        .is_some_and(|record| record.verified);
-
-    let id = profile
-        .get("id")
-        .and_then(|value| value.as_i64().map(|value| value.to_string()))
-        .or_else(|| profile.get("id").and_then(Value::as_str).map(String::from))
-        .ok_or_else(|| AuthError::internal("missing id"))?;
-
-    let login = profile
-        .get("login")
-        .and_then(Value::as_str)
-        .map(String::from);
-
-    Ok(Some(OAuthUserInfoResponse {
-        user: OAuthUserInfo {
-            additional_fields: Default::default(),
-            id,
-            email,
-            name: profile
-                .get("name")
-                .and_then(Value::as_str)
-                .map(String::from)
-                .or(login)
-                .map(|value| Some(value).into())
-                .unwrap_or_default(),
-            image: profile
-                .get("avatar_url")
-                .cloned()
-                .map(serde_json::from_value)
-                .transpose()
-                .map_err(|error| AuthError::internal(format!("Invalid GitHub avatar: {error}")))?,
-            email_verified: Some(email_verified).into(),
-        },
-        data: profile,
-    }))
+    let emails = super::super::social_profile::fetch_native_profile(get(emails_url)?).await?;
+    native::github(&profile.data, &emails.data, mapper)
+        .await
+        .map(Some)
 }

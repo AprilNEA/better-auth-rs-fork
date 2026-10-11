@@ -18,6 +18,7 @@ impl ProviderKind {
         mapper: Option<&dyn OAuthProfileMapper>,
     ) -> AuthResult<Option<ProviderProfile>> {
         let construct: fn(&FieldValue) -> AuthResult<FieldMap> = match self {
+            Self::Google { .. } => fields::google,
             Self::Discord => fields::discord,
             Self::GitLab => fields::gitlab,
             Self::Spotify => fields::spotify,
@@ -197,6 +198,73 @@ fn index_zero(value: &FieldValue) -> AuthResult<FieldValue> {
             })),
         value => value.model_property("0"),
     }
+}
+
+pub(super) async fn github(
+    profile: &FieldValue,
+    emails: &FieldValue,
+    mapper: Option<&dyn OAuthProfileMapper>,
+) -> AuthResult<ProviderProfile> {
+    if !profile.model_property("email")?.is_truthy() && emails.is_truthy() {
+        let selected = coalesce(
+            github_find(emails, |email| {
+                Ok(email.model_property("primary")?.is_truthy())
+            })?,
+            || index_zero(emails),
+        )?;
+        let email = optional_property(&selected, "email")?;
+        match profile {
+            FieldValue::Object(profile) => {
+                let _ = profile.set("email", email)?;
+            }
+            FieldValue::Array(_) | FieldValue::Date(_) | FieldValue::Function(_) => {
+                // shortcut: Move assignment into FieldValue when all object carriers support named properties.
+                return Err(AuthError::internal(
+                    "Native carrier does not support named-property assignment on this value",
+                ));
+            }
+            _ => {
+                return Err(AuthError::type_error(
+                    "Cannot assign property 'email' to a primitive value",
+                ));
+            }
+        }
+    }
+    let verified = if emails.is_null() || emails.is_undefined() {
+        FieldValue::Undefined
+    } else {
+        let matched = github_find(emails, |email| {
+            Ok(email
+                .model_property("email")?
+                .strict_equals(&profile.model_property("email")?))
+        })?;
+        optional_property(&matched, "verified")?
+    };
+    let verified = coalesce(verified, || Ok(false.into()))?;
+    let mapped = map_profile(profile, mapper).await?;
+    let user = literal([
+        ("name", name_or(profile, "name", "login")?),
+        ("email", profile.model_property("email")?),
+        ("image", profile.model_property("avatar_url")?),
+        ("emailVerified", verified),
+    ]);
+    Ok(response(spread(user, &mapped)?, profile.clone()))
+}
+
+fn github_find(
+    emails: &FieldValue,
+    mut predicate: impl FnMut(&FieldValue) -> AuthResult<bool>,
+) -> AuthResult<FieldValue> {
+    let FieldValue::Array(emails) = emails else {
+        return Err(AuthError::type_error("emails.find is not a function"));
+    };
+    for email in emails.iter()? {
+        let email = email?;
+        if predicate(&email)? {
+            return Ok(email);
+        }
+    }
+    Ok(FieldValue::Undefined)
 }
 
 async fn cloudflare(

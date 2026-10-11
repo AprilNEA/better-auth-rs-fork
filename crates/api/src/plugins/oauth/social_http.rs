@@ -3,12 +3,14 @@
 use better_auth_core::{AuthError, AuthResult, FieldValue};
 use serde_json::{Value, value::RawValue};
 
-pub(super) struct HttpProfile {
+pub(in crate::plugins::oauth) struct HttpProfile {
     pub data: FieldValue,
     pub error: FieldValue,
 }
 
-pub(super) async fn fetch_native(request: reqwest::RequestBuilder) -> AuthResult<HttpProfile> {
+pub(in crate::plugins::oauth) async fn fetch_native(
+    request: reqwest::RequestBuilder,
+) -> AuthResult<HttpProfile> {
     let response = request.send().await.map_err(|error| {
         AuthError::internal(format!(
             "Failed to fetch user info: {}",

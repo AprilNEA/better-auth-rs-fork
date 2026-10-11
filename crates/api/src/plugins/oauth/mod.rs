@@ -38,6 +38,8 @@ pub(super) mod google;
 pub use google::GoogleOptions;
 #[cfg(all(test, feature = "axum"))]
 mod google_client_ids_tests;
+#[cfg(test)]
+mod google_github_native_tests;
 mod handlers;
 mod id_token;
 pub use providers::facebook::FacebookOptions;

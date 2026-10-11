@@ -595,7 +595,10 @@ async fn account_subject_is_validated_before_local_account_lookup() {
         let error = resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
             .await
             .unwrap_err();
-        assert!(error.to_string().contains("OAUTH_ACCOUNT_SUBJECT_INVALID"));
+        assert_eq!(
+            error.message_value().unwrap(),
+            FieldValue::from("OAUTH_ACCOUNT_SUBJECT_INVALID")
+        );
     }
     for (subject, expected) in [(42.0, "42"), (-0.0, "0"), (1e-7, "1e-7"), (1e21, "1e+21")] {
         let provider = provider(

@@ -491,11 +491,11 @@ async fn sign_in_with_id_token_core(
         .model_property("email")?
         .is_truthy()
     {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "USER_EMAIL_NOT_FOUND",
-            message: "User email not found",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "USER_EMAIL_NOT_FOUND",
+            "User email not found",
+        ));
     }
 
     let account_id = super::social_profile::resolve_account_subject(
@@ -611,11 +611,11 @@ async fn link_with_id_token_core(
         .model_property("email")?
         .is_truthy()
     {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "USER_EMAIL_NOT_FOUND",
-            message: "User email not found",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "USER_EMAIL_NOT_FOUND",
+            "User email not found",
+        ));
     };
 
     let account_id = super::social_profile::resolve_account_subject(

@@ -88,7 +88,13 @@ pub(super) fn headers_init(value: &FieldValue) -> AuthResult<Headers> {
         return Ok(Headers::new());
     }
     let mut converted: Vec<Vec<Utf16String>> = Vec::new();
-    if let Some(pairs) = value.as_array() {
+    if let Some(headers) = crate::types::native_headers::snapshot(value)? {
+        converted.extend(
+            headers
+                .into_iter()
+                .map(|(name, value)| vec![name.into(), value.into()]),
+        );
+    } else if let Some(pairs) = value.as_array() {
         let mut index = 0;
         while index < pairs.len()? {
             let pair = pairs.get(index)?.unwrap_or_default();
@@ -274,13 +280,3 @@ const BUN_HEADER_NAMES: &[&str] = &[
     "X-Temp-Tablet",
     "X-XSS-Protection",
 ];
-
-impl From<Headers> for FieldValue {
-    fn from(headers: Headers) -> Self {
-        headers
-            .into_iter()
-            .map(|(name, value)| FieldValue::from(vec![name.into(), value.into()]))
-            .collect::<Vec<_>>()
-            .into()
-    }
-}

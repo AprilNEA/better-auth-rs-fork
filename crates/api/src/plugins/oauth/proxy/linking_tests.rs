@@ -263,14 +263,13 @@ async fn explicit_linking_returns_native_redirects_for_success_and_create_cancel
                 .ok_or_else(|| AuthError::internal("Proxy must throw a native redirect"))?;
             assert!(error.is_found_redirect()?);
             let failed = !existing && stage == Stage::Cancel;
-            assert_eq!(
-                error.headers_value()?.model_property("location")?,
-                if failed {
-                    format!("{ORIGIN}/api/auth/error?error=unable_to_link_account").into()
-                } else {
-                    CALLBACK.into()
-                }
-            );
+            let headers = better_auth_core::Headers::from_field_value(&error.headers_value()?)?;
+            let location = if failed {
+                format!("{ORIGIN}/api/auth/error?error=unable_to_link_account")
+            } else {
+                CALLBACK.to_owned()
+            };
+            assert_eq!(headers.get("location"), Some(&location));
             assert_eq!(
                 store.storage_rows(EntityRole::Account)?.len(),
                 usize::from(!failed)

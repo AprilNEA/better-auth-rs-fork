@@ -1,6 +1,6 @@
-use super::{AuthRequest, Headers};
-use crate::{AuthError, AuthResult, FieldArray, FieldValue, field_value::FieldArraySource};
-use std::sync::{Arc, Mutex, MutexGuard};
+use super::{AuthRequest, Headers, native_headers};
+use crate::{AuthError, AuthResult, FieldValue};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 pub(super) struct ResponseHeaders {
@@ -11,37 +11,8 @@ pub(super) struct ResponseHeaders {
 impl Default for ResponseHeaders {
     fn default() -> Self {
         let headers = Arc::new(Mutex::new(Headers::new()));
-        let value = FieldArray::from_source(Arc::new(HeaderPairs(headers.clone()))).into();
+        let value = native_headers::value(headers.clone());
         Self { headers, value }
-    }
-}
-
-struct HeaderPairs(Arc<Mutex<Headers>>);
-
-fn lock_headers(headers: &Mutex<Headers>) -> AuthResult<MutexGuard<'_, Headers>> {
-    headers
-        .lock()
-        .map_err(|_| AuthError::internal("Session response headers lock poisoned"))
-}
-
-impl FieldArraySource for HeaderPairs {
-    fn len(&self) -> AuthResult<usize> {
-        Ok(lock_headers(&self.0)?.0.len())
-    }
-
-    fn own_indices(&self) -> AuthResult<Vec<usize>> {
-        Ok((0..self.len()?).collect())
-    }
-
-    fn get(&self, index: usize) -> AuthResult<Option<FieldValue>> {
-        Ok(lock_headers(&self.0)?
-            .0
-            .get(index)
-            .map(|(name, value)| FieldValue::from(vec![name.clone().into(), value.clone().into()])))
-    }
-
-    fn identity(&self) -> usize {
-        Arc::as_ptr(&self.0) as usize
     }
 }
 
@@ -51,7 +22,7 @@ impl AuthRequest {
             .response_headers
             .lock()
             .map_err(|_| AuthError::internal("Session response headers lock poisoned"))?;
-        let mut headers = lock_headers(&binding.headers)?;
+        let mut headers = native_headers::lock(&binding.headers)?;
         Ok(apply(&mut headers))
     }
 
@@ -85,8 +56,9 @@ impl AuthRequest {
         self.with_response_headers(|headers| headers.remove_set_cookie(name))
     }
 
-    /// Borrow the current response header collection as a stable native HeadersInit handle.
+    /// Borrow the current response header collection as a stable native Headers object.
     /// Cloned handles observe header mutations until the request starts a new accumulator.
+    /// Header entries are not enumerable properties. Use `Headers::from_field_value` to read them.
     pub fn response_headers_value(&self) -> AuthResult<FieldValue> {
         Ok(self
             .response_headers
@@ -110,7 +82,7 @@ impl AuthRequest {
     /// Take the current response headers without draining retained native handles.
     pub fn take_response_headers(&self) -> AuthResult<Headers> {
         let binding = self.take_response_header_binding()?;
-        let headers = lock_headers(&binding.headers)?.clone();
+        let headers = native_headers::lock(&binding.headers)?.clone();
         Ok(headers)
     }
 
@@ -131,6 +103,9 @@ mod tests {
         let headers = request.response_headers_value()?;
         let error = request.redirect("/welcome")?;
         assert!(error.headers_value()?.strict_equals(&headers));
+        assert!(matches!(headers, FieldValue::Object(_)));
+        assert!(headers.enumerable_fields()?.is_empty());
+        assert_eq!(headers.json()?, Some(serde_json::json!({})));
         assert!(error.is_api_error_instance(crate::ApiErrorClass::BetterCall));
         assert!(!error.is_api_error_instance(crate::ApiErrorClass::BetterAuth));
         request.append_response_header("set-cookie", "after=1".into())?;
@@ -143,6 +118,60 @@ mod tests {
         assert_eq!(
             captured.get("location").map(String::as_str),
             Some("/welcome")
+        );
+        let next = request.response_headers_value()?;
+        assert!(!next.strict_equals(&headers));
+        request.set_response_header("location", "/next")?;
+        assert_eq!(
+            Headers::from_field_value(&next)?
+                .get("location")
+                .map(String::as_str),
+            Some("/next")
+        );
+        assert_eq!(Headers::from_field_value(&headers)?, captured);
+        Ok(())
+    }
+
+    #[test]
+    fn native_headers_properties_do_not_replace_the_header_collection() -> AuthResult<()> {
+        let mut headers = Headers::new();
+        headers.append("set-cookie", "first=1");
+        headers.append("set-cookie", "second=2");
+        let _ = headers.insert("location", "/original");
+        let value: FieldValue = headers.clone().into();
+        let object = value
+            .as_object()
+            .ok_or_else(|| AuthError::internal("Expected a native Headers object"))?;
+        let marker: FieldValue = crate::FieldMap::from([("kept".into(), true.into())]).into();
+        let _ = object.set("location", marker.clone())?;
+        assert!(value.model_property("location")?.strict_equals(&marker));
+        assert_eq!(object.enumerable_keys()?, ["location"]);
+        assert_eq!(
+            value.json()?,
+            Some(serde_json::json!({"location": {"kept": true}}))
+        );
+        assert_eq!(Headers::from_field_value(&value)?, headers);
+        let _ = object.delete("location")?;
+        assert_eq!(value.json()?, Some(serde_json::json!({})));
+        assert_eq!(Headers::from_field_value(&value)?, headers);
+        Ok(())
+    }
+
+    #[test]
+    fn native_headers_keep_validation_at_the_existing_conversion_boundary() -> AuthResult<()> {
+        let request = AuthRequest::new(crate::HttpMethod::Get, "/headers");
+        request.set_response_header("x-invalid", "value\ntrailer")?;
+        let value = request.response_headers_value()?;
+        assert_eq!(value.json()?, Some(serde_json::json!({})));
+        let error = Headers::from_field_value(&value)
+            .err()
+            .ok_or_else(|| AuthError::internal("HeadersInit must reject an invalid header"))?;
+        assert!(matches!(error, AuthError::TypeError(ref message)
+            if message == "Header 'x-invalid' has invalid value: 'value\ntrailer'"));
+        let captured = request.take_response_headers()?;
+        assert_eq!(
+            captured.get("x-invalid").map(String::as_str),
+            Some("value\ntrailer")
         );
         Ok(())
     }

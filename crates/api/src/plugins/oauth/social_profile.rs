@@ -11,7 +11,7 @@ pub(super) use native::{LegacySubject, ProviderProfile};
 
 #[path = "social_http.rs"]
 mod http;
-pub(super) use http::fetch_http_profile;
+pub(super) use http::{fetch_http_profile, fetch_native as fetch_native_profile};
 
 pub(super) async fn resolve_account_subject(
     provider: &ResolvedProvider,
@@ -387,10 +387,14 @@ async fn fetch_default_user_info(
     claims: Option<VerifiedIdToken>,
 ) -> AuthResult<ProviderProfile> {
     if let Some((user_url, emails_url)) = provider.config.github_endpoints() {
-        return match super::providers::github_profile(user_url, emails_url, &request).await? {
-            Some(response) => map_legacy_profile(provider, response).await,
-            None => Ok(ProviderProfile::default()),
-        };
+        return super::providers::github_profile(
+            user_url,
+            emails_url,
+            &request,
+            provider.config.map_profile_to_user.as_deref(),
+        )
+        .await
+        .map(Option::unwrap_or_default);
     }
     if provider.config.is_twitter() {
         return match super::providers::twitter::fetch_user_info(&provider.config, &request).await? {
@@ -411,15 +415,17 @@ async fn fetch_default_user_info(
             };
             profile
         }
-        Some(VerifiedIdToken::Google(claims)) => {
-            let claims = claims.into_value();
-            if !google::hosted_domain_allowed(provider.config.google_hosted_domain(), &claims) {
-                return Ok(ProviderProfile::default());
-            }
-            claims
-        }
+        Some(VerifiedIdToken::Google(claims)) => claims.into_value(),
         Some(VerifiedIdToken::Paybin(claims)) => claims,
         Some(_) => return Err(AuthError::internal("Unexpected verified Social profile")),
+        None if provider.config.google_jwks_url().is_some() => {
+            if !request.id_token.is_truthy()? {
+                return Ok(ProviderProfile::default());
+            }
+            let token = request.id_token.field_value();
+            super::generic_profile::decode_claims(&super::providers::jwt_string(&token)?)
+                .ok_or_else(|| AuthError::internal("Invalid Google ID-token claims"))?
+        }
         None if provider.config.twitch_options().is_some() => {
             let Some(profile) = super::providers::twitch::fetch_profile(&request)? else {
                 return Ok(ProviderProfile::default());
@@ -469,6 +475,34 @@ async fn fetch_default_user_info(
                 .ok_or_else(|| AuthError::internal("Legacy JSON provider profile is undefined"))?
         }
     };
+    if provider.config.google_jwks_url().is_some() {
+        if !google::hosted_domain_allowed(provider.config.google_hosted_domain(), &data) {
+            let domain = data
+                .get("hd")
+                .filter(|value| !value.is_null())
+                .cloned()
+                .map(FieldValue::from)
+                .unwrap_or_else(|| "<missing>".into())
+                .display_utf16()?;
+            better_auth_core::observability::logger::current().error(
+                &format!(
+                    "Google sign-in rejected: id token hosted domain (hd) \"{}\" does not satisfy the configured \"hd\" option \"{}\".",
+                    String::from_utf16_lossy(domain.as_utf16()),
+                    provider.config.google_hosted_domain().unwrap_or_default(),
+                ),
+                &[],
+            );
+            return Ok(ProviderProfile::default());
+        }
+        let profile = FieldValue::from(data.clone());
+        if let Some(response) = provider
+            .config
+            .native_default_profile(&profile, &profile)
+            .await?
+        {
+            return Ok(response);
+        }
+    }
     match provider.config.decode_profile(data.clone())? {
         Some(user) => map_legacy_profile(provider, OAuthUserInfoResponse { user, data }).await,
         None => Ok(ProviderProfile::default()),
@@ -476,11 +510,11 @@ async fn fetch_default_user_info(
 }
 
 pub(super) fn missing_profile() -> AuthError {
-    AuthError::Upstream {
-        status: 401,
-        code: "FAILED_TO_GET_USER_INFO",
-        message: "Failed to get user info",
-    }
+    AuthError::from_code(
+        "UNAUTHORIZED",
+        "FAILED_TO_GET_USER_INFO",
+        "Failed to get user info",
+    )
 }
 
 pub(super) fn placeholder_email(identifier: &str, namespace: &str) -> AuthResult<String> {

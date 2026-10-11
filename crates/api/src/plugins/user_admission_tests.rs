@@ -224,7 +224,7 @@ async fn invalid_runtime_email_fails_before_admission_and_database_hooks() -> Au
     .unwrap_err();
     assert_eq!(
         error.instrumentation_message().unwrap(),
-        "user.email.toLowerCase is not a function"
+        "user.email.toLowerCase is not a function. (In 'user.email.toLowerCase()', 'user.email.toLowerCase' is undefined)"
     );
     assert!(trace.0.lock().unwrap().is_empty());
     assert!(

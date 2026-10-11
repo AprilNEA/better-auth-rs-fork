@@ -255,6 +255,11 @@ run_stage() {
         ./compat-tests/reference-server/contracts/social-http-providers.test.ts \
         ./compat-tests/reference-server/contracts/social-native-defaults.test.mjs \
         ./compat-tests/reference-server/contracts/social-http-envelope.test.mjs \
+        ./compat-tests/reference-server/contracts/google-profile.test.ts \
+        ./compat-tests/reference-server/contracts/google-client-ids.test.ts \
+        ./compat-tests/reference-server/contracts/github-email-presence.test.ts \
+        ./compat-tests/reference-server/contracts/google-github-native.test.mjs \
+        ./compat-tests/reference-server/contracts/social-profile-errors.test.ts \
         ./compat-tests/reference-server/contracts/vk.test.ts \
         ./compat-tests/reference-server/contracts/tiktok.test.ts \
         ./compat-tests/reference-server/contracts/salesforce.test.ts \
@@ -576,7 +581,8 @@ run_stage() {
         error:: field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
-        plugin::tests::response_status:: response_body::http_tests:: types::response:: || json_status=1
+        plugin::tests::response_status:: response_body::http_tests:: types::response:: \
+        types::request_headers:: || json_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
         plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::oauth:: \
         plugins::passkey:: plugins::siwe:: \

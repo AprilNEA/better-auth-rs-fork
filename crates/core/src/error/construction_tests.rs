@@ -33,19 +33,23 @@ fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthRe
     reason = "The same message must have different bodies for coded and explicit errors"
 )]
 fn coded_errors_and_explicit_message_bodies_have_distinct_contracts() -> AuthResult<()> {
-    let coded = observe(
-        AuthError::from_code(400, "USER_NOT_FOUND", "User not found"),
-        400,
-        &["message", "code"],
-        br#"{"message":"User not found","code":"USER_NOT_FOUND"}"#,
-    )?;
-    assert_eq!(
-        coded,
-        FieldValue::from(FieldMap::from([
-            ("message".into(), "User not found".into()),
-            ("code".into(), "USER_NOT_FOUND".into()),
-        ]))
-    );
+    for status in [FieldValue::from(400u16), "BAD_REQUEST".into()] {
+        let error = AuthError::from_code(status.clone(), "USER_NOT_FOUND", "User not found");
+        assert_eq!(error.status_value()?, status);
+        let coded = observe(
+            error,
+            400,
+            &["message", "code"],
+            br#"{"message":"User not found","code":"USER_NOT_FOUND"}"#,
+        )?;
+        assert_eq!(
+            coded,
+            FieldValue::from(FieldMap::from([
+                ("message".into(), "User not found".into()),
+                ("code".into(), "USER_NOT_FOUND".into()),
+            ]))
+        );
+    }
     let explicit: FieldValue = FieldMap::from([("message".into(), "User not found".into())]).into();
     let observed = observe(
         AuthResponse::native(Some(400), explicit.clone()).into(),

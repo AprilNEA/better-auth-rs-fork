@@ -14,7 +14,7 @@ Coded native API errors contain `message` followed by `code`:
 }
 ```
 
-Use `AuthError::from_code(status, code, message)` for the upstream `APIError.from` construction. Explicit bodies created with `AuthResponse::native(status, body).into()` retain their property order, extra fields, and native object identity. An explicit body can contain only `message`, even when another endpoint returns a coded error with the same message. Clients should use `code` when present and the status otherwise.
+Use `AuthError::from_code(status, code, message)` for the upstream `APIError.from` construction. Pass a numeric status or an upstream status name such as `"UNAUTHORIZED"`; the native error retains that value until HTTP conversion. Explicit bodies created with `AuthResponse::native(status, body).into()` retain their property order, extra fields, and native object identity. An explicit body can contain only `message`, even when another endpoint returns a coded error with the same message. Clients should use `code` when present and the status otherwise.
 
 Native errors retain the complete original `FieldValue`. Use `AuthError::from_thrown(value)` to propagate an existing thrown value or `AuthError::try_api_error(ApiErrorInit { .. })?` to run the upstream constructor. `ApiErrorClass` distinguishes Better Call and Better Auth instances. `is_api_error()?` also recognizes structural errors through their current `name` property; `is_api_error_instance(class)` checks the instance without reading that property.
 

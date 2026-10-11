@@ -5,6 +5,8 @@ use std::sync::{Arc, Once};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
+use crate::plugins::oauth::{profile_test_support, resolved::ResolvedProvider};
+
 static LOCAL_PROXY_BYPASS: Once = Once::new();
 
 fn ensure_local_proxy_bypass() {
@@ -133,29 +135,37 @@ async fn github_provider_get_user_info_uses_email_fallback_and_login_name() {
             access_token: (Some("github-access-token".to_string())).into(),
             ..Default::default()
         },
+        None,
     )
     .await
     .unwrap()
     .unwrap();
 
-    assert_eq!(response.user.id, "42");
+    let data = profile_test_support::data(&response);
+    assert_eq!(data["id"], serde_json::json!(42));
     assert_eq!(
-        response.user.email.typed().unwrap().as_deref(),
-        Some("octocat@example.com")
+        profile_test_support::subject(
+            &ResolvedProvider {
+                config: provider,
+                generic: None,
+            },
+            &OAuthTokenSet::default(),
+            &response,
+        )
+        .await
+        .as_str(),
+        Some("42")
     );
     assert_eq!(
-        response.user.name.typed().unwrap().as_deref(),
-        Some("octocat")
+        profile_test_support::user(&response),
+        serde_json::json!({
+            "name": "octocat",
+            "email": "octocat@example.com",
+            "image": "https://avatars.githubusercontent.com/u/42?v=4",
+            "emailVerified": true,
+        })
     );
-    assert_eq!(
-        response.user.image.as_ref().and_then(Option::as_deref),
-        Some("https://avatars.githubusercontent.com/u/42?v=4")
-    );
-    assert_eq!(response.user.email_verified.typed().unwrap(), &Some(true));
-    assert_eq!(
-        response.data["email"],
-        serde_json::json!("octocat@example.com")
-    );
+    assert_eq!(data["email"], serde_json::json!("octocat@example.com"));
 
     let requests = requests.lock().await;
     assert_eq!(requests.len(), 2);
@@ -212,20 +222,21 @@ async fn github_provider_get_user_info_keeps_inline_email() {
             access_token: (Some("github-access-token".to_string())).into(),
             ..Default::default()
         },
+        None,
     )
     .await
     .unwrap()
     .unwrap();
 
     assert_eq!(
-        response.user.email.typed().unwrap().as_deref(),
-        Some("public@example.com")
+        profile_test_support::user(&response),
+        serde_json::json!({
+            "name": "Octo Cat",
+            "email": "public@example.com",
+            "image": null,
+            "emailVerified": false,
+        })
     );
-    assert_eq!(
-        response.user.name.typed().unwrap().as_deref(),
-        Some("Octo Cat")
-    );
-    assert_eq!(response.user.email_verified.typed().unwrap(), &Some(false));
 }
 #[tokio::test]
 async fn github_http_errors_distinguish_missing_profile_from_optional_email_data() {
@@ -247,6 +258,7 @@ async fn github_http_errors_distinguish_missing_profile_from_optional_email_data
                 access_token: (Some("ordinary-access-token".into())).into(),
                 ..Default::default()
             },
+            None,
         )
         .await
         .unwrap();
@@ -256,10 +268,13 @@ async fn github_http_errors_distinguish_missing_profile_from_optional_email_data
         } else {
             let response = response.unwrap();
             assert_eq!(
-                response.user.email.typed().unwrap().as_deref(),
-                Some("public@example.test")
+                profile_test_support::user(&response),
+                serde_json::json!({
+                    "name": "octocat",
+                    "email": "public@example.test",
+                    "emailVerified": false,
+                })
             );
-            assert_eq!(response.user.email_verified.typed().unwrap(), &Some(false));
             assert_eq!(requests.lock().await.len(), 2);
         }
     }
@@ -462,7 +477,7 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
 }
 
 #[tokio::test]
-async fn github_rejects_nonstring_profile_email_before_using_fallback_values() {
+async fn github_retains_nonstring_profile_email_without_using_fallback_values() {
     let (user_url, emails_url, _) = start_github_mock_server(
         serde_json::json!({
             "id":42, "login":"octocat", "name":"Octo Cat", "email":123,
@@ -472,17 +487,29 @@ async fn github_rejects_nonstring_profile_email_before_using_fallback_values() {
         ("200 OK", "200 OK"),
     )
     .await;
-    let error = github_profile(
+    let response = github_profile(
         &user_url,
         &emails_url,
         &OAuthUserInfoRequest {
             access_token: (Some("ordinary-github-token".into())).into(),
             ..Default::default()
         },
+        None,
     )
     .await
-    .unwrap_err();
-    assert!(
-        matches!(error, AuthError::Internal(message) if message.starts_with("Invalid provider email:"))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        profile_test_support::user(&response),
+        serde_json::json!({
+            "name": "Octo Cat",
+            "email": 123,
+            "image": "https://images.example.test/octocat.png",
+            "emailVerified": false,
+        })
+    );
+    assert_eq!(
+        profile_test_support::data(&response)["email"],
+        serde_json::json!(123)
     );
 }
