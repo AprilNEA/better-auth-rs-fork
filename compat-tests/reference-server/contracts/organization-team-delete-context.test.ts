@@ -1,13 +1,41 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { getAuthTables } from "@better-auth/core/db";
 import { betterAuth } from "better-auth";
+import { getMigrations } from "better-auth/db/migration";
 import { organization } from "better-auth/plugins";
 import { expectOrdered, setup } from "./organization-invitation-response-contract";
 import { date, membershipKey, type Events, type Fields } from "./organization-team-member-contract";
+import { observeSqliteCatalog } from "./sqlite-catalog";
 
 type Mode = "mapped-owner" | "moved-owner" | "deleted-team" | "invitation-error" | "after-error" | "hidden-id" | "wrong-projected-owner";
 const modes: Mode[] = ["mapped-owner", "moved-owner", "deleted-team", "invitation-error", "after-error", "hidden-id", "wrong-projected-owner"];
 type Fixture = Awaited<ReturnType<typeof setup>>;
 const teamIds = "target-team,retained-team";
+
+async function makeOriginalOwnerNullable(fixture: Fixture) {
+  const database = fixture.options.database;
+  if (!(database instanceof Database)) throw new Error("The mapped Team owner fixture requires SQLite");
+  const before = fixture.snapshot();
+  expect(before.team).toStrictEqual([]);
+  expect(before.teamMember).toStrictEqual([]);
+  const { catalog } = observeSqliteCatalog(database, "team", "The original Team table must exist");
+  const owner = getAuthTables(fixture.options).team.fields.organizationId;
+  // The reader maps organizationId to name, so the unused physical owner must allow an omitted value.
+  database.exec('DROP TABLE "team"');
+  await (await getMigrations({
+    ...fixture.options,
+    plugins: [...fixture.options.plugins!, { id: "nullable-physical-team-owner", schema: {
+      team: { fields: { organizationId: { ...owner, required: false } } },
+    } }],
+  })).runMigrations();
+  const rebuilt = observeSqliteCatalog(database, "team", "The rebuilt Team table must exist").catalog;
+  expect(rebuilt).toStrictEqual({
+    ...catalog,
+    columns: catalog.columns.map(column => column.name === "organizationId" ? { ...column, notnull: 0 } : column),
+  });
+  expect(fixture.snapshot()).toStrictEqual(before);
+}
 
 function invitation(id: string, organizationId: string, teamId: string, status = "pending") {
   return {
@@ -145,8 +173,10 @@ for (const backend of ["memory", "sqlite"] as const) {
     test(`${backend} trusted Team deletion preserves ${mode} operation context, callbacks and complete storage`, async () => {
       const fixture = await setup(backend, { name: mode, route: "cancel", deleteBefore: true });
       try {
+        if (backend === "sqlite" && mode === "mapped-owner") await makeOriginalOwnerNullable(fixture);
         await seed(fixture, mode);
         const before = fixture.snapshot();
+        if (mode === "mapped-owner") expect(before.team.find(row => row.id === "target-team")?.organizationId).toBe("other");
         const events: Events = [];
         const failure = new Error(mode === "after-error" ? "team-after-hook-failed" : "team-invitation-output-failed");
         const auth = authFor(fixture, mode, events, failure);

@@ -7,7 +7,9 @@ use serde_json::{Map, Value, json};
 
 use crate::{AuthResponse, AuthResult, FieldValue};
 
-pub(crate) fn where_operator(operator: &str) -> crate::WhereOperator {
+/// Resolve the adapter operator before field binding, using equality for an unknown name.
+#[doc(hidden)]
+pub fn where_operator(operator: &str) -> crate::WhereOperator {
     use crate::WhereOperator;
     match operator {
         "ne" => WhereOperator::Ne,
@@ -24,7 +26,9 @@ pub(crate) fn where_operator(operator: &str) -> crate::WhereOperator {
     }
 }
 
-pub(crate) fn validate_where_operand(
+/// Validate the raw operand before resolving or converting its field declaration.
+#[doc(hidden)]
+pub fn validate_where_operand(
     operator: crate::WhereOperator,
     value: &FieldValue,
 ) -> AuthResult<()> {

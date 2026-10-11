@@ -39,11 +39,10 @@ fn bind_member_filter(
         .as_ref()
         .unwrap_or(&FieldValue::Undefined);
     let operator = params.filter_operator.as_deref().unwrap_or("eq");
-    if operator == "in" && value.as_array().is_none() {
-        return Err(better_auth_core::AuthError::internal(
-            "Value must be an array",
-        ));
-    }
+    better_auth_core::query::validate_where_operand(
+        better_auth_core::query::where_operator(operator),
+        value,
+    )?;
     let schema = better_auth_core::store::MemberUser::field_schema(config);
     let before =
         runtime.runtime_fields(better_auth_core::store::schema::EntityRole::Member, &schema)?;

@@ -14,16 +14,19 @@ enum Case {
     Page,
     Chronological,
     InvalidSort(usize),
+    ScalarIn(&'static str),
 }
 
 impl Case {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 8] = [
         Self::Insertion,
         Self::Page,
         Self::Chronological,
         Self::InvalidSort(0),
         Self::InvalidSort(1),
         Self::InvalidSort(3),
+        Self::ScalarIn("role"),
+        Self::ScalarIn("unknown"),
     ];
     fn size(self) -> usize {
         if let Self::InvalidSort(size) = self {
@@ -39,7 +42,7 @@ impl Case {
             Self::Chronological => &["member-a", "member-m", "member-z"],
             Self::InvalidSort(0) => &[],
             Self::InvalidSort(1) => &["member-a"],
-            Self::InvalidSort(_) => unreachable!(),
+            Self::InvalidSort(_) | Self::ScalarIn(_) => unreachable!(),
         }
     }
 }
@@ -178,6 +181,10 @@ async fn check<S: AuthSchema>(
                 query["filterValue"] = json!(if size == 0 { "absent" } else { "user-a-query" });
             }
         }
+        Case::ScalarIn(field) => {
+            query["filterField"] = json!(field);
+            query["filterOperator"] = json!("in");
+        }
     }
     let result = auth
         .call_endpoint(
@@ -195,7 +202,12 @@ async fn check<S: AuthSchema>(
         "output".into(),
         "owner".into(),
     ])];
-    if matches!(case, Case::InvalidSort(size) if !storage.memory() || size >= 2) {
+    if matches!(case, Case::ScalarIn(_)) {
+        assert!(
+            matches!(result.expect_err("Scalar in values must fail before resolving the filter field"),
+            AuthError::Config(message) if message == "Value must be an array")
+        );
+    } else if matches!(case, Case::InvalidSort(size) if !storage.memory() || size >= 2) {
         assert!(
             matches!(result.expect_err("Invalid sort must fail at the backend's resolution boundary"),
             AuthError::Config(message) if message == "Field unknown not found in model member")

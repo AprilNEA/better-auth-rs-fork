@@ -22,6 +22,8 @@ const cases = [
   { name: "unknown-sort-empty", query: { sortBy: "unknown", filterField: "userId", filterValue: "absent" }, selected: [], total: 0 },
   { name: "unknown-sort-single", query: { sortBy: "unknown", filterField: "userId", filterValue: "user-a-query" }, selected: [1], total: 1 },
   { name: "unknown-sort-many", query: { sortBy: "unknown" }, selected: [0, 1, 2], total: 3 },
+  { name: "scalar-in-role", query: { filterField: "role", filterOperator: "in" as const, filterValue: "selected" }, selected: [], total: 0 },
+  { name: "scalar-in-unknown", query: { filterField: "unknown", filterOperator: "in" as const, filterValue: "selected" }, selected: [], total: 0 },
 ];
 
 function adapterMember(row: typeof rows[number], role: string) {
@@ -94,12 +96,13 @@ for (const backend of ["memory", "sqlite"] as const) {
             organizationId: "organization", filterField: "role", filterValue: "selected", ...scenario.query,
           } });
         } catch (error) { caught = error; }
-        const fails = scenario.query.sortBy === "unknown" && (backend === "sqlite" || scenario.total > 1);
+        const invalidMembership = scenario.query.filterOperator === "in";
+        const fails = invalidMembership || (scenario.query.sortBy === "unknown" && (backend === "sqlite" || scenario.total > 1));
         if (fails) {
           expect(actual).toBeUndefined();
           expect(caught).toBeInstanceOf(Error);
           expect({ name: (caught as Error).name, message: (caught as Error).message }).toStrictEqual({
-            name: "BetterAuthError", message: "Field unknown not found in model member",
+            name: "BetterAuthError", message: invalidMembership ? "Value must be an array" : "Field unknown not found in model member",
           });
         } else {
           expect(caught).toBeUndefined();

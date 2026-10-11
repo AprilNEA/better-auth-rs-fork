@@ -6,6 +6,7 @@ use better_auth::plugins::organization::hooks::{OrganizationHooks, OrganizationT
 use better_auth::server_api::EndpointInput;
 use better_auth_core::id::{IdGeneration, IdGenerator};
 use better_auth_core::{AuthRecordFields, CreateInvitation, HttpMethod, InvitationStatus};
+use better_auth_seaorm::sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
 
 type Events = Arc<Mutex<Vec<FieldValue>>>;
 type Ids = Arc<Mutex<String>>;
@@ -62,6 +63,78 @@ fn settings(ids: Ids) -> AuthConfig {
             Ok(Some(trace_lock(&ids)?.clone()))
         })));
     settings
+}
+
+async fn team_schema(database: &DatabaseConnection) -> AuthResult<Vec<FieldMap>> {
+    database
+        .query_all_raw(Statement::from_string(
+            DbBackend::Sqlite,
+            "SELECT json_object('type', type, 'name', name, 'table', tbl_name, 'sql', sql) AS value
+             FROM sqlite_schema WHERE tbl_name = 'team' ORDER BY type, name",
+        ))
+        .await
+        .map_err(|error| AuthError::internal(error.to_string()))?
+        .into_iter()
+        .map(|row| {
+            let value = row
+                .try_get::<String>("", "value")
+                .map_err(|error| AuthError::internal(error.to_string()))?;
+            FieldMap::from_json(serde_json::from_str(&value)?)
+        })
+        .collect()
+}
+
+async fn make_original_owner_nullable(storage: &Storage) -> AuthResult<()> {
+    let Storage::Sqlite(database) = storage else {
+        return Ok(());
+    };
+    let before = storage.snapshot().await?;
+    assert!(required(before.get("team"), "Expected Team table")?.is_empty());
+    let mut schema = team_schema(database).await?;
+    let table = required(
+        schema
+            .iter_mut()
+            .find(|row| row.get("type").and_then(FieldValue::as_str) == Some("table")),
+        "Expected Team table declaration",
+    )?;
+    let sql = required(
+        table.get("sql").and_then(FieldValue::as_str),
+        "Expected Team table SQL",
+    )?;
+    let (prefix, declaration) = required(
+        sql.split_once("\"organization_id\" "),
+        "Expected owner column declaration",
+    )?;
+    let (column, suffix) = required(
+        declaration.split_once(','),
+        "Expected following Team column",
+    )?;
+    let column_type = required(
+        column.strip_suffix(" NOT NULL"),
+        "Expected required owner column",
+    )?;
+    let sql = format!("{prefix}\"organization_id\" {column_type},{suffix}");
+    let _ = table.insert("sql".into(), sql.clone().into());
+    // Preserve the original table definition and indexes while making the remapped column optional.
+    let statements = ["DROP TABLE \"team\"".to_owned(), sql].into_iter().chain(
+        schema
+            .iter()
+            .filter(|row| row.get("type").and_then(FieldValue::as_str) != Some("table"))
+            .filter_map(|row| {
+                row.get("sql")
+                    .and_then(FieldValue::as_str)
+                    .map(str::to_owned)
+            }),
+    );
+    for statement in statements {
+        let _ = database
+            .execute_raw(Statement::from_string(DbBackend::Sqlite, statement))
+            .await
+            .map_err(|error| AuthError::internal(error.to_string()))?;
+    }
+    assert_eq!(team_schema(database).await?, schema);
+    assert_eq!(storage.snapshot().await?, before);
+    Ok(())
 }
 
 async fn writer<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, ids: Ids) -> AuthResult<BetterAuth<S>> {
@@ -453,11 +526,24 @@ async fn check<S: AuthSchema>(
     storage: Storage,
     case: Case,
 ) -> AuthResult<()> {
+    if case == Case::MappedOwner {
+        make_original_owner_nullable(&storage).await?;
+    }
     let ids = Ids::default();
     let writer = writer(raw.clone(), ids.clone()).await?;
     seed_teams(raw.clone(), writer.store().as_ref(), &ids, case).await?;
     let mut snapshot = storage.snapshot().await?;
     assert_eq!(snapshot.len(), 9);
+    if case == Case::MappedOwner {
+        assert_eq!(
+            row_mut(&mut snapshot, "team", "target-team")?.get(if storage.memory() {
+                "organizationId"
+            } else {
+                "organization_id"
+            }),
+            Some(&FieldValue::from("other")),
+        );
+    }
     let events = Events::default();
     let reader = reader(raw, writer.store().clone(), ids, &events, case).await?;
     assert!(trace_lock(&events)?.is_empty());
@@ -487,8 +573,8 @@ async fn check<S: AuthSchema>(
             let error = response.expect_err("Projected owner must determine access");
             assert_eq!(error.status_code(), 400);
             assert_eq!(
-                error.to_auth_response().body.bytes()?,
-                br#"{"code":"TEAM_NOT_FOUND","message":"Team not found"}"#
+                error.to_auth_response().body.bytes()?.as_ref(),
+                br#"{"code":"TEAM_NOT_FOUND","message":"Team not found"}"#.as_slice()
             );
         }
         _ => {
@@ -498,8 +584,8 @@ async fn check<S: AuthSchema>(
                 FieldMap::from_iter([("message".into(), "Team removed successfully.".into())]);
             ordered(&response.body.field_value()?, &expected.into())?;
             assert_eq!(
-                response.body.bytes()?,
-                br#"{"message":"Team removed successfully."}"#
+                response.body.bytes()?.as_ref(),
+                br#"{"message":"Team removed successfully."}"#.as_slice()
             );
         }
     }
