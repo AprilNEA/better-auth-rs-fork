@@ -139,7 +139,7 @@ async fn check_json_identity<S: AuthSchema>(
                 })),
                 output: Some(UserFieldTransform::new(move |value| {
                     output_events.lock().unwrap().push("output".into());
-                    assert_eq!(value, FieldValue::from("native-provider"));
+                    assert_eq!(value, FieldValue::from("\"native-provider\""));
                     if output_failure.load(Ordering::SeqCst) {
                         return Err(AuthError::internal("native output failure"));
                     }

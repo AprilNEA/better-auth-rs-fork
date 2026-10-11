@@ -264,6 +264,7 @@ async fn preset_requests_profiles_and_json_mapper_inputs_match_pinned_helpers() 
             endpoint: preset.profile_endpoint().into(),
         }
         .request(&tokens)
+        .unwrap()
         .build()
         .unwrap();
         assert_eq!(

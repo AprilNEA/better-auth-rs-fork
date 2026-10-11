@@ -228,7 +228,7 @@ mod tests {
     #[test]
     fn native_callback_names_observe_conversion_mutations_and_keep_errors() -> AuthResult<()> {
         for fail in [false, true] {
-            let events = Arc::new(Mutex::new(Vec::new()));
+            let events = Arc::new(Mutex::new(Vec::<String>::new()));
             let user = FieldObject::from(FieldMap::new());
             let changed_user = user.clone();
             let converted = events.clone();
