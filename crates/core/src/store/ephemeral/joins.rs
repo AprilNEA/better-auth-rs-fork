@@ -10,7 +10,6 @@ use crate::store::JoinValue;
 use crate::store::schema::resolve_field_name;
 use crate::user_fields::{
     UserFieldConfig, project_adapter_value, project_owned_source_fields_batches_then,
-    project_source_fields_batches_then,
 };
 use futures_util::future::BoxFuture;
 
@@ -58,6 +57,18 @@ fn apply_user_field<'a>(
 
 impl EphemeralStore {
     pub(super) async fn output_user_refs(&self, users: Vec<UserRef>) -> AuthResult<Vec<UserView>> {
+        self.output_user_refs_batches_then(users, |ready| std::future::ready(Ok(ready)))
+            .await
+    }
+
+    pub(super) async fn output_user_refs_batches_then<R: Send + 'static, F>(
+        &self,
+        users: Vec<UserRef>,
+        complete: impl Fn(Vec<(usize, UserView)>) -> F + Send + Sync + 'static,
+    ) -> AuthResult<Vec<R>>
+    where
+        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send + 'static,
+    {
         let fields = self.user_schema();
         let runtime = self.model_fields.clone();
         project_owned_source_fields_batches_then(
@@ -67,30 +78,6 @@ impl EphemeralStore {
                 .collect(),
             fields.fields().clone(),
             move |row, name, field| read_user_field(&runtime, row, name, field),
-            apply_user_field,
-            |_, (_, _, output)| UserView::from_field_values(std::mem::take(output)),
-            |ready| std::future::ready(Ok(ready)),
-        )
-        .await
-    }
-
-    pub(super) async fn output_user_refs_batches_then<R: Send, F>(
-        &self,
-        users: Vec<UserRef>,
-        complete: impl Fn(Vec<(usize, UserView)>) -> F + Sync,
-    ) -> AuthResult<Vec<R>>
-    where
-        F: std::future::Future<Output = AuthResult<Vec<(usize, R)>>> + Send,
-    {
-        let fields = self.user_schema();
-        let mut rows = users
-            .into_iter()
-            .map(|user| (user, false, FieldMap::new()))
-            .collect::<Vec<_>>();
-        project_source_fields_batches_then(
-            &mut rows,
-            fields.fields(),
-            |row, name, field| read_user_field(&self.model_fields, row, name, field),
             apply_user_field,
             |_, (_, _, output)| UserView::from_field_values(std::mem::take(output)),
             complete,

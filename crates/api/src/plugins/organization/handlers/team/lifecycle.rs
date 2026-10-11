@@ -33,20 +33,30 @@ pub(super) async fn create(
                 .map(|session| session.session.active_organization_id.field_value())
         })
         .filter(FieldValue::is_truthy)
-        .ok_or_else(|| AuthError::bad_request("No active organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization")
+        })?;
     if let Some(session) = &session {
         let member = ctx
             .database
             .get_member_with_user_value(&org, &session.user_property("id")?)
             .await?
             .ok_or_else(|| {
-                AuthError::forbidden("You are not allowed to invite users to this organization")
+                AuthError::from_code(
+                    403,
+                    "YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION",
+                    "You are not allowed to invite users to this organization",
+                )
             })?;
         authorize(
             &member.member,
             &org,
             ("team", "create"),
-            "You are not allowed to create teams in this organization",
+            AuthError::from_code(
+                403,
+                "YOU_ARE_NOT_ALLOWED_TO_CREATE_TEAMS_IN_THIS_ORGANIZATION",
+                "You are not allowed to create teams in this organization",
+            ),
             config,
             ctx,
         )
@@ -69,7 +79,9 @@ pub(super) async fn create(
         .filter(|limit| *limit > 0)
         && teams.len() >= maximum
     {
-        return Err(AuthError::bad_request(
+        return Err(AuthError::from_code(
+            400,
+            "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_TEAMS",
             "You have reached the maximum number of teams",
         ));
     }
@@ -77,7 +89,9 @@ pub(super) async fn create(
         .database
         .get_organization_by_id_value(&org)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+        })?;
     let organization_view = fields::organization(&organization, ctx)?;
     let created_at = chrono::Utc::now();
     let mut data = OrganizationTeamDraft {
@@ -135,7 +149,9 @@ pub(super) async fn remove(
                 .map(|session| session.session.active_organization_id.field_value())
         })
         .filter(FieldValue::is_truthy)
-        .ok_or_else(|| AuthError::bad_request("No active organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization")
+        })?;
     if session.is_none() && request_present(req, ctx) {
         return Err(AuthResponse::new(401).into());
     }
@@ -144,14 +160,22 @@ pub(super) async fn remove(
             .database
             .get_member_with_user_value(&org, &session.user_property("id")?)
             .await?
-            .ok_or_else(|| AuthError::forbidden("You are not allowed to delete this team"))?;
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    403,
+                    "YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_TEAM",
+                    "You are not allowed to delete this team",
+                )
+            })?;
         if session
             .session
             .active_team_id
             .field_value()
             .strict_equals(&body.team_id.as_str().into())
         {
-            return Err(AuthError::forbidden(
+            return Err(AuthError::from_code(
+                403,
+                "YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_TEAM",
                 "You are not allowed to delete this team",
             ));
         }
@@ -159,7 +183,11 @@ pub(super) async fn remove(
             &member.member,
             &org,
             ("team", "delete"),
-            "You are not allowed to delete teams in this organization",
+            AuthError::from_code(
+                403,
+                "YOU_ARE_NOT_ALLOWED_TO_DELETE_TEAMS_IN_THIS_ORGANIZATION",
+                "You are not allowed to delete teams in this organization",
+            ),
             config,
             ctx,
         )
@@ -167,16 +195,26 @@ pub(super) async fn remove(
     }
     let team = find_team(&body.team_id.as_str().into(), &org, ctx, config).await?;
     if !team.organization_id.field_value().strict_equals(&org) {
-        return Err(AuthError::bad_request("Team not found"));
+        return Err(AuthError::from_code(
+            400,
+            "TEAM_NOT_FOUND",
+            "Team not found",
+        ));
     }
     if !config.teams.allow_removing_all_teams && list_teams(&org, ctx, config).await?.len() <= 1 {
-        return Err(AuthError::bad_request("Unable to remove last team"));
+        return Err(AuthError::from_code(
+            400,
+            "UNABLE_TO_REMOVE_LAST_TEAM",
+            "Unable to remove last team",
+        ));
     }
     let organization = ctx
         .database
         .get_organization_by_id_value(&org)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Organization not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+        })?;
     let organization_view = fields::organization(&organization, ctx)?;
     let event = OrganizationTeamEvent {
         team: &team,

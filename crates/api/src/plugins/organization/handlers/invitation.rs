@@ -424,6 +424,15 @@ pub(crate) async fn list_invitations_core(
         None,
         &session.session,
         ctx,
+        AuthResponse::native(
+            Some(400),
+            better_auth_core::FieldMap::from([(
+                "message".into(),
+                "Organization ID is required".into(),
+            )])
+            .into(),
+        )
+        .into(),
     )
     .await?;
 

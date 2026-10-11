@@ -81,17 +81,23 @@ run_stage() {
       cargo fmt --all -- --check
       local team_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-live-consumption.test.ts \
         ./compat-tests/reference-server/contracts/organization-team-delete-context.test.ts \
         ./tests/fixtures/organization-native-teams-upstream.test.ts || team_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings || team_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test organization_native_team_tests \
         --test organization_list_relations_tests -- -D warnings || team_status=1
-      cargo test --locked -p better-auth-core --lib store::ephemeral::teams::tests:: || team_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        store::ephemeral::teams::tests:: error::construction_tests:: || team_status=1
       cargo test --locked -p better-auth-api --lib plugins::organization:: || team_status=1
       cargo test --locked -p better-auth-seaorm --lib organization_schema::tests:: || team_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
-        --test plugin_model_fields_tests -- organization::team_delete_context:: || team_status=1
+        --test plugin_model_fields_tests -- organization::team_delete_context:: \
+        organization::organization_live_sources::consumption:: \
+        organization::team_member::route_projection:: || team_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test organization_native_team_tests || team_status=1
       return "$team_status"
@@ -639,11 +645,13 @@ run_stage() {
         ./compat-tests/reference-server/contracts/schema-preflight-native-mapping.test.ts \
         ./compat-tests/reference-server/contracts/projection-error-lifecycle.test.ts \
         ./compat-tests/reference-server/contracts/async-field-transforms.test.ts \
+        ./compat-tests/reference-server/contracts/account-owner-batch.test.ts \
         ./tests/fixtures/organization-join-continuation-upstream.test.ts || projection_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-seaorm -- -D warnings || projection_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test schema_preflight_tests --test query_binding_order_tests --test telemetry_options_tests \
-        --test async_field_transform_tests --test relation_object_mutation_tests -- -D warnings || projection_status=1
+        --test async_field_transform_tests --test account_owner_batch_tests \
+        --test relation_object_mutation_tests -- -D warnings || projection_status=1
       cargo test --locked -p better-auth-core --lib -- \
         request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: || projection_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \

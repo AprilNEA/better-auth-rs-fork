@@ -25,11 +25,7 @@ pub(crate) async fn require_native_session<S: better_auth_core::AuthSchema>(
     ctx.require_native_session(req)
         .await
         .map_err(|error| match error {
-            AuthError::Unauthenticated => AuthError::Upstream {
-                status: 401,
-                code: "UNAUTHORIZED",
-                message: "Unauthorized",
-            },
+            AuthError::Unauthenticated => AuthError::from_code(401, "UNAUTHORIZED", "Unauthorized"),
             error => error,
         })
 }
@@ -61,11 +57,7 @@ async fn request_only_session<S: better_auth_core::AuthSchema>(
 ) -> AuthResult<Option<NativeSessionData>> {
     let session = optional_session(req, ctx).await?;
     if session.is_none() && request_present(req, ctx) {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "UNAUTHORIZED",
-            message: "Unauthorized",
-        });
+        return Err(AuthError::from_code(401, "UNAUTHORIZED", "Unauthorized"));
     }
     Ok(session)
 }
@@ -76,6 +68,7 @@ pub(crate) async fn resolve_organization_id(
     org_slug: Option<&str>,
     session: &impl AuthSession,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+    missing: AuthError,
 ) -> AuthResult<better_auth_core::FieldValue> {
     if let Some(id) = org_id.filter(|id| !id.is_empty()) {
         return Ok(id.into());
@@ -90,9 +83,7 @@ pub(crate) async fn resolve_organization_id(
     }
 
     let id = session.active_organization_id().field_value();
-    id.is_truthy()
-        .then_some(id)
-        .ok_or_else(|| AuthError::bad_request("No active organization"))
+    id.is_truthy().then_some(id).ok_or(missing)
 }
 
 // ---------------------------------------------------------------------------
@@ -105,9 +96,14 @@ pub(crate) async fn has_permission_core(
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<HasPermissionResponse> {
-    let org_id =
-        resolve_organization_id(body.organization_id.as_deref(), None, &session.session, ctx)
-            .await?;
+    let org_id = resolve_organization_id(
+        body.organization_id.as_deref(),
+        None,
+        &session.session,
+        ctx,
+        AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
+    )
+    .await?;
 
     let member = ctx
         .database

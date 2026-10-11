@@ -68,6 +68,7 @@ pub(crate) async fn list_members_core(
             None,
             &session.session,
             ctx,
+            AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
         )
         .await?
     };
@@ -151,6 +152,7 @@ pub(crate) async fn get_active_member_role_core(
             None,
             &session.session,
             ctx,
+            AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
         )
         .await?
     };
@@ -188,9 +190,14 @@ pub(crate) async fn remove_member_core(
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<RemovedMemberResponse> {
-    let org_id =
-        resolve_organization_id(body.organization_id.as_deref(), None, &session.session, ctx)
-            .await?;
+    let org_id = resolve_organization_id(
+        body.organization_id.as_deref(),
+        None,
+        &session.session,
+        ctx,
+        AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
+    )
+    .await?;
 
     let requester_member = ctx
         .database
@@ -336,9 +343,14 @@ pub(crate) async fn update_member_role_core(
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<BasicMemberResponse> {
-    let org_id =
-        resolve_organization_id(body.organization_id.as_deref(), None, &session.session, ctx)
-            .await?;
+    let org_id = resolve_organization_id(
+        body.organization_id.as_deref(),
+        None,
+        &session.session,
+        ctx,
+        AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
+    )
+    .await?;
 
     let requester_member = ctx
         .database

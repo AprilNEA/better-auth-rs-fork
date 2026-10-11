@@ -6,6 +6,9 @@
     reason = "Contract fixtures fail immediately on invalid setup, unexpected channel events, or a changed two-row result shape."
 )]
 
+#[path = "account_owner_batch_tests/retained.rs"]
+mod retained;
+
 use better_auth_core::{
     AuthConfig, AuthError, AuthResult, AuthSchema, AuthStore, CreateAccount, CreateUser, FieldMap,
     FieldValue,
@@ -206,27 +209,31 @@ enum Event {
     Complete(usize, Value),
 }
 
+fn async_callback(sender: &mpsc::UnboundedSender<Event>, name: &'static str) -> UserFieldTransform {
+    let sender = sender.clone();
+    UserFieldTransform::new_async(move |value| {
+        let sender = sender.clone();
+        async move {
+            let (reply, result) = oneshot::channel();
+            sender
+                .send(Event::Field(Call { name, value, reply }))
+                .map_err(|_| AuthError::internal("Field controller closed"))?;
+            result
+                .await
+                .map_err(|_| AuthError::internal("Field answer missing"))?
+        }
+    })
+}
+
 fn async_fields(sender: &mpsc::UnboundedSender<Event>) -> UserConfig {
     let mut config = AuthConfig::default();
     for name in ["accessToken", "refreshToken"] {
-        let sender = sender.clone();
         let _ = config.account.additional_fields.insert(
             name.into(),
             UserFieldConfig {
                 returned: Some(false),
                 transform: Some(FieldTransforms {
-                    output: Some(UserFieldTransform::new_async(move |value| {
-                        let sender = sender.clone();
-                        async move {
-                            let (reply, result) = oneshot::channel();
-                            sender
-                                .send(Event::Field(Call { name, value, reply }))
-                                .map_err(|_| AuthError::internal("Field controller closed"))?;
-                            result
-                                .await
-                                .map_err(|_| AuthError::internal("Field answer missing"))?
-                        }
-                    })),
+                    output: Some(async_callback(sender, name)),
                     ..Default::default()
                 }),
                 ..Default::default()

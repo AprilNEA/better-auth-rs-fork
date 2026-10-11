@@ -4,6 +4,7 @@ use crate::store::schema::EntityRole;
 use crate::store::{AccountOwner, JoinValue, ResolvedJoin, UserAccounts};
 
 type UserRef = RowRef<UserView>;
+type UserPage = (Arc<[UserRef]>, usize);
 type AccountRef = RowRef<FieldMap>;
 
 pub(super) fn user_value(user: &UserView, _logical: &str, physical: &str) -> Value {
@@ -253,16 +254,19 @@ impl EphemeralStore {
         } else {
             (self.account_records(provider, account_id).await?, None)
         };
+        let continuation = Arc::new((users, fields.clone(), relation.clone()));
+        let store = self.clone();
         let owners = self
-            .project_record_sources_batches_then(
+            .project_record_sources_owned_batches_then(
                 EntityRole::Account,
                 &fields,
                 records,
                 |_, fields| Ok(fields),
-                |ready| {
-                    let users = &users;
-                    let fields = &fields;
+                move |ready| {
+                    let continuation = continuation.clone();
+                    let store = store.clone();
                     async move {
+                        let (users, fields, relation) = continuation.as_ref();
                         let mut selected = Vec::with_capacity(ready.len());
                         for (index, account) in &ready {
                             selected.push(match users {
@@ -272,16 +276,17 @@ impl EphemeralStore {
                                     )
                                 })?,
                                 None => {
-                                    self.fallback_join_users(
-                                        relation,
-                                        (EntityRole::Account, "account", fields),
-                                        account,
-                                    )
-                                    .await?
+                                    store
+                                        .fallback_join_users(
+                                            relation,
+                                            (EntityRole::Account, "account", fields),
+                                            account,
+                                        )
+                                        .await?
                                 }
                             });
                         }
-                        let projected = self.output_user_relations(selected).await?;
+                        let projected = store.output_user_relations(selected).await?;
                         Ok(ready
                             .into_iter()
                             .zip(projected)
@@ -350,9 +355,12 @@ impl EphemeralStore {
     ) -> AuthResult<Vec<JoinValue<UserView>>> {
         let (many, pages): (Vec<_>, Vec<_>) = users
             .into_iter()
-            .map(|users| match users {
-                JoinValue::One(user) => (false, user.into_iter().collect()),
-                JoinValue::Many(users) => (true, users),
+            .map(|users| {
+                let (many, users) = match users {
+                    JoinValue::One(user) => (false, user.into_iter().collect()),
+                    JoinValue::Many(users) => (true, users),
+                };
+                (many, (Arc::from(users), 0))
             })
             .unzip();
         let projected = self.output_user_pages(pages).await?;
@@ -374,22 +382,27 @@ impl EphemeralStore {
 
     fn output_user_pages(
         &self,
-        pages: Vec<Vec<UserRef>>,
-    ) -> futures_util::future::BoxFuture<'_, AuthResult<Vec<Vec<UserView>>>> {
+        pages: Vec<UserPage>,
+    ) -> futures_util::future::BoxFuture<'static, AuthResult<Vec<Vec<UserView>>>> {
+        let store = self.clone();
         Box::pin(async move {
             let mut output = vec![Vec::new(); pages.len()];
             let mut pending = Vec::new();
             let mut first = Vec::new();
-            for (index, page) in pages.into_iter().enumerate() {
-                let mut page = page.into_iter();
-                if let Some(user) = page.next() {
-                    first.push(user);
-                    pending.push((index, page.collect::<Vec<_>>()));
+            for (index, (page, position)) in pages.into_iter().enumerate() {
+                if let Some(user) = page.get(position) {
+                    first.push(user.clone());
+                    pending.push((index, (page, position + 1)));
                 }
             }
-            let projected = self
-                .output_user_refs_batches_then(first, |ready| {
-                    let pending = &pending;
+            if first.is_empty() {
+                return Ok(output);
+            }
+            let pending = Arc::new(pending);
+            let continuation = (pending.clone(), store.clone());
+            let projected = store
+                .output_user_refs_batches_then(first, move |ready| {
+                    let (pending, store) = continuation.clone();
                     async move {
                         let tails = ready
                             .iter()
@@ -405,7 +418,7 @@ impl EphemeralStore {
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
                         // Ready parents advance independently; each page awaits its preceding child.
-                        let tails = self.output_user_pages(tails).await?;
+                        let tails = store.output_user_pages(tails).await?;
                         Ok(ready
                             .into_iter()
                             .zip(tails)
@@ -416,8 +429,8 @@ impl EphemeralStore {
                     }
                 })
                 .await?;
-            for ((index, _), users) in pending.into_iter().zip(projected) {
-                *output.get_mut(index).ok_or_else(|| {
+            for ((index, _), users) in pending.iter().zip(projected) {
+                *output.get_mut(*index).ok_or_else(|| {
                     AuthError::internal("User projection lost its output page index")
                 })? = users;
             }

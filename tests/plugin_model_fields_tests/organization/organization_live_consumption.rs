@@ -3,6 +3,9 @@ use better_auth::plugins::organization::hooks::{OrganizationHooks, OrganizationT
 use better_auth::server_api::EndpointInput;
 use better_auth_core::{AuthRecordFields, CreateInvitation, HttpMethod};
 
+#[path = "organization_error_construction.rs"]
+mod errors;
+
 async fn endpoint<S: AuthSchema>(
     auth: &BetterAuth<S>,
     token: &str,
@@ -97,7 +100,7 @@ fn response(
         error.to_auth_response()
     };
     assert_eq!(actual.status, status);
-    if native && status == 200 {
+    if native {
         ordered(&actual.body.field_value()?, expected)?;
     }
     assert_eq!(
@@ -335,12 +338,12 @@ async fn team<S: AuthSchema>(
             native,
             &FieldMap::from_iter([
                 (
-                    "code".into(),
-                    "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM".into(),
-                ),
-                (
                     "message".into(),
                     "You are not allowed to update this team".into(),
+                ),
+                (
+                    "code".into(),
+                    "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM".into(),
                 ),
             ])
             .into(),

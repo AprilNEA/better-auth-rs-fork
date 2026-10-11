@@ -2,6 +2,7 @@ use super::instrumentation::database_operation;
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{ConnectionTrait, DbBackend, EntityName, EntityTrait, QueryFilter, QuerySelect};
+use std::sync::Arc;
 
 use better_auth_core::id::AdapterIdInput;
 use better_auth_core::store::schema::EntityRole;
@@ -321,7 +322,7 @@ where
     async fn native_account_owners(
         &self,
         records: Vec<AdapterRecord>,
-        users: &[Vec<SqlRow>],
+        users: Vec<Vec<SqlRow>>,
         many: bool,
     ) -> AuthResult<Vec<AccountOwner>>
     where
@@ -336,7 +337,7 @@ where
             .storage_model_name(EntityRole::User, entity.table_name());
         let records = records
             .into_iter()
-            .zip(users)
+            .zip(&users)
             .map(|(record, users)| {
                 Ok(record.with_storage_property(
                     physical,
@@ -349,14 +350,18 @@ where
                 ))
             })
             .collect::<AuthResult<Vec<_>>>()?;
+        let continuation = Arc::new((users, fields.clone()));
+        let store = self.clone();
         fields
-            .project_adapter_records_batches_then(
+            .project_adapter_records_owned_batches_then(
                 records,
                 backend == sea_orm::DbBackend::Postgres,
                 backend != sea_orm::DbBackend::Sqlite,
-                |ready| {
-                    let fields = &fields;
+                move |ready| {
+                    let continuation = continuation.clone();
+                    let store = store.clone();
                     async move {
+                        let (users, fields) = continuation.as_ref();
                         let pages = ready
                             .iter()
                             .map(|(index, _)| {
@@ -367,7 +372,7 @@ where
                                 })
                             })
                             .collect::<AuthResult<Vec<_>>>()?;
-                        let projected = self.output_native_user_pages(pages).await?;
+                        let projected = store.output_native_user_pages(pages).await?;
                         ready
                             .into_iter()
                             .zip(projected)
@@ -584,33 +589,36 @@ where
             .collect::<AuthResult<Vec<_>>>()?;
         let backend = self.connection().get_database_backend();
         let owners = if let Some(users) = native_users {
-            self.native_account_owners(extracted, &users, relation.many)
+            self.native_account_owners(extracted, users, relation.many)
                 .await?
         } else {
+            let continuation = Arc::new((relation, fields.clone()));
+            let store = self.clone();
             fields
-                .project_adapter_records_then(
+                .project_adapter_records_owned_then(
                     extracted,
                     backend == sea_orm::DbBackend::Postgres,
                     backend != sea_orm::DbBackend::Sqlite,
-                    |_, output| {
-                        let relation = &relation;
-                        let fields = &fields;
+                    move |_, output| {
+                        let continuation = continuation.clone();
+                        let store = store.clone();
                         async move {
+                            let (relation, fields) = continuation.as_ref();
                             let source = relation.fallback_from(
                                 (EntityRole::Account, "account", fields),
-                                &self.model_fields,
+                                &store.model_fields,
                             )?;
                             let value = output.get(&source).cloned().unwrap_or_default();
-                            let users = self
+                            let users = store
                                 .selected_join_users(
                                     relation,
                                     value,
-                                    self.config().advanced.database.find_many_limit(),
+                                    store.config().advanced.database.find_many_limit(),
                                 )
                                 .await?;
                             let mut projected = Vec::with_capacity(users.len());
                             for user in users {
-                                let user = self.output_user(&user, self.connection()).await?;
+                                let user = store.output_user(&user, store.connection()).await?;
                                 projected.push(user);
                             }
                             Ok(AccountOwner {

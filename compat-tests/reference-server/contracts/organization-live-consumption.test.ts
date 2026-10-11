@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { serializeSignedCookie } from "better-call";
+import { serializeSignedCookie, toResponse } from "better-call";
 import { baseURL, expectOrdered, outputField } from "./organization-invitation-response-contract";
 import { build, fixture, mutate, past, replace, visible } from "./organization-live-source-contract";
 import { date, type Backend, type Events, type Fields } from "./organization-team-member-contract";
@@ -34,6 +34,7 @@ async function response(operation: Promise<unknown>, entry: Entry, expected: Fie
     try { await operation; } catch (error) { caught = error; }
     expect(caught).toMatchObject({ name: "APIError", statusCode: status });
     expectOrdered(Reflect.get(caught as object, "body"), expected);
+    expect(await toResponse(caught).text()).toBe(JSON.stringify(expected));
   }
 }
 
@@ -95,7 +96,7 @@ async function team(backend: Backend, entry: Entry, denied: boolean) {
     } });
     if (denied) {
       await response(call(reader, entry, true, true), entry, {
-        code: "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM", message: "You are not allowed to update this team",
+        message: "You are not allowed to update this team", code: "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM",
       }, 403);
       expect(events).toStrictEqual([]);
     } else {

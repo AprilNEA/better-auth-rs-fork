@@ -20,8 +20,7 @@ impl std::fmt::Display for ApiErrorResponse {
 /// Authentication framework error types.
 ///
 /// Each variant maps to an HTTP status code via [`AuthError::status_code`].
-/// Use [`AuthError::to_auth_response`] to produce a standardized JSON response
-/// matching the better-auth OpenAPI spec: `{ "message": "..." }`.
+/// Use [`AuthError::to_auth_response`] to retain explicit endpoint bodies or serialize legacy error variants.
 #[derive(Error, Debug)]
 pub enum AuthError {
     /// Runtime schema failures reject the host entry point before endpoint error handling.
@@ -143,6 +142,20 @@ pub enum AuthError {
 }
 
 impl AuthError {
+    /// Construct an upstream coded API error with `message` before `code` in the native body.
+    /// Use `AuthResponse::native(Some(status), body).into()` to preserve an explicit error body instead.
+    pub fn from_code(status: u16, code: impl Into<String>, message: impl Into<String>) -> Self {
+        crate::AuthResponse::native(
+            Some(status),
+            crate::FieldMap::from([
+                ("message".into(), message.into().into()),
+                ("code".into(), code.into().into()),
+            ])
+            .into(),
+        )
+        .into()
+    }
+
     /// Diagnostic message for tracing. Response headers are never included.
     pub fn instrumentation_message(&self) -> String {
         match self {
@@ -343,8 +356,9 @@ impl AuthError {
         (status, code, message)
     }
 
-    /// Convert this error into a standardized [`AuthResponse`](crate::types::AuthResponse) matching the
-    /// better-auth spec: `{ "code": "...", "message": "..." }`.
+    /// Convert this error into an [`AuthResponse`](crate::types::AuthResponse).
+    /// Explicit response errors retain their native body and property order.
+    /// Legacy convenience variants generate a code-first body from [`Self::error_payload`].
     ///
     /// Named `to_auth_response` to avoid collision with Axum's
     /// `IntoResponse::into_response` when the `axum` feature is enabled.
@@ -553,6 +567,10 @@ where
 
     Ok(value)
 }
+
+#[cfg(test)]
+#[path = "error/construction_tests.rs"]
+mod construction_tests;
 
 #[cfg(test)]
 mod tests {

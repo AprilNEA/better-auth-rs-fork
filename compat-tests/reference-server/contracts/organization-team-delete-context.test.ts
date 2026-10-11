@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { toResponse } from "better-call";
 import { Database } from "bun:sqlite";
 import { getAuthTables } from "@better-auth/core/db";
 import { betterAuth } from "better-auth";
@@ -185,7 +186,9 @@ for (const backend of ["memory", "sqlite"] as const) {
         try { actual = await auth.api.removeTeam({ body: { teamId: "target-team", organizationId: "organization" } }); }
         catch (error) { caught = error; }
         if (mode === "wrong-projected-owner") {
-          expect(caught).toMatchObject({ name: "APIError", statusCode: 400, body: { code: "TEAM_NOT_FOUND", message: "Team not found" } });
+          expect(caught).toMatchObject({ name: "APIError", statusCode: 400 });
+          expectOrdered(Reflect.get(caught as object, "body"), { message: "Team not found", code: "TEAM_NOT_FOUND" });
+          expect(await toResponse(caught).text()).toBe('{"message":"Team not found","code":"TEAM_NOT_FOUND"}');
           expect(actual).toBeUndefined();
         } else if (mode === "invitation-error" || mode === "after-error") {
           expect(caught).toBe(failure);

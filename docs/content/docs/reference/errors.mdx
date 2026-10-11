@@ -5,23 +5,24 @@ description: Error types, HTTP status codes, and error response format.
 
 ## Error Response Format
 
-All errors return JSON:
+Coded native API errors contain `message` followed by `code`:
 
 ```json
 {
-  "code": "USER_NOT_FOUND",
-  "message": "User not found"
+  "message": "User not found",
+  "code": "USER_NOT_FOUND"
 }
 ```
 
-`code` is present only when the upstream TypeScript implementation defines a constant for that message; the table mirrors every `defineErrorCodes` entry in `better-auth` and its plugins. Messages without an upstream code carry only `message`, so clients should branch on `code` when it exists and fall back to the status otherwise.
+Use `AuthError::from_code(status, code, message)` for the upstream `APIError.from` construction. Explicit bodies created with `AuthResponse::native(status, body).into()` retain their property order, extra fields, and native object identity. An explicit body can contain only `message`, even when another endpoint returns a coded error with the same message. Clients should use `code` when present and the status otherwise.
 
-For 5xx errors, the actual error details are hidden and a generic message is returned to avoid leaking internal information.
+An undefined native body produces an empty HTTP body; explicit null serializes as `null`. Undefined object properties remain present for native callers and are omitted at HTTP JSON serialization. Existing convenience constructors retain their current response format. Ordinary runtime failures reach the dispatcher's empty 500 response; explicit API error bodies retain the endpoint's contract.
 
 ## AuthError Variants
 
 | Variant | HTTP Status | Description |
 |---------|-------------|-------------|
+| `Response` | Provided status | Explicit native API error body and headers |
 | `BadRequest` | 400 | Malformed request |
 | `InvalidRequest` | 400 | Invalid request parameters |
 | `Validation` | 400 | Input validation failed |
@@ -86,6 +87,16 @@ AuthError::internal("Unexpected error");
 AuthError::validation("Password too short");
 AuthError::plugin("my-plugin", "Something went wrong");
 AuthError::not_implemented("Feature not available yet");
+```
+
+Construct an upstream coded error or preserve an explicit body:
+
+```rust
+use better_auth::{AuthError, AuthResponse, FieldMap};
+
+let coded = AuthError::from_code(400, "USER_NOT_FOUND", "User not found");
+let body = FieldMap::from([("message".into(), "User not found".into())]);
+let explicit = AuthError::from(AuthResponse::native(400, body.into()));
 ```
 
 ## Common Error Scenarios

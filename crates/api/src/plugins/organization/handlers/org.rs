@@ -224,9 +224,14 @@ pub(crate) async fn update_organization_core(
     };
     let name = nonempty(&body.data.name, "name")?;
     let slug = nonempty(&body.data.slug, "slug")?;
-    let org_id =
-        resolve_organization_id(body.organization_id.as_deref(), None, &session.session, ctx)
-            .await?;
+    let org_id = resolve_organization_id(
+        body.organization_id.as_deref(),
+        None,
+        &session.session,
+        ctx,
+        AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found"),
+    )
+    .await?;
 
     let member = ctx
         .database
