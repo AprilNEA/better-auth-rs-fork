@@ -44,11 +44,14 @@ impl Control {
         let (model, detail) = store.operation(|op| {
             let state = op.capture_state()?;
             if self.path == "invitations" {
-                let row = state.invitations.get_ref("invitation-a")?.unwrap();
+                let row = state
+                    .fixture_table("invitation")
+                    .get_ref("invitation-a")?
+                    .unwrap();
                 let _ = row.set_field("detail".into(), Value::from("I-A-detail-after"))?;
                 Ok(("invitation", "I-A-detail-after"))
             } else {
-                let row = state.members.get_ref("member-a")?.unwrap();
+                let row = state.fixture_table("member").get_ref("member-a")?.unwrap();
                 let _ = row.set_field("detail".into(), Value::from("M-A-detail-after"))?;
                 Ok(("member", "M-A-detail-after"))
             }
@@ -359,9 +362,9 @@ async fn check_case(fixture: &JsonValue) -> AuthResult<()> {
     let state = store.operation(|op| op.capture_state())?;
     assert_eq!(
         json!({
-            "memberDetail":state.members.get("member-a")?.unwrap()["detail"].json()?,
-            "invitationDetail":state.invitations.get("invitation-a")?.unwrap()["detail"].json()?,
-            "logo":state.organizations.get("organization-a")?.unwrap().get("logo").unwrap().json()?,
+            "memberDetail":state.fixture_table("member").get("member-a")?.unwrap()["detail"].json()?,
+            "invitationDetail":state.fixture_table("invitation").get("invitation-a")?.unwrap()["detail"].json()?,
+            "logo":state.fixture_table("organization").get("organization-a")?.unwrap().get("logo").unwrap().json()?,
         }),
         fixture["stored"]
     );

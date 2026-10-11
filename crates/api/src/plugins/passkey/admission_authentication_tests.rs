@@ -44,12 +44,17 @@ impl MemoryFixture {
         let config = Arc::new(config);
         let raw: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(config.clone()));
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(config.clone(), raw.clone());
+        better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+            &PasskeyPlugin::new(),
+            &mut model_fields,
+        )?;
         AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
         if admin_fields {
-            init.register_native_user_fields("admin.enabled");
+            model_fields.register_native_user_fields("admin.enabled");
         }
-        let (config, _, fields) = init.into_parts().plugin_fields.resolve(&config);
+        let (config, _, fields) = model_fields.resolve(&config);
         let config = Arc::new(config);
         let raw = raw.with_runtime(config.clone(), Vec::new(), fields)?;
         let ctx = AuthContext::new(config, raw.clone());
@@ -119,7 +124,12 @@ impl MemoryFixture {
         owner: Option<FieldValue>,
     ) -> TestResult {
         let config = Arc::new(config);
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(config.clone(), self.raw.clone());
+        better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+            &PasskeyPlugin::new(),
+            &mut model_fields,
+        )?;
         AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
         if admin {
             let trace = self.trace.clone();
@@ -129,6 +139,10 @@ impl MemoryFixture {
                     trace.banned_users.lock().unwrap().push(user.clone().into());
                     Box::pin(async { Ok("Admission denied".into()) })
                 }));
+            better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+                &plugin,
+                &mut model_fields,
+            )?;
             AuthPlugin::on_init(&plugin, &mut init).await?;
         }
         let trace = self.trace.clone();
@@ -150,9 +164,9 @@ impl MemoryFixture {
                 output(UserFieldTransform::new(move |_| Ok(owner.clone()))),
             );
         }
-        init.register_model_fields(EntityRole::Passkey, fields)?;
+        model_fields.register_model_fields(EntityRole::Passkey, fields)?;
         let parts = init.into_parts();
-        let (adapter, endpoint, fields) = parts.plugin_fields.resolve(&config);
+        let (adapter, endpoint, fields) = model_fields.resolve(&config);
         let database =
             self.raw
                 .with_runtime(Arc::new(adapter), vec![self.trace.clone()], fields)?;

@@ -2,9 +2,9 @@ use better_auth::__private_core::__private_async_trait::async_trait;
 use better_auth::seaorm::sea_orm::entity::prelude::DateTimeUtc;
 use better_auth::{
     __private_core::{
-        AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-        AuthRoute, AuthSchema, AuthStore, CreateDeviceCode, CreateUser, DeviceCode,
-        DeviceCodeOwnership, FieldMap, FieldValue, UpdateDeviceCode,
+        AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+        AuthSchema, AuthStore, CreateDeviceCode, CreateUser, DeviceCode, DeviceCodeOwnership,
+        FieldMap, FieldValue, UpdateDeviceCode,
         store::schema::EntityRole,
         user_fields::{
             FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -29,7 +29,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(EntityRole::DeviceCode, self.0.clone())
     }
     async fn on_request(

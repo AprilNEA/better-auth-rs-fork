@@ -394,8 +394,7 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
 #[tokio::test]
 async fn native_authentication_uses_projected_counter_relational_semantics() -> TestResult {
     use better_auth_core::{
-        AuthInitContext, CreatePasskey, FieldValue, PasskeyCredentialState,
-        UpdatePasskeyAuthentication,
+        CreatePasskey, FieldValue, PasskeyCredentialState, UpdatePasskeyAuthentication,
         store::schema::EntityRole,
         user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
     };
@@ -444,8 +443,8 @@ async fn native_authentication_uses_projected_counter_relational_semantics() -> 
             UpdatePasskeyAuthentication::Native { counter: 5 },
         )
         .await?;
-        let mut init = AuthInitContext::new(fixture.ctx.config.clone(), raw.clone());
-        init.register_model_fields(
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_fields(
             EntityRole::Passkey,
             UserConfig {
                 additional_fields: Some(
@@ -466,11 +465,8 @@ async fn native_authentication_uses_projected_counter_relational_semantics() -> 
                 ),
             },
         )?;
-        fixture.ctx.database = raw.with_runtime(
-            fixture.ctx.config.clone(),
-            Vec::new(),
-            init.into_parts().plugin_fields,
-        )?;
+        fixture.ctx.database =
+            raw.with_runtime(fixture.ctx.config.clone(), Vec::new(), model_fields)?;
         let (options, cookie) = options(
             fixture
                 .route(&request(

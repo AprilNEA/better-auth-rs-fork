@@ -65,20 +65,40 @@ async fn serial_organization_lifecycle_binds_numbers_and_projects_public_ids() -
     {
         let state = store.operation(|op| op.capture_state())?;
         let ids = [
-            organization_id(required(state.organizations.snapshot()?.first())?).field_value(),
-            organization_id(required(state.members.snapshot()?.first())?).field_value(),
-            organization_id(required(state.invitations.snapshot()?.first())?).field_value(),
-            organization_id(required(state.teams.snapshot()?.first())?).field_value(),
-            organization_id(required(state.team_members.snapshot()?.first())?).field_value(),
-            organization_id(required(state.organization_roles.snapshot()?.first())?).field_value(),
+            organization_id(required(
+                state.fixture_table("organization").snapshot()?.first(),
+            )?)
+            .field_value(),
+            organization_id(required(state.fixture_table("member").snapshot()?.first())?)
+                .field_value(),
+            organization_id(required(
+                state.fixture_table("invitation").snapshot()?.first(),
+            )?)
+            .field_value(),
+            organization_id(required(state.fixture_table("team").snapshot()?.first())?)
+                .field_value(),
+            organization_id(required(
+                state.fixture_table("teamMember").snapshot()?.first(),
+            )?)
+            .field_value(),
+            organization_id(required(
+                state.fixture_table("organizationRole").snapshot()?.first(),
+            )?)
+            .field_value(),
         ];
         assert_eq!(ids.to_vec(), vec![Value::Number(1.0); 6]);
         assert_eq!(
-            required(required(state.team_members.snapshot()?.first())?.get("teamId"))?.clone(),
+            required(
+                required(state.fixture_table("teamMember").snapshot()?.first())?.get("teamId")
+            )?
+            .clone(),
             Value::Number(1.0)
         );
         assert_eq!(
-            required(required(state.team_members.snapshot()?.first())?.get("userId"))?.clone(),
+            required(
+                required(state.fixture_table("teamMember").snapshot()?.first())?.get("userId")
+            )?
+            .clone(),
             Value::Number(1.0)
         );
     }
@@ -112,12 +132,15 @@ async fn serial_organization_lifecycle_binds_numbers_and_projects_public_ids() -
     let roles_before = store.storage_rows(EntityRole::OrganizationRole)?;
     store.delete_organization("001").await?;
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.organizations.len()?, 0);
-    assert_eq!(state.members.len()?, 0);
-    assert_eq!(state.invitations.len()?, 0);
-    assert_eq!(state.teams.snapshot()?, teams_before);
-    assert_eq!(state.team_members.len()?, 0);
-    assert_eq!(state.organization_roles.snapshot()?, roles_before);
+    assert_eq!(state.fixture_table("organization").len()?, 0);
+    assert_eq!(state.fixture_table("member").len()?, 0);
+    assert_eq!(state.fixture_table("invitation").len()?, 0);
+    assert_eq!(state.fixture_table("team").snapshot()?, teams_before);
+    assert_eq!(state.fixture_table("teamMember").len()?, 0);
+    assert_eq!(
+        state.fixture_table("organizationRole").snapshot()?,
+        roles_before
+    );
     Ok(())
 }
 
@@ -240,11 +263,17 @@ async fn serial_organization_id_updates_keep_numeric_storage() -> AuthResult<()>
     }
     let state = store.operation(|op| op.capture_state())?;
     assert_eq!(
-        organization_id(required(state.organizations.snapshot()?.first())?).field_value(),
+        organization_id(required(
+            state.fixture_table("organization").snapshot()?.first()
+        )?)
+        .field_value(),
         Value::Number(2.0)
     );
     assert_eq!(
-        organization_id(required(state.organization_roles.snapshot()?.first())?).field_value(),
+        organization_id(required(
+            state.fixture_table("organizationRole").snapshot()?.first()
+        )?)
+        .field_value(),
         Value::Number(3.0)
     );
     Ok(())
@@ -269,9 +298,9 @@ async fn serial_organization_joins_distinguish_native_owners_from_projected_owne
             let state = op.capture_state()?;
             let id = SchemaValue::from_field(Value::Number(1.0));
             let owner = Value::Array(vec![Value::Number(1.0)].into());
-            let _ = required(state.members.get_ref(&id)?)?
+            let _ = required(state.fixture_table("member").get_ref(&id)?)?
                 .set_field("organizationId".into(), owner.clone())?;
-            let _ = required(state.invitations.get_ref(&id)?)?
+            let _ = required(state.fixture_table("invitation").get_ref(&id)?)?
                 .set_field("organizationId".into(), owner)?;
             Ok(())
         })?;
@@ -418,7 +447,7 @@ async fn serial_invitation_cookie_projects_ids_without_changing_session_update_o
         let state = store.operation(|op| op.capture_state())?;
         let raw = required(
             state
-                .sessions
+                .fixture_table("session")
                 .snapshot()?
                 .into_iter()
                 .find(|row| row.get("token") == Some(&session.token.field_value())),
@@ -434,10 +463,11 @@ async fn serial_invitation_cookie_projects_ids_without_changing_session_update_o
         );
         assert_eq!(raw.get("activeTeamId").and_then(Value::as_str), Some("1"));
         assert_eq!(
-            organization_id(required(state.members.snapshot()?.first())?).field_value(),
+            organization_id(required(state.fixture_table("member").snapshot()?.first())?)
+                .field_value(),
             Value::Number(1.0)
         );
-        let memberships = state.team_members.snapshot()?;
+        let memberships = state.fixture_table("teamMember").snapshot()?;
         let membership = required(memberships.first())?;
         assert_eq!(membership.get("id"), Some(&Value::Number(1.0)));
         assert_eq!(membership.get("teamId"), Some(&Value::Number(1.0)));

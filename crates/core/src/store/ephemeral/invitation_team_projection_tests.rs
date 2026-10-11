@@ -312,13 +312,16 @@ async fn acceptance_reads_live_teams_and_pending_seats_without_callback_replay()
                     .insert("memberCount".into(), Value::Number(9.0));
             }
             let state = store.operation(|op| op.capture_state())?;
-            assert_eq!(state.teams.snapshot()?, expected_teams);
-            assert_eq!(state.members.len()?, usize::from(outcome == "commit"));
+            assert_eq!(state.fixture_table("team").snapshot()?, expected_teams);
             assert_eq!(
-                state.team_members.len()?,
+                state.fixture_table("member").len()?,
+                usize::from(outcome == "commit")
+            );
+            assert_eq!(
+                state.fixture_table("teamMember").len()?,
                 if outcome == "commit" { 2 } else { 0 }
             );
-            let rows = state.invitations.snapshot()?;
+            let rows = state.fixture_table("invitation").snapshot()?;
             assert_eq!(
                 required(rows.first())?.get("status"),
                 Some(&Value::from(if outcome == "commit" {
@@ -390,11 +393,11 @@ async fn pending_team_scope_patch_is_used_by_the_next_scoped_lookup() -> AuthRes
         ]
     );
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.teams.snapshot()?, original);
-    assert_eq!(state.team_members.len()?, 0);
-    assert_eq!(state.members.len()?, 0);
+    assert_eq!(state.fixture_table("team").snapshot()?, original);
+    assert_eq!(state.fixture_table("teamMember").len()?, 0);
+    assert_eq!(state.fixture_table("member").len()?, 0);
     assert_eq!(
-        required(state.invitations.snapshot()?.first())?.get("status"),
+        required(state.fixture_table("invitation").snapshot()?.first())?.get("status"),
         Some(&Value::from("pending"))
     );
     Ok(())
@@ -522,7 +525,7 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
         }
         assert_eq!(limits.calls.load(Ordering::SeqCst), 2);
         let state = store.operation(|op| op.capture_state())?;
-        let memberships = state.team_members.snapshot()?;
+        let memberships = state.fixture_table("teamMember").snapshot()?;
         if serial {
             assert_eq!(memberships, vec![concurrent]);
         } else {
@@ -533,15 +536,15 @@ async fn membership_refresh_preserves_external_deletion_and_serial_allocation() 
                     .all(|row| row.get("userId") == Some(&Value::from(user)))
             );
         }
-        assert_eq!(state.members.len()?, usize::from(!serial));
-        for team in state.teams.snapshot()? {
+        assert_eq!(state.fixture_table("member").len()?, usize::from(!serial));
+        for team in state.fixture_table("team").snapshot()? {
             assert_eq!(
                 team.get("memberCount"),
                 Some(&Value::Number(if serial { 0.0 } else { 1.0 }))
             );
         }
         assert_eq!(
-            required(state.invitations.snapshot()?.first())?.get("status"),
+            required(state.fixture_table("invitation").snapshot()?.first())?.get("status"),
             Some(&Value::from(if serial { "pending" } else { "accepted" }))
         );
     }
@@ -567,10 +570,10 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
         event(&self.events, "before", phase.into())?;
         let transaction = required(context.transaction)?;
         let state = self.writer.operation(|op| op.capture_state())?;
-        assert_eq!(state.members.len()?, 0);
-        assert_eq!(state.users.len()?, 0);
+        assert_eq!(state.fixture_table("member").len()?, 0);
+        assert_eq!(state.fixture_table("user").len()?, 0);
         assert_eq!(
-            required(state.teams.snapshot()?.first())?.get("memberCount"),
+            required(state.fixture_table("team").snapshot()?.first())?.get("memberCount"),
             Some(&Value::Number(0.0))
         );
         assert_eq!(
@@ -620,8 +623,8 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
             "hook@example.com".into()
         );
         let state = self.writer.operation(|op| op.capture_state())?;
-        assert_eq!(state.members.len()?, 1);
-        assert_eq!(state.users.len()?, 1);
+        assert_eq!(state.fixture_table("member").len()?, 1);
+        assert_eq!(state.fixture_table("user").len()?, 1);
         event(&self.events, "after.user", "committed".into())
     }
 
@@ -632,10 +635,10 @@ impl crate::store::database_hooks::DatabaseHooks<StatelessSchema> for SessionAcc
     ) -> AuthResult<()> {
         assert!(context.transaction.is_none());
         let state = self.writer.operation(|op| op.capture_state())?;
-        assert_eq!(state.members.len()?, 1);
-        assert_eq!(state.team_members.len()?, 1);
+        assert_eq!(state.fixture_table("member").len()?, 1);
+        assert_eq!(state.fixture_table("teamMember").len()?, 1);
         assert_eq!(
-            required(state.invitations.snapshot()?.first())?.get("status"),
+            required(state.fixture_table("invitation").snapshot()?.first())?.get("status"),
             Some(&Value::from("accepted"))
         );
         event(
@@ -791,21 +794,33 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
         }
         assert_eq!(events_snapshot(&events)?, expected, "{mode}");
         let state = writer.operation(|op| op.capture_state())?;
-        assert_eq!(state.members.len()?, usize::from(committed), "{mode}");
-        assert_eq!(state.team_members.len()?, usize::from(committed), "{mode}");
-        assert_eq!(state.users.len()?, usize::from(committed), "{mode}");
         assert_eq!(
-            state.sessions.contains_ref(&original)?,
+            state.fixture_table("member").len()?,
+            usize::from(committed),
+            "{mode}"
+        );
+        assert_eq!(
+            state.fixture_table("teamMember").len()?,
+            usize::from(committed),
+            "{mode}"
+        );
+        assert_eq!(
+            state.fixture_table("user").len()?,
+            usize::from(committed),
+            "{mode}"
+        );
+        assert_eq!(
+            state.fixture_table("session").contains_ref(&original)?,
             !committed,
             "{mode}"
         );
         assert_eq!(
-            required(state.teams.snapshot()?.first())?.get("memberCount"),
+            required(state.fixture_table("team").snapshot()?.first())?.get("memberCount"),
             Some(&Value::Number(if committed { 1.0 } else { 0.0 })),
             "{mode}"
         );
         assert_eq!(
-            required(state.invitations.snapshot()?.first())?.get("status"),
+            required(state.fixture_table("invitation").snapshot()?.first())?.get("status"),
             Some(&Value::from(
                 if matches!(mode, "commit" | "cancel-organization") {
                     "accepted"
@@ -815,7 +830,13 @@ async fn acceptance_session_writes_share_transaction_hooks_projection_and_owners
             )),
             "{mode}"
         );
-        let stored = required(state.sessions.snapshot()?.into_iter().next())?;
+        let stored = required(
+            state
+                .fixture_table("session")
+                .snapshot()?
+                .into_iter()
+                .next(),
+        )?;
         if committed {
             assert_eq!(stored.get("activeTeamId"), Some(&Value::from("team")));
             assert_eq!(

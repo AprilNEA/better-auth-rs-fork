@@ -23,8 +23,8 @@ mod wallet;
 use better_auth::{
     __private_core::{
         __private_async_trait::async_trait,
-        AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-        AuthRoute, AuthSchema, AuthStore, CreateUser, FieldValue,
+        AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+        AuthSchema, AuthStore, CreateUser, FieldValue,
         store::{EphemeralStore, schema::EntityRole},
         user_fields::{
             FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -164,7 +164,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(self.0, self.1.clone())
     }
     async fn on_request(

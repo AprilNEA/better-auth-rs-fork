@@ -3,7 +3,7 @@ use super::{
     values,
 };
 use better_auth_core::{
-    AuthConfig, AuthInitContext, AuthResult, AuthStore, FieldMap, FieldValue,
+    AuthConfig, AuthResult, AuthStore, FieldMap, FieldValue,
     error::DatabaseError,
     id::IdGeneration,
     store::schema::EntityRole,
@@ -236,9 +236,9 @@ pub(super) async fn jwk(mut database: DatabaseConnection, name: &str) -> TestRes
         )
     };
     let config = Arc::new(config);
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
-    init.register_model_fields(EntityRole::Jwk, fields(&case.declaration, &trace)?)?;
-    let store = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(EntityRole::Jwk, fields(&case.declaration, &trace)?)?;
+    let store = raw.with_runtime(config, Vec::new(), model_fields)?;
     for (index, operation) in case.operations.into_iter().enumerate() {
         assert!(trace.take().is_empty(), "{name} starts with an empty trace");
         let input = revive_fields(&operation.input)?;

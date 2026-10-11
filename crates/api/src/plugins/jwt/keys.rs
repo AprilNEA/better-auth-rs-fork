@@ -102,15 +102,19 @@ pub(super) fn import(value: FieldValue, alg: &FieldValue) -> AuthResult<(String,
         ));
     }
     if let Some(operations) = fields.get("key_ops").filter(|value| !value.is_undefined()) {
-        let mut seen = std::collections::HashSet::new();
-        if !operations.as_array().is_some_and(|values| {
-            values
-                .iter()
-                .all(|value| value.as_str().is_some_and(|value| seen.insert(value)))
-        }) {
-            return Err(AuthError::internal(
+        let invalid_operations = || {
+            AuthError::internal(
                 "\"key_ops\" (Key Operations) Parameter must be an array of unique strings",
-            ));
+            )
+        };
+        let operations = operations.as_array().ok_or_else(invalid_operations)?;
+        let mut seen = std::collections::HashSet::new();
+        for value in operations.iter()? {
+            let value = value?;
+            let name = value.as_str().ok_or_else(invalid_operations)?;
+            if !seen.insert(name.to_owned()) {
+                return Err(invalid_operations());
+            }
         }
     }
     let kind = fields.get("kty").and_then(FieldValue::as_str);

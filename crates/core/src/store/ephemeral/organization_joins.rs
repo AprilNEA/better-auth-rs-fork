@@ -107,7 +107,7 @@ impl EphemeralStore {
                 .map(RecordSource::Live)
                 .collect();
             let groups = native_relationships(rows, &[(EntityRole::Team, &join, limit)], |role| {
-                op.capture_table(role)
+                op.capture_join_table(role)
             })?;
             Ok(crate::query::paginate_memory(groups, Some(limit), None)
                 .into_iter()

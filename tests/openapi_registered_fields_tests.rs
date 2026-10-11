@@ -4,8 +4,8 @@ use better_auth::{
     plugins::{OpenApiPlugin, OrganizationConfig, OrganizationPlugin},
 };
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, RateLimitConfig,
+    AuthConfig, AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+    AuthSchema, RateLimitConfig,
     organization_fields::OrganizationFields,
     store::schema::EntityRole,
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
@@ -57,7 +57,10 @@ impl<S: AuthSchema> AuthPlugin<S> for RegisteredFields {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let core = UserFieldConfig {
             input: Some(false),
             returned: Some(false),

@@ -64,11 +64,16 @@ async fn context(
     }
     let config = Arc::new(config);
     let store: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(EphemeralStore::new(config.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), store.clone());
+    better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+        plugin,
+        &mut model_fields,
+    )?;
     plugin.on_init(&mut init).await?;
     let runtime = init.runtime();
     let parts = init.into_parts();
-    let store = store.with_runtime(config.clone(), parts.database_hooks, parts.plugin_fields)?;
+    let store = store.with_runtime(config.clone(), parts.database_hooks, model_fields)?;
     let mut context = AuthContext::new(config, store);
     context.extensions = parts.extensions;
     let reads = Arc::new(AtomicUsize::new(0));

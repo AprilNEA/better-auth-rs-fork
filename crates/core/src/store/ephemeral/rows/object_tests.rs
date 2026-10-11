@@ -405,18 +405,24 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
             assert!(session.is_none());
         }
         let state = store.operation(|op| op.capture_state())?;
-        assert_eq!(state.members.len()?, usize::from(!fail_copy));
-        assert_eq!(state.team_members.len()?, if fail_copy { 0 } else { 2 });
-        assert_eq!(state.sessions.len()?, 0);
         assert_eq!(
-            required(state.invitations.snapshot()?.first())?.get("status"),
+            state.fixture_table("member").len()?,
+            usize::from(!fail_copy)
+        );
+        assert_eq!(
+            state.fixture_table("teamMember").len()?,
+            if fail_copy { 0 } else { 2 }
+        );
+        assert_eq!(state.fixture_table("session").len()?, 0);
+        assert_eq!(
+            required(state.fixture_table("invitation").snapshot()?.first())?.get("status"),
             Some(&FieldValue::from(if fail_copy {
                 "pending"
             } else {
                 "accepted"
             }))
         );
-        let teams = state.teams.snapshot()?;
+        let teams = state.fixture_table("team").snapshot()?;
         let first = required(teams.first())?;
         let cloned = required(required(first.get("graph"))?.as_object())?;
         if !fail_copy {
@@ -430,7 +436,10 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
                 team.get("memberCount"),
                 Some(&FieldValue::from(if fail_copy { 0 } else { 1 }))
             );
-            assert_eq!(state.teams.contains_ref(original)?, fail_copy);
+            assert_eq!(
+                state.fixture_table("team").contains_ref(original)?,
+                fail_copy
+            );
             for name in ["graph", "alias"] {
                 let value = required(required(team.get(name))?.as_object())?;
                 assert!(cloned.same_object(value));

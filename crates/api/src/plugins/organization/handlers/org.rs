@@ -1109,7 +1109,8 @@ mod tests {
                 .unwrap()
                 .as_array()
                 .unwrap()
-                .len(),
+                .len()
+                .expect("member array must be readable"),
             1
         );
     }

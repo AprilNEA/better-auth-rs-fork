@@ -82,7 +82,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Badge {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_custom_model(
             "badge",
             Some("shared"),
@@ -125,7 +128,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Policies {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let output = |name| UserFieldConfig {
             transform: Some(FieldTransforms {
                 output: Some(self.events.output(name)),

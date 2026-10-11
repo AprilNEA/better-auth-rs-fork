@@ -35,7 +35,7 @@ fn raw_owners(store: &EphemeralStore, session_owner: &str) -> AuthResult<(Vec<Va
     store.operation(|op| {
         let state = op.capture_state()?;
         let sessions = state
-            .sessions
+            .fixture_table("session")
             .snapshot()?
             .into_iter()
             .map(|session| {
@@ -46,7 +46,7 @@ fn raw_owners(store: &EphemeralStore, session_owner: &str) -> AuthResult<(Vec<Va
             })
             .collect();
         let accounts = state
-            .accounts
+            .fixture_table("account")
             .snapshot()?
             .into_iter()
             .map(|account| Ok(required(account.get("userId"))?.clone()))
@@ -182,7 +182,7 @@ async fn serial_unproven_user_verification_cleans_access_once_through_aliases() 
     assert!(*verified.email_verified.typed()?);
     assert!(
         store
-            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?
             .is_empty()
     );
     assert!(
@@ -216,7 +216,7 @@ async fn serial_unproven_user_verification_cleans_access_once_through_aliases() 
     );
     assert!(
         store
-            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?
             .is_empty()
     );
     assert_eq!(

@@ -23,7 +23,7 @@ async fn serial_array_owners_join_only_after_fallback_projection() -> AuthResult
         assert_eq!(
             required(
                 store
-                    .operation(|op| op.capture_state()?.sessions.snapshot())?
+                    .operation(|op| op.capture_state()?.fixture_table("session").snapshot())?
                     .first()
             )?
             .get("userId")
@@ -65,7 +65,7 @@ async fn serial_array_owners_join_only_after_fallback_projection() -> AuthResult
         assert_eq!(
             required(
                 store
-                    .operation(|op| op.capture_state()?.accounts.snapshot())?
+                    .operation(|op| op.capture_state()?.fixture_table("account").snapshot())?
                     .first()
             )?
             .get("userId"),
@@ -138,7 +138,7 @@ async fn member_joins_and_full_details_resolve_users_at_their_projection_stage()
             required(
                 required(
                     store
-                        .operation(|op| op.capture_state()?.members.snapshot())?
+                        .operation(|op| op.capture_state()?.fixture_table("member").snapshot())?
                         .first()
                 )?
                 .get("userId")

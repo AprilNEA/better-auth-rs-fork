@@ -11,9 +11,8 @@ mod values;
 
 use better_auth::{AuthConfig, BetterAuth, plugins::DeviceAuthorizationPlugin};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, CreateDeviceCode, DeviceCode, FieldMap,
-    FieldValue, UpdateDeviceCode,
+    AuthContext, AuthError, AuthPlugin, AuthRecordFields, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, CreateDeviceCode, DeviceCode, FieldMap, FieldValue, UpdateDeviceCode,
     error::DatabaseError,
     id::{IdGeneration, IdGenerator},
     store::schema::EntityRole,
@@ -90,7 +89,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let callback = |phase: &'static str| {
             let trace = self.0.clone();
             UserFieldTransform::new(move |value| {

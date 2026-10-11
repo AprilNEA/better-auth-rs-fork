@@ -124,12 +124,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Declaration {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
-        self.calls
-            .init
-            .lock()
-            .map_err(|_| AuthError::internal("RateLimit init lock poisoned"))?
-            .push(if self.last { "last" } else { "first" });
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_custom_model(
             if self.last { "after" } else { "before" },
             None,
@@ -156,6 +154,14 @@ impl<S: AuthSchema> AuthPlugin<S> for Declaration {
             }),
             fields,
         )
+    }
+    async fn on_init(&self, _context: &mut AuthInitContext<S>) -> AuthResult<()> {
+        self.calls
+            .init
+            .lock()
+            .map_err(|_| AuthError::internal("RateLimit init lock poisoned"))?
+            .push(if self.last { "last" } else { "first" });
+        Ok(())
     }
     async fn on_request(
         &self,

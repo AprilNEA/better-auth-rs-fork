@@ -1,7 +1,7 @@
 use super::{BundledSchema, TestResult, server};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthResult, AuthStore, DeviceCode, DeviceCodeOwnership,
-    FieldMap, FieldValue, FromFieldMap,
+    AuthConfig, AuthError, AuthResult, AuthStore, DeviceCode, DeviceCodeOwnership, FieldMap,
+    FieldValue, FromFieldMap,
     store::{
         VerificationStore,
         schema::{EntityRole, SchemaConfiguration},

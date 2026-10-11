@@ -78,7 +78,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         for (role, fields) in &self.0 {
             context.register_model_fields(*role, fields.clone())?;
         }

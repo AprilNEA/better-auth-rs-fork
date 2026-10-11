@@ -14,7 +14,7 @@ impl EphemeralStore {
         let id = self.organization_query(EntityRole::Team, "id", requested_id.clone())?;
         let (stored_owner, public_id, selectors, rows, snapshot) = self.operation(|op| {
             let state = op.capture_state()?;
-            let team = state.teams.get(&id)?;
+            let team = self.snapshot_table(&state, EntityRole::Team)?.get(&id)?;
             // The stored owner guards concurrent changes independently of the caller's invitation scope.
             let stored_owner = team
                 .as_ref()
@@ -76,10 +76,10 @@ impl EphemeralStore {
             updates.push((invitation_id, patch));
         }
         self.operation(|op| {
-            let mut state = op.shallow_snapshot()?;
-            let team = state.teams.get(&id)?;
-            let pending = state
-                .invitations
+            let state = op.shallow_snapshot()?;
+            let team = self.snapshot_table(&state, EntityRole::Team)?.get(&id)?;
+            let pending = self
+                .snapshot_table(&state, EntityRole::Invitation)?
                 .select_refs(|row| Self::matches_pending_invitation(row, &selectors))?
                 .iter()
                 .map(|row| row.shallow_fields())
@@ -108,26 +108,35 @@ impl EphemeralStore {
             let updates = updates
                 .into_iter()
                 .map(|(id, patch)| {
-                    let row = state
-                        .invitations
+                    let row = self
+                        .snapshot_table(&state, EntityRole::Invitation)?
                         .get(&id)?
                         .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
                     Ok((id, patch.apply(row)))
                 })
                 .collect::<AuthResult<Vec<_>>>()?;
-            let _ = state.teams.remove(&id)?;
-            let removed = state.team_members.select_refs(|row| {
-                Ok(
-                    super::super::organization_rows::field(row, &membership_schema, "teamId")?
-                        .strict_equals(&member_team.field_value()),
-                )
-            })?;
-            state.team_members = state.team_members.without_refs(&removed)?;
+            let _ = self.snapshot_table(&state, EntityRole::Team)?.remove(&id)?;
+            let removed = self
+                .snapshot_table(&state, EntityRole::TeamMember)?
+                .select_refs(|row| {
+                    Ok(
+                        super::super::organization_rows::field(row, &membership_schema, "teamId")?
+                            .strict_equals(&member_team.field_value()),
+                    )
+                })?;
+            let memberships = self
+                .snapshot_table(&state, EntityRole::TeamMember)?
+                .without_refs(&removed)?;
             for (id, invitation) in updates {
-                let _ = state.invitations.replace(&id, invitation)?;
+                let _ = self
+                    .snapshot_table(&state, EntityRole::Invitation)?
+                    .replace(&id, invitation)?;
             }
-            op.replace_table(EntityRole::Team, state.teams)?;
-            op.replace_table(EntityRole::TeamMember, state.team_members)
+            op.replace_table(
+                EntityRole::Team,
+                self.snapshot_table(&state, EntityRole::Team)?.clone(),
+            )?;
+            op.replace_table(EntityRole::TeamMember, memberships)
         })
     }
 }

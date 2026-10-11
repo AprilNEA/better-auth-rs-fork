@@ -91,7 +91,18 @@ fn decode(value: &str) -> Option<Vec<u8>> {
 fn validate_header(header: &verification::Header, signing: bool) -> AuthResult<()> {
     let critical = header.field("crit")?;
     if !critical.is_undefined() {
-        let critical = critical.as_array().filter(|values| !values.is_empty()).ok_or_else(|| AuthError::internal("\"crit\" (Critical) Header Parameter MUST be an array of non-empty strings when present"))?;
+        let invalid_critical = || {
+            AuthError::internal(
+                "\"crit\" (Critical) Header Parameter MUST be an array of non-empty strings when present",
+            )
+        };
+        let critical = critical
+            .as_array()
+            .ok_or_else(invalid_critical)?
+            .snapshot()?;
+        if critical.is_empty() {
+            return Err(invalid_critical());
+        }
         if signing
             && critical.iter().enumerate().any(|(index, value)| {
                 critical

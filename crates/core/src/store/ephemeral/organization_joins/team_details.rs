@@ -69,7 +69,7 @@ impl EphemeralStore {
                     let Some(mut group) = native_relationships(
                         parents,
                         &[(EntityRole::TeamMember, relation, limit)],
-                        |role| op.capture_table(role),
+                        |role| op.capture_join_table(role),
                     )?
                     .into_iter()
                     .next() else {

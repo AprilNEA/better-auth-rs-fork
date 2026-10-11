@@ -4,7 +4,7 @@ use better_auth_core::store::UserStore;
 use better_auth_core::user_fields::{
     FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
 };
-use better_auth_core::{AuthConfig, AuthInitContext, CreateUser};
+use better_auth_core::{AuthConfig, CreateUser};
 use sea_orm::Database;
 use std::sync::{
     Arc,
@@ -63,8 +63,8 @@ async fn replaced_columns_keep_dynamic_values_and_transformed_backup_cas() -> Au
         database,
     )
     .with_plugin_schema::<Plugins>();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::TwoFactor,
         UserConfig {
             additional_fields: Some(
@@ -111,7 +111,7 @@ async fn replaced_columns_keep_dynamic_values_and_transformed_backup_cas() -> Au
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     store.validate_two_factor_fields()?;
     let id = "replacement-factor".into();
     let created = store
@@ -207,8 +207,8 @@ async fn failure_increment_skips_input_and_checks_raw_count_before_locking() -> 
     let factories = updates.clone();
     let reset_lock = FieldDate::from_milliseconds(1_900_000_000_000.0);
     let transformed_lock = reset_lock.clone();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::TwoFactor,
         UserConfig {
             additional_fields: Some(
@@ -263,7 +263,7 @@ async fn failure_increment_skips_input_and_checks_raw_count_before_locking() -> 
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let callbacks = AtomicUsize::new(0);
     let deadline = || {
         let _ = callbacks.fetch_add(1, Ordering::SeqCst);
@@ -336,8 +336,8 @@ async fn atomic_setters_reject_discarded_fields_before_legacy_timestamps() -> Au
         .map_err(map_db_err)?
         .ok_or_else(|| AuthError::internal("Expected the original TwoFactor"))?;
     let outputs = Arc::new(AtomicUsize::new(0));
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::TwoFactor,
         UserConfig {
             additional_fields: Some(
@@ -370,7 +370,7 @@ async fn atomic_setters_reject_discarded_fields_before_legacy_timestamps() -> Au
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let assert_empty = |error: AuthError| {
         assert!(matches!(error, AuthError::Internal(message) if message
             == "incrementOne resolved to an empty update: every increment/set field was unknown to the schema or transformed away."));

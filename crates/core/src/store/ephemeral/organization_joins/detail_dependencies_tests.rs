@@ -158,11 +158,11 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
     );
     store.operation(|op| {
         let state = op.capture_state()?;
-        state.organizations.push(stored_parent)?;
-        state.invitations.push(invitation.clone())?;
-        state.members.push(member.clone())?;
-        state.teams.push(team.clone())?;
-        state.users.push(user.clone())?;
+        state.fixture_table("organization").push(stored_parent)?;
+        state.fixture_table("invitation").push(invitation.clone())?;
+        state.fixture_table("member").push(member.clone())?;
+        state.fixture_table("team").push(team.clone())?;
+        state.fixture_table("user").push(user.clone())?;
         Ok(())
     })?;
     let roles = [

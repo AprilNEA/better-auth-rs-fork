@@ -74,9 +74,9 @@ pub(super) async fn check(database: &DatabaseConnection) -> TestResult {
             let raw: Arc<dyn AuthStore<BundledSchema>> = Arc::new(
                 SeaOrmStore::<BundledSchema>::new(config.clone(), database.clone()),
             );
-            let mut init = AuthInitContext::new(config.clone(), raw.clone());
-            init.register_model_fields(EntityRole::DeviceCode, fields)?;
-            let mut fields = init.into_parts().plugin_fields;
+            let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+            model_fields.register_model_fields(EntityRole::DeviceCode, fields)?;
+            let mut fields = model_fields;
             fields.set_schema_configuration(&SchemaConfiguration {
                 config: config.clone(),
                 plugins: Vec::new(),

@@ -4,8 +4,8 @@ use better_auth::{
     plugins::{DeviceAuthorizationPlugin, OpenApiPlugin, OrganizationConfig, OrganizationPlugin},
 };
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
+    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, RateLimitConfig,
     organization_fields::OrganizationFields,
     store::schema::EntityRole,
     user_fields::{UserConfig, UserFieldConfig},
@@ -79,7 +79,10 @@ impl<S: AuthSchema> AuthPlugin<S> for DisplayFields {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         if matches!(self, Self::NumericDevice) {
             return context.register_model_fields(EntityRole::DeviceCode, self.fields());
         }

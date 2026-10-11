@@ -195,7 +195,7 @@ better_auth_core::impl_auth_plugin! {
         post "/passkey/update-passkey"                 => handle_update_passkey,                 "updatePasskey", body = types::update_body;
     }
     extra {
-        async fn on_init(&self, ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
+        fn schema(&self, ctx: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
             let role = better_auth_core::store::schema::EntityRole::Passkey;
             ctx.register_model_fields(
                 role,

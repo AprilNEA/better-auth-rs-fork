@@ -1,126 +1,72 @@
-//! State stores active array bindings; captured tables and rows retain their own identities.
+//! The physical root owns ordered table bindings. Captured arrays retain their identities.
 
 use super::operation::{MemoryGate, MemoryOperation};
 use super::rows::RowRef;
 use super::table::TableRef;
-use super::*;
-use crate::store::schema::EntityRole;
+use crate::{AuthError, AuthResult, FieldMap};
+use indexmap::IndexMap;
 
-/// Clone captures bindings. Use shallow_snapshot to copy the independent row lists.
-#[derive(Clone)]
+/// Clone captures bindings. A shallow snapshot copies arrays while retaining row identities.
+#[derive(Clone, Default)]
 pub(super) struct State {
-    pub(super) organizations: TableRef<FieldMap>,
-    pub(super) members: TableRef<FieldMap>,
-    pub(super) invitations: TableRef<FieldMap>,
-    pub(super) teams: TableRef<FieldMap>,
-    pub(super) team_members: TableRef<FieldMap>,
-    pub(super) organization_roles: TableRef<FieldMap>,
-    pub(super) jwks: TableRef<FieldMap>,
-    pub(super) users: TableRef<FieldMap>,
-    pub(super) wallets: TableRef<FieldMap>,
-    pub(super) sessions: TableRef<FieldMap>,
-    pub(super) accounts: TableRef<FieldMap>,
-    pub(super) verifications: TableRef<FieldMap>,
-    pub(super) two_factors: TableRef<FieldMap>,
-    pub(super) device_codes: TableRef<FieldMap>,
-    pub(super) api_keys: TableRef<FieldMap>,
-    pub(super) passkeys: TableRef<FieldMap>,
-    pub(super) rate_limits: TableRef<FieldMap>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new(Arc::default())
-    }
+    pub(super) tables: IndexMap<String, TableRef<FieldMap>>,
 }
 
 impl State {
-    pub(super) fn new(gate: MemoryGate) -> Self {
+    pub(super) fn with_models<'a>(
+        gate: MemoryGate,
+        names: impl IntoIterator<Item = &'a str>,
+    ) -> Self {
         Self {
-            organizations: TableRef::new(gate.clone()),
-            members: TableRef::new(gate.clone()),
-            invitations: TableRef::new(gate.clone()),
-            teams: TableRef::new(gate.clone()),
-            team_members: TableRef::new(gate.clone()),
-            organization_roles: TableRef::new(gate.clone()),
-            jwks: TableRef::new(gate.clone()),
-            users: TableRef::new(gate.clone()),
-            wallets: TableRef::new(gate.clone()),
-            sessions: TableRef::new(gate.clone()),
-            accounts: TableRef::new(gate.clone()),
-            verifications: TableRef::new(gate.clone()),
-            two_factors: TableRef::new(gate.clone()),
-            device_codes: TableRef::new(gate.clone()),
-            api_keys: TableRef::new(gate.clone()),
-            passkeys: TableRef::new(gate.clone()),
-            rate_limits: TableRef::new(gate),
+            tables: names
+                .into_iter()
+                .map(|name| (name.to_owned(), TableRef::new(gate.clone())))
+                .collect(),
         }
     }
 
-    pub(super) fn table(&self, role: EntityRole) -> AuthResult<&TableRef<FieldMap>> {
-        match role {
-            EntityRole::Organization => Ok(&self.organizations),
-            EntityRole::Member => Ok(&self.members),
-            EntityRole::Invitation => Ok(&self.invitations),
-            EntityRole::Team => Ok(&self.teams),
-            EntityRole::TeamMember => Ok(&self.team_members),
-            EntityRole::OrganizationRole => Ok(&self.organization_roles),
-            EntityRole::Jwk => Ok(&self.jwks),
-            EntityRole::WalletAddress => Ok(&self.wallets),
-            EntityRole::Session => Ok(&self.sessions),
-            EntityRole::Account => Ok(&self.accounts),
-            EntityRole::Verification => Ok(&self.verifications),
-            EntityRole::TwoFactor => Ok(&self.two_factors),
-            EntityRole::DeviceCode => Ok(&self.device_codes),
-            EntityRole::ApiKey => Ok(&self.api_keys),
-            EntityRole::Passkey => Ok(&self.passkeys),
-            EntityRole::RateLimit => Ok(&self.rate_limits),
-            EntityRole::User => Ok(&self.users),
-        }
+    pub(super) fn keys(&self) -> Vec<String> {
+        let mut keys: Vec<_> = self.tables.keys().cloned().collect();
+        keys.sort_by_key(|name| {
+            crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))
+        });
+        keys
     }
 
-    pub(super) fn table_mut(&mut self, role: EntityRole) -> AuthResult<&mut TableRef<FieldMap>> {
-        match role {
-            EntityRole::Organization => Ok(&mut self.organizations),
-            EntityRole::Member => Ok(&mut self.members),
-            EntityRole::Invitation => Ok(&mut self.invitations),
-            EntityRole::Team => Ok(&mut self.teams),
-            EntityRole::TeamMember => Ok(&mut self.team_members),
-            EntityRole::OrganizationRole => Ok(&mut self.organization_roles),
-            EntityRole::Jwk => Ok(&mut self.jwks),
-            EntityRole::WalletAddress => Ok(&mut self.wallets),
-            EntityRole::Session => Ok(&mut self.sessions),
-            EntityRole::Account => Ok(&mut self.accounts),
-            EntityRole::Verification => Ok(&mut self.verifications),
-            EntityRole::TwoFactor => Ok(&mut self.two_factors),
-            EntityRole::DeviceCode => Ok(&mut self.device_codes),
-            EntityRole::ApiKey => Ok(&mut self.api_keys),
-            EntityRole::Passkey => Ok(&mut self.passkeys),
-            EntityRole::RateLimit => Ok(&mut self.rate_limits),
-            EntityRole::User => Ok(&mut self.users),
-        }
+    pub(super) fn table(&self, name: &str) -> AuthResult<&TableRef<FieldMap>> {
+        self.tables
+            .get(name)
+            .ok_or_else(|| AuthError::internal(format!("Model {name} not found")))
+    }
+
+    #[cfg(test)]
+    #[expect(
+        clippy::expect_used,
+        reason = "These fixture observations require a table explicitly supplied by test setup."
+    )]
+    pub(super) fn fixture_table(&self, name: &str) -> &TableRef<FieldMap> {
+        self.tables
+            .get(name)
+            .expect("Expected a declared fixture table")
     }
 
     pub(super) fn shallow_snapshot(&self) -> AuthResult<Self> {
-        Ok(Self {
-            organizations: self.organizations.shallow_copy()?,
-            members: self.members.shallow_copy()?,
-            invitations: self.invitations.shallow_copy()?,
-            teams: self.teams.shallow_copy()?,
-            team_members: self.team_members.shallow_copy()?,
-            organization_roles: self.organization_roles.shallow_copy()?,
-            jwks: self.jwks.shallow_copy()?,
-            users: self.users.shallow_copy()?,
-            wallets: self.wallets.shallow_copy()?,
-            sessions: self.sessions.shallow_copy()?,
-            accounts: self.accounts.shallow_copy()?,
-            verifications: self.verifications.shallow_copy()?,
-            two_factors: self.two_factors.shallow_copy()?,
-            device_codes: self.device_codes.shallow_copy()?,
-            api_keys: self.api_keys.shallow_copy()?,
-            passkeys: self.passkeys.shallow_copy()?,
-            rate_limits: self.rate_limits.shallow_copy()?,
-        })
+        let mut tables = IndexMap::new();
+        let mut copies = Vec::<(crate::FieldArray, TableRef<FieldMap>)>::new();
+        for name in self.keys() {
+            let table = self.table(&name)?;
+            let array = table.array();
+            let copy = match copies.iter().find(|(source, _)| source.same_array(&array)) {
+                Some((_, copy)) => copy.clone(),
+                None => {
+                    let copy = table.shallow_copy()?;
+                    copies.push((array, copy.clone()));
+                    copy
+                }
+            };
+            let _ = tables.insert(name, copy);
+        }
+        Ok(Self { tables })
     }
 
     pub(super) fn structured_clone_from(
@@ -128,58 +74,21 @@ impl State {
         context: &mut crate::StructuredCloneContext,
         mut device_origin: impl FnMut(RowRef<FieldMap>, RowRef<FieldMap>, FieldMap),
     ) -> AuthResult<Self> {
-        Ok(Self {
-            organizations: operation
-                .capture_table(EntityRole::Organization)?
-                .deep_clone(context)?,
-            members: operation
-                .capture_table(EntityRole::Member)?
-                .deep_clone(context)?,
-            invitations: operation
-                .capture_table(EntityRole::Invitation)?
-                .deep_clone(context)?,
-            teams: operation
-                .capture_table(EntityRole::Team)?
-                .deep_clone(context)?,
-            organization_roles: operation
-                .capture_table(EntityRole::OrganizationRole)?
-                .deep_clone(context)?,
-            users: operation
-                .capture_table(EntityRole::User)?
-                .deep_clone(context)?,
-            two_factors: operation
-                .capture_table(EntityRole::TwoFactor)?
-                .deep_clone(context)?,
-            device_codes: operation
-                .capture_table(EntityRole::DeviceCode)?
-                .deep_clone_with(context, &mut device_origin)?,
-            api_keys: operation
-                .capture_table(EntityRole::ApiKey)?
-                .deep_clone(context)?,
-            passkeys: operation
-                .capture_table(EntityRole::Passkey)?
-                .deep_clone(context)?,
-            team_members: operation
-                .capture_table(EntityRole::TeamMember)?
-                .deep_clone(context)?,
-            jwks: operation
-                .capture_table(EntityRole::Jwk)?
-                .deep_clone(context)?,
-            wallets: operation
-                .capture_table(EntityRole::WalletAddress)?
-                .deep_clone(context)?,
-            sessions: operation
-                .capture_table(EntityRole::Session)?
-                .deep_clone(context)?,
-            accounts: operation
-                .capture_table(EntityRole::Account)?
-                .deep_clone(context)?,
-            verifications: operation
-                .capture_table(EntityRole::Verification)?
-                .deep_clone(context)?,
-            rate_limits: operation
-                .capture_table(EntityRole::RateLimit)?
-                .deep_clone(context)?,
-        })
+        let keys = operation.root_keys()?;
+        let device_model = operation.model_name(crate::store::schema::EntityRole::DeviceCode)?;
+        let mut tables = IndexMap::new();
+        for name in keys {
+            // A preceding field getter may replace or delete a later root binding.
+            let Some(table) = operation.capture_physical_table(&name)? else {
+                continue;
+            };
+            let cloned = if name == device_model {
+                table.deep_clone_with(context, &mut device_origin)?
+            } else {
+                table.deep_clone(context)?
+            };
+            let _ = tables.insert(name, cloned);
+        }
+        Ok(Self { tables })
     }
 }

@@ -248,9 +248,11 @@ fn structured_clone_preserves_aliases_across_records_without_reusing_source_iden
     let nested_date = first
         .get("array")
         .and_then(FieldValue::as_array)
-        .and_then(|array| array.first())
+        .expect("cloned array")
+        .first()
+        .expect("readable cloned array")
         .expect("date inside cloned array");
-    assert!(copied_date.strict_equals(nested_date));
+    assert!(copied_date.strict_equals(&nested_date));
     let object_date = first
         .get("object")
         .expect("cloned object")

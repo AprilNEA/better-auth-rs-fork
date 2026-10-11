@@ -7,6 +7,7 @@ mod models;
 #[cfg(test)]
 mod rate_limit_tests;
 mod record;
+mod registration;
 
 use crate::id::AdapterIdInput;
 use crate::store::schema::{EntityRole, resolve_field_name};
@@ -157,10 +158,22 @@ impl ModelFields {
                 .insert(ModelDeclaration::Native(EntityRole::RateLimit), model_name);
         }
         self.schema_models = Some(config.core_models());
-        self.user_plugin_fields =
-            crate::wire::UserView::active_plugin_fields(&config.metadata).collect();
-        self.session_plugin_fields =
-            crate::wire::SessionView::active_plugin_fields(&config.metadata).collect();
+        self.set_plugin_metadata(&config.metadata);
+    }
+
+    /// Activate native public fields without rebuilding declarations or adapter operation history.
+    #[doc(hidden)]
+    pub fn set_plugin_metadata(&mut self, metadata: &crate::plugin::MetadataMap) {
+        for name in crate::wire::UserView::active_plugin_fields(metadata) {
+            if !self.user_plugin_fields.contains(&name) {
+                self.user_plugin_fields.push(name);
+            }
+        }
+        for name in crate::wire::SessionView::active_plugin_fields(metadata) {
+            if !self.session_plugin_fields.contains(&name) {
+                self.session_plugin_fields.push(name);
+            }
+        }
     }
 
     /// Read native User fields owned by active plugins before adapter output projection.
@@ -221,7 +234,9 @@ impl ModelFields {
         }
     }
 
-    pub(crate) fn register_organization_schema(
+    /// Declare enabled Organization models in upstream schema order.
+    #[doc(hidden)]
+    pub fn register_organization_schema(
         &mut self,
         fields: &crate::organization_fields::OrganizationFields,
         teams_enabled: bool,

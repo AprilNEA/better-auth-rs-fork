@@ -118,7 +118,7 @@ impl EphemeralStore {
         mut fields: FieldMap,
     ) -> AuthResult<RowRef<FieldMap>> {
         self.operation(|op| {
-            let table = op.capture_table(role)?;
+            let table = op.create_table(role)?;
             if let Some(id) = self.next_serial_id(table.len()?) {
                 let _ = fields.insert("id".into(), id);
             }

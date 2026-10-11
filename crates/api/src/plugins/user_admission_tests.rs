@@ -720,15 +720,24 @@ async fn signup_preserves_native_phone_fields_from_enabled_plugin_declarations()
 
     let config = Arc::new(test_helpers::create_test_config());
     let store: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(EphemeralStore::new(config.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), store.clone());
+    better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+        &crate::plugins::phone_number::PhoneNumberPlugin::new(),
+        &mut model_fields,
+    )?;
     crate::plugins::phone_number::PhoneNumberPlugin::new()
         .on_init(&mut init)
         .await?;
+    better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+        &crate::plugins::anonymous::AnonymousPlugin::new(),
+        &mut model_fields,
+    )?;
     crate::plugins::anonymous::AnonymousPlugin::new()
         .on_init(&mut init)
         .await?;
     let parts = init.into_parts();
-    let (adapter, endpoint, mut fields) = parts.plugin_fields.clone().resolve(&config);
+    let (adapter, endpoint, mut fields) = model_fields.resolve(&config);
     let adapter_fields = adapter.user.clone();
     let adapter = Arc::new(adapter);
     fields.set_schema_configuration(&SchemaConfiguration {

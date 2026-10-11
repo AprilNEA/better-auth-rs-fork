@@ -74,6 +74,8 @@ mod plugin_records;
 mod protected_function_tests;
 mod rate_limits;
 mod record_projection;
+#[cfg(test)]
+mod root_join_contract_tests;
 mod rows;
 mod runtime;
 #[cfg(test)]
@@ -149,14 +151,26 @@ impl EphemeralStore {
         .then(|| Value::Number((row_count + 1) as f64))
     }
 
-    /// Construct an empty adapter. Restarting the process discards all records.
+    /// Construct a standalone adapter with empty tables for every native logical model.
+    /// Use `empty` for an explicit empty Memory root, or `from_schema` for auth initialization.
+    /// Restarting the process discards all records.
     pub fn new(config: Arc<AuthConfig>) -> Self {
+        let mut store = Self::empty(config);
+        store.state = Arc::new(Mutex::new(State::with_models(
+            store.operations.clone(),
+            crate::plugin_runtime::ModelFields::all_native_model_names(),
+        )));
+        store
+    }
+
+    /// Construct an explicit empty Memory root. Native nonserial creation adds physical tables lazily.
+    pub fn empty(config: Arc<AuthConfig>) -> Self {
         let operations = MemoryGate::default();
         Self {
             model_fields: Default::default(),
             session_config: config.session.clone(),
             config,
-            state: Arc::new(Mutex::new(State::new(operations.clone()))),
+            state: Arc::new(Mutex::new(State::default())),
             operations,
             rate_limit_operations: Arc::default(),
             verification_locks: Arc::default(),
@@ -167,6 +181,73 @@ impl EphemeralStore {
             hooks: Vec::new(),
             pending_hooks: None,
         }
+    }
+
+    /// Construct the default no-database root from resolved logical schema keys.
+    /// Physical model aliases do not change the initial root keys.
+    pub fn from_schema(
+        config: Arc<AuthConfig>,
+        fields: &crate::plugin_runtime::ModelFields,
+    ) -> Self {
+        let mut store = Self::empty(config);
+        store.state = Arc::new(Mutex::new(State::with_models(
+            store.operations.clone(),
+            fields.logical_model_names(),
+        )));
+        store.model_fields = fields.clone();
+        store
+    }
+
+    fn memory_model_name(&self, role: crate::store::schema::EntityRole) -> AuthResult<&str> {
+        let logical = crate::plugin_runtime::ModelFields::native_model_name(role)?;
+        Ok(self.model_fields.storage_model_name(role, logical))
+    }
+
+    fn snapshot_table<'a>(
+        &self,
+        state: &'a State,
+        role: crate::store::schema::EntityRole,
+    ) -> AuthResult<&'a table::TableRef<FieldMap>> {
+        state.table(self.memory_model_name(role)?)
+    }
+
+    fn memory_create_id_input(
+        &self,
+        role: crate::store::schema::EntityRole,
+        supplied: Option<Value>,
+        policy: crate::id::AdapterIdInput,
+    ) -> AuthResult<Option<Value>> {
+        let generation = self.config.advanced.database.generate_id();
+        let value = generation.adapter_create_id_input(
+            crate::plugin_runtime::ModelFields::native_model_name(role)?,
+            supplied,
+            policy,
+        )?;
+        if matches!(generation, crate::id::IdGeneration::Serial) {
+            return self.operation(|op| Ok(self.next_serial_id(op.table_length(role)?)));
+        }
+        Ok(value)
+    }
+
+    fn memory_record_input(
+        &self,
+        role: crate::store::schema::EntityRole,
+        name: &str,
+        field: &crate::user_fields::UserFieldConfig,
+        value: Value,
+        create: bool,
+    ) -> AuthResult<Value> {
+        let value = self.memory_plugin_field_input(field, value)?;
+        if create
+            && name == "id"
+            && matches!(
+                self.config.advanced.database.generate_id(),
+                crate::id::IdGeneration::Serial
+            )
+        {
+            return self.operation(|op| Ok(Value::Number((op.table_length(role)? + 1) as f64)));
+        }
+        Ok(value)
     }
 
     /// Register application lifecycle hooks in invocation order.

@@ -180,7 +180,9 @@ async fn check_signup<S: AuthSchema>(
             "Phone Owner".into()
         });
     }
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), store.clone());
+    better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields)?;
     plugin.on_init(&mut init).await?;
     let mut replacement_fields = UserConfig::default();
     for name in ["phoneNumber", "phoneNumberVerified"] {
@@ -188,9 +190,9 @@ async fn check_signup<S: AuthSchema>(
             .fields_mut()
             .insert(name.into(), config.user.fields()[name].clone());
     }
-    init.register_user_fields(replacement_fields);
+    model_fields.register_user_fields(replacement_fields);
     let parts = init.into_parts();
-    let (adapter, endpoint, mut fields) = parts.plugin_fields.clone().resolve(&config);
+    let (adapter, endpoint, mut fields) = model_fields.resolve(&config);
     let adapter_fields = adapter.user.clone();
     let adapter = Arc::new(adapter);
     fields.set_schema_configuration(&SchemaConfiguration {

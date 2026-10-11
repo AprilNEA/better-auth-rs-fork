@@ -114,8 +114,11 @@ impl<S: AuthSchema> AuthPlugin<S> for Plugin {
         Vec::new()
     }
 
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        fields.register_model_fields(EntityRole::Session, self.fields.clone())
+    }
+
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
-        context.register_model_fields(EntityRole::Session, self.fields.clone())?;
         context.register_database_hook(Arc::new(self.clone()));
         Ok(())
     }

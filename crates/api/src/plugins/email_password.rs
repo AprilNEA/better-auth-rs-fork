@@ -586,6 +586,16 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for EmailPasswordPlugin {
         self.config.password_hasher.clone()
     }
 
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        if self.config.username {
+            <super::username::UsernamePlugin as AuthPlugin<S>>::schema(
+                &super::username::UsernamePlugin::default(),
+                fields,
+            )?;
+        }
+        Ok(())
+    }
+
     async fn on_init(&self, ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
         ctx.password_policy.min_length = self.config.password_min_length();
         ctx.password_policy.max_length = self.config.password_max_length();
@@ -680,13 +690,14 @@ mod tests {
         let config = AuthConfig::new("test-secret-key-at-least-32-chars-long");
         let config = Arc::new(config);
         let database = crate::plugins::test_helpers::create_test_database().await;
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = better_auth_core::AuthInitContext::new(config.clone(), database.clone());
         init.password_policy.hasher =
             <EmailPasswordPlugin as AuthPlugin<TestSchema>>::password_hasher(plugin);
+        better_auth_core::AuthPlugin::<TestSchema>::schema(plugin, &mut model_fields).unwrap();
         plugin.on_init(&mut init).await.unwrap();
         let parts = init.into_parts();
-        let (adapter_config, endpoint_config, model_fields) =
-            parts.plugin_fields.clone().resolve(&config);
+        let (adapter_config, endpoint_config, model_fields) = model_fields.resolve(&config);
         let database = database
             .with_runtime(
                 Arc::new(adapter_config),

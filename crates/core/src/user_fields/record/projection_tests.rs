@@ -5,7 +5,164 @@ use crate::{
     store::schema::EntityRole,
     user_fields::{FieldTransforms, UserFieldTransform},
 };
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract compares declaration order, callback failures, and unchanged source fields"
+)]
+async fn registered_user_fields_keep_plugin_slots_before_metadata_fallback() -> AuthResult<()> {
+    for custom_first in [true, false] {
+        for fail in [false, true] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let traced = |name: &'static str| {
+                let events = events.clone();
+                UserConfig {
+                    additional_fields: Some(
+                        [(
+                            name.into(),
+                            UserFieldConfig {
+                                field_name: Some(format!("stored_{name}")),
+                                transform: Some(FieldTransforms {
+                                    output: Some(UserFieldTransform::new(move |value| {
+                                        events
+                                            .lock()
+                                            .map_err(|_| {
+                                                crate::AuthError::internal("Trace lock poisoned")
+                                            })?
+                                            .push(name);
+                                        if fail && name == "marker" {
+                                            return Err(crate::AuthError::config(
+                                                "marker output failed",
+                                            ));
+                                        }
+                                        Ok(value)
+                                    })),
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                        )]
+                        .into(),
+                    ),
+                }
+            };
+            let mut runtime = ModelFields::default();
+            if custom_first {
+                runtime.register_user_fields(traced("marker"));
+            }
+            runtime.register_native_user_fields("admin.enabled");
+            if !custom_first {
+                runtime.register_user_fields(traced("marker"));
+            }
+            runtime.register_user_fields(traced("role"));
+            let (adapter, _, runtime) = runtime.resolve(&crate::AuthConfig::default());
+            let schema = adapter
+                .user
+                .user_field_schema_with_plugins(runtime.user_plugin_fields());
+            let storage = FieldMap::from([
+                ("id".into(), "user-id".into()),
+                ("stored_marker".into(), "marker-value".into()),
+                ("stored_role".into(), "role-value".into()),
+            ]);
+            let before = storage.clone();
+            let result = schema.project_record(&storage, false, true).await;
+            if fail {
+                assert!(
+                    matches!(result, Err(crate::AuthError::Config(message)) if message == "marker output failed")
+                );
+            } else {
+                let output = result?;
+                let mut order = vec![
+                    "name",
+                    "email",
+                    "emailVerified",
+                    "image",
+                    "createdAt",
+                    "updatedAt",
+                ];
+                if custom_first {
+                    order.push("marker");
+                }
+                order.extend(["role", "banned", "banReason", "banExpires"]);
+                if !custom_first {
+                    order.push("marker");
+                }
+                order.push("id");
+                assert_eq!(output.keys().map(String::as_str).collect::<Vec<_>>(), order);
+                let expected = order
+                    .iter()
+                    .map(|name| {
+                        let value = match *name {
+                            "marker" => "marker-value".into(),
+                            "role" => "role-value".into(),
+                            "id" => "user-id".into(),
+                            _ => Value::Undefined,
+                        };
+                        ((*name).to_owned(), value)
+                    })
+                    .collect::<FieldMap>();
+                assert_eq!(output, expected);
+            }
+            assert_eq!(
+                *events
+                    .lock()
+                    .map_err(|_| crate::AuthError::internal("Trace lock poisoned"))?,
+                if custom_first {
+                    if fail {
+                        vec!["marker"]
+                    } else {
+                        vec!["marker", "role"]
+                    }
+                } else {
+                    vec!["role", "marker"]
+                }
+            );
+            assert_eq!(storage, before);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn metadata_only_user_fields_keep_native_defaults() {
+    let schema = UserConfig::default().user_field_schema_with_plugins(&[
+        "role",
+        "banned",
+        "banReason",
+        "banExpires",
+    ]);
+    assert_eq!(
+        schema
+            .fields()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        [
+            "name",
+            "email",
+            "emailVerified",
+            "image",
+            "createdAt",
+            "updatedAt",
+            "role",
+            "banned",
+            "banReason",
+            "banExpires"
+        ]
+    );
+    let banned = schema
+        .fields()
+        .get("banned")
+        .expect("metadata must declare banned");
+    assert!(matches!(banned.field_type, UserFieldType::Boolean));
+    assert_eq!(banned.default_value, Some(false.into()));
+    assert_eq!(banned.input, Some(false));
+}
 
 async fn project(
     method: usize,

@@ -103,6 +103,12 @@ better_auth_core::impl_auth_plugin! {
         post "/admin/has-permission" => handle_has_permission, "userHasPermission", body = request::validate;
     }
     extra {
+        fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> better_auth_core::AuthResult<()> {
+            fields.register_native_user_fields("admin.enabled");
+            fields.register_native_session_fields("admin.enabled")?;
+            Ok(())
+        }
+
         async fn on_init(
             &self,
             ctx: &mut better_auth_core::AuthInitContext<S>,
@@ -110,8 +116,6 @@ better_auth_core::impl_auth_plugin! {
             self.config.validate()?;
             S::User::require_plugin_fields("admin", &["role", "banned", "ban_reason", "ban_expires"])?;
             S::Session::require_plugin_fields("admin", &["impersonated_by"])?;
-            ctx.register_native_user_fields("admin.enabled");
-            ctx.register_native_session_fields("admin.enabled")?;
             ctx.set_metadata("admin.enabled", serde_json::Value::Bool(true));
             ctx.set_metadata(
                 "admin.default_role",

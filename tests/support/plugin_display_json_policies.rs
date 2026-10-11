@@ -1,7 +1,7 @@
 use super::*;
 use better_auth::__private_core::{
     __private_async_trait::async_trait,
-    AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthRoute,
+    AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthRoute,
     id::{IdGeneration, IdGenerator},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -55,7 +55,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Policy {
         Ok(None)
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let target = self.target;
         let inputs = self.state.clone();
         let outputs = self.state.clone();

@@ -1,9 +1,8 @@
 use better_auth::{AuthConfig, BetterAuth, plugins::DeviceAuthorizationPlugin};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, AuthStore, CreateDeviceCode, CreateUser,
-    DeviceCode, DeviceCodeOwnership, DeviceCodeWhere, FieldMap, FieldValue, WhereMode,
-    WhereOperator,
+    AuthContext, AuthError, AuthPlugin, AuthRecordFields, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, AuthStore, CreateDeviceCode, CreateUser, DeviceCode,
+    DeviceCodeOwnership, DeviceCodeWhere, FieldMap, FieldValue, WhereMode, WhereOperator,
     error::DatabaseError,
     id::IdGeneration,
     store::{DeviceCodeStore, schema::EntityRole, transaction},
@@ -104,7 +103,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(EntityRole::DeviceCode, self.0.clone())
     }
     async fn on_request(

@@ -69,7 +69,10 @@ impl<S: AuthSchema> AuthPlugin<S> for DocumentationOverlay {
                 ]),
             )
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_custom_model(
             "runtimeWidget",
             Some("physical_widget"),
@@ -146,12 +149,9 @@ async fn documentation_overlays_preserve_runtime_policies_and_final_declaration_
     config.telemetry.enabled = false;
     let calls = Arc::new(CallbackCalls::default());
     let raw = EphemeralStore::new(Arc::new(config.clone()));
-    let mut initialization =
-        AuthInitContext::<StatelessSchema>::new(Arc::new(config.clone()), Arc::new(raw.clone()));
-    DocumentationOverlay(calls.clone())
-        .on_init(&mut initialization)
-        .await?;
-    let (_, _, runtime) = initialization.into_parts().plugin_fields.resolve(&config);
+    let mut declarations = better_auth_core::plugin_runtime::ModelFields::default();
+    AuthPlugin::<StatelessSchema>::schema(&DocumentationOverlay(calls.clone()), &mut declarations)?;
+    let (_, _, runtime) = declarations.resolve(&config);
     assert_eq!(
         runtime
             .fields(EntityRole::Jwk)
@@ -307,7 +307,10 @@ impl<S: AuthSchema> AuthPlugin<S> for UserPolicyOverlay {
             ]),
         )
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(
             EntityRole::User,
             fields([(

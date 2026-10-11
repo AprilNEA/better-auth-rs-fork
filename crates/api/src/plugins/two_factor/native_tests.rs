@@ -37,17 +37,18 @@ impl Fixture {
         let auth_config = Arc::new(crate::plugins::test_helpers::create_test_config());
         let store: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(auth_config.clone()));
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(auth_config.clone(), store.clone());
+        better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+            &TwoFactorPlugin::with_config(config.clone()),
+            &mut model_fields,
+        )?;
         TwoFactorPlugin::with_config(config.clone())
             .on_init(&mut init)
             .await?;
         let parts = init.into_parts();
-        let fields = parts.plugin_fields.clone();
-        let store = store.with_runtime(
-            auth_config.clone(),
-            parts.database_hooks,
-            parts.plugin_fields,
-        )?;
+        let fields = model_fields.clone();
+        let store = store.with_runtime(auth_config.clone(), parts.database_hooks, model_fields)?;
         let user = store
             .create_user(CreateUser {
                 id: Some("native-factor-user".into()),
@@ -160,6 +161,7 @@ async fn mixed_backup_codes_keep_nonmatching_values_and_native_view_output() -> 
     assert!(
         view.as_array()
             .unwrap()
+            .snapshot()?
             .iter()
             .any(|value| value.as_date().is_some())
     );

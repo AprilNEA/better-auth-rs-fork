@@ -20,9 +20,9 @@ fn cases() -> AuthResult<Vec<FieldMap>> {
     values
         .as_array()
         .ok_or_else(|| AuthError::internal("Passkey owner cases must be an array"))?
-        .iter()
+        .iter()?
         .map(|value| {
-            value
+            value?
                 .as_object()
                 .ok_or_else(|| AuthError::internal("Passkey owner case must be an object"))?
                 .snapshot_fields()
@@ -62,10 +62,12 @@ async fn project<S: AuthSchema>(
     let mut config = ctx.config.as_ref().clone();
     config.session.store_session_in_database = Some(true);
     let config = Arc::new(config);
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), ctx.database.clone());
+    better_auth_core::AuthPlugin::<S>::schema(&PasskeyPlugin::new(), &mut model_fields)?;
     AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
     if let Some(owner) = passkey_owner {
-        init.register_model_fields(
+        model_fields.register_model_fields(
             EntityRole::Passkey,
             UserConfig {
                 additional_fields: Some(
@@ -84,9 +86,9 @@ async fn project<S: AuthSchema>(
             },
         )?;
     }
-    let database =
-        ctx.database
-            .with_runtime(config.clone(), Vec::new(), init.into_parts().plugin_fields)?;
+    let database = ctx
+        .database
+        .with_runtime(config.clone(), Vec::new(), model_fields)?;
     let cache = Arc::new(MemoryCacheAdapter::new());
     let database =
         SecondaryStore::new(database, cache.clone(), config.clone(), Default::default())?;

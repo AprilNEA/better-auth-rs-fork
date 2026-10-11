@@ -5,8 +5,8 @@
 )]
 
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthRecordFields, AuthResult, AuthSchema, FieldDate,
-    FieldMap, FieldValue,
+    AuthConfig, AuthError, AuthRecordFields, AuthResult, AuthSchema, FieldDate, FieldMap,
+    FieldValue,
     store::{JoinValue, RuntimeStore, schema::EntityRole},
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
 };
@@ -348,14 +348,18 @@ async fn check(target: Target, joins: bool, reject: bool, missing: bool) -> Test
         (*config).clone(),
         database.clone(),
     ));
-    let mut init = AuthInitContext::new(config.clone(), raw_store.clone());
-    init.register_model_schema(EntityRole::User, Some("linked_user"), UserConfig::default())?;
-    init.register_model_schema(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_schema(
+        EntityRole::User,
+        Some("linked_user"),
+        UserConfig::default(),
+    )?;
+    model_fields.register_model_schema(
         EntityRole::Account,
         Some("linked_account"),
         UserConfig::default(),
     )?;
-    let reader = raw_store.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+    let reader = raw_store.with_runtime(config, Vec::new(), model_fields)?;
     let result: TestResult<(FieldMap, FieldValue)> = async {
         match target {
             Target::Account => {

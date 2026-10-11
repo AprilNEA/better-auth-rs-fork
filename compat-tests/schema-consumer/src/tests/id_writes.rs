@@ -2,9 +2,10 @@ use super::*;
 use better_auth::config::{FieldTransforms, UserFieldTransform};
 use better_auth::{
     __private_core::{
-        AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-        CreateApiKey, CreateDeviceCode, Member, UpdateDeviceCode, UpdateTeam,
+        AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute, CreateApiKey,
+        CreateDeviceCode, Member, UpdateDeviceCode, UpdateTeam,
         organization_fields::OrganizationFields,
+        plugin_runtime::ModelFields,
         store::{OrganizationStore, schema::EntityRole},
         user_fields::UserConfig,
     },
@@ -27,7 +28,7 @@ impl<S: AuthSchema> AuthPlugin<S> for DeviceOwnerReference {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, context: &mut ModelFields) -> AuthResult<()> {
         context.register_model_fields(
             EntityRole::DeviceCode,
             UserConfig {

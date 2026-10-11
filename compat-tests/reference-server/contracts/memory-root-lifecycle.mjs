@@ -12,9 +12,8 @@ async function outcome(action) {
 }
 
 // Compare the complete native error across JavaScript engines, including the failing expression.
-function missingLength(create) {
+function missingLength(create, model) {
   const activeDb = {};
-  const model = "apikey";
   const props = { model };
   try {
     if (create) return activeDb[props.model].length;
@@ -63,7 +62,7 @@ for (const explicit of [false, true]) {
           const missing = { error: { name: "Error", message: `Model ${physical} not found` } };
           assert.deepStrictEqual(initialized, prebuilt
             ? { find: { value: [] }, count: { value: 0 }, filteredCount: { value: 0 } }
-            : { find: missing, count: missingLength(false), filteredCount: missing });
+            : { find: missing, count: missingLength(false, physical), filteredCount: missing });
           const initialKeys = explicit ? [] : ["user", "session", "account", "verification", "apikey"];
           assert.deepStrictEqual(logs, prebuilt ? [] : [
             [`[MemoryAdapter] Model ${physical} not found in the DB`, initialKeys],
@@ -75,7 +74,7 @@ for (const explicit of [false, true]) {
           const input = { ...key("target", 5), before: "before", after: "after" };
           const result = await outcome(() => adapter.create({ model: "apikey", data: input, forceAllowId: true }));
           if (serial && !prebuilt) {
-            assert.deepStrictEqual(result, missingLength(true));
+            assert.deepStrictEqual(result, missingLength(true, physical));
             expect(events).toStrictEqual(["init", "input:name", "input:before"]);
             assert.deepStrictEqual(memory, {});
           } else {

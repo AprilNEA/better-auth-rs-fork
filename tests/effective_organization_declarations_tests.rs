@@ -128,7 +128,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Declaration {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(self.0, self.1.clone())
     }
     async fn on_request(
@@ -381,6 +384,7 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
 -> AuthResult<()> {
     for enabled in [false, true] {
         let config = Arc::new(config());
+        let mut fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut context = AuthInitContext::<StatelessSchema>::new(
             config.clone(),
             Arc::new(EphemeralStore::new(config.clone())),
@@ -402,18 +406,17 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
                 .into(),
             ),
         };
-        context
+        fields
             .register_model_fields(EntityRole::OrganizationRole, declaration("externalBefore"))?;
         let mut options = OrganizationConfig {
             dynamic_access_control: enabled,
             ..Default::default()
         };
         options.schema.organization_role = declaration("own");
-        OrganizationPlugin::with_config(options)
-            .on_init(&mut context)
-            .await?;
-        context
-            .register_model_fields(EntityRole::OrganizationRole, declaration("externalAfter"))?;
+        let plugin = OrganizationPlugin::with_config(options);
+        AuthPlugin::<StatelessSchema>::schema(&plugin, &mut fields)?;
+        plugin.on_init(&mut context).await?;
+        fields.register_model_fields(EntityRole::OrganizationRole, declaration("externalAfter"))?;
         let settings = SchemaConfiguration {
             config,
             plugins: vec!["organization"],
@@ -421,7 +424,6 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
             secondary_storage: false,
             rate_limit: Default::default(),
         };
-        let mut fields = context.into_parts().plugin_fields;
         fields.set_schema_configuration(&settings);
         let resolved = fields.organization_fields(Default::default());
         for declaration in [

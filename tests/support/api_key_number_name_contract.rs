@@ -8,8 +8,8 @@
 use better_auth::{
     __private_core::{
         __private_async_trait::async_trait,
-        AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-        AuthRoute, AuthSchema, AuthStore, CreateUser,
+        AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+        AuthSchema, AuthStore, CreateUser,
         api_error::{ApiErrorHandler, ApiErrorTask},
         entity::AuthUser,
         id::{IdGeneration, IdGenerator},
@@ -184,7 +184,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     ) -> AuthResult<Option<AuthResponse>> {
         Ok(None)
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let scenario = self.scenario;
         let transform = |kind| {
             let state = self.state.clone();

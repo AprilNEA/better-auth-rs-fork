@@ -77,19 +77,19 @@ impl Model {
         let state = store.operation(|op| op.capture_state())?;
         let ids = match self {
             Self::Session => state
-                .sessions
+                .fixture_table("session")
                 .snapshot()?
                 .into_iter()
                 .map(|row| row.get("id").cloned().unwrap_or_default())
                 .collect::<Vec<_>>(),
             Self::Jwk => state
-                .jwks
+                .fixture_table("jwks")
                 .snapshot()?
                 .into_iter()
                 .map(|row| row.get("id").cloned().unwrap_or_default())
                 .collect(),
             Self::Wallet => state
-                .wallets
+                .fixture_table("walletAddress")
                 .snapshot()?
                 .into_iter()
                 .map(|row| row.get("id").cloned().unwrap_or_default())

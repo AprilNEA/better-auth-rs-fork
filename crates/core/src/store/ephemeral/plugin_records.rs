@@ -79,13 +79,7 @@ impl EphemeralStore {
                     };
                     let generation = self.config.advanced.database.generate_id();
                     if create {
-                        let count = self.operation(|op| op.capture_table(role)?.len())?;
-                        let id = generation.adapter_create_id_input(
-                            model(role)?,
-                            supplied.take(),
-                            policy,
-                        )?;
-                        Ok(self.next_serial_id(count).or(id))
+                        self.memory_create_id_input(role, supplied.take(), policy)
                     } else {
                         supplied
                             .take()
@@ -94,7 +88,7 @@ impl EphemeralStore {
                             .map(Option::flatten)
                     }
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| self.memory_record_input(role, name, field, value, create),
             )
             .await
     }
@@ -121,7 +115,7 @@ impl EphemeralStore {
         let mut storage = self.prepare_plugin_fields(role, input, true).await?;
         storage.extend(internal);
         self.raw(model(role)?, "create", |op| {
-            let table = op.capture_table(role)?;
+            let table = op.create_table(role)?;
             if let Some(id) = self.next_serial_id(table.len()?) {
                 let _ = storage.insert("id".into(), id);
             }

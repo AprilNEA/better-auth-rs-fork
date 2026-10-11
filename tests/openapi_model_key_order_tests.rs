@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use better_auth::{BetterAuth, plugins::OpenApiPlugin};
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
+    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, RateLimitConfig,
     user_fields::{UserConfig, UserFieldConfig},
 };
 use serde_json::{Value, json};
@@ -19,7 +19,10 @@ impl<S: AuthSchema> AuthPlugin<S> for ExplicitModels {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         for name in ["tail", "10", "2", "01", "4294967294", "4294967295"] {
             let fields = UserConfig {
                 additional_fields: Some(

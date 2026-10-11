@@ -82,10 +82,10 @@ async fn database_rate_limit_replaces_the_complete_declaration_without_resetting
                 ..Default::default()
             };
             let mut fields = ModelFields::default();
-            fields.register_custom_model("before".into(), Some("shared"), UserConfig::default())?;
+            fields.register_custom_model("before", Some("shared"), UserConfig::default())?;
             fields.register(EntityRole::RateLimit, replacement());
             fields.set_model_name(EntityRole::RateLimit, Some("plugin_counter"))?;
-            fields.register_custom_model("after".into(), Some("shared"), UserConfig::default())?;
+            fields.register_custom_model("after", Some("shared"), UserConfig::default())?;
             let history = AdapterIdInput {
                 force_allow_id: true,
                 supports_native_uuid: true,

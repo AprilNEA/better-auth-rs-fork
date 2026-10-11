@@ -364,12 +364,12 @@ impl TeamStore for EphemeralStore {
                 return Ok((Some(row), false));
             }
             let state = op.capture_state()?;
-            let actual = state
-                .team_members
+            let actual = self
+                .snapshot_table(&state, EntityRole::TeamMember)?
                 .select_refs(|row| Self::matches_team_member(row, &selectors))?
                 .len();
             if maximum.is_some_and(|maximum| actual >= maximum)
-                && !prepared.is_current(&state.teams, actual)?
+                && !prepared.is_current(self.snapshot_table(&state, EntityRole::Team)?, actual)?
             {
                 return Ok((None, false));
             }
@@ -378,18 +378,18 @@ impl TeamStore for EphemeralStore {
                     self.config.advanced.database.generate_id(),
                     crate::id::IdGeneration::Serial
                 )
-                && state.team_members.len()? != staged.base.len()?
+                && self.snapshot_table(&state, EntityRole::TeamMember)?.len()?
+                    != staged.base.len()?
             {
                 return Err(AuthError::conflict(
                     "Team membership allocation changed while field transforms were pending",
                 ));
             }
-            let _ = prepared.apply(&state.teams, actual)?;
+            let _ = prepared.apply(self.snapshot_table(&state, EntityRole::Team)?, actual)?;
             let plan = staged
                 .as_ref()
                 .map(|staged| {
-                    state
-                        .team_members
+                    self.snapshot_table(&state, EntityRole::TeamMember)?
                         .reconcile_with_plan(&staged.base, &staged.working)
                         .map(|(_, plan)| plan)
                 })

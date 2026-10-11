@@ -204,7 +204,7 @@ async fn schema_history_memory_verification_cleanup_keeps_the_adapter_runtime() 
         store
             .operation(|op| op.capture_state())
             .unwrap()
-            .verifications
+            .fixture_table("verification")
             .snapshot()
             .unwrap()
             .is_empty()

@@ -3,8 +3,8 @@ use super::{
 };
 use crate::plugins::endpoint_context::{EndpointContext, WithCallbacks};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthResult, AuthSchema, DeviceCode,
-    FieldMap, store::schema::EntityRole, user_fields::UserConfig,
+    AuthContext, AuthError, AuthPlugin, AuthResult, AuthSchema, DeviceCode, FieldMap,
+    store::schema::EntityRole, user_fields::UserConfig,
 };
 use serde_json::{Map, Value};
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -197,10 +197,7 @@ fn missing_client() -> AuthResult<AuthError> {
     Ok(device_error_response(400, "invalid_request", "client_id is required")?.into())
 }
 
-pub(super) fn register_fields<S: AuthSchema>(
-    context: &mut AuthInitContext<S>,
-    fields: &UserConfig,
-) -> AuthResult<()> {
+pub(super) fn validate_fields(fields: &UserConfig) -> AuthResult<()> {
     let native =
         better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(EntityRole::DeviceCode);
     let conflicts: Vec<_> = fields
@@ -215,5 +212,5 @@ pub(super) fn register_fields<S: AuthSchema>(
             conflicts.join(", "),
         )));
     }
-    context.register_model_fields(EntityRole::DeviceCode, fields.clone())
+    Ok(())
 }

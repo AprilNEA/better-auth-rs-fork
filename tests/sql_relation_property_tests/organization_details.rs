@@ -402,10 +402,14 @@ async fn contract(name: &str) -> TestResult {
             SeaOrmStore::<models::Core>::new((*config).clone(), database.clone())
                 .with_organization_schema::<organization_models::Organizations>(),
         );
-        let mut init = AuthInitContext::new(config.clone(), raw.clone());
-        init.register_model_schema(EntityRole::User, Some("linked_user"), UserConfig::default())?;
-        init.register_organization_schema(&fields, true, false);
-        let reader = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_schema(
+            EntityRole::User,
+            Some("linked_user"),
+            UserConfig::default(),
+        )?;
+        model_fields.register_organization_schema(&fields, true, false);
+        let reader = raw.with_runtime(config, Vec::new(), model_fields)?;
         let result = async {
             reader
                 .get_organization_details(OrganizationDetailsQuery {

@@ -9,9 +9,12 @@ use better_auth_core::{
     store::{ResolvedJoin, schema::SchemaConfiguration},
 };
 
-fn context(config: &AuthConfig) -> AuthInitContext<StatelessSchema> {
+fn context(config: &AuthConfig) -> (AuthInitContext<StatelessSchema>, ModelFields) {
     let config = Arc::new(config.clone());
-    AuthInitContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+    (
+        AuthInitContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        ModelFields::default(),
+    )
 }
 
 fn declaration(events: &Events) -> UserConfig {
@@ -34,6 +37,7 @@ fn declaration(events: &Events) -> UserConfig {
 
 fn finish(
     context: AuthInitContext<StatelessSchema>,
+    mut fields: ModelFields,
     config: AuthConfig,
     plugins: Vec<&'static str>,
     secondary_storage: bool,
@@ -45,7 +49,6 @@ fn finish(
         secondary_storage,
         rate_limit: Default::default(),
     };
-    let mut fields = context.into_parts().plugin_fields;
     fields.set_schema_configuration(&settings);
     fields
 }
@@ -139,16 +142,16 @@ fn assert_error(
 #[test]
 fn explicit_native_models_and_memory_rate_limit_keep_logical_names_and_aliases() -> AuthResult<()> {
     let config = AuthConfig::default();
-    let mut context = context(&config);
+    let (context, mut declarations) = context(&config);
     let events = Events::default();
     events.enabled.store(true, Ordering::Relaxed);
     for (role, alias) in [
         (EntityRole::Passkey, "key_store"),
         (EntityRole::RateLimit, "counter_store"),
     ] {
-        context.register_model_schema(role, Some(alias), declaration(&events))?;
+        declarations.register_model_schema(role, Some(alias), declaration(&events))?;
     }
-    let fields = finish(context, config, vec![], false);
+    let fields = finish(context, declarations, config, vec![], false);
     assert_eq!(
         names(&fields),
         [
@@ -187,11 +190,11 @@ async fn organization_role_visibility_keeps_explicit_declarations_and_alias_prio
     for explicit_before in [false, true] {
         for enabled in [false, true] {
             let config = AuthConfig::default();
-            let mut context = context(&config);
+            let (context, mut declarations) = context(&config);
             let events = Events::default();
             events.enabled.store(true, Ordering::Relaxed);
             if explicit_before {
-                context.register_model_schema(
+                declarations.register_model_schema(
                     EntityRole::OrganizationRole,
                     Some("shared"),
                     declaration(&events),
@@ -200,22 +203,23 @@ async fn organization_role_visibility_keeps_explicit_declarations_and_alias_prio
             let mut organization = OrganizationConfig::default();
             organization.teams.enabled = true;
             organization.dynamic_access_control = enabled;
-            OrganizationPlugin::with_config(organization)
-                .on_init(&mut context)
-                .await?;
+            let plugin = OrganizationPlugin::with_config(organization);
+            AuthPlugin::<StatelessSchema>::schema(&plugin, &mut declarations)?;
+            let mut context = context;
+            plugin.on_init(&mut context).await?;
             if enabled {
-                context.register_model_schema(
+                declarations.register_model_schema(
                     EntityRole::OrganizationRole,
                     Some("shared"),
                     UserConfig::default(),
                 )?;
             }
-            context.register_model_schema(
+            declarations.register_model_schema(
                 EntityRole::Team,
                 Some("shared"),
                 UserConfig::default(),
             )?;
-            let fields = finish(context, config, vec!["organization"], false);
+            let fields = finish(context, declarations, config, vec!["organization"], false);
             let mut expected = vec!["user", "session", "account", "verification"];
             if explicit_before {
                 expected.push("organizationRole");
@@ -290,13 +294,13 @@ fn secondary_storage_hides_explicit_core_declarations_until_database_storage_is_
         let mut config = AuthConfig::default();
         config.session.store_session_in_database = Some(store_core);
         config.verification.store_in_database = store_core;
-        let mut context = context(&config);
+        let (context, mut declarations) = context(&config);
         let events = Events::default();
         events.enabled.store(true, Ordering::Relaxed);
         for role in [EntityRole::Session, EntityRole::Verification] {
-            context.register_model_fields(role, declaration(&events))?;
+            declarations.register_model_fields(role, declaration(&events))?;
         }
-        let fields = finish(context, config, vec![], true);
+        let fields = finish(context, declarations, config, vec![], true);
         assert_eq!(
             names(&fields),
             if store_core {
@@ -335,11 +339,11 @@ fn secondary_storage_hides_explicit_core_declarations_until_database_storage_is_
 fn plugin_names_do_not_declare_models_but_explicit_empty_schemas_do() -> AuthResult<()> {
     for declared in [false, true] {
         let config = AuthConfig::default();
-        let mut context = context(&config);
+        let (context, mut declarations) = context(&config);
         if declared {
-            context.register_model_fields(EntityRole::Passkey, UserConfig::default())?;
+            declarations.register_model_fields(EntityRole::Passkey, UserConfig::default())?;
         }
-        let fields = finish(context, config, vec!["passkey"], false);
+        let fields = finish(context, declarations, config, vec!["passkey"], false);
         let mut expected = vec!["user", "session", "account", "verification"];
         if declared {
             expected.push("passkey");

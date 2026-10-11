@@ -14,6 +14,7 @@ import "./memory-graph-clone.mjs";
 import "./memory-array-clone.mjs";
 import "./memory-root-lifecycle.mjs";
 import "./memory-root-order.mjs";
+import "./memory-root-join.mjs";
 import "./runtime-json-getters.mjs";
 import "./direct-map-json-order.mjs";
 import "./cookie-cache-json-errors.mjs";

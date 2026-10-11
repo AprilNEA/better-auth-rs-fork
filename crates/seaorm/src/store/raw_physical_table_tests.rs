@@ -86,8 +86,8 @@ async fn crud<M: SeaOrmPluginModel>(role: EntityRole, model: &str, table: &str) 
         database.clone(),
     );
     let events = Events::default();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         role,
         UserConfig {
             additional_fields: Some(
@@ -106,7 +106,7 @@ async fn crud<M: SeaOrmPluginModel>(role: EntityRole, model: &str, table: &str) 
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     store
         .model_fields
         .set_schema_configuration(&SchemaConfiguration {

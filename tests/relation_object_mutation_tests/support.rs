@@ -107,20 +107,32 @@ pub(super) fn configured<S: AuthSchema>(
         }
     }
     let config = Arc::new(config);
-    let initial = raw.with_runtime(config.clone(), Vec::new(), ModelFields::default())?;
-    let mut init = better_auth_core::AuthInitContext::new(config.clone(), initial);
-    init.register_model_schema(EntityRole::User, Some("linked_user"), UserConfig::default())?;
-    init.register_model_schema(
+
+    let mut model_fields = ModelFields::default();
+    model_fields.register_model_schema(
+        EntityRole::User,
+        Some("linked_user"),
+        UserConfig::default(),
+    )?;
+    model_fields.register_model_schema(
         EntityRole::Account,
         Some("linked_account"),
         UserConfig::default(),
     )?;
     if let Some((organization, child)) = organization {
-        init.register_organization_schema(&organization, true, false);
-        init.register_model_schema(EntityRole::Team, Some("linked_team"), UserConfig::default())?;
-        init.register_model_schema(EntityRole::TeamMember, Some("linked_team_member"), child)?;
+        model_fields.register_organization_schema(&organization, true, false);
+        model_fields.register_model_schema(
+            EntityRole::Team,
+            Some("linked_team"),
+            UserConfig::default(),
+        )?;
+        model_fields.register_model_schema(
+            EntityRole::TeamMember,
+            Some("linked_team_member"),
+            child,
+        )?;
     }
-    raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)
+    raw.with_runtime(config, Vec::new(), model_fields)
 }
 
 fn date() -> FieldDate {

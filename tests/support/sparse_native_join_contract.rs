@@ -2,9 +2,8 @@ use super::{TestResult, models, values};
 use async_trait::async_trait;
 use better_auth::{AuthConfig, BetterAuth};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, FieldMap, FieldValue, ListUsersParams,
-    SchemaValue,
+    AuthContext, AuthError, AuthPlugin, AuthRecordFields, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, FieldMap, FieldValue, ListUsersParams, SchemaValue,
     organization_fields::OrganizationFields,
     store::{OrganizationDetailsQuery, OrganizationKey, schema::EntityRole},
     user_fields::{
@@ -31,7 +30,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Declarations {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         for (role, fields) in &self.0 {
             context.register_model_fields(*role, fields.clone())?;
         }

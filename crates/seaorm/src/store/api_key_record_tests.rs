@@ -1,7 +1,7 @@
 use super::*;
 use crate::store::{bundled_schema::BundledSchema, migrator::run_migrations};
+use better_auth_core::AuthConfig;
 use better_auth_core::user_fields::{UserConfig, UserFieldConfig, UserFieldType};
-use better_auth_core::{AuthConfig, AuthInitContext};
 use sea_orm::Database;
 use std::sync::Arc;
 
@@ -29,8 +29,8 @@ async fn id_sort_uses_the_primary_key_despite_an_application_field_name() -> Aut
             .await?;
     }
     for field_name in ["name", "column-that-does-not-exist"] {
-        let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-        init.register_model_fields(
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_fields(
             EntityRole::ApiKey,
             UserConfig {
                 additional_fields: Some(
@@ -45,7 +45,7 @@ async fn id_sort_uses_the_primary_key_despite_an_application_field_name() -> Aut
                 ),
             },
         )?;
-        store.model_fields = init.into_parts().plugin_fields;
+        store.model_fields = model_fields;
         store
             .validate_plugin_fields::<super::super::entities::api_key::Model>(EntityRole::ApiKey)?;
         for (direction, expected) in [("asc", ["a-key", "z-key"]), ("desc", ["z-key", "a-key"])] {
@@ -73,8 +73,8 @@ async fn usage_null_guards_distinguish_json_null_from_sql_null() -> AuthResult<(
             AuthConfig::new("a-secret-that-is-at-least-32-characters"),
             database,
         );
-        let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-        init.register_model_fields(
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_fields(
             EntityRole::ApiKey,
             UserConfig {
                 additional_fields: Some(
@@ -94,7 +94,7 @@ async fn usage_null_guards_distinguish_json_null_from_sql_null() -> AuthResult<(
                 ),
             },
         )?;
-        store.model_fields = init.into_parts().plugin_fields;
+        store.model_fields = model_fields;
         let at = Utc::now();
         let mut input = FieldMap::from([
             ("id".into(), "json-null-guard".into()),
@@ -178,8 +178,8 @@ async fn undefined_refill_snapshot_does_not_match_a_null_timestamp() -> AuthResu
         ]))
         .await?;
     let reader = store.clone();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::ApiKey,
         UserConfig {
             additional_fields: Some(
@@ -199,7 +199,7 @@ async fn undefined_refill_snapshot_does_not_match_a_null_timestamp() -> AuthResu
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let snapshot = store
         .get_api_key_by_id("undefined-refill")
         .await?
@@ -248,8 +248,8 @@ async fn nested_create_without_id_leaves_an_unforced_uuid_policy() -> AuthResult
     let calls = Arc::new(Mutex::new(Vec::new()));
     let callback_store = nested.clone();
     let callback_calls = calls.clone();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::ApiKey,
         UserConfig {
             additional_fields: Some(
@@ -291,7 +291,7 @@ async fn nested_create_without_id_leaves_an_unforced_uuid_policy() -> AuthResult
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let store = Arc::new(store);
     assert!(nested.set(Arc::downgrade(&store)).is_ok());
     let at = Utc::now();

@@ -40,7 +40,13 @@ pub struct BetterAuth<S: AuthSchema> {
     context: Arc<AuthContext<S>>,
 }
 
-type EphemeralStoreFactory<S> = Box<dyn FnOnce(Arc<AuthConfig>) -> Arc<dyn AuthStore<S>> + Send>;
+type EphemeralStoreFactory<S> = Box<
+    dyn FnOnce(
+            Arc<AuthConfig>,
+            &better_auth_core::plugin_runtime::ModelFields,
+        ) -> Arc<dyn AuthStore<S>>
+        + Send,
+>;
 
 /// Initial builder for configuring BetterAuth.
 pub struct AuthBuilder<S: AuthSchema> {
@@ -179,10 +185,32 @@ impl<S: AuthSchema> AuthBuilder<S> {
         };
         self.config.resolve_storage_defaults(capabilities);
         let config = Arc::new(self.config);
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        let mut registered_model_fields = Vec::with_capacity(self.plugins.len());
+        for plugin in &self.plugins {
+            plugin.schema(&mut model_fields)?;
+            registered_model_fields.push(model_fields.take_registered_model_field_names()?);
+        }
+        let rate_limit_config = self.rate_limit_config.clone().unwrap_or_default();
+        model_fields.set_schema_configuration(
+            &better_auth_core::store::schema::SchemaConfiguration {
+                config: config.clone(),
+                plugins: self.plugins.iter().map(|plugin| plugin.name()).collect(),
+                metadata: Default::default(),
+                secondary_storage: capabilities.secondary,
+                rate_limit: rate_limit_config.clone(),
+            },
+        );
+        let (initial_adapter_config, _, initial_fields) = model_fields.clone().resolve(&config);
+        let initial_adapter_config = Arc::new(initial_adapter_config);
         let store = self
             .store
-            .or_else(|| self.ephemeral_store.map(|create| create(config.clone())))
+            .or_else(|| {
+                self.ephemeral_store
+                    .map(|create| create(initial_adapter_config.clone(), &initial_fields))
+            })
             .ok_or_else(|| AuthError::config("Auth store not configured"))?;
+        let store = store.with_runtime(initial_adapter_config, Vec::new(), initial_fields)?;
 
         let mut init_context = AuthInitContext::new(config.clone(), store.clone());
         init_context.initialize_request_context().await?;
@@ -227,10 +255,8 @@ impl<S: AuthSchema> AuthBuilder<S> {
         init_context.extensions.insert(telemetry);
 
         // Initialize all plugins.
-        let mut registered_model_fields = Vec::with_capacity(self.plugins.len());
         for plugin in &self.plugins {
             plugin.on_init(&mut init_context).await?;
-            registered_model_fields.push(init_context.take_registered_model_field_names()?);
         }
 
         let config = init_context.config.clone();
@@ -242,11 +268,9 @@ impl<S: AuthSchema> AuthBuilder<S> {
             ));
         let mut context = AuthContext::new(config.clone(), store.clone());
         init_parts.apply_request_runtime(&mut context);
-        let (adapter_config, endpoint_config, mut model_fields) =
-            init_parts.plugin_fields.resolve(&config);
+        let (adapter_config, endpoint_config, mut model_fields) = model_fields.resolve(&config);
         let adapter_fields = adapter_config.user.clone();
         let adapter_config = Arc::new(adapter_config);
-        let rate_limit_config = self.rate_limit_config.unwrap_or_default();
         let schema_configuration = better_auth_core::store::schema::SchemaConfiguration {
             config: adapter_config.clone(),
             plugins: self.plugins.iter().map(|plugin| plugin.name()).collect(),
@@ -254,7 +278,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
             secondary_storage: init_parts.secondary_storage.is_some(),
             rate_limit: rate_limit_config.clone(),
         };
-        model_fields.set_schema_configuration(&schema_configuration);
+        model_fields.set_plugin_metadata(&init_parts.metadata);
         let openapi_fields = model_fields.clone();
         let store = store.with_runtime(
             adapter_config.clone(),
@@ -403,8 +427,11 @@ impl AuthBuilder<better_auth_core::store::StatelessSchema> {
             >,
         >,
     ) -> Self {
-        self.ephemeral_store = Some(Box::new(move |config| {
-            Arc::new(better_auth_core::store::EphemeralStore::new(config).with_hooks(hooks))
+        self.ephemeral_store = Some(Box::new(move |config, fields| {
+            Arc::new(
+                better_auth_core::store::EphemeralStore::from_schema(config, fields)
+                    .with_hooks(hooks),
+            )
         }));
         self
     }

@@ -90,19 +90,19 @@ fn observe_user(row: &UserView) -> AuthResult<JsonValue> {
 fn observe_memory(store: &EphemeralStore, trace: &Trace) -> AuthResult<JsonValue> {
     let state = store.operation(|op| op.capture_state())?;
     let users = state
-        .users
+        .fixture_table("user")
         .snapshot()?
         .iter()
         .map(|row| observe_fields(row.clone()))
         .collect::<AuthResult<Vec<_>>>()?;
     let sessions = state
-        .sessions
+        .fixture_table("session")
         .snapshot()?
         .iter()
         .map(|row| observe_session_fields(row.clone(), trace))
         .collect::<AuthResult<Vec<_>>>()?;
-    assert!(state.accounts.snapshot()?.is_empty());
-    assert!(state.verifications.snapshot()?.is_empty());
+    assert!(state.fixture_table("account").snapshot()?.is_empty());
+    assert!(state.fixture_table("verification").snapshot()?.is_empty());
     Ok(json!({"user":users, "account":[], "session":sessions, "verification":[]}))
 }
 

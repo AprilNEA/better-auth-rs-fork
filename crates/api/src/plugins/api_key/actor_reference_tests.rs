@@ -57,15 +57,13 @@ async fn harness<S: AuthSchema>(
         .enable_metadata(true)
         .default_permissions_callback(Arc::new(Permissions(callbacks.clone())))
         .build();
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields).unwrap();
     plugin.on_init(&mut init).await.unwrap();
     let store = ctx
         .database
-        .with_runtime(
-            ctx.config.clone(),
-            Vec::new(),
-            init.into_parts().plugin_fields,
-        )
+        .with_runtime(ctx.config.clone(), Vec::new(), model_fields)
         .unwrap();
     let store = SecondaryStore::new(
         store,

@@ -448,12 +448,16 @@ better_auth_core::impl_auth_plugin!(AnonymousPlugin, "anonymous";
         post "/delete-anonymous-user" => delete, "deleteAnonymousUser";
     }
     extra {
+        fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+            fields.register_native_user_fields("anonymous.enabled");
+            Ok(())
+        }
+
         async fn on_init(
             &self,
             ctx: &mut better_auth_core::AuthInitContext<S>,
         ) -> AuthResult<()> {
             S::User::require_plugin_fields("anonymous", &["is_anonymous"])?;
-            ctx.register_native_user_fields("anonymous.enabled");
             ctx.set_metadata("anonymous.enabled", serde_json::json!(true));
             Ok(())
         }

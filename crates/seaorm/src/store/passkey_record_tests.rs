@@ -4,9 +4,8 @@ use better_auth_core::store::UserStore;
 use better_auth_core::user_fields::{
     FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform,
 };
-use better_auth_core::{AuthConfig, AuthInitContext, CreateUser, FieldValue};
+use better_auth_core::{AuthConfig, CreateUser, FieldValue};
 use sea_orm::Database;
-use std::sync::Arc;
 
 const NATIVE_FIELDS: [&str; 10] = [
     "name",
@@ -108,8 +107,8 @@ async fn raw_passkey_records_exclude_undeclared_legacy_fields() -> AuthResult<()
 #[tokio::test]
 async fn declared_legacy_fields_follow_raw_and_typed_output_policies() -> AuthResult<()> {
     let (mut store, owner) = store().await?;
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::Passkey,
         UserConfig {
             additional_fields: Some(
@@ -146,7 +145,7 @@ async fn declared_legacy_fields_follow_raw_and_typed_output_policies() -> AuthRe
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let at = Utc::now();
     let created = store
         .create_passkey_record(FieldMap::from([

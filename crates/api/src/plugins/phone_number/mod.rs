@@ -765,6 +765,11 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
         post "/phone-number/reset-password" => reset, "resetPasswordPhoneNumber", body = request::validate;
     }
     extra {
+        fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+            fields.register_native_user_fields("phone-number.enabled");
+            Ok(())
+        }
+
         async fn on_init(
             &self,
             ctx: &mut better_auth_core::AuthInitContext<S>,
@@ -773,7 +778,6 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
                 "phone-number",
                 &["phone_number", "phone_number_verified"],
             )?;
-            ctx.register_native_user_fields("phone-number.enabled");
             ctx.set_metadata("phone-number.enabled", json!(true));
             ctx.extensions.insert(self.clone());
             Ok(())

@@ -129,6 +129,10 @@ pub(crate) mod test_helpers {
         database: Arc<dyn AuthStore<S>>,
         plugins: &[&dyn AuthPlugin<S>],
     ) -> AuthResult<AuthContext<S>> {
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        for plugin in plugins {
+            plugin.schema(&mut model_fields)?;
+        }
         let mut init = AuthInitContext::new(config, database.clone());
         init.initialize_request_context().await?;
         for plugin in plugins {
@@ -136,7 +140,7 @@ pub(crate) mod test_helpers {
         }
         let config = init.config.clone();
         let mut parts = init.into_parts();
-        let (adapter, endpoint, mut fields) = parts.plugin_fields.clone().resolve(&config);
+        let (adapter, endpoint, mut fields) = model_fields.resolve(&config);
         let adapter_fields = adapter.user.clone();
         let adapter = Arc::new(adapter);
         fields.set_schema_configuration(&SchemaConfiguration {

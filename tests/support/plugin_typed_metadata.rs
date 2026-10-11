@@ -6,9 +6,8 @@
 use async_trait::async_trait;
 use better_auth::{AuthConfig, BetterAuth};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, AuthStore, FieldDate, FieldMap, FieldValue,
-    FromFieldMap,
+    AuthContext, AuthError, AuthPlugin, AuthRecordFields, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, AuthStore, FieldDate, FieldMap, FieldValue, FromFieldMap,
     store::{EphemeralStore, schema::EntityRole},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -82,7 +81,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(self.0, self.1.clone())
     }
     async fn on_request(

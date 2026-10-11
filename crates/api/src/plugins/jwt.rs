@@ -162,12 +162,16 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
             AuthRoute::get("/token", "getJSONWebToken").require_headers(true),
         ]
     }
-    async fn on_init(&self, ctx: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
         let role = better_auth_core::store::schema::EntityRole::Jwk;
-        ctx.register_model_fields(
+        fields.register_model_fields(
             role,
             better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
         )?;
+        Ok(())
+    }
+
+    async fn on_init(&self, ctx: &mut AuthInitContext<S>) -> AuthResult<()> {
         ctx.extensions.insert(self.config.clone());
         if self.config.custom_sign.is_some() && self.config.remote_url.is_none() {
             return Err(AuthError::config("custom_sign requires remote_url"));

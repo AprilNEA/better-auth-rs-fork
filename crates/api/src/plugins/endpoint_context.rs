@@ -164,6 +164,9 @@ impl<S: AuthSchema, P: AuthPlugin<S>, C: Send + Sync + 'static> AuthPlugin<S>
     fn telemetry_plugin_id(&self) -> Option<&'static str> {
         self.plugin.telemetry_plugin_id()
     }
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        self.plugin.schema(fields)
+    }
     fn routes(&self) -> Vec<AuthRoute> {
         self.plugin.routes()
     }

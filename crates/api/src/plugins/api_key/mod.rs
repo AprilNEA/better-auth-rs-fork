@@ -843,7 +843,25 @@ better_auth_core::impl_auth_plugin! {
         get  "/api-key/list"                      => handle_list,               "listApiKeys", query = crate::plugins::query_input::api_key_list;
     }
     extra {
-        async fn on_init(&self, ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
+        fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+            let mut declaration = better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(
+                better_auth_core::store::schema::EntityRole::ApiKey,
+            );
+            if let [config] = self.configurations.as_slice() {
+                for (name, value) in [
+                    ("rateLimitMax", config.rate_limit.max_requests),
+                    ("rateLimitTimeWindow", config.rate_limit.time_window),
+                ] {
+                    if let Some(field) = declaration.fields_mut().get_mut(name) {
+                        field.default_value = Some(value.into());
+                    }
+                }
+            }
+            fields.register_model_fields(better_auth_core::store::schema::EntityRole::ApiKey, declaration)?;
+            Ok(())
+        }
+
+        async fn on_init(&self, _ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
             if self.configurations.len() > 1 {
                 let mut ids = std::collections::HashSet::new();
                 for config in &self.configurations {
@@ -855,20 +873,6 @@ better_auth_core::impl_auth_plugin! {
                     }
                 }
             }
-            let mut fields = better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(
-                better_auth_core::store::schema::EntityRole::ApiKey,
-            );
-            if let [config] = self.configurations.as_slice() {
-                for (name, value) in [
-                    ("rateLimitMax", config.rate_limit.max_requests),
-                    ("rateLimitTimeWindow", config.rate_limit.time_window),
-                ] {
-                    if let Some(field) = fields.fields_mut().get_mut(name) {
-                        field.default_value = Some(value.into());
-                    }
-                }
-            }
-            ctx.register_model_fields(better_auth_core::store::schema::EntityRole::ApiKey, fields)?;
             Ok(())
         }
 

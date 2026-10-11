@@ -132,10 +132,10 @@ async fn native_user_team_joins_group_duplicate_parent_ids_before_projection() -
         store.operation(|op| {
             let state = op.capture_state()?;
             for row in &members {
-                state.team_members.push(row.clone())?;
+                state.fixture_table("teamMember").push(row.clone())?;
             }
             for row in &teams {
-                state.teams.push(row.clone())?;
+                state.fixture_table("team").push(row.clone())?;
             }
             Ok(())
         })?;
@@ -254,9 +254,9 @@ async fn team_details_null_query_matches_missing_id_without_coercing_native_join
                 });
                 store.operation(|op| {
                     let state = op.capture_state()?;
-                    state.teams.push(parent.clone())?;
+                    state.fixture_table("team").push(parent.clone())?;
                     for child in &children {
-                        state.team_members.push(child.clone())?;
+                        state.fixture_table("teamMember").push(child.clone())?;
                     }
                     Ok(())
                 })?;

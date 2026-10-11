@@ -55,7 +55,7 @@ fn joined(many: bool, rows: &[FieldMap]) -> FieldValue {
             .collect::<Vec<_>>()
             .into()
     } else {
-        rows.first()?
+        rows.first()
             .cloned()
             .map_or(FieldValue::Null, FieldValue::from)
     }
@@ -335,6 +335,10 @@ async fn check(
     let _ = child_fields.insert(value_field.into(), child_policy);
     let mut models = crate::plugin_runtime::ModelFields::default();
     models.set_model_name(child_role, Some(&physical))?;
+    writer.operation(|op| {
+        let table = op.capture_table(child_role)?;
+        op.replace_physical_table(physical.clone(), Some(table))
+    })?;
     let reader = writer.with_runtime(Arc::new(config), Vec::new(), models)?;
     let result = async {
         if many {

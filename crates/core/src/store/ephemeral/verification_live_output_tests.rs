@@ -204,7 +204,10 @@ async fn verification_output_reads_live_fields_after_awaited_writer_updates() ->
             assert_eq!(
                 serde_json::to_value(
                     writer
-                        .operation(|op| op.capture_state()?.verifications.snapshot())?
+                        .operation(|op| op
+                            .capture_state()?
+                            .fixture_table("verification")
+                            .snapshot())?
                         .iter()
                         .map(FieldMap::json)
                         .collect::<AuthResult<Vec<_>>>()?
@@ -257,7 +260,7 @@ async fn verification_consumed_output_retains_the_detached_record_when_its_id_is
     assert_eq!(
         serde_json::to_value(
             writer
-                .operation(|op| op.capture_state()?.verifications.snapshot())?
+                .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?
                 .iter()
                 .map(FieldMap::json)
                 .collect::<AuthResult<Vec<_>>>()?
@@ -312,7 +315,7 @@ async fn verification_reservation_rethrows_the_original_output_error_after_reent
     );
     assert!(
         writer
-            .operation(|op| op.capture_state()?.verifications.snapshot())?
+            .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?
             .is_empty()
     );
     Ok(())
@@ -397,7 +400,8 @@ async fn verification_consumption_binds_projected_ids_without_raw_identity_fallb
                 let _ = writer.create_verification(input).await?;
             }
             assert_eq!(
-                writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+                writer
+                    .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?,
                 physical
             );
             let events = Events::default();
@@ -428,7 +432,8 @@ async fn verification_consumption_binds_projected_ids_without_raw_identity_fallb
                 &physical[..]
             };
             assert_eq!(
-                writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+                writer
+                    .operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?,
                 remaining
             );
         }
@@ -564,7 +569,7 @@ async fn verification_consumption_uses_the_id_projected_before_delete_hooks() ->
         }
         assert_eq!(observed(&events)?, trace);
         assert_eq!(
-            writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+            writer.operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?,
             [subject.fields()?, retained.fields()?],
             "The consume transaction must keep its writes isolated"
         );
@@ -582,7 +587,7 @@ async fn verification_consumption_uses_the_id_projected_before_delete_hooks() ->
             remaining.push(moved);
         }
         assert_eq!(
-            writer.operation(|op| op.capture_state()?.verifications.snapshot())?,
+            writer.operation(|op| op.capture_state()?.fixture_table("verification").snapshot())?,
             remaining
         );
     }

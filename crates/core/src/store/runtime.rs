@@ -36,6 +36,8 @@ pub trait RuntimeStore<S: AuthSchema>: Send + Sync {
     /// Bind the final configuration and prepend plugin hooks without changing the original store.
     /// Share stored records, but isolate configuration and hook lists for each auth build.
     /// Consume registered model fields in the returned adapter and forward them through wrappers.
+    /// Preserve the supplied field runtime's operation history across initialization phases.
+    /// Use `ModelFields::fresh_runtime` when a caller starts a separate adapter runtime from existing fields.
     fn with_runtime(
         &self,
         config: Arc<AuthConfig>,

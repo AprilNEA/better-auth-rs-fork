@@ -1,13 +1,7 @@
 use super::*;
 
-pub(super) fn generate(
-    input: &DeriveInput,
-    fields: &syn::FieldsNamed,
-    options: &EntityOptions,
-    (seaorm_root, core_root): (&TokenStream, &TokenStream),
-) -> syn::Result<TokenStream> {
-    let role = options.role;
-    let record = match role {
+pub(super) fn record_name(role: EntityRole) -> Option<&'static str> {
+    Some(match role {
         EntityRole::ApiKey => "ApiKey",
         EntityRole::DeviceCode => "DeviceCode",
         EntityRole::Passkey => "Passkey",
@@ -15,13 +9,19 @@ pub(super) fn generate(
         EntityRole::Jwk => "Jwk",
         EntityRole::WalletAddress => "WalletAddress",
         EntityRole::RateLimit => "RateLimitRecord",
-        _ => {
-            return Err(syn::Error::new_spanned(
-                input,
-                "expected a plugin entity role",
-            ));
-        }
-    };
+        _ => return None,
+    })
+}
+
+pub(super) fn generate(
+    input: &DeriveInput,
+    fields: &syn::FieldsNamed,
+    options: &EntityOptions,
+    (seaorm_root, core_root): (&TokenStream, &TokenStream),
+) -> syn::Result<TokenStream> {
+    let role = options.role;
+    let record = record_name(role)
+        .ok_or_else(|| syn::Error::new_spanned(input, "expected a plugin entity role"))?;
     let record = format_ident!("{record}");
     let record = if role == EntityRole::RateLimit {
         quote!(#core_root::store::#record)
@@ -41,17 +41,7 @@ pub(super) fn generate(
     let mut values = Vec::new();
     let mut references = Vec::new();
     let mut assignments = Vec::new();
-    let mut output = Vec::new();
     let mut raw_output = Vec::new();
-    let dynamic_record = matches!(
-        role,
-        EntityRole::ApiKey
-            | EntityRole::Passkey
-            | EntityRole::DeviceCode
-            | EntityRole::TwoFactor
-            | EntityRole::Jwk
-            | EntityRole::WalletAddress
-    );
     for field in &fields.named {
         let Some(ident) = &field.ident else { continue };
         let name = ident.to_string();
@@ -99,32 +89,6 @@ pub(super) fn generate(
             stored_value
         };
         raw_output.push(quote!((#logical.to_owned(), #logical_value),));
-        if dynamic_record {
-            continue;
-        }
-        let value = if name == "id" {
-            quote!(#core_root::SchemaValue::Typed(self.#ident.to_string()))
-        } else if reference {
-            if identity::optional_inner(&field.ty).is_some() {
-                quote!(self.#ident.as_ref().map(ToString::to_string))
-            } else {
-                quote!(self.#ident.to_string())
-            }
-        } else if role == EntityRole::RateLimit && name == "count" {
-            quote!(f64::from(self.#ident.to_owned()))
-        } else if matches!(
-            name.as_str(),
-            "expires_at" | "last_polled_at" | "locked_until" | "created_at" | "updated_at"
-        ) {
-            if identity::optional_inner(&field.ty).is_some() {
-                quote!(self.#ident.map(Into::into))
-            } else {
-                quote!(self.#ident.into())
-            }
-        } else {
-            quote!(self.#ident.to_owned())
-        };
-        output.push(quote!(#ident: #value,));
     }
     let passkey_storage = options.native_passkey.then(|| {
         quote! {
@@ -152,16 +116,7 @@ pub(super) fn generate(
         }
     });
     let ident = &input.ident;
-    let logical = if dynamic_record {
-        quote!(#core_root::FieldMap::from_iter([#(#raw_output)*]))
-    } else {
-        quote!(Default::default())
-    };
-    let record_body = if dynamic_record {
-        quote!(<#record as #core_root::FromFieldMap>::from_field_values(#core_root::FieldMap::from_iter([#(#raw_output)*])))
-    } else {
-        quote!(Ok(#record { #(#output)* }))
-    };
+    let logical = quote!(#core_root::FieldMap::from_iter([#(#raw_output)*]));
     Ok(quote! {
         impl #seaorm_root::SeaOrmPluginModel for #ident {
             type Record = #record;
@@ -192,7 +147,7 @@ pub(super) fn generate(
                 Ok(#core_root::user_fields::AdapterRecord::new(#logical, storage))
             }
             fn record(&self) -> #core_root::AuthResult<Self::Record> {
-                #record_body
+                <#record as #core_root::FromFieldMap>::from_field_values(#logical)
             }
             fn is_id_reference(column: &Column) -> bool {
                 match column { #(#references)* }

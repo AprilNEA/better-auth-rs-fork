@@ -140,9 +140,10 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
             );
         }
         let state = store.operation(|op| op.capture_state())?;
-        let claimed = required(state.invitations.get(
-            &crate::SchemaValue::<String>::from_field(Value::Number(1.0)),
-        )?)?;
+        let claimed =
+            required(state.fixture_table("invitation").get(
+                &crate::SchemaValue::<String>::from_field(Value::Number(1.0)),
+            )?)?;
         assert_eq!(
             required(claimed.get("organizationId"))?.clone(),
             Value::Number(1.0)
@@ -153,11 +154,11 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
             required(claimed.get("status"))? == &Value::from("pending"),
             maximum == 0
         );
-        assert_eq!(state.members.len()?, maximum);
-        assert_eq!(state.team_members.len()?, maximum);
+        assert_eq!(state.fixture_table("member").len()?, maximum);
+        assert_eq!(state.fixture_table("teamMember").len()?, maximum);
         let persisted = required(
             state
-                .sessions
+                .fixture_table("session")
                 .snapshot()?
                 .into_iter()
                 .find(|row| row.get("token") == Some(&session.token.field_value())),
@@ -260,12 +261,12 @@ async fn serial_team_membership_binds_owner_queries_and_isolates_removal() -> Au
         assert_eq!(store.list_team_members("001").await?, vec![invalid]);
         let state = store.operation(|op| op.capture_state())?;
         assert!(matches!(
-            required(required(state.team_members.snapshot()?.iter().find(|row| {
+            required(required(state.fixture_table("teamMember").snapshot()?.iter().find(|row| {
                 row.get("teamId").is_some_and(|id| id.strict_equals(&Value::Number(1.0)))
             }))?.get("userId"))?,
             Value::Number(value) if value.is_nan()
         ));
-        for team in state.teams.snapshot()? {
+        for team in state.fixture_table("team").snapshot()? {
             assert_eq!(team.get("memberCount"), Some(&Value::Number(1.0)));
         }
     }
@@ -394,15 +395,16 @@ async fn serial_invitation_rejects_same_owner_added_during_output_callback() -> 
     assert_eq!(store.list_team_members("001").await?, vec![concurrent]);
     assert!(required(store.get_invitation_by_id("001").await?)?.is_pending());
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.members.len()?, 0);
-    assert_eq!(state.team_members.len()?, 1);
-    assert_eq!(state.sessions.len()?, 0);
+    assert_eq!(state.fixture_table("member").len()?, 0);
+    assert_eq!(state.fixture_table("teamMember").len()?, 1);
+    assert_eq!(state.fixture_table("session").len()?, 0);
     assert_eq!(
-        required(required(state.team_members.snapshot()?.first())?.get("userId"))?.clone(),
+        required(required(state.fixture_table("teamMember").snapshot()?.first())?.get("userId"))?
+            .clone(),
         Value::Number(1.0)
     );
     assert_eq!(
-        required(state.teams.snapshot()?.first())?.get("memberCount"),
+        required(state.fixture_table("team").snapshot()?.first())?.get("memberCount"),
         Some(&Value::Number(1.0))
     );
     Ok(())

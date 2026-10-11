@@ -148,7 +148,7 @@ pub fn session_field_schema(
     ]
     .into();
     for name in ["impersonatedBy", "activeOrganizationId", "activeTeamId"] {
-        if input.contains_key(name) {
+        if input.contains_key(name) && !config.fields().contains_key(name) {
             let _ = fields.insert(name.into(), field(UserFieldType::String, false));
         }
     }
@@ -172,6 +172,182 @@ pub fn session_from_create_fields(fields: FieldMap) -> AuthResult<SessionView> {
 mod tests {
     use super::*;
     use crate::{FieldDate, FieldValue, user_fields::UserFieldConfig};
+
+    #[tokio::test]
+    async fn declared_session_plugin_fields_keep_slots_and_complete_policies() -> AuthResult<()> {
+        use crate::user_fields::{FieldTransforms, UserFieldTransform, UserFieldType};
+        use std::sync::{Arc, Mutex};
+
+        for name in ["impersonatedBy", "activeOrganizationId", "activeTeamId"] {
+            for marker_first in [true, false] {
+                for create in [true, false] {
+                    for fail in [false, true] {
+                        let events = Arc::new(Mutex::new(Vec::new()));
+                        let policy = |label: &'static str, field_type| {
+                            let events = events.clone();
+                            UserFieldConfig {
+                                field_type,
+                                required: Some(true),
+                                input: Some(true),
+                                field_name: Some(format!("stored_{label}")),
+                                transform: Some(FieldTransforms {
+                                    input: Some(UserFieldTransform::new(move |value| {
+                                        events.lock().unwrap().push(label);
+                                        if fail && label == "marker" {
+                                            return Err(crate::AuthError::internal(
+                                                "marker input failed",
+                                            ));
+                                        }
+                                        Ok(value)
+                                    })),
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            }
+                        };
+                        let declarations = if marker_first {
+                            [
+                                ("marker", UserFieldType::String),
+                                (name, UserFieldType::Boolean),
+                            ]
+                        } else {
+                            [
+                                (name, UserFieldType::Boolean),
+                                ("marker", UserFieldType::String),
+                            ]
+                        };
+                        let config = crate::config::SessionConfig {
+                            additional_fields: Some(
+                                declarations
+                                    .iter()
+                                    .map(|(name, kind)| {
+                                        ((*name).into(), policy(name, kind.clone()))
+                                    })
+                                    .collect(),
+                            ),
+                            ..Default::default()
+                        };
+                        let input: FieldMap = [
+                            ("expiresAt".into(), FieldDate::from_milliseconds(0.0).into()),
+                            ("token".into(), "session-token".into()),
+                            ("createdAt".into(), FieldDate::from_milliseconds(0.0).into()),
+                            ("updatedAt".into(), FieldDate::from_milliseconds(0.0).into()),
+                            ("ipAddress".into(), FieldValue::Null),
+                            ("userAgent".into(), FieldValue::Null),
+                            ("userId".into(), "owner-id".into()),
+                            ("marker".into(), "marker-value".into()),
+                            (name.into(), true.into()),
+                        ]
+                        .into();
+                        let schema = session_field_schema(&config, &input);
+                        let declared = &schema.fields()[name];
+                        assert!(matches!(declared.field_type, UserFieldType::Boolean));
+                        assert_eq!(declared.required, Some(true));
+                        assert_eq!(declared.input, Some(true));
+                        assert_eq!(declared.field_name, Some(format!("stored_{name}")));
+                        let mut order = vec![
+                            "expiresAt",
+                            "token",
+                            "createdAt",
+                            "updatedAt",
+                            "ipAddress",
+                            "userAgent",
+                            "userId",
+                        ];
+                        order.extend(declarations.iter().map(|(name, _)| *name));
+                        assert_eq!(
+                            schema
+                                .fields()
+                                .keys()
+                                .map(String::as_str)
+                                .collect::<Vec<_>>(),
+                            order
+                        );
+                        let result = schema
+                            .storage_fields_with_bound_id(
+                                input.clone(),
+                                create,
+                                || Ok(None),
+                                |_, _, value| Ok(value),
+                            )
+                            .await;
+                        if fail {
+                            assert!(
+                                matches!(result, Err(crate::AuthError::Internal(message)) if message == "marker input failed")
+                            );
+                        } else {
+                            let stored = result?;
+                            let expected: FieldMap = order
+                                .iter()
+                                .map(|key| {
+                                    let storage = if *key == "marker" || *key == name {
+                                        format!("stored_{key}")
+                                    } else {
+                                        (*key).to_owned()
+                                    };
+                                    (storage, input[*key].clone())
+                                })
+                                .collect();
+                            assert_eq!(stored, expected);
+                            assert_eq!(
+                                stored.keys().collect::<Vec<_>>(),
+                                expected.keys().collect::<Vec<_>>()
+                            );
+                        }
+                        let expected = if marker_first && fail {
+                            vec!["marker"]
+                        } else {
+                            declarations.iter().map(|(name, _)| *name).collect()
+                        };
+                        assert_eq!(*events.lock().unwrap(), expected);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn input_only_session_plugin_fields_keep_legacy_slots() {
+        use crate::user_fields::UserFieldType;
+        let config = crate::config::SessionConfig {
+            additional_fields: Some([("marker".into(), UserFieldConfig::default())].into()),
+            ..Default::default()
+        };
+        let input = [
+            ("activeTeamId".into(), "team".into()),
+            ("impersonatedBy".into(), "admin".into()),
+            ("activeOrganizationId".into(), "organization".into()),
+        ]
+        .into();
+        let schema = session_field_schema(&config, &input);
+        assert_eq!(
+            schema
+                .fields()
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy",
+                "activeOrganizationId",
+                "activeTeamId",
+                "marker",
+            ]
+        );
+        for name in ["impersonatedBy", "activeOrganizationId", "activeTeamId"] {
+            let field = &schema.fields()[name];
+            assert!(matches!(field.field_type, UserFieldType::String));
+            assert_eq!(field.required, Some(false));
+            assert_eq!(field.field_name, None);
+        }
+    }
 
     #[test]
     fn session_hooks_observe_numeric_properties_before_stable_string_properties() -> AuthResult<()>

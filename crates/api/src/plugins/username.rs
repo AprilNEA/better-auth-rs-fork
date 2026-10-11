@@ -95,6 +95,11 @@ impl<S: AuthSchema> AuthPlugin<S> for UsernamePlugin {
                 .body_validator(request::availability_body),
         ]
     }
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        fields.register_user_fields(self.fields());
+        Ok(())
+    }
+
     async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
         let required = if self.config.display_username {
             &["username", "display_username"][..]
@@ -108,7 +113,6 @@ impl<S: AuthSchema> AuthPlugin<S> for UsernamePlugin {
             Value::Bool(self.config.display_username),
         );
         context.extensions.insert(self.config.clone());
-        context.register_user_fields(self.fields());
         context.register_database_hook(Arc::new(hooks::UsernameHooks {
             config: self.config.clone(),
             runtime: context.runtime(),

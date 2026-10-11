@@ -27,6 +27,13 @@ struct ArrayValues {
     entries: BTreeMap<usize, FieldValue>,
 }
 
+fn publish_array(target: &OnceLock<ArrayValues>, values: ArrayValues) {
+    assert!(
+        target.set(values).is_ok(),
+        "A clone array is published exactly once"
+    );
+}
+
 pub(crate) trait FieldArraySource: Send + Sync {
     fn len(&self) -> AuthResult<usize>;
     fn own_indices(&self) -> AuthResult<Vec<usize>>;
@@ -230,10 +237,7 @@ impl FieldArray {
                     entries: entries.into_iter().collect(),
                 };
                 Ok(Box::new(move || {
-                    assert!(
-                        target.set(values).is_ok(),
-                        "A clone array is published exactly once"
-                    );
+                    publish_array(&target, values);
                 }))
             }),
         })

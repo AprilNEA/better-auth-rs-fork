@@ -161,7 +161,7 @@ mod tests {
             assert_eq!(
                 store
                     .operation(|op| op.capture_state())?
-                    .teams
+                    .fixture_table("team")
                     .get(&selected.id)?
                     .unwrap()["memberCount"],
                 Value::Number(1.0)

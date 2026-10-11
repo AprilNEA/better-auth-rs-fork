@@ -1,7 +1,7 @@
 use super::{Trace, record, take_trace};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthRecordFields, AuthResult, AuthStore,
-    DeviceCodeOwnership, DeviceCodeWhere, FieldMap, FieldValue,
+    AuthConfig, AuthError, AuthRecordFields, AuthResult, AuthStore, DeviceCodeOwnership,
+    DeviceCodeWhere, FieldMap, FieldValue,
     id::IdGeneration,
     organization_fields::OrganizationFields,
     store::{
@@ -45,9 +45,9 @@ fn runtime(
         config.clone(),
         database.clone(),
     ));
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
-    init.register_model_fields(role, fields)?;
-    raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(role, fields)?;
+    raw.with_runtime(config, Vec::new(), model_fields)
 }
 
 fn callbacks(trace: &Trace, input: &'static str, output: &'static str) -> FieldTransforms {

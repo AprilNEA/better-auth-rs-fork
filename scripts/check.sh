@@ -258,6 +258,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-team-delete-context.test.ts \
         ./compat-tests/reference-server/contracts/organization-physical-fields.test.ts \
         ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
+        ./compat-tests/reference-server/contracts/plugin-model-fields.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-input.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-output.test.ts \
         ./compat-tests/reference-server/contracts/memory-user-live-reads.test.ts \
@@ -269,7 +270,7 @@ run_stage() {
         --test nullable_user_update_tests --test telemetry_options_tests -- -D warnings || query_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
         store::ephemeral:: user_query:: store::joins:: request_runtime:: store::secondary:: field_value:: query:: \
-        user_fields::record:: session::cookie_cache:: || query_status=1
+        user_fields::record:: store::session_create:: session::cookie_cache:: || query_status=1
       cargo test --locked -p better-auth-api --lib plugins::api_key::verification::validator_error_tests || query_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test device_runtime_transaction_tests --test device_where_tests \

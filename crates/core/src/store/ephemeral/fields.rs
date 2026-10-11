@@ -328,15 +328,6 @@ impl EphemeralStore {
         create: bool,
     ) -> AuthResult<FieldMap> {
         let schema = self.field_config(role)?;
-        let model = match role {
-            EntityRole::Organization => "organization",
-            EntityRole::Member => "member",
-            EntityRole::Invitation => "invitation",
-            EntityRole::Team => "team",
-            EntityRole::TeamMember => "teamMember",
-            EntityRole::OrganizationRole => "organizationRole",
-            _ => return Err(AuthError::config("Expected an organization entity role")),
-        };
         let supplied = core.get("id").or_else(|| extras.get("id")).cloned();
         self.model_fields.begin_id_input(
             role,
@@ -356,7 +347,7 @@ impl EphemeralStore {
                     };
                     let generation = self.config.advanced.database.generate_id();
                     if create {
-                        generation.adapter_create_id_input(model, supplied.clone(), policy)
+                        self.memory_create_id_input(role, supplied.clone(), policy)
                     } else {
                         supplied
                             .clone()
@@ -365,7 +356,7 @@ impl EphemeralStore {
                             .map(Option::flatten)
                     }
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| self.memory_record_input(role, name, field, value, create),
             )
             .await
     }
@@ -649,7 +640,7 @@ async fn builtin_policies_transform_typed_records_once_and_preserve_adapter_id()
         store
             .operation(|op| op.capture_state())
             .unwrap()
-            .organizations
+            .fixture_table("organization")
             .get(&organization.id)
             .unwrap()
             .unwrap()["name"],
@@ -817,11 +808,19 @@ async fn invalid_builtin_transform_cannot_partially_update_a_memory_record() {
     );
     let state = store.operation(|op| op.capture_state()).unwrap();
     assert_eq!(
-        state.organizations.get(&organization.id).unwrap().unwrap()["name"],
+        state
+            .fixture_table("organization")
+            .get(&organization.id)
+            .unwrap()
+            .unwrap()["name"],
         Value::from("original")
     );
     assert_eq!(
-        state.organizations.get(&organization.id).unwrap().unwrap()["slug"],
+        state
+            .fixture_table("organization")
+            .get(&organization.id)
+            .unwrap()
+            .unwrap()["slug"],
         Value::from("original")
     );
 }
@@ -885,7 +884,7 @@ async fn memory_core_fields_keep_dynamic_values_and_output_omission() {
         store
             .operation(|op| op.capture_state())
             .unwrap()
-            .organizations
+            .fixture_table("organization")
             .get(&organization.id)
             .unwrap()
             .unwrap()["name"]

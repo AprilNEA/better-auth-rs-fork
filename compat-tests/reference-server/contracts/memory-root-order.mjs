@@ -84,7 +84,8 @@ test("Memory root clone snapshots keys once but reads later table bindings live"
     if (read === 1) memory[2] = late;
     return `copied user ${read}`;
   };
-  Object.defineProperty(owner, "name", { get: getter, enumerable: true, configurable: true });
+  const probe = Object.defineProperty({}, "value", { get: getter, enumerable: true, configurable: true });
+  owner.name = probe;
   const capturedUsers = memory.user;
   const adapter = await adapterFor(memory);
   const result = await adapter.transaction(async current => {
@@ -94,10 +95,10 @@ test("Memory root clone snapshots keys once but reads later table bindings live"
     return { selected, updated };
   });
   expect(events).toStrictEqual(["clone:user:1", "clone:late:1", "clone:user:2", "transaction:enter"]);
-  assert.deepStrictEqual(result, { selected: user("copied user 2"), updated: key("target", 19) });
+  assert.deepStrictEqual(result, { selected: user({ value: "copied user 2" }), updated: key("target", 19) });
   assert.deepStrictEqual(memory, {
     2: [{ id: "late", probe: { value: "copied late" } }],
-    user: [user("copied user 2")], apikey: [key("target", 19)],
+    user: [user({ value: "copied user 2" })], apikey: [key("target", 19)],
   });
   expect(Object.keys(memory)).toStrictEqual(["2", "user", "apikey"]);
   assert.deepStrictEqual(original, [key("target", 5)]);
@@ -106,7 +107,8 @@ test("Memory root clone snapshots keys once but reads later table bindings live"
   expect(memory.apikey).not.toBe(replacements[1]);
   expect(memory[2]).not.toBe(late);
   expect(capturedUsers[0]).toBe(owner);
-  expect(Object.getOwnPropertyDescriptor(owner, "name")).toStrictEqual({
+  expect(owner.name).toBe(probe);
+  expect(Object.getOwnPropertyDescriptor(probe, "value")).toStrictEqual({
     get: getter, set: undefined, enumerable: true, configurable: true,
   });
   expect(userReads).toBe(2);
@@ -146,4 +148,48 @@ test("Memory root commit publishes an earlier API Key table before a later User 
   expect(owner.name).toBe(owner);
   expect(callbackResult).not.toBe(memory.apikey[0]);
   expect(callbackResult.createdAt).toBe(memory.apikey[0].createdAt);
+});
+
+test("Memory root commit deletes a working-absent key after a concurrent live rebind", async () => {
+  const events = [];
+  const owner = user();
+  const capturedUsers = [owner];
+  const target = key("target", 5);
+  const capturedKeys = [target];
+  const concurrent = key("concurrent", 9);
+  const concurrentKeys = [concurrent];
+  const memory = { user: capturedUsers, apikey: capturedKeys };
+  let reads = 0;
+  const getter = () => {
+    events.push(`clone:user:${++reads}`);
+    if (reads === 2) delete memory.apikey;
+    return `copied user ${reads}`;
+  };
+  const probe = Object.defineProperty({}, "value", { get: getter, enumerable: true });
+  owner.name = probe;
+  const adapter = await adapterFor(memory);
+  const result = await adapter.transaction(async current => {
+    events.push("transaction:enter");
+    const selected = await current.findOne({ model: "user", where: where("owner") });
+    memory.apikey = concurrentKeys;
+    events.push("live:rebind");
+    return selected;
+  });
+  expect(events).toStrictEqual(["clone:user:1", "clone:user:2", "transaction:enter", "live:rebind"]);
+  assert.deepStrictEqual(result, user({ value: "copied user 2" }));
+  assert.deepStrictEqual(memory, { user: [user({ value: "copied user 2" })] });
+  expect(Object.keys(memory)).toStrictEqual(["user"]);
+  assert.deepStrictEqual(capturedKeys, [key("target", 5)]);
+  assert.deepStrictEqual(concurrentKeys, [key("concurrent", 9)]);
+  expect(capturedKeys[0]).toBe(target);
+  expect(concurrentKeys[0]).toBe(concurrent);
+  expect(memory.user).not.toBe(capturedUsers);
+  expect(memory.user[0]).not.toBe(owner);
+  expect(owner.name).toBe(probe);
+  expect(result.name).toBe(memory.user[0].name);
+  expect(result.name).not.toBe(probe);
+  expect(Object.getOwnPropertyDescriptor(probe, "value")).toStrictEqual({
+    get: getter, set: undefined, enumerable: true, configurable: false,
+  });
+  expect(reads).toBe(2);
 });

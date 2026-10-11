@@ -93,12 +93,15 @@ impl ModelFields {
         Ok(())
     }
 
-    pub(crate) fn register_custom_model(
+    /// Declare a custom logical model and merge complete field declarations in insertion order.
+    /// Repeated declarations replace the physical name without moving the model.
+    pub fn register_custom_model(
         &mut self,
-        name: String,
+        name: impl Into<String>,
         model_name: Option<&str>,
         fields: UserConfig,
     ) -> AuthResult<()> {
+        let name = name.into();
         if NATIVE_MODELS.iter().any(|(_, native)| *native == name) {
             return Err(AuthError::config(format!(
                 "Model \"{name}\" is reserved for a native model and cannot be declared as a custom model"
@@ -167,11 +170,17 @@ impl ModelFields {
             })
     }
 
-    pub(crate) fn resolve_model_name(
-        &self,
-        candidate: &str,
-        table_matches: &impl Fn(EntityRole, &str) -> bool,
-    ) -> AuthResult<&str> {
+    pub(crate) fn all_native_model_names() -> Vec<&'static str> {
+        NATIVE_MODELS.iter().map(|(_, name)| *name).collect()
+    }
+
+    /// Enumerate logical model keys in upstream object order, including custom models.
+    #[doc(hidden)]
+    pub fn logical_model_names(&self) -> Vec<&str> {
+        self.ordered_models().into_keys().collect()
+    }
+
+    fn ordered_models(&self) -> indexmap::IndexMap<&str, (Option<EntityRole>, Option<&str>)> {
         let active = self.active_models();
         let mut models = indexmap::IndexMap::new();
         for (role, name) in active.iter().filter(|(role, _)| is_core(*role)) {
@@ -199,6 +208,15 @@ impl ModelFields {
         models.sort_by_cached_key(|name, _| {
             crate::utils::json::array_index(name).map_or((true, 0), |index| (false, index))
         });
+        models
+    }
+
+    pub(crate) fn resolve_model_name(
+        &self,
+        candidate: &str,
+        table_matches: &impl Fn(EntityRole, &str) -> bool,
+    ) -> AuthResult<&str> {
+        let models = self.ordered_models();
         // Every logical name precedes physical aliases, including aliases of native models.
         models
             .get_key_value(candidate)
@@ -230,7 +248,7 @@ mod tests {
                 Some(vec![(EntityRole::User, "user"), (EntityRole::Team, "team")]);
             if custom_first {
                 schema
-                    .register_custom_model("badge".into(), Some("shared"), UserConfig::default())
+                    .register_custom_model("badge", Some("shared"), UserConfig::default())
                     .unwrap();
             }
             schema
@@ -238,7 +256,7 @@ mod tests {
                 .unwrap();
             if !custom_first {
                 schema
-                    .register_custom_model("badge".into(), Some("shared"), UserConfig::default())
+                    .register_custom_model("badge", Some("shared"), UserConfig::default())
                     .unwrap();
             }
             let schema = schema.fresh_runtime();
@@ -275,7 +293,7 @@ mod tests {
 
             let mut replaced = schema.clone();
             replaced
-                .register_custom_model("badge".into(), None, UserConfig::default())
+                .register_custom_model("badge", None, UserConfig::default())
                 .unwrap();
             assert_eq!(
                 replaced
@@ -284,7 +302,7 @@ mod tests {
                 "team"
             );
             replaced
-                .register_custom_model("badge".into(), Some("shared"), UserConfig::default())
+                .register_custom_model("badge", Some("shared"), UserConfig::default())
                 .unwrap();
             assert_eq!(
                 replaced
@@ -316,7 +334,7 @@ mod tests {
             );
 
             replaced
-                .register_custom_model("0".into(), Some("shared"), UserConfig::default())
+                .register_custom_model("0", Some("shared"), UserConfig::default())
                 .unwrap();
             assert_eq!(
                 replaced.resolve_model_name("shared", &|_, _| true).unwrap(),
@@ -346,20 +364,16 @@ mod tests {
         };
         schema
             .register_custom_model(
-                "badge".into(),
+                "badge",
                 Some("old_badges"),
                 fields(&["label", "rank"], false),
             )
             .unwrap();
         schema
-            .register_custom_model("other".into(), Some("shared"), UserConfig::default())
+            .register_custom_model("other", Some("shared"), UserConfig::default())
             .unwrap();
         schema
-            .register_custom_model(
-                "badge".into(),
-                Some("shared"),
-                fields(&["label", "enabled"], true),
-            )
+            .register_custom_model("badge", Some("shared"), fields(&["label", "enabled"], true))
             .unwrap();
         let schema = schema.fresh_runtime();
         assert_eq!(
@@ -396,7 +410,7 @@ mod tests {
     fn custom_model_names_precede_aliases_and_reserve_native_roles() {
         let mut schema = ModelFields::default();
         schema
-            .register_custom_model("badge".into(), Some("user"), UserConfig::default())
+            .register_custom_model("badge", Some("user"), UserConfig::default())
             .unwrap();
         let aliases = |role, name: &str| role == EntityRole::User && name == "badge";
         assert_eq!(
@@ -414,7 +428,7 @@ mod tests {
             "rateLimit",
         ] {
             let error = schema
-                .register_custom_model(name.into(), None, UserConfig::default())
+                .register_custom_model(name, None, UserConfig::default())
                 .unwrap_err();
             assert_eq!(
                 error.instrumentation_message(),
@@ -425,7 +439,7 @@ mod tests {
         }
         assert_eq!(schema.custom_models().count(), 1);
         schema
-            .register_custom_model("badge".into(), Some(""), UserConfig::default())
+            .register_custom_model("badge", Some(""), UserConfig::default())
             .unwrap();
         assert_eq!(schema.custom_models().next().unwrap().1, "badge");
         assert_eq!(

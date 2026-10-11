@@ -1,7 +1,7 @@
 use super::*;
 use crate::store::{bundled_schema::BundledSchema, map_db_err, migrator};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext,
+    AuthConfig, AuthError,
     store::schema::{EntityRole, SchemaCheckError},
     user_fields::{UserConfig, UserFieldConfig},
 };
@@ -68,8 +68,8 @@ async fn rate_limit_preflight_uses_declared_memory_fields_and_replaced_database_
             AuthConfig::new("a-secret-that-is-at-least-32-characters"),
             database.clone(),
         );
-        let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-        init.register_model_fields(
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_fields(
             EntityRole::RateLimit,
             UserConfig {
                 additional_fields: Some(
@@ -84,7 +84,7 @@ async fn rate_limit_preflight_uses_declared_memory_fields_and_replaced_database_
                 ),
             },
         )?;
-        store.model_fields = init.into_parts().plugin_fields;
+        store.model_fields = model_fields;
         let settings = SchemaConfiguration {
             config: store.config.clone(),
             plugins: Vec::new(),
@@ -142,11 +142,11 @@ async fn secondary_storage_hides_explicit_core_declarations_from_physical_prefli
         AuthConfig::new("a-secret-that-is-at-least-32-characters"),
         database,
     );
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     for role in [EntityRole::Session, EntityRole::Verification] {
-        init.register_model_fields(role, UserConfig::default())?;
+        model_fields.register_model_fields(role, UserConfig::default())?;
     }
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     for secondary_storage in [true, false] {
         let settings = SchemaConfiguration {
             config: store.config.clone(),

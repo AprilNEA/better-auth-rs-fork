@@ -118,19 +118,10 @@ pub(crate) fn derive_auth_entity(input: &DeriveInput) -> TokenStream {
 
     let core = registry::core_field_names(role);
     let plugin = registry::plugin_field_names(role);
+    let plugin_record = plugin_model::record_name(role).is_some();
 
-    // Validate core fields are present
     if let Some(missing) = core.iter().find(|required| {
-        !(matches!(
-            role,
-            EntityRole::ApiKey
-                | EntityRole::Passkey
-                | EntityRole::DeviceCode
-                | EntityRole::TwoFactor
-                | EntityRole::Jwk
-                | EntityRole::WalletAddress
-        ) && **required != "id"
-            || row_presence && **required == "active")
+        !(plugin_record && **required != "id" || row_presence && **required == "active")
             && !idents.iter().any(|ident| ident == *required)
     }) {
         return syn::Error::new_spanned(
@@ -324,13 +315,7 @@ pub(crate) fn derive_auth_entity(input: &DeriveInput) -> TokenStream {
             adapter_record::generate(input, fields, role, &seaorm_root, &core_root)
                 .unwrap_or_else(syn::Error::into_compile_error)
         }
-        EntityRole::ApiKey
-        | EntityRole::DeviceCode
-        | EntityRole::Passkey
-        | EntityRole::TwoFactor
-        | EntityRole::Jwk
-        | EntityRole::WalletAddress
-        | EntityRole::RateLimit => {
+        _ if plugin_record => {
             plugin_model::generate(input, fields, &options, (&seaorm_root, &core_root))
                 .unwrap_or_else(syn::Error::into_compile_error)
         }

@@ -147,26 +147,26 @@ fn observe_user(row: &UserView) -> AuthResult<JsonValue> {
 fn observe_memory(store: &EphemeralStore) -> AuthResult<JsonValue> {
     let state = store.operation(|op| op.capture_state())?;
     let users = state
-        .users
+        .fixture_table("user")
         .snapshot()?
         .iter()
         .map(|row| observe_fields(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
     let jwks = state
-        .jwks
+        .fixture_table("jwks")
         .snapshot()?
         .iter()
         .map(|row| observe_fields(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
     let wallets = state
-        .wallets
+        .fixture_table("walletAddress")
         .snapshot()?
         .iter()
         .map(|row| observe_fields(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
-    assert!(state.accounts.snapshot()?.is_empty());
-    assert!(state.sessions.snapshot()?.is_empty());
-    assert!(state.verifications.snapshot()?.is_empty());
+    assert!(state.fixture_table("account").snapshot()?.is_empty());
+    assert!(state.fixture_table("session").snapshot()?.is_empty());
+    assert!(state.fixture_table("verification").snapshot()?.is_empty());
     Ok(
         json!({"user":users, "account":[], "session":[], "verification":[], "jwks":jwks, "walletAddress":wallets}),
     )

@@ -3,8 +3,8 @@ use better_auth_api::plugins::device_authorization::{
     DeviceFieldValidation, DeviceRequestField, DeviceRequestFields, DeviceRequestIssue,
 };
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, HttpMethod,
+    AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+    AuthSchema, HttpMethod,
     hooks::current_request_hook_context,
     middleware::RateLimitConfig,
     store::{EphemeralStore, StatelessSchema, schema::EntityRole},
@@ -160,7 +160,10 @@ impl<S: AuthSchema> AuthPlugin<S> for StoredDisplay {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(
             EntityRole::DeviceCode,
             UserConfig {

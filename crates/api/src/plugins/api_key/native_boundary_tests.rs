@@ -9,32 +9,35 @@ use better_auth_core::{
     },
 };
 
-async fn check_organization_reference(ctx: AuthContext<impl better_auth_core::AuthSchema>) {
+async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: AuthContext<S>) {
     let plugin = ApiKeyPlugin::builder()
         .references(ApiKeyReferences::Organization)
         .build();
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields).unwrap();
     plugin.on_init(&mut init).await.unwrap();
-    init.register_model_fields(
-        EntityRole::ApiKey,
-        UserConfig {
-            additional_fields: Some(
-                [(
-                    "referenceId".into(),
-                    UserFieldConfig {
-                        field_type: UserFieldType::Number,
-                        transform: Some(FieldTransforms {
-                            input: None,
-                            output: Some(UserFieldTransform::new(|_| Ok(41.0.into()))),
-                        }),
-                        ..Default::default()
-                    },
-                )]
-                .into(),
-            ),
-        },
-    )
-    .unwrap();
+    model_fields
+        .register_model_fields(
+            EntityRole::ApiKey,
+            UserConfig {
+                additional_fields: Some(
+                    [(
+                        "referenceId".into(),
+                        UserFieldConfig {
+                            field_type: UserFieldType::Number,
+                            transform: Some(FieldTransforms {
+                                input: None,
+                                output: Some(UserFieldTransform::new(|_| Ok(41.0.into()))),
+                            }),
+                            ..Default::default()
+                        },
+                    )]
+                    .into(),
+                ),
+            },
+        )
+        .unwrap();
     let organization_reference = UserConfig {
         additional_fields: Some(
             [(
@@ -47,7 +50,7 @@ async fn check_organization_reference(ctx: AuthContext<impl better_auth_core::Au
             .into(),
         ),
     };
-    init.register_organization_schema(
+    model_fields.register_organization_schema(
         &OrganizationFields {
             member: organization_reference.clone(),
             organization_role: organization_reference,
@@ -58,11 +61,7 @@ async fn check_organization_reference(ctx: AuthContext<impl better_auth_core::Au
     );
     let database = ctx
         .database
-        .with_runtime(
-            ctx.config.clone(),
-            Vec::new(),
-            init.into_parts().plugin_fields,
-        )
+        .with_runtime(ctx.config.clone(), Vec::new(), model_fields)
         .unwrap();
     use crate::plugins::organization::{
         METADATA_AC, METADATA_DYNAMIC_ACCESS_CONTROL, METADATA_ENABLED,

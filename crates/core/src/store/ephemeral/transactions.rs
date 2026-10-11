@@ -11,28 +11,17 @@ pub(super) struct PreparedTransactionCommit {
     consumed: Vec<super::device_codes::DeviceCodeConsumption>,
 }
 
-const TRANSACTION_TABLES: &[EntityRole] = &[
-    EntityRole::User,
-    EntityRole::Account,
-    EntityRole::Session,
-    EntityRole::Verification,
-    EntityRole::Organization,
-    EntityRole::Member,
-    EntityRole::Invitation,
-    EntityRole::Team,
-    EntityRole::OrganizationRole,
-    EntityRole::TwoFactor,
-    EntityRole::DeviceCode,
-    EntityRole::ApiKey,
-    EntityRole::Passkey,
-    EntityRole::RateLimit,
-    EntityRole::TeamMember,
-    EntityRole::Jwk,
-    EntityRole::WalletAddress,
-];
+fn transaction_keys(base: &State, working: &State) -> Vec<String> {
+    base.keys()
+        .into_iter()
+        .chain(working.keys())
+        .collect::<indexmap::IndexSet<_>>()
+        .into_iter()
+        .collect()
+}
 
 pub(super) struct AtomicTransactionCommit {
-    tables: Vec<(EntityRole, super::table::ReconcilePlan<FieldMap>)>,
+    tables: Vec<(String, Option<super::table::ReconcilePlan<FieldMap>>)>,
     consumed: Vec<super::device_codes::DeviceCodeConsumption>,
 }
 
@@ -40,6 +29,9 @@ fn validate_consumed_devices(
     op: &super::operation::MemoryOperation<'_>,
     consumed: &[super::device_codes::DeviceCodeConsumption],
 ) -> AuthResult<()> {
+    if consumed.is_empty() {
+        return Ok(());
+    }
     let live = op.capture_table(EntityRole::DeviceCode)?;
     for consumed in consumed {
         if !consumed.unchanged(&live)? {
@@ -59,12 +51,21 @@ impl PreparedTransactionCommit {
     ) -> AuthResult<AtomicTransactionCommit> {
         validate_consumed_devices(op, &self.consumed)?;
         let mut tables = Vec::new();
-        for &role in TRANSACTION_TABLES {
-            let live = op.capture_table(role)?;
-            let working = self.store.operation(|op| op.capture_table(role))?;
-            let (_, plan) = live.reconcile_with_plan(base.table(role)?, &working)?;
-            if !plan.is_empty() {
-                tables.push((role, plan));
+        let working_root = self.store.operation(|op| op.capture_state())?;
+        for name in transaction_keys(base, &working_root) {
+            let Some(working) = self
+                .store
+                .operation(|op| op.capture_physical_table(&name))?
+            else {
+                tables.push((name, None));
+                continue;
+            };
+            let live = op.table_or_empty(&name)?;
+            let empty = super::table::TableRef::new(self.store.operations.clone());
+            let before = base.tables.get(&name).unwrap_or(&empty);
+            let (_, plan) = live.reconcile_with_plan(before, &working)?;
+            if !plan.is_empty() || op.capture_physical_table(&name)?.is_none() {
+                tables.push((name, Some(plan)));
             }
         }
         Ok(AtomicTransactionCommit {
@@ -80,10 +81,15 @@ impl AtomicTransactionCommit {
         let tables = self
             .tables
             .into_iter()
-            .map(|(role, plan)| Ok((role, plan.apply(&op.capture_table(role)?)?)))
+            .map(|(name, plan)| {
+                let table = plan
+                    .map(|plan| plan.apply(&op.table_or_empty(&name)?))
+                    .transpose()?;
+                Ok((name, table))
+            })
             .collect::<AuthResult<Vec<_>>>()?;
-        for (role, table) in tables {
-            op.replace_table(role, table)?;
+        for (name, table) in tables {
+            op.replace_physical_table(name, table)?;
         }
         Ok(())
     }
@@ -482,14 +488,24 @@ impl EphemeralStore {
         let committed = isolated.prepare_transaction_commit()?;
         self.operation(|op| {
             validate_consumed_devices(op, &committed.consumed)?;
-            for &role in TRANSACTION_TABLES {
-                if role == EntityRole::DeviceCode {
+            let working_root = committed.store.operation(|op| op.capture_state())?;
+            let device_model = op.model_name(EntityRole::DeviceCode)?;
+            for name in transaction_keys(&base, &working_root) {
+                if name == device_model {
                     validate_consumed_devices(op, &committed.consumed)?;
                 }
-                let live = op.capture_table(role)?;
-                let working = committed.store.operation(|op| op.capture_table(role))?;
-                let table = live.reconcile(base.table(role)?, &working)?;
-                op.replace_table(role, table)?;
+                let Some(working) = committed
+                    .store
+                    .operation(|op| op.capture_physical_table(&name))?
+                else {
+                    op.replace_physical_table(name, None)?;
+                    continue;
+                };
+                let live = op.table_or_empty(&name)?;
+                let empty = super::table::TableRef::new(self.operations.clone());
+                let before = base.tables.get(&name).unwrap_or(&empty);
+                let table = live.reconcile(before, &working)?;
+                op.replace_physical_table(name, Some(table))?;
             }
             Ok(())
         })?;

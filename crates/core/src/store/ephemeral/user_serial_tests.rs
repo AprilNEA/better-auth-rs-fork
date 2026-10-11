@@ -25,7 +25,7 @@ fn user(name: &str) -> CreateUser {
 fn stored_ids(store: &EphemeralStore) -> AuthResult<Vec<Value>> {
     store
         .operation(|op| op.capture_state())?
-        .users
+        .fixture_table("user")
         .snapshot()?
         .into_iter()
         .map(|user| required(user.get("id")).cloned())

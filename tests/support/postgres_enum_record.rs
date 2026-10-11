@@ -1,7 +1,6 @@
 use super::*;
 use better_auth_core::{
     FieldValue, SchemaValue,
-    plugin::AuthInitContext,
     schema::EntityRole,
     store::{AuthStore, schema::SchemaConfiguration},
     user_fields::UserConfig,
@@ -155,9 +154,9 @@ async fn check(database: DatabaseConnection) -> TestResult {
             ..Default::default()
         },
     );
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
-    init.register_model_fields(EntityRole::Jwk, fields)?;
-    let mut fields = init.into_parts().plugin_fields;
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(EntityRole::Jwk, fields)?;
+    let mut fields = model_fields;
     fields.set_schema_configuration(&SchemaConfiguration {
         config: config.clone(),
         plugins: Vec::new(),

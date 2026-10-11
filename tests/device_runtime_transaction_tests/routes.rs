@@ -22,7 +22,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Projection {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(EntityRole::DeviceCode, self.0.clone())
     }
     async fn on_request(

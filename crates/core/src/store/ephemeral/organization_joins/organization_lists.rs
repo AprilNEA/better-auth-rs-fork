@@ -87,7 +87,7 @@ impl EphemeralStore {
                 let groups = native_relationships(
                     rows,
                     &[(EntityRole::Organization, &relation, limit)],
-                    |role| op.capture_table(role),
+                    |role| op.capture_join_table(role),
                 )?;
                 let (sources, children) = crate::query::paginate_memory(groups, Some(limit), None)
                     .into_iter()

@@ -156,9 +156,14 @@ impl Fixture {
         let config = Arc::new(config);
         let raw: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(config.clone()));
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(config.clone(), raw.clone());
+        better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+            &DeviceAuthorizationPlugin::new(),
+            &mut model_fields,
+        )?;
         AuthPlugin::on_init(&DeviceAuthorizationPlugin::new(), &mut init).await?;
-        let fields = init.into_parts().plugin_fields;
+        let fields = model_fields;
         let raw = raw.with_runtime(config.clone(), Vec::new(), fields.clone())?;
         for (id, name) in [("user-a", "Selected User"), ("user-b", "Other User")] {
             raw.create_user(CreateUser {

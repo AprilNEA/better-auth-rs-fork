@@ -125,10 +125,10 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
     let _ = parent.insert(physical.clone(), "stored-parent-property".into());
     writer.operation(|op| {
         let state = op.capture_state()?;
-        state.members.push(member)?;
-        state.users.push(user)?;
-        state.teams.push(team)?;
-        state.team_members.push(membership)?;
+        state.fixture_table("member").push(member)?;
+        state.fixture_table("user").push(user)?;
+        state.fixture_table("team").push(team)?;
+        state.fixture_table("teamMember").push(membership)?;
         Ok(())
     })?;
     let before_parent = writer.storage_rows(parent_role)?;
@@ -291,6 +291,10 @@ async fn check(relation: Relation, native: bool, alias: bool, reject: bool) -> A
     models.register_organization_schema(&organization, true, true);
     models.extend(EntityRole::TeamMember, membership_fields);
     models.set_model_name(child_role, Some(&physical))?;
+    writer.operation(|op| {
+        let table = op.capture_table(child_role)?;
+        op.replace_physical_table(physical.clone(), Some(table))
+    })?;
     let reader = writer.with_runtime(Arc::new(config), Vec::new(), models)?;
     let result: AuthResult<Value> = async {
         match relation {
@@ -474,7 +478,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
         store.configure_organization_fields(fields)?;
         store.operation(|op| {
             let state = op.capture_state()?;
-            state.organizations.push(
+            state.fixture_table("organization").push(
                 [
                     ("id".into(), "organization".into()),
                     ("name".into(), "Organization".into()),
@@ -487,7 +491,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
             )?;
             for suffix in ["a", "b"] {
                 let id = format!("user-{suffix}");
-                state.users.push(
+                state.fixture_table("user").push(
                     [
                         ("id".into(), id.clone().into()),
                         ("name".into(), suffix.into()),
@@ -499,7 +503,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                     ]
                     .into(),
                 )?;
-                state.members.push(
+                state.fixture_table("member").push(
                     [
                         ("id".into(), format!("member-{suffix}").into()),
                         ("org_ref".into(), format!("route-{suffix}").into()),
@@ -509,7 +513,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                     ]
                     .into(),
                 )?;
-                state.invitations.push(
+                state.fixture_table("invitation").push(
                     [
                         ("id".into(), format!("invitation-{suffix}").into()),
                         ("org_ref".into(), format!("route-{suffix}").into()),
@@ -523,7 +527,7 @@ async fn full_details_resolve_mapped_references_after_parent_projection_for_fall
                     ]
                     .into(),
                 )?;
-                state.teams.push(
+                state.fixture_table("team").push(
                     [
                         ("id".into(), format!("team-{suffix}").into()),
                         ("org_ref".into(), format!("route-{suffix}").into()),

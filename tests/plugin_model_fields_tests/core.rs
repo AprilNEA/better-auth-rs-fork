@@ -1,4 +1,5 @@
 use super::*;
+use better_auth_core::plugin_runtime::ModelFields;
 
 struct LegacyFields(&'static str, UserConfig, Arc<Mutex<Vec<&'static str>>>);
 
@@ -10,9 +11,12 @@ impl<S: AuthSchema> AuthPlugin<S> for LegacyFields {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        fields.register_user_fields(self.1.clone());
+        Ok(())
+    }
+    async fn on_init(&self, _context: &mut AuthInitContext<S>) -> AuthResult<()> {
         trace_lock(&self.2)?.push(self.0);
-        context.register_user_fields(self.1.clone());
         Ok(())
     }
     async fn on_request(
@@ -85,6 +89,155 @@ async fn memory_legacy_registration_replaces_once_in_plugin_order() -> AuthResul
 #[tokio::test]
 async fn sqlite_legacy_registration_replaces_once_in_plugin_order() -> AuthResult<()> {
     legacy_contract(sqlite().await?).await
+}
+
+struct LifecycleFields {
+    name: &'static str,
+    events: Arc<Mutex<Vec<String>>>,
+    declarations: Arc<Mutex<Option<ModelFields>>>,
+    fail: bool,
+}
+
+#[async_trait]
+impl AuthPlugin<StatelessSchema> for LifecycleFields {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn routes(&self) -> Vec<AuthRoute> {
+        Vec::new()
+    }
+
+    fn schema(
+        &self,
+        declarations: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
+        trace_lock(&self.events)?.push(format!("schema:{}", self.name));
+        if self.name == "last" {
+            let events = self.events.clone();
+            declarations.register_user_fields(fields(
+                "name",
+                UserFieldConfig {
+                    transform: Some(FieldTransforms {
+                        input: Some(UserFieldTransform::new(move |value| {
+                            trace_lock(&events)?.push("input:name".into());
+                            Ok(format!(
+                                "registered:{}",
+                                required(value.as_str(), "Expected initialization user name")?
+                            )
+                            .into())
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ));
+            *trace_lock(&self.declarations)? = Some(declarations.clone());
+        }
+        Ok(())
+    }
+
+    async fn on_init(&self, context: &mut AuthInitContext<StatelessSchema>) -> AuthResult<()> {
+        trace_lock(&self.events)?.push(format!("init:{}", self.name));
+        if self.name == "first" {
+            let user = context
+                .database
+                .create_user(
+                    CreateUser::new()
+                        .with_name("initializer")
+                        .with_email("initializer@fields.test"),
+                )
+                .await?;
+            let name = required(user.name.json()?, "Expected the initialization user name")?;
+            trace_lock(&self.events)?.push(format!("return:{name}"));
+            let missing = context
+                .database
+                .get_user_by_email("missing@fields.test")
+                .await?
+                .is_none();
+            trace_lock(&self.events)?.push(format!("missing:{missing}"));
+        }
+        if self.fail {
+            return Err(AuthError::bad_request("initialization stopped"));
+        }
+        Ok(())
+    }
+
+    async fn on_request(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<StatelessSchema>,
+    ) -> AuthResult<Option<AuthResponse>> {
+        Ok(None)
+    }
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The lifecycle contract compares schema, initialization, and persisted adapter effects"
+)]
+async fn all_declarations_precede_initialization_and_failures_keep_completed_writes()
+-> AuthResult<()> {
+    for fail in [false, true] {
+        let raw = memory();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let declarations = Arc::new(Mutex::new(None));
+        let result = BetterAuth::new(config())
+            .store_arc(raw.clone())
+            .plugin(LifecycleFields {
+                name: "first",
+                events: events.clone(),
+                declarations: declarations.clone(),
+                fail,
+            })
+            .plugin(LifecycleFields {
+                name: "last",
+                events: events.clone(),
+                declarations: declarations.clone(),
+                fail: false,
+            })
+            .build()
+            .await;
+        let mut expected = vec![
+            "schema:first",
+            "schema:last",
+            "init:first",
+            "input:name",
+            "return:\"registered:initializer\"",
+            "missing:true",
+        ];
+        let history = required(
+            trace_lock(&declarations)?.clone(),
+            "Expected collected model declarations",
+        )?;
+        assert!(history.id_input_active(EntityRole::User)?);
+        if fail {
+            let error = result
+                .err()
+                .ok_or_else(|| AuthError::internal("Expected initialization failure"))?;
+            assert!(matches!(&error, AuthError::BadRequest(_)));
+            assert_eq!(error.instrumentation_message(), "initialization stopped");
+        } else {
+            let auth = result?;
+            expected.push("init:last");
+            let user = required(
+                auth.store()
+                    .get_user_by_email("initializer@fields.test")
+                    .await?,
+                "Expected initialized user through the final adapter",
+            )?;
+            assert_eq!(user.name.json()?, Some(json!("registered:initializer")));
+            assert!(!history.id_input_active(EntityRole::User)?);
+        }
+        assert_eq!(*trace_lock(&events)?, expected);
+        let user = raw
+            .get_user_by_email("initializer@fields.test")
+            .await?
+            .ok_or_else(|| AuthError::internal("Initialization write disappeared"))?;
+        assert_eq!(user.name.json()?, Some(json!("registered:initializer")));
+    }
+    Ok(())
 }
 
 fn prefix(prefix: &'static str) -> UserFieldConfig {
@@ -349,7 +502,7 @@ fn display_field_registration_preserves_omitted_empty_and_logical_aliases() {
         (EntityRole::DeviceCode, "scope"),
     ] {
         for alias in [None, Some(""), Some(name)] {
-            let mut context = AuthInitContext::new(Arc::new(config()), memory());
+            let mut context = better_auth_core::plugin_runtime::ModelFields::default();
             let result = context.register_model_fields(
                 role,
                 fields(
@@ -364,7 +517,7 @@ fn display_field_registration_preserves_omitted_empty_and_logical_aliases() {
                 result.is_ok(),
                 "registration: {role:?}.{name}, alias={alias:?}: {result:?}"
             );
-            let registered = context.into_parts().plugin_fields;
+            let registered = context;
             let declared = registered.fields(role).fields();
             assert_eq!(declared.len(), 1);
             assert_eq!(

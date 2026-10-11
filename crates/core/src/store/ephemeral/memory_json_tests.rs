@@ -162,13 +162,13 @@ impl Fixture {
     ) -> AuthResult<JsonValue> {
         let state = self.store.operation(|op| op.capture_state())?;
         let fields = match model {
-            "user" => state.users.get(id)?,
-            "session" => state.sessions.get(id)?,
-            "organization" => state.organizations.get(id)?,
-            "member" => state.members.get(id)?,
-            "invitation" => state.invitations.get(id)?,
-            "team" => state.teams.get(id)?,
-            "organizationRole" => state.organization_roles.get(id)?,
+            "user" => state.fixture_table("user").get(id)?,
+            "session" => state.fixture_table("session").get(id)?,
+            "organization" => state.fixture_table("organization").get(id)?,
+            "member" => state.fixture_table("member").get(id)?,
+            "invitation" => state.fixture_table("invitation").get(id)?,
+            "team" => state.fixture_table("team").get(id)?,
+            "organizationRole" => state.fixture_table("organizationRole").get(id)?,
             _ => return Err(AuthError::internal("Unknown display fixture model")),
         }
         .ok_or_else(|| AuthError::internal("Expected the stored display row"))?;

@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use better_auth::plugins::{AdminPlugin, AnonymousPlugin, PhoneNumberPlugin, TwoFactorPlugin};
 use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
 use better_auth_core::{
-    AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, FieldMap,
+    AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+    AuthSchema, FieldMap,
     store::{EphemeralStore, StatelessSchema},
     user_fields::{
         FieldTransforms, FieldValidators, UserConfig, UserFieldConfig, UserFieldTransform,
@@ -33,7 +33,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Policies {
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
     }
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_user_fields(self.1.clone());
         Ok(())
     }

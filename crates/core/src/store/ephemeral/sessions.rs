@@ -132,32 +132,16 @@ impl EphemeralStore {
                     else {
                         return Ok(supplied.filter(|value| !value.is_undefined()));
                     };
-                    let row_count =
-                        self.operation(|op| op.capture_table(EntityRole::Session)?.len())?;
-                    let value = self
-                        .config
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_create_id_input("session", supplied, policy)?;
-                    Ok(self.next_serial_id(row_count).or(value))
+                    self.memory_create_id_input(EntityRole::Session, supplied, policy)
                 },
                 |name, field, value| {
-                    let value = self.memory_plugin_field_input(field, value)?;
-                    Ok(if name == "id" {
-                        self.next_serial_id(
-                            self.operation(|op| op.capture_table(EntityRole::Session)?.len())?,
-                        )
-                        .unwrap_or(value)
-                    } else {
-                        value
-                    })
+                    self.memory_record_input(EntityRole::Session, name, field, value, true)
                 },
             )
             .await?;
         let source = self
             .raw("session", "create", |op| {
-                let table = op.capture_table(EntityRole::Session)?;
+                let table = op.create_table(EntityRole::Session)?;
                 if let Some(id) = self.next_serial_id(table.len()?) {
                     let _ = storage.insert("id".into(), id);
                 }

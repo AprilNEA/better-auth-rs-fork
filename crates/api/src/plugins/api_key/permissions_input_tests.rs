@@ -25,10 +25,12 @@ async fn check_permissions<S: AuthSchema>(
         .disable_key_hashing(true)
         .store_starting_characters(false)
         .build();
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields)?;
     plugin.on_init(&mut init).await?;
     if declaration {
-        init.register_model_fields(
+        model_fields.register_model_fields(
             EntityRole::ApiKey,
             UserConfig {
                 additional_fields: Some(
@@ -45,11 +47,9 @@ async fn check_permissions<S: AuthSchema>(
             },
         )?;
     }
-    let store = ctx.database.with_runtime(
-        ctx.config.clone(),
-        Vec::new(),
-        init.into_parts().plugin_fields,
-    )?;
+    let store = ctx
+        .database
+        .with_runtime(ctx.config.clone(), Vec::new(), model_fields)?;
     let ctx = AuthContext::new(ctx.config, store);
     let created = plugin
         .create_key(

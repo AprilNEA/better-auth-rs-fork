@@ -79,18 +79,18 @@ fn observe_fields(fields: &FieldMap) -> AuthResult<JsonValue> {
 fn raw_memory(store: &EphemeralStore) -> AuthResult<JsonValue> {
     let state = store.operation(|op| op.capture_state())?;
     let users = state
-        .users
+        .fixture_table("user")
         .snapshot()?
         .iter()
         .map(observe_fields)
         .collect::<AuthResult<Vec<_>>>()?;
-    let accounts = state.accounts.snapshot()?;
-    let verifications = state.verifications.snapshot()?;
+    let accounts = state.fixture_table("account").snapshot()?;
+    let verifications = state.fixture_table("verification").snapshot()?;
     for row in accounts.iter().chain(&verifications) {
         assert!(matches!(row.get("id"), Some(Value::Number(_))));
     }
     let sessions = state
-        .sessions
+        .fixture_table("session")
         .snapshot()?
         .iter()
         .map(observe_fields)

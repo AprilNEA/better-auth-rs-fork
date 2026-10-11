@@ -1,7 +1,7 @@
 use super::{Trace, record, take_trace};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthResult, AuthStore, FieldFunction, FieldMap,
-    FieldValue, SchemaValue, UpdateUser,
+    AuthConfig, AuthError, AuthResult, AuthStore, FieldFunction, FieldMap, FieldValue, SchemaValue,
+    UpdateUser,
     store::{RuntimeStore, schema::EntityRole},
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
 };
@@ -191,11 +191,11 @@ fn runtime(
         config.clone(),
         database.clone(),
     ));
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     if !matches!(model, Model::User) {
-        init.register_model_fields(model.role(), fields)?;
+        model_fields.register_model_fields(model.role(), fields)?;
     }
-    raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)
+    raw.with_runtime(config, Vec::new(), model_fields)
 }
 
 fn rejecting(trace: &Trace, allocation: &Arc<AtomicUsize>, phase: &'static str) -> FieldValue {

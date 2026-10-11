@@ -408,18 +408,21 @@ async fn invitation_member_output_failure_compensates_without_member_seat_or_ses
     );
     let state = store.operation(|op| op.capture_state())?;
     assert_eq!(
-        state.invitations.get(&invitation.id)?.unwrap()["status"],
+        state
+            .fixture_table("invitation")
+            .get(&invitation.id)?
+            .unwrap()["status"],
         Value::from("pending")
     );
-    assert_eq!(state.members.len()?, 0);
-    assert_eq!(state.team_members.len()?, 0);
+    assert_eq!(state.fixture_table("member").len()?, 0);
+    assert_eq!(state.fixture_table("teamMember").len()?, 0);
     assert_eq!(
-        state.teams.get(&team.id)?.unwrap()["memberCount"],
+        state.fixture_table("team").get(&team.id)?.unwrap()["memberCount"],
         Value::from(0.0)
     );
     assert_eq!(
         state
-            .sessions
+            .fixture_table("session")
             .snapshot()?
             .into_iter()
             .find(|row| row.get("token") == Some(&session.token.field_value()))

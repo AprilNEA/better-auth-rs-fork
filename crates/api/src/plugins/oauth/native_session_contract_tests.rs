@@ -1057,7 +1057,8 @@ async fn run<S: AuthSchema>(
     let expected = expected_events
         .as_array()
         .unwrap()
-        .iter()
+        .snapshot()?
+        .into_iter()
         .filter(|event| text(event, "kind") != "adapter")
         .collect::<Vec<_>>();
     assert_eq!(
@@ -1068,7 +1069,7 @@ async fn run<S: AuthSchema>(
     for (index, (actual, expected)) in observed.iter().zip(expected).enumerate() {
         assert_eq!(
             normalize.value(actual)?,
-            *expected,
+            expected,
             "{}/{}/{scenario} event {index}",
             text(case, "backend"),
             text(case, "operation")
@@ -1086,17 +1087,18 @@ async fn native_session_http_cache_state_and_selected_rows_match_172_captured_ca
     assert_eq!(text(&fixture, "version"), "1.7.6");
     let cases = field(&fixture, "cases");
     let cases = cases.as_array().unwrap();
-    assert_eq!(cases.len(), 172);
-    for case in cases.iter() {
-        let config = config(case);
-        if text(case, "backend") == "memory" {
-            run::<StatelessSchema>(case, Arc::new(EphemeralStore::new(Arc::new(config))), None)
+    assert_eq!(cases.len()?, 172);
+    for case in cases.iter()? {
+        let case = case?;
+        let config = config(&case);
+        if text(&case, "backend") == "memory" {
+            run::<StatelessSchema>(&case, Arc::new(EphemeralStore::new(Arc::new(config))), None)
                 .await?;
         } else {
-            assert_eq!(text(case, "backend"), "sqlite");
-            let database = sqlite(text(case, "scenario").starts_with("many")).await?;
+            assert_eq!(text(&case, "backend"), "sqlite");
+            let database = sqlite(text(&case, "scenario").starts_with("many")).await?;
             run::<BundledSchema>(
-                case,
+                &case,
                 Arc::new(SeaOrmStore::<BundledSchema>::new(config, database.clone())),
                 Some(&database),
             )

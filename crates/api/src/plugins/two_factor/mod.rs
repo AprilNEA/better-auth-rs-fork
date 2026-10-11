@@ -549,18 +549,22 @@ impl<S: better_auth_core::AuthSchema> better_auth_core::AuthPlugin<S> for TwoFac
         };
         Ok(Some(response))
     }
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        let role = better_auth_core::store::schema::EntityRole::TwoFactor;
+        fields.register_model_fields(
+            role,
+            better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
+        )?;
+        fields.register_native_user_fields(METADATA_ENABLED);
+        Ok(())
+    }
+
     async fn on_init(
         &self,
         ctx: &mut better_auth_core::AuthInitContext<S>,
     ) -> better_auth_core::AuthResult<()> {
-        let role = better_auth_core::store::schema::EntityRole::TwoFactor;
-        ctx.register_model_fields(
-            role,
-            better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
-        )?;
         ctx.extensions.insert(self.config.clone());
         S::User::require_plugin_fields("two-factor", &["two_factor_enabled"])?;
-        ctx.register_native_user_fields(METADATA_ENABLED);
         ctx.set_metadata(METADATA_ENABLED, serde_json::Value::Bool(true));
         ctx.set_metadata(
             METADATA_TOTP_DISABLED,

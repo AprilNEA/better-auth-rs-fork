@@ -16,7 +16,6 @@ pub type MetadataMap = HashMap<String, serde_json::Value>;
 
 pub struct AuthInitParts<S: AuthSchema> {
     request_runtime: crate::request_runtime::RequestRuntime,
-    pub plugin_fields: crate::plugin_runtime::ModelFields,
     pub database_hooks: Vec<Arc<dyn crate::store::database_hooks::DatabaseHooks<S>>>,
     pub runtime: crate::plugin_runtime::PluginRuntime<S>,
     pub extensions: crate::RuntimeExtensions,
@@ -53,6 +52,12 @@ pub enum BeforeRequestAction {
 pub trait AuthPlugin<S: AuthSchema>: Send + Sync + std::any::Any {
     /// Plugin name - should be unique
     fn name(&self) -> &'static str;
+
+    /// Declare adapter fields before the default database and plugin runtime are initialized.
+    /// Keep runtime validation, callbacks, and side effects in `on_init`.
+    fn schema(&self, _fields: &mut crate::plugin_runtime::ModelFields) -> AuthResult<()> {
+        Ok(())
+    }
 
     /// Return the upstream plugin ID; core option wrappers have no plugin ID.
     fn telemetry_plugin_id(&self) -> Option<&'static str> {
@@ -243,7 +248,6 @@ pub struct AuthRoute {
 /// Initialization context passed to plugin setup.
 pub struct AuthInitContext<S: AuthSchema> {
     request_runtime: crate::request_runtime::RequestRuntime,
-    plugin_fields: crate::plugin_runtime::ModelFields,
     database_hooks: Vec<Arc<dyn crate::store::database_hooks::DatabaseHooks<S>>>,
     runtime: crate::plugin_runtime::PluginRuntime<S>,
     pub extensions: crate::RuntimeExtensions,
@@ -423,7 +427,6 @@ impl<S: AuthSchema> AuthInitContext<S> {
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {
             request_runtime: Default::default(),
-            plugin_fields: Default::default(),
             database_hooks: Vec::new(),
             runtime: Default::default(),
             extensions: crate::RuntimeExtensions::default(),
@@ -445,109 +448,6 @@ impl<S: AuthSchema> AuthInitContext<S> {
         self.config = context.config.clone();
         self.request_runtime = context.request_runtime.clone();
         Ok(())
-    }
-
-    /// Register user schema fields in plugin registration order.
-    pub fn register_user_fields(&mut self, fields: crate::user_fields::UserConfig) {
-        self.plugin_fields
-            .extend(crate::store::schema::EntityRole::User, fields);
-    }
-
-    /// Register one plugin's native User declarations at its initialization position.
-    #[doc(hidden)]
-    pub fn register_native_user_fields(&mut self, enabled_metadata: &str) {
-        let metadata = [(enabled_metadata.to_owned(), serde_json::Value::Bool(true))].into();
-        let names: Vec<_> = crate::wire::UserView::active_plugin_fields(&metadata).collect();
-        let mut fields =
-            crate::user_fields::UserConfig::default().user_field_schema_with_plugins(&names);
-        fields
-            .fields_mut()
-            .retain(|name, _| names.contains(&name.as_str()));
-        self.register_user_fields(fields);
-    }
-
-    /// Register one plugin's native Session declarations at its initialization position.
-    #[doc(hidden)]
-    pub fn register_native_session_fields(&mut self, enabled_metadata: &str) -> AuthResult<()> {
-        let metadata = [(enabled_metadata.to_owned(), serde_json::Value::Bool(true))].into();
-        let fields = crate::user_fields::UserConfig {
-            additional_fields: Some(
-                crate::wire::SessionView::active_plugin_fields(&metadata)
-                    .map(|name| {
-                        (
-                            name.to_owned(),
-                            crate::user_fields::UserFieldConfig {
-                                required: Some(false),
-                                input: Some(false),
-                                ..Default::default()
-                            },
-                        )
-                    })
-                    .collect(),
-            ),
-        };
-        self.register_model_fields(crate::store::schema::EntityRole::Session, fields)
-    }
-
-    /// Merge complete adapter field declarations for a native model in registration order.
-    /// Reset any preceding name override to the adapter's native table-name mapping.
-    pub fn register_model_fields(
-        &mut self,
-        role: crate::store::schema::EntityRole,
-        fields: crate::user_fields::UserConfig,
-    ) -> AuthResult<()> {
-        self.plugin_fields.register(role, fields);
-        Ok(())
-    }
-
-    /// Merge a native model declaration at its first schema position.
-    /// Omitted or empty names reset the declared name to the logical model name.
-    /// Field-only registration resets name overrides to the adapter's native table-name mapping.
-    /// Storage adapters retain responsibility for the physical model and migrations.
-    pub fn register_model_schema(
-        &mut self,
-        role: crate::store::schema::EntityRole,
-        model_name: Option<&str>,
-        fields: crate::user_fields::UserConfig,
-    ) -> AuthResult<()> {
-        self.register_model_fields(role, fields)?;
-        self.plugin_fields.set_model_name(role, model_name)
-    }
-
-    /// Declare a custom model for runtime reference resolution and adapter schema metadata.
-    /// Repeated declarations merge field policies and replace the physical model name.
-    /// Omitted or empty physical names use the logical name. Native logical names are reserved.
-    /// The application's storage adapter must provide custom model operations and migrations.
-    pub fn register_custom_model(
-        &mut self,
-        name: impl Into<String>,
-        model_name: Option<&str>,
-        fields: crate::user_fields::UserConfig,
-    ) -> AuthResult<()> {
-        self.plugin_fields
-            .register_custom_model(name.into(), model_name, fields)
-    }
-
-    /// Take successful declarations after one plugin initializes, before the next plugin runs.
-    /// Each model retains explicit empty declarations and its field insertion order.
-    #[doc(hidden)]
-    pub fn take_registered_model_field_names(&mut self) -> AuthResult<Vec<(String, Vec<String>)>> {
-        self.plugin_fields.take_registered_declarations()
-    }
-
-    /// Register enabled Organization schemas at their positions in plugin initialization.
-    #[doc(hidden)]
-    pub fn register_organization_schema(
-        &mut self,
-        fields: &crate::organization_fields::OrganizationFields,
-        teams_enabled: bool,
-        dynamic_access_control: bool,
-    ) {
-        self.plugin_fields.register_organization_schema(
-            fields,
-            teams_enabled,
-            dynamic_access_control,
-        );
     }
 
     /// Register a database hook before application-owned adapter hooks.
@@ -574,7 +474,6 @@ impl<S: AuthSchema> AuthInitContext<S> {
     pub fn into_parts(self) -> AuthInitParts<S> {
         AuthInitParts {
             request_runtime: self.request_runtime,
-            plugin_fields: self.plugin_fields,
             database_hooks: self.database_hooks,
             runtime: self.runtime,
             extensions: self.extensions,

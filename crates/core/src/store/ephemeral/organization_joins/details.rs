@@ -152,7 +152,7 @@ impl EphemeralStore {
                     .map(|relation| (relation.role, &relation.join, relation.limit))
                     .collect::<Vec<_>>();
                 let group =
-                    native_relationships(parents, &relations, |role| op.capture_table(role))?
+                    native_relationships(parents, &relations, |role| op.capture_join_table(role))?
                         .into_iter()
                         .next()
                         .ok_or_else(|| {

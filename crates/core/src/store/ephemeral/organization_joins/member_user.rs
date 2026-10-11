@@ -38,7 +38,7 @@ impl EphemeralStore {
                     let groups = native_relationships(
                         selected.into_iter().map(RecordSource::Live).collect(),
                         &[(EntityRole::User, join, limit)],
-                        |_| op.capture_table(EntityRole::User),
+                        |_| op.capture_join_table(EntityRole::User),
                     )?;
                     let Some(mut group) = groups.into_iter().next() else {
                         return Ok(None);

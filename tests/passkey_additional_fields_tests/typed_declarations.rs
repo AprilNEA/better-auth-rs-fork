@@ -1,7 +1,7 @@
 use super::*;
 use better_auth_core::{
-    AuthConfig, AuthInitContext, AuthRecordFields, AuthSchema, AuthStore, CreatePasskey, FieldMap,
-    FieldValue, Passkey, PasskeyCredentialState, PasskeyStorage, SchemaValue, UpdatePasskey,
+    AuthConfig, AuthRecordFields, AuthSchema, AuthStore, CreatePasskey, FieldMap, FieldValue,
+    Passkey, PasskeyCredentialState, PasskeyStorage, SchemaValue, UpdatePasskey,
     UpdatePasskeyAuthentication,
     id::{IdGeneration, IdGenerator},
     store::schema::{EntityRole, SchemaConfiguration},
@@ -268,12 +268,12 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
     let events = Events::default();
     let object = FieldValue::from(FieldMap::from([("source".into(), "output".into())]));
     let config = Arc::new(config());
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::Passkey,
         fields(&events, &object, "stored_label"),
     )?;
-    let mut model_fields = init.into_parts().plugin_fields;
+
     model_fields.set_schema_configuration(&SchemaConfiguration {
         config: config.clone(),
         plugins: Vec::new(),
@@ -521,9 +521,9 @@ async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_
         }
         let raw_store: Arc<dyn AuthStore<better_auth_core::store::StatelessSchema>> =
             Arc::new(raw.clone());
-        let mut init = AuthInitContext::new(config.clone(), raw_store.clone());
-        init.register_model_fields(EntityRole::Passkey, declaration)?;
-        let mut model_fields = init.into_parts().plugin_fields;
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+        model_fields.register_model_fields(EntityRole::Passkey, declaration)?;
+
         model_fields.set_schema_configuration(&SchemaConfiguration {
             config: config.clone(),
             plugins: Vec::new(),

@@ -5,8 +5,8 @@ pub(crate) use ordinary::{Trace, take};
 use better_auth::__private_core::__private_async_trait::async_trait;
 use better_auth::{
     __private_core::{
-        AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-        AuthSchema, store::schema::EntityRole, user_fields::UserConfig,
+        AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute, AuthSchema,
+        store::schema::EntityRole, user_fields::UserConfig,
     },
     AuthConfig,
 };
@@ -24,7 +24,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(EntityRole::ApiKey, self.0.clone())
     }
 

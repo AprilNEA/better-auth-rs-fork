@@ -80,11 +80,11 @@ impl EphemeralStore {
                         return Ok(supplied.clone());
                     };
                     if create {
-                        self.config
-                            .advanced
-                            .database
-                            .generate_id()
-                            .adapter_create_id_input("verification", supplied.clone(), policy)
+                        self.memory_create_id_input(
+                            EntityRole::Verification,
+                            supplied.clone(),
+                            policy,
+                        )
                     } else {
                         supplied
                             .clone()
@@ -99,7 +99,9 @@ impl EphemeralStore {
                             .map(Option::flatten)
                     }
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| {
+                    self.memory_record_input(EntityRole::Verification, name, field, value, create)
+                },
             )
             .await
     }
@@ -108,7 +110,7 @@ impl EphemeralStore {
         let mut record = self.verification_storage_fields(input, true).await?;
         let source = self
             .raw("verification", "create", |op| {
-                let table = op.capture_table(EntityRole::Verification)?;
+                let table = op.create_table(EntityRole::Verification)?;
                 if let Some(id) = self.next_serial_id(table.len()?) {
                     let _ = record.insert("id".into(), id);
                 }

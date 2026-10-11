@@ -1,7 +1,7 @@
 use super::*;
 use crate::store::{bundled_schema::BundledSchema, entities};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, FieldValue,
+    AuthConfig, AuthError, FieldValue,
     store::{
         ApiKeyStore, JwksStore, PasskeyStore, WalletStore,
         schema::{SchemaCheckError, SchemaConfiguration, SchemaFinding},
@@ -11,7 +11,6 @@ use better_auth_core::{
     },
 };
 use sea_orm::Database;
-use std::sync::Arc;
 
 #[path = "raw_physical_table_tests.rs"]
 mod raw_physical_tables;
@@ -147,7 +146,7 @@ async fn api_key_and_passkey_preflight_accepts_merged_columns_and_rejects_missin
         database.clone(),
     )
     .with_plugin_schema::<Plugins>();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     for role in [EntityRole::ApiKey, EntityRole::Passkey] {
         let mut fields = better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role);
         for declaration in fields.fields_mut().values_mut() {
@@ -156,9 +155,9 @@ async fn api_key_and_passkey_preflight_accepts_merged_columns_and_rejects_missin
                 ..field(UserFieldType::String)
             };
         }
-        init.register_model_fields(role, fields)?;
+        model_fields.register_model_fields(role, fields)?;
     }
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let settings = SchemaConfiguration {
         config: store.config.clone(),
         plugins: Vec::new(),
@@ -231,14 +230,14 @@ async fn passkey_and_two_factor_preflight_keep_undeclared_legacy_envelope_column
         AuthConfig::new("a-secret-that-is-at-least-32-characters"),
         database.clone(),
     );
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     for role in [EntityRole::Passkey, EntityRole::TwoFactor] {
-        init.register_model_fields(
+        model_fields.register_model_fields(
             role,
             better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
         )?;
     }
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let settings = SchemaConfiguration {
         config: store.config.clone(),
         plugins: vec!["passkey", "two-factor"],
@@ -310,11 +309,11 @@ async fn native_key_and_wallet_records_keep_dynamic_fields_and_transaction_bound
         database,
     )
     .with_plugin_schema::<Plugins>();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let add_ten = UserFieldTransform::new(|value| {
         Ok((better_auth_core::query::field_number(&value)? + 10.0).into())
     });
-    init.register_model_fields(
+    model_fields.register_model_fields(
         EntityRole::Jwk,
         UserConfig {
             additional_fields: Some(
@@ -338,7 +337,7 @@ async fn native_key_and_wallet_records_keep_dynamic_fields_and_transaction_bound
             ),
         },
     )?;
-    init.register_model_fields(
+    model_fields.register_model_fields(
         EntityRole::WalletAddress,
         UserConfig {
             additional_fields: Some(
@@ -365,7 +364,7 @@ async fn native_key_and_wallet_records_keep_dynamic_fields_and_transaction_bound
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     store.validate_jwk_fields()?;
     store.validate_wallet_fields()?;
     let key_id = "key".into();

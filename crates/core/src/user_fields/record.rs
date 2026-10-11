@@ -142,7 +142,8 @@ impl UserConfig {
         self.user_field_schema_with_plugins(&[])
     }
 
-    /// Compose core fields, enabled plugin fields, and application replacements in schema order.
+    /// Compose core fields and registered declarations in schema order.
+    /// Metadata supplies missing plugin declarations without moving explicitly declared fields.
     #[doc(hidden)]
     pub fn user_field_schema_with_plugins(&self, plugins: &[&str]) -> Self {
         let mut fields: indexmap::IndexMap<_, _> = [
@@ -175,6 +176,9 @@ impl UserConfig {
         ]
         .into();
         for name in plugins {
+            if self.fields().contains_key(*name) {
+                continue;
+            }
             let mut declaration = match *name {
                 "isAnonymous" | "twoFactorEnabled" | "banned" => UserFieldConfig {
                     default_value: Some(false.into()),

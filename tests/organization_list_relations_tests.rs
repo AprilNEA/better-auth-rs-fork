@@ -12,9 +12,9 @@ use better_auth::{
     server_api::EndpointInput,
 };
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRecordFields, AuthRequest,
-    AuthResponse, AuthResult, AuthRoute, AuthSchema, AuthStore, CreateInvitation, CreateSession,
-    CreateUser, FieldDate, FieldMap, FieldValue, HttpMethod, Member, Organization,
+    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRecordFields, AuthRequest, AuthResponse,
+    AuthResult, AuthRoute, AuthSchema, AuthStore, CreateInvitation, CreateSession, CreateUser,
+    FieldDate, FieldMap, FieldValue, HttpMethod, Member, Organization,
     store::{EphemeralStore, StatelessSchema, schema::EntityRole},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldReference, UserFieldTransform,

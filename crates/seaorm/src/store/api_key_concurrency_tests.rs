@@ -9,7 +9,6 @@ use tokio::task::JoinSet;
 
 #[tokio::test]
 async fn increment_overrides_set_policies_for_the_same_physical_column() -> AuthResult<()> {
-    use better_auth_core::AuthInitContext;
     use better_auth_core::user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
     };
@@ -40,8 +39,8 @@ async fn increment_overrides_set_policies_for_the_same_physical_column() -> Auth
             let reader = store.clone();
             let setters = Arc::new(AtomicUsize::new(0));
             let outputs = Arc::new(AtomicUsize::new(0));
-            let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-            init.register_model_fields(
+            let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+            model_fields.register_model_fields(
                 EntityRole::ApiKey,
                 UserConfig {
                     additional_fields: Some(
@@ -82,7 +81,7 @@ async fn increment_overrides_set_policies_for_the_same_physical_column() -> Auth
                     ),
                 },
             )?;
-            store.model_fields = init.into_parts().plugin_fields;
+            store.model_fields = model_fields;
 
             let write_at = at + chrono::Duration::seconds(1);
             let outcome = store
@@ -134,7 +133,6 @@ async fn increment_overrides_set_policies_for_the_same_physical_column() -> Auth
 
 #[tokio::test]
 async fn atomic_usage_rejects_empty_setters_but_keeps_counter_expressions() -> AuthResult<()> {
-    use better_auth_core::AuthInitContext;
     use better_auth_core::user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
     };
@@ -166,8 +164,8 @@ async fn atomic_usage_rejects_empty_setters_but_keeps_counter_expressions() -> A
     let id = "empty-setter".to_owned().into();
     let before = reader.get_api_key_record(&id).await?;
     let outputs = Arc::new(AtomicUsize::new(0));
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::ApiKey,
         UserConfig {
             additional_fields: Some(
@@ -200,7 +198,7 @@ async fn atomic_usage_rejects_empty_setters_but_keeps_counter_expressions() -> A
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     for write in [
         ApiKeyUsageWrite::Refill {
             previous: FieldValue::Null,

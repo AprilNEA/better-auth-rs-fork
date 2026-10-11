@@ -1,7 +1,6 @@
 use super::{Trace, record, take_trace};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthResult, AuthStore, FieldFunction, FieldMap,
-    FieldValue, SchemaValue,
+    AuthConfig, AuthError, AuthResult, AuthStore, FieldFunction, FieldMap, FieldValue, SchemaValue,
     store::{ApiKeyUsageWrite, RuntimeStore, schema::EntityRole},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
@@ -206,9 +205,9 @@ fn runtime(
         config.clone(),
         database.clone(),
     ));
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
-    init.register_model_fields(model.role(), fields)?;
-    raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(model.role(), fields)?;
+    raw.with_runtime(config, Vec::new(), model_fields)
 }
 
 struct Transactions(Trace);

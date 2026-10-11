@@ -102,45 +102,47 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
             FieldValue::Undefined,
         ),
     ] {
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(ctx.config.clone(), raw.clone());
+        better_auth_core::AuthPlugin::<
+            better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
+        >::schema(&plugin, &mut model_fields)
+        .unwrap();
         better_auth_core::AuthPlugin::on_init(&plugin, &mut init)
             .await
             .unwrap();
-        init.register_model_fields(
-            EntityRole::Passkey,
-            UserConfig {
-                additional_fields: Some(
-                    [
-                        ("credentialID".into(), id),
-                        ("transports".into(), transports),
-                    ]
-                    .into_iter()
-                    .map(|(name, value)| {
-                        (
-                            name,
-                            UserFieldConfig {
-                                required: Some(false),
-                                transform: Some(FieldTransforms {
-                                    input: None,
-                                    output: Some(UserFieldTransform::new(move |_| {
-                                        Ok(value.clone())
-                                    })),
-                                }),
-                                ..Default::default()
-                            },
-                        )
-                    })
-                    .collect(),
-                ),
-            },
-        )
-        .unwrap();
-        ctx.database = raw
-            .with_runtime(
-                ctx.config.clone(),
-                Vec::new(),
-                init.into_parts().plugin_fields,
+        model_fields
+            .register_model_fields(
+                EntityRole::Passkey,
+                UserConfig {
+                    additional_fields: Some(
+                        [
+                            ("credentialID".into(), id),
+                            ("transports".into(), transports),
+                        ]
+                        .into_iter()
+                        .map(|(name, value)| {
+                            (
+                                name,
+                                UserFieldConfig {
+                                    required: Some(false),
+                                    transform: Some(FieldTransforms {
+                                        input: None,
+                                        output: Some(UserFieldTransform::new(move |_| {
+                                            Ok(value.clone())
+                                        })),
+                                    }),
+                                    ..Default::default()
+                                },
+                            )
+                        })
+                        .collect(),
+                    ),
+                },
             )
+            .unwrap();
+        ctx.database = raw
+            .with_runtime(ctx.config.clone(), Vec::new(), model_fields)
             .unwrap();
         for (path, property) in [
             ("/passkey/generate-register-options", "excludeCredentials"),
@@ -168,7 +170,12 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
             assert!(cookie_header(&response).contains("better-auth-passkey="));
             let body = response.body.field_value().unwrap();
             let body = body.as_object().unwrap().snapshot_fields().unwrap();
-            let descriptor = body[property].as_array().unwrap()[0]
+            let descriptor = body[property]
+                .as_array()
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .unwrap()
                 .as_object()
                 .unwrap()
                 .snapshot_fields()
@@ -179,7 +186,12 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
             let bytes = response.body.bytes().unwrap();
             let serialized = FieldValue::parse_json(std::str::from_utf8(&bytes).unwrap()).unwrap();
             let serialized = serialized.as_object().unwrap().snapshot_fields().unwrap();
-            let descriptor = serialized[property].as_array().unwrap()[0]
+            let descriptor = serialized[property]
+                .as_array()
+                .unwrap()
+                .get(0)
+                .unwrap()
+                .unwrap()
                 .as_object()
                 .unwrap()
                 .snapshot_fields()

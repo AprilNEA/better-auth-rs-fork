@@ -28,7 +28,7 @@ impl EphemeralStore {
                     };
                     let generation = self.config.advanced.database.generate_id();
                     if create {
-                        generation.adapter_create_id_input("account", supplied.clone(), policy)
+                        self.memory_create_id_input(EntityRole::Account, supplied.clone(), policy)
                     } else {
                         supplied
                             .clone()
@@ -37,7 +37,9 @@ impl EphemeralStore {
                             .map(Option::flatten)
                     }
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| {
+                    self.memory_record_input(EntityRole::Account, name, field, value, create)
+                },
             )
             .await
     }
@@ -172,7 +174,7 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         let mut fields = self.account_storage_fields(input.fields()?, true).await?;
         let record = self
             .raw("account", "create", |op| {
-                let table = op.capture_table(EntityRole::Account)?;
+                let table = op.create_table(EntityRole::Account)?;
                 if let Some(id) = self.next_serial_id(table.len()?) {
                     let _ = fields.insert("id".into(), id);
                 }

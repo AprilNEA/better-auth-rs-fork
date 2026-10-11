@@ -232,11 +232,15 @@ impl App {
         let plugin = OAuthPlugin::new().add_provider("facebook", provider);
         let config = Arc::new(crate::plugins::test_helpers::create_test_config());
         let database = crate::plugins::test_helpers::create_test_database().await;
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = better_auth_core::AuthInitContext::new(config.clone(), database.clone());
+        better_auth_core::AuthPlugin::<
+            better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
+        >::schema(&plugin, &mut model_fields)
+        .unwrap();
         plugin.on_init(&mut init).await.unwrap();
         let parts = init.into_parts();
-        let (adapter_config, endpoint_config, model_fields) =
-            parts.plugin_fields.clone().resolve(&config);
+        let (adapter_config, endpoint_config, model_fields) = model_fields.resolve(&config);
         let database = database
             .with_runtime(
                 Arc::new(adapter_config),

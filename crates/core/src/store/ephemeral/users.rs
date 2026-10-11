@@ -164,7 +164,9 @@ impl EphemeralStore {
                         .adapter_id_input(value.clone(), policy),
                     (_, value) => Ok(value.cloned()),
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| {
+                    self.memory_record_input(EntityRole::User, name, field, value, false)
+                },
             )
             .await
     }
@@ -267,23 +269,16 @@ impl UserStore<StatelessSchema> for EphemeralStore {
                     let Some(policy) = self.model_fields.id_input_policy(EntityRole::User)? else {
                         return Ok(supplied);
                     };
-                    if let Some(serial) = self.next_serial_id(
-                        self.operation(|op| op.capture_table(EntityRole::User)?.len())?,
-                    ) {
-                        return Ok(Some(serial));
-                    }
-                    self.config
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_create_id_input("user", supplied, policy)
+                    self.memory_create_id_input(EntityRole::User, supplied, policy)
                 },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+                |name, field, value| {
+                    self.memory_record_input(EntityRole::User, name, field, value, true)
+                },
             )
             .await?;
         let user = self
             .raw("user", "create", |op| {
-                let users = op.capture_table(EntityRole::User)?;
+                let users = op.create_table(EntityRole::User)?;
                 if let Some(id) = self.next_serial_id(users.len()?) {
                     let _ = fields.insert("id".into(), id);
                 }

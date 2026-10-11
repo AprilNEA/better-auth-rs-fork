@@ -94,12 +94,13 @@ impl EphemeralStore {
                             let session = source.shallow_fields()?;
                             let value = session.get(&relation.from).cloned().unwrap_or_default();
                             let users = native_relation(
-                                op.capture_table(EntityRole::User)?.select_refs(|user| {
-                                    Ok(user
-                                        .field(&relation.to)?
-                                        .unwrap_or_default()
-                                        .strict_equals(&value))
-                                })?,
+                                op.capture_join_table(EntityRole::User)?
+                                    .select_refs(|user| {
+                                        Ok(user
+                                            .field(&relation.to)?
+                                            .unwrap_or_default()
+                                            .strict_equals(&value))
+                                    })?,
                                 &relation,
                                 self.config.advanced.database.find_many_limit(),
                                 |user| user.get("id").cloned().unwrap_or_default(),

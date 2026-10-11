@@ -18,6 +18,7 @@ use std::sync::{
 };
 
 mod arrays;
+mod root;
 
 type Events = Arc<Mutex<Vec<String>>>;
 
@@ -113,7 +114,11 @@ fn fixture(trace: &Events) -> EphemeralStore {
         .user
         .fields_mut()
         .insert("name".into(), field("user"));
-    let mut store = EphemeralStore::new(Arc::new(config));
+    let mut store = EphemeralStore::empty(Arc::new(config));
+    store.state = Arc::new(Mutex::new(super::State::with_models(
+        store.operations.clone(),
+        ["user", "session", "account", "verification", "apikey"],
+    )));
     store.model_fields.register(
         EntityRole::ApiKey,
         UserConfig {
@@ -146,30 +151,22 @@ fn check_raw_accounts(
     expected_accounts: &[FieldMap],
 ) -> AuthResult<()> {
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.users.snapshot()?, expected_users);
-    assert_eq!(state.api_keys.snapshot()?, expected_keys);
-    assert_eq!(state.accounts.snapshot()?, expected_accounts);
+    assert_eq!(state.fixture_table("user").snapshot()?, expected_users);
+    assert_eq!(state.fixture_table("apikey").snapshot()?, expected_keys);
+    assert_eq!(
+        state.fixture_table("account").snapshot()?,
+        expected_accounts
+    );
     check_empty_tables(&state)
 }
 
 fn check_empty_tables(state: &super::State) -> AuthResult<()> {
-    for table in [
-        &state.sessions,
-        &state.verifications,
-        &state.organizations,
-        &state.members,
-        &state.invitations,
-        &state.teams,
-        &state.team_members,
-        &state.organization_roles,
-        &state.jwks,
-        &state.wallets,
-        &state.two_factors,
-        &state.device_codes,
-        &state.passkeys,
-        &state.rate_limits,
-    ] {
-        assert!(table.snapshot()?.is_empty());
+    assert_eq!(
+        state.keys(),
+        ["user", "session", "account", "verification", "apikey"]
+    );
+    for name in ["session", "verification"] {
+        assert!(state.table(name)?.snapshot()?.is_empty());
     }
     Ok(())
 }
@@ -442,7 +439,8 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
         let owner = captured_users.push(user("Before".into()))?;
         let expected_failure = required(target.field_value().stringify().err())?;
         let (base, tx, queue) = store.begin_adapter_transaction()?;
-        let base_name = required(required(base.api_keys.row_at(0)?)?.field("name")?)?;
+        let base_name =
+            required(required(base.fixture_table("apikey").row_at(0)?)?.field("name")?)?;
         record(&trace, "transaction:enter")?;
         let selected = required(tx.get_api_key_record(&"target".to_owned().into()).await?)?;
         assert!(!selected["name"].strict_equals(&live_name));

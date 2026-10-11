@@ -504,7 +504,7 @@ impl<S: AuthSchema> better_auth_core::AuthPlugin<S> for SiwePlugin {
                 .body_validator(move |req| request::verify(req, anonymous)),
         ]
     }
-    async fn on_init(&self, ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, ctx: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
         let role = better_auth_core::store::schema::EntityRole::WalletAddress;
         ctx.register_model_fields(
             role,

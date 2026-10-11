@@ -3,9 +3,9 @@
 use async_trait::async_trait;
 use better_auth::BetterAuth;
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, AuthStore, CreateAccount, CreateUser, FieldDate, FieldMap,
-    FieldValue, ListUsersParams, UserView,
+    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, AuthStore, CreateAccount, CreateUser, FieldDate, FieldMap, FieldValue,
+    ListUsersParams, UserView,
     store::{EphemeralStore, JoinValue, schema::EntityRole},
     user_fields::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldReference, UserFieldTransform,
@@ -119,7 +119,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Declaration {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let name = self.native.map_or("badge", |(_, name)| name);
         let fields = UserConfig {
             additional_fields: Some(

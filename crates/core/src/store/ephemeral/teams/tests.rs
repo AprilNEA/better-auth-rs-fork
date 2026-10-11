@@ -53,12 +53,19 @@ async fn organization_role_batch_matches_native_scope_and_does_not_project_write
     store
         .operation(|op| {
             let state = op.capture_state()?;
-            let mut duplicate = state.organization_roles.snapshot().unwrap().pop().unwrap();
+            let mut duplicate = state
+                .fixture_table("organizationRole")
+                .snapshot()
+                .unwrap()
+                .pop()
+                .unwrap();
             let _ = duplicate.insert("id".into(), "second".into());
-            state.organization_roles.push(duplicate.clone())?;
+            state
+                .fixture_table("organizationRole")
+                .push(duplicate.clone())?;
             let _ = duplicate.insert("id".into(), "other-tenant".into());
             let _ = duplicate.insert("organizationId".into(), Value::Number(8.0));
-            state.organization_roles.push(duplicate)?;
+            state.fixture_table("organizationRole").push(duplicate)?;
             Ok(())
         })
         .unwrap();

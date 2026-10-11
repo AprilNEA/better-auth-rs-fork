@@ -4,7 +4,7 @@ use better_auth_core::store::{UserStore, transaction};
 use better_auth_core::user_fields::{
     FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform,
 };
-use better_auth_core::{AuthConfig, AuthInitContext, CreateUser, DeviceCodeOwnership, FieldValue};
+use better_auth_core::{AuthConfig, CreateUser, DeviceCodeOwnership, FieldValue};
 use sea_orm::Database;
 use std::sync::{
     Arc,
@@ -29,8 +29,8 @@ async fn consumption_uses_original_storage_and_rejects_changed_public_bindings()
         )
         .await?;
     let reader = store.clone();
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::DeviceCode,
         UserConfig {
             additional_fields: Some(
@@ -64,7 +64,7 @@ async fn consumption_uses_original_storage_and_rejects_changed_public_bindings()
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     let ownership = DeviceCodeOwnership::ClientId("original-client".into());
     for status in ["approved", "pending"] {
         let input = FieldMap::from([
@@ -181,8 +181,8 @@ async fn claim_rejects_discarded_owner_in_direct_and_explicit_transactions() -> 
     let before = reader.get_device_code_record(&id).await?;
     let inputs = Arc::new(AtomicUsize::new(0));
     let outputs = Arc::new(AtomicUsize::new(0));
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         EntityRole::DeviceCode,
         UserConfig {
             additional_fields: Some(
@@ -214,7 +214,7 @@ async fn claim_rejects_discarded_owner_in_direct_and_explicit_transactions() -> 
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     for transactional in [false, true] {
         let result = if transactional {
             let id = id.clone();

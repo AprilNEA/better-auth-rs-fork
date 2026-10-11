@@ -1,7 +1,7 @@
 use super::*;
 use super::{adapter_storage_snapshot::Storage, field_projection_gate::Call as ProjectionCall};
 use better_auth_core::{
-    AuthInitContext, AuthRequest, CreateTeam, FieldDate, HttpMethod, Organization, UpdateTeam,
+    AuthRequest, CreateTeam, FieldDate, HttpMethod, Organization, UpdateTeam,
     hooks::{RequestHookContext, current_request_hook_context, with_request_hook_context_value},
     organization_fields::OrganizationFields,
     store::{StatelessSchema, schema::EntityRole},
@@ -231,11 +231,11 @@ async fn check<S: AuthSchema>(
     count.field_type = better_auth_core::user_fields::UserFieldType::Number;
     let _ = fields.team.fields_mut().insert("memberCount".into(), count);
     let config = Arc::new(config);
-    let initial = raw.with_runtime(config.clone(), Vec::new(), Default::default())?;
-    let mut init = AuthInitContext::new(config.clone(), initial);
-    init.register_organization_schema(&fields, true, false);
-    init.register_model_fields(EntityRole::TeamMember, membership)?;
-    let reader = raw.with_runtime(config, Vec::new(), init.into_parts().plugin_fields)?;
+
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_organization_schema(&fields, true, false);
+    model_fields.register_model_fields(EntityRole::TeamMember, membership)?;
+    let reader = raw.with_runtime(config, Vec::new(), model_fields)?;
     let mut request = AuthRequest::new(HttpMethod::Get, "/team-projection-lifetime");
     let _ = request
         .headers

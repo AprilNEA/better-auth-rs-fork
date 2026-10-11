@@ -231,9 +231,9 @@ impl<S: AuthSchema> AuthPlugin<S> for LastLoginMethodPlugin<S> {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
         if self.config.store_in_database {
-            context.register_user_fields(UserConfig {
+            fields.register_user_fields(UserConfig {
                 additional_fields: Some(
                     [(
                         "lastLoginMethod".into(),
@@ -247,6 +247,12 @@ impl<S: AuthSchema> AuthPlugin<S> for LastLoginMethodPlugin<S> {
                     .into(),
                 ),
             });
+        }
+        Ok(())
+    }
+
+    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+        if self.config.store_in_database {
             context.register_database_hook(Arc::new(LoginDatabaseHooks {
                 plugin: self.clone(),
                 runtime: context.runtime(),

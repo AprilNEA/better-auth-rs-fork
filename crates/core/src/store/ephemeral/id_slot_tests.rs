@@ -95,18 +95,18 @@ fn session_fields(session: &SessionView, slot: &str) -> FieldMap {
 
 fn memory(store: &EphemeralStore, _slot: &str) -> AuthResult<JsonValue> {
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.accounts.len()?, 0);
-    assert_eq!(state.verifications.len()?, 0);
-    assert_eq!(state.jwks.len()?, 0);
-    assert_eq!(state.wallets.len()?, 0);
+    assert_eq!(state.fixture_table("account").len()?, 0);
+    assert_eq!(state.fixture_table("verification").len()?, 0);
+    assert_eq!(state.fixture_table("jwks").len()?, 0);
+    assert_eq!(state.fixture_table("walletAddress").len()?, 0);
     let users = state
-        .users
+        .fixture_table("user")
         .snapshot()?
         .iter()
         .map(|row| observe(row.clone(), true))
         .collect::<AuthResult<Vec<_>>>()?;
     let sessions = state
-        .sessions
+        .fixture_table("session")
         .snapshot()?
         .iter()
         .map(|row| observe(row.clone(), true))

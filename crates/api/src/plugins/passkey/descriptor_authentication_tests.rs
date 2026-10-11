@@ -58,9 +58,13 @@ async fn native_authentication_accepts_utf16_transport_hints_and_rejects_non_str
             UpdatePasskeyAuthentication::Native { counter: 0 },
         )
         .await?;
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(fixture.ctx.config.clone(), raw.clone());
+        better_auth_core::AuthPlugin::<
+            better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
+        >::schema(&PasskeyPlugin::new(), &mut model_fields)?;
         better_auth_core::AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
-        init.register_model_fields(
+        model_fields.register_model_fields(
             EntityRole::Passkey,
             UserConfig {
                 additional_fields: Some(
@@ -81,11 +85,8 @@ async fn native_authentication_accepts_utf16_transport_hints_and_rejects_non_str
                 ),
             },
         )?;
-        fixture.ctx.database = raw.with_runtime(
-            fixture.ctx.config.clone(),
-            Vec::new(),
-            init.into_parts().plugin_fields,
-        )?;
+        fixture.ctx.database =
+            raw.with_runtime(fixture.ctx.config.clone(), Vec::new(), model_fields)?;
         let (options, cookie) = options(
             fixture
                 .route(&request(

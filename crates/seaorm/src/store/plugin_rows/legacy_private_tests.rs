@@ -1,7 +1,7 @@
 use crate::store::{SeaOrmStore, bundled_schema::BundledSchema, map_db_err};
 use better_auth_core::{
-    AuthConfig, AuthError, AuthInitContext, AuthRecordFields, AuthResult, FieldMap, FieldValue,
-    FromFieldMap, SchemaValue,
+    AuthConfig, AuthError, AuthRecordFields, AuthResult, FieldMap, FieldValue, FromFieldMap,
+    SchemaValue,
     store::{
         PasskeyStore, TwoFactorStore,
         schema::{EntityRole, SchemaConfiguration},
@@ -99,8 +99,8 @@ async fn store(
         AuthConfig::new("legacy-private-fields-secret-at-least-thirty-two-characters"),
         database,
     );
-    let mut init = AuthInitContext::new(store.config.clone(), Arc::new(store.clone()));
-    init.register_model_fields(
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
+    model_fields.register_model_fields(
         role,
         UserConfig {
             additional_fields: Some(
@@ -111,7 +111,7 @@ async fn store(
             ),
         },
     )?;
-    store.model_fields = init.into_parts().plugin_fields;
+    store.model_fields = model_fields;
     store
         .model_fields
         .set_schema_configuration(&SchemaConfiguration {

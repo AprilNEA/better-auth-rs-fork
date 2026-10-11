@@ -31,11 +31,15 @@ async fn install_fields(
     hooks: Vec<Arc<dyn DatabaseHooks<BundledSchema>>>,
 ) -> TestResult {
     let config = Arc::new(config);
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), raw.clone());
+    better_auth_core::AuthPlugin::<
+        better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
+    >::schema(&PasskeyPlugin::new(), &mut model_fields)?;
     AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
-    init.register_model_fields(EntityRole::Passkey, fields)?;
+    model_fields.register_model_fields(EntityRole::Passkey, fields)?;
     let parts = init.into_parts();
-    let database = raw.with_runtime(config.clone(), hooks, parts.plugin_fields)?;
+    let database = raw.with_runtime(config.clone(), hooks, model_fields)?;
     fixture.ctx = AuthContext::new(config, database);
     fixture.ctx.metadata = parts.metadata;
     fixture.ctx.extensions = parts.extensions;

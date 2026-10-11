@@ -79,6 +79,7 @@ async fn fixture(
         .insert("token".into(), output(UserFieldType::String, 42.0.into()));
     let config = Arc::new(config);
     let store: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(EphemeralStore::new(config.clone()));
+    let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
     let mut init = AuthInitContext::new(config.clone(), store.clone());
     let verified = Arc::new(Mutex::new(Vec::new()));
     let seen = verified.clone();
@@ -90,8 +91,12 @@ async fn fixture(
             async { Ok(true) }
         },
     );
+    better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
+        &plugin,
+        &mut model_fields,
+    )?;
     plugin.on_init(&mut init).await?;
-    init.register_model_fields(
+    model_fields.register_model_fields(
         EntityRole::WalletAddress,
         UserConfig {
             additional_fields: Some(
@@ -119,10 +124,10 @@ async fn fixture(
         },
     )?;
     if cancel {
-        init.register_database_hook(Arc::new(CancelSession));
+        model_fields.register_database_hook(Arc::new(CancelSession));
     }
     let parts = init.into_parts();
-    let store = store.with_runtime(config.clone(), parts.database_hooks, parts.plugin_fields)?;
+    let store = store.with_runtime(config.clone(), parts.database_hooks, model_fields)?;
     let mut context = AuthContext::new(config, store);
     context.extensions = parts.extensions;
     Ok((plugin, context, reads, verified))

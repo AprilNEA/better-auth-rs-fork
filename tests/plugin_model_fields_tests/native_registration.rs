@@ -379,19 +379,20 @@ async fn complete_declaration_replacement_preserves_then_clears_metadata() -> Au
             .chain(["id".into(), "marker".into()])
             .collect::<Vec<_>>();
         for phase in 0..4 {
-            let mut context = AuthInitContext::new(Arc::new(config()), memory());
+            let mut context = better_auth_core::plugin_runtime::ModelFields::default();
             match model {
-                Model::ApiKey => {
-                    ApiKeyPlugin::builder()
-                        .build()
-                        .on_init(&mut context)
-                        .await?
+                Model::ApiKey => AuthPlugin::<StatelessSchema>::schema(
+                    &ApiKeyPlugin::builder().build(),
+                    &mut context,
+                )?,
+                Model::Passkey => {
+                    AuthPlugin::<StatelessSchema>::schema(&PasskeyPlugin::new(), &mut context)?
                 }
-                Model::Passkey => PasskeyPlugin::new().on_init(&mut context).await?,
             }
-            Fields(vec![(model.role(), initial.clone())])
-                .on_init(&mut context)
-                .await?;
+            AuthPlugin::<StatelessSchema>::schema(
+                &Fields(vec![(model.role(), initial.clone())]),
+                &mut context,
+            )?;
             if phase > 0 {
                 let replacement = UserFieldConfig {
                     index: (phase == 1).then_some(false),
@@ -404,11 +405,12 @@ async fn complete_declaration_replacement_preserves_then_clears_metadata() -> Au
                     }),
                     ..Default::default()
                 };
-                Fields(vec![(model.role(), fields(model.field(), replacement))])
-                    .on_init(&mut context)
-                    .await?;
+                AuthPlugin::<StatelessSchema>::schema(
+                    &Fields(vec![(model.role(), fields(model.field(), replacement))]),
+                    &mut context,
+                )?;
             }
-            let registered = context.into_parts().plugin_fields;
+            let registered = context;
             let schema = registered.fields(model.role());
             assert_eq!(schema.fields().keys().cloned().collect::<Vec<_>>(), names);
             let field = required(

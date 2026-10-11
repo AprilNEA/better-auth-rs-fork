@@ -3,8 +3,8 @@ use std::sync::Arc;
 use axum::{Router, http::StatusCode};
 use better_auth::{
     __private_core::{
-        AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-        AuthSchema,
+        AuthContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute, AuthSchema,
+        plugin_runtime::ModelFields,
         store::schema::EntityRole,
         user_fields::{UserConfig, UserFieldConfig},
     },
@@ -43,7 +43,7 @@ impl<S: AuthSchema> AuthPlugin<S> for DisplayFields {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, context: &mut ModelFields) -> AuthResult<()> {
         for (role, names) in [
             (EntityRole::ApiKey, &["name"][..]),
             (EntityRole::Passkey, &["name", "aaguid"][..]),

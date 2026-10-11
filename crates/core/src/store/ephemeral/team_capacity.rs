@@ -224,7 +224,7 @@ impl EphemeralStore {
         Ok(StagedTeamMember {
             member,
             created,
-            base: base.team_members,
+            base: self.snapshot_table(&base, EntityRole::TeamMember)?.clone(),
             working,
         })
     }
@@ -426,7 +426,10 @@ mod tests {
                     ..Default::default()
                 })
                 .await?;
-            let original = store.operation(|op| op.capture_state())?.teams.snapshot()?;
+            let original = store
+                .operation(|op| op.capture_state())?
+                .fixture_table("team")
+                .snapshot()?;
             let started = Arc::new(Notify::new());
             let release = Arc::new(Notify::new());
             let calls = Arc::new(AtomicUsize::new(0));
@@ -478,12 +481,15 @@ mod tests {
             assert!(
                 store
                     .operation(|op| op.capture_state())?
-                    .team_members
+                    .fixture_table("teamMember")
                     .snapshot()?
                     .is_empty()
             );
             assert_eq!(
-                store.operation(|op| op.capture_state())?.teams.snapshot()?,
+                store
+                    .operation(|op| op.capture_state())?
+                    .fixture_table("team")
+                    .snapshot()?,
                 original
             );
             if mode == "cancel" {
@@ -508,17 +514,17 @@ mod tests {
             );
             let state = store.operation(|op| op.capture_state())?;
             if mode == "commit" {
-                assert_eq!(state.team_members.len()?, 1);
+                assert_eq!(state.fixture_table("teamMember").len()?, 1);
                 assert_eq!(
                     state
-                        .teams
+                        .fixture_table("team")
                         .get(&team.id)?
                         .ok_or_else(|| AuthError::internal("Team disappeared"))?["memberCount"],
                     Value::Number(1.0)
                 );
             } else {
-                assert_eq!(state.team_members.len()?, 0);
-                assert_eq!(state.teams.snapshot()?, original);
+                assert_eq!(state.fixture_table("teamMember").len()?, 0);
+                assert_eq!(state.fixture_table("team").snapshot()?, original);
             }
         }
         Ok(())

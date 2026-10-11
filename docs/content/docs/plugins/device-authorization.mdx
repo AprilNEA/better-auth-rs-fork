@@ -85,7 +85,7 @@ Unannotated validators remain absent from generated request documentation. The l
 
 ## Adapter field policies
 
-Custom plugins can register complete declarations through `AuthInitContext::register_model_fields(EntityRole::DeviceCode, UserConfig)`. Register replacements after the Device plugin. Replacement preserves the original field position and replaces the entire declaration, including its type, references, defaults, mappings, and callbacks. A later native plugin restores its declarations at their existing positions. Grant `stored_fields` retains the upstream restriction to additional fields.
+Custom plugins can register complete declarations through `ModelFields::register_model_fields(EntityRole::DeviceCode, UserConfig)`. Register replacements after the Device plugin. Replacement preserves the original field position and replaces the entire declaration, including its type, references, defaults, mappings, and callbacks. A later native plugin restores its declarations at their existing positions. Grant `stored_fields` retains the upstream restriction to additional fields.
 
 Complete records and update patches use the shared adapter policy. `DeviceCodeStore::{create_device_code_record, get_device_code_record, update_device_code_record}` accepts or returns logical `FieldMap` values. The ordinary typed creation and update methods use the same pipeline. Generate matching physical columns with `deviceCode.additionalFields`, including declarations that replace native fields. Runtime registration does not migrate existing databases.
 

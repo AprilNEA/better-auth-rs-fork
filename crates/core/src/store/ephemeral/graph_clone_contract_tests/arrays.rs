@@ -310,17 +310,20 @@ async fn array_clone_reads_later_indices_after_earlier_getter_writes() -> AuthRe
         &named(key("target", 4.0), name).into(),
     )?;
     let state = store.operation(|op| op.capture_state())?;
-    assert_eq!(state.users.snapshot()?, [user("Live side effect 1".into())]);
-    assert_eq!(state.api_keys.len()?, 1);
+    assert_eq!(
+        state.fixture_table("user").snapshot()?,
+        [user("Live side effect 1".into())]
+    );
+    assert_eq!(state.fixture_table("apikey").len()?, 1);
     assert_tree(
-        &required(state.api_keys.row_at(0)?)?.field_value(),
+        &required(state.fixture_table("apikey").row_at(0)?)?.field_value(),
         &named(
             key("target", 4.0),
             vec!["copied 2".into(), payload(2)].into(),
         )
         .into(),
     )?;
-    assert!(state.accounts.snapshot()?.is_empty());
+    assert!(state.fixture_table("account").snapshot()?.is_empty());
     check_empty_tables(&state)?;
     assert_eq!(
         captured_users.snapshot()?,

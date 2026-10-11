@@ -9,8 +9,8 @@ use async_trait::async_trait;
 use better_auth::seaorm::sea_orm::EntityTrait;
 use better_auth::{
     __private_core::{
-        AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-        AuthRoute, AuthSchema, AuthStore, CreateJwk, CreateWalletAddress, FieldMap, FieldValue,
+        AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
+        AuthSchema, AuthStore, CreateJwk, CreateWalletAddress, FieldMap, FieldValue,
         id::{IdGeneration, IdGenerator},
         store::schema::EntityRole,
         user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
@@ -34,7 +34,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         context.register_model_fields(self.0, self.1.clone())
     }
 

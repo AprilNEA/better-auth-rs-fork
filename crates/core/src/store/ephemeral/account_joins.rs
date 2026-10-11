@@ -94,12 +94,13 @@ impl EphemeralStore {
                     let user = user.shallow_fields()?;
                     let value = user.get(&relation.from).cloned().unwrap_or_default();
                     let accounts = native_relation(
-                        op.capture_table(EntityRole::Account)?.select_refs(|row| {
-                            Ok(row
-                                .field(&relation.to)?
-                                .unwrap_or_default()
-                                .strict_equals(&value))
-                        })?,
+                        op.capture_join_table(EntityRole::Account)?
+                            .select_refs(|row| {
+                                Ok(row
+                                    .field(&relation.to)?
+                                    .unwrap_or_default()
+                                    .strict_equals(&value))
+                            })?,
                         relation,
                         self.config.advanced.database.find_many_limit(),
                         |row| row.get("id").cloned().unwrap_or_default(),
@@ -224,12 +225,13 @@ impl EphemeralStore {
                         parent_ids.push(id);
                         let value = account.get(&relation.from).cloned().unwrap_or_default();
                         let users = native_relation(
-                            op.capture_table(EntityRole::User)?.select_refs(|user| {
-                                Ok(user
-                                    .field(&relation.to)?
-                                    .unwrap_or_default()
-                                    .strict_equals(&value))
-                            })?,
+                            op.capture_join_table(EntityRole::User)?
+                                .select_refs(|user| {
+                                    Ok(user
+                                        .field(&relation.to)?
+                                        .unwrap_or_default()
+                                        .strict_equals(&value))
+                                })?,
                             relation,
                             self.config.advanced.database.find_many_limit(),
                             |user| user.get("id").cloned().unwrap_or_default(),

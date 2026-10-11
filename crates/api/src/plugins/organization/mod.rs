@@ -278,24 +278,33 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
         .organization_fields(&self.config.schema)
     }
 
-    async fn on_init(
+    fn schema(
         &self,
-        ctx: &mut better_auth_core::AuthInitContext<S>,
+        fields: &mut better_auth_core::plugin_runtime::ModelFields,
     ) -> better_auth_core::AuthResult<()> {
-        ctx.register_organization_schema(
+        fields.register_organization_schema(
             &self.config.schema,
             self.config.teams.enabled,
             self.config.dynamic_access_control,
         );
+        fields.register_native_session_fields(METADATA_ENABLED)?;
+        if self.config.teams.enabled {
+            fields.register_native_session_fields("organization.teams_enabled")?;
+        }
+        Ok(())
+    }
+
+    async fn on_init(
+        &self,
+        ctx: &mut better_auth_core::AuthInitContext<S>,
+    ) -> better_auth_core::AuthResult<()> {
         ctx.extensions
             .insert(self.config.schema.initialized_options());
         ctx.extensions.insert(self.clone());
 
         S::Session::require_plugin_fields("organization", &["active_organization_id"])?;
-        ctx.register_native_session_fields(METADATA_ENABLED)?;
         if self.config.teams.enabled {
             S::Session::require_plugin_fields("organization", &["active_team_id"])?;
-            ctx.register_native_session_fields("organization.teams_enabled")?;
         }
         ctx.set_metadata(
             METADATA_DYNAMIC_ACCESS_CONTROL,

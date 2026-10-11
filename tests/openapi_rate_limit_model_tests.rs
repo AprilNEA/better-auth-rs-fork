@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use better_auth::{BetterAuth, plugins::OpenApiPlugin};
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
-    AuthResult, AuthRoute, AuthSchema, RateLimitConfig,
+    AuthConfig, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, RateLimitConfig,
     middleware::RateLimitStorageKind,
     store::schema::EntityRole,
     user_fields::{UserConfig, UserFieldConfig},
@@ -27,7 +27,10 @@ impl<S: AuthSchema> AuthPlugin<S> for RateLimitModel {
         Vec::new()
     }
 
-    async fn on_init(&self, context: &mut AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(
+        &self,
+        context: &mut better_auth_core::plugin_runtime::ModelFields,
+    ) -> AuthResult<()> {
         let ordinary = UserConfig {
             additional_fields: Some(
                 [(

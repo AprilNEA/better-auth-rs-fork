@@ -727,12 +727,19 @@ impl<S: better_auth_core::AuthSchema> better_auth_core::AuthPlugin<S>
         Ok(Some(response))
     }
 
-    async fn on_init(&self, ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
         let role = better_auth_core::store::schema::EntityRole::DeviceCode;
-        ctx.register_model_fields(
+        fields.register_model_fields(
             role,
             better_auth_core::plugin_runtime::ModelFields::plugin_native_fields(role),
         )?;
+        if let Some(grant) = &self.config.grant_fields {
+            fields.register_model_fields(role, grant.clone())?;
+        }
+        Ok(())
+    }
+
+    async fn on_init(&self, _ctx: &mut better_auth_core::AuthInitContext<S>) -> AuthResult<()> {
         for (name, length) in [
             ("deviceCodeLength", self.config.device_code_length),
             ("userCodeLength", self.config.user_code_length),
@@ -744,7 +751,7 @@ impl<S: better_auth_core::AuthSchema> better_auth_core::AuthPlugin<S>
             }
         }
         if let Some(fields) = &self.config.grant_fields {
-            grant::register_fields(ctx, fields)?;
+            grant::validate_fields(fields)?;
         }
         Ok(())
     }

@@ -80,12 +80,17 @@ impl Fixture {
             store = store.hook(RejectEnrollment);
         }
         let mut ctx = AuthContext::new(config, Arc::new(store));
+        let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+        better_auth_core::AuthPlugin::<
+            better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
+        >::schema(&TwoFactorPlugin::new(), &mut model_fields)
+        .unwrap();
         TwoFactorPlugin::new().on_init(&mut init).await.unwrap();
         let parts = init.into_parts();
         ctx.metadata = parts.metadata;
         ctx.extensions = parts.extensions;
-        let mut fields = parts.plugin_fields;
+        let mut fields = model_fields;
         fields.set_schema_configuration(&better_auth_core::store::schema::SchemaConfiguration {
             config: ctx.config.clone(),
             plugins: vec!["two-factor"],
