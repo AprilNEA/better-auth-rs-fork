@@ -42,21 +42,35 @@ impl AuthRecordFields for SessionView {
     }
 
     fn structured_clone(&self, context: &mut crate::StructuredCloneContext) -> AuthResult<Self> {
-        let mut output = self.clone();
-        output.id = context.clone_field(&self.id)?;
-        output.user_id = context.clone_field(&self.user_id)?;
-        output.token = context.clone_field(&self.token)?;
-        output.ip_address = context.clone_field(&self.ip_address)?;
-        output.user_agent = context.clone_field(&self.user_agent)?;
-        output.impersonated_by = context.clone_field(&self.impersonated_by)?;
-        output.active_organization_id = context.clone_field(&self.active_organization_id)?;
-        output.active_team_id = context.clone_field(&self.active_team_id)?;
-
-        output.expires_at = context.clone_field(&self.expires_at)?;
-        output.created_at = context.clone_field(&self.created_at)?;
-        output.updated_at = context.clone_field(&self.updated_at)?;
-        output.additional_fields = context.clone_map(&self.additional_fields)?;
-        Ok(output)
+        macro_rules! clone_fields {
+            ($($field:ident),* $(,)?) => {{
+                // The public map preserves an active extension independently of private liveness.
+                let fields = FieldMap::from(self.clone());
+                let mut state = vec![$(self.$field.field_value(),)*];
+                state.extend(crate::entity::record_fields::ClonedFields::map_values(&self.additional_fields));
+                context.clone_with(&fields, &state, |fields, state| {
+                    let mut state = crate::entity::record_fields::ClonedFields::new(state);
+                    let mut output = self.clone();
+                    $(output.$field = state.field(&self.$field)?;)*
+                    output.additional_fields = state.map(&self.additional_fields)?;
+                    output.field_order = fields.keys().cloned().collect();
+                    Ok(output)
+                })
+            }};
+        }
+        clone_fields!(
+            id,
+            user_id,
+            token,
+            ip_address,
+            user_agent,
+            impersonated_by,
+            active_organization_id,
+            active_team_id,
+            expires_at,
+            created_at,
+            updated_at,
+        )
     }
 }
 

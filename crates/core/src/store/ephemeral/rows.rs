@@ -172,9 +172,7 @@ impl<T: ObjectRow> crate::field_value::FieldObjectSource for RowRef<T> {
                     value: T::from_field_values(fields)?,
                     user_state,
                 };
-                Ok(Box::new(move || {
-                    crate::field_value::publish_clone(&target.0, row);
-                }))
+                Ok(crate::field_value::prepare_clone(target.0, row))
             }),
         }))
     }

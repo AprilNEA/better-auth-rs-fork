@@ -1,11 +1,15 @@
-use super::{FieldValue, structured_clone::ArrayCloneSeed};
+use super::{
+    FieldValue,
+    structured_clone::{ArrayCloneSeed, CloneWrite},
+};
 use crate::AuthResult;
+use parking_lot::Mutex;
 use std::{
     any::Any,
     cell::RefCell,
     collections::{BTreeMap, HashSet},
     fmt,
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 /// A stable array handle. Live arrays read each index from their current source.
@@ -18,20 +22,15 @@ pub struct FieldArray(ArrayStorage);
 
 #[derive(Clone)]
 enum ArrayStorage {
-    Owned(Arc<OnceLock<ArrayValues>>),
+    // Native restoration can inspect a prepared clone before success commits the array or failure resets the array.
+    Owned(Arc<Mutex<Option<ArrayValues>>>),
     Live(Arc<dyn FieldArraySource>),
 }
 
+#[derive(Clone)]
 struct ArrayValues {
     length: usize,
     entries: BTreeMap<usize, FieldValue>,
-}
-
-fn publish_array(target: &OnceLock<ArrayValues>, values: ArrayValues) {
-    assert!(
-        target.set(values).is_ok(),
-        "A clone array is published exactly once"
-    );
 }
 
 pub(crate) trait FieldArraySource: Send + Sync {
@@ -66,7 +65,9 @@ impl FieldArray {
     /// Read the current array length, including missing indices.
     pub fn len(&self) -> AuthResult<usize> {
         match &self.0 {
-            ArrayStorage::Owned(values) => Ok(values.get().map_or(0, |values| values.length)),
+            ArrayStorage::Owned(values) => {
+                Ok(values.lock().as_ref().map_or(0, |values| values.length))
+            }
             ArrayStorage::Live(source) => source.len(),
         }
     }
@@ -80,7 +81,8 @@ impl FieldArray {
     pub fn get(&self, index: usize) -> AuthResult<Option<FieldValue>> {
         match &self.0 {
             ArrayStorage::Owned(values) => Ok(values
-                .get()
+                .lock()
+                .as_ref()
                 .and_then(|values| values.entries.get(&index))
                 .cloned()),
             ArrayStorage::Live(source) => source.get(index),
@@ -96,7 +98,8 @@ impl FieldArray {
     pub fn own_indices(&self) -> AuthResult<Vec<usize>> {
         let mut indices = match &self.0 {
             ArrayStorage::Owned(values) => values
-                .get()
+                .lock()
+                .as_ref()
                 .map_or_else(Vec::new, |values| values.entries.keys().copied().collect()),
             ArrayStorage::Live(source) => source.own_indices()?,
         };
@@ -157,9 +160,9 @@ impl FieldArray {
                 let _ = entries.insert(index, transform(value)?);
             }
         }
-        Ok(Self(ArrayStorage::Owned(Arc::new(OnceLock::from(
+        Ok(Self(ArrayStorage::Owned(Arc::new(Mutex::new(Some(
             ArrayValues { length, entries },
-        )))))
+        ))))))
     }
 
     /// Filter present indices in order, omitting missing indices from the new dense array.
@@ -207,7 +210,8 @@ impl FieldArray {
         let ArrayStorage::Owned(values) = &self.0 else {
             return None;
         };
-        let values = values.get()?;
+        let values = values.lock();
+        let values = values.as_ref()?;
         if values.entries.len() != values.length {
             return None;
         }
@@ -224,7 +228,7 @@ impl FieldArray {
         {
             return Ok(seed);
         }
-        let target = Arc::new(OnceLock::new());
+        let target = Arc::new(Mutex::new(None));
         Ok(ArrayCloneSeed {
             array: Self(ArrayStorage::Owned(target.clone())),
             prepare: Box::new(move |length, entries| {
@@ -232,12 +236,12 @@ impl FieldArray {
                     .iter()
                     .map(|(index, _)| index + 1)
                     .fold(length, usize::max);
-                let values = ArrayValues {
+                let mut values = Some(ArrayValues {
                     length,
                     entries: entries.into_iter().collect(),
-                };
-                Ok(Box::new(move || {
-                    publish_array(&target, values);
+                });
+                Ok(CloneWrite::new(move || {
+                    std::mem::swap(&mut *target.lock(), &mut values);
                 }))
             }),
         })
@@ -252,10 +256,12 @@ impl Default for FieldArray {
 
 impl From<Vec<FieldValue>> for FieldArray {
     fn from(values: Vec<FieldValue>) -> Self {
-        Self(ArrayStorage::Owned(Arc::new(OnceLock::from(ArrayValues {
-            length: values.len(),
-            entries: values.into_iter().enumerate().collect(),
-        }))))
+        Self(ArrayStorage::Owned(Arc::new(Mutex::new(Some(
+            ArrayValues {
+                length: values.len(),
+                entries: values.into_iter().enumerate().collect(),
+            },
+        )))))
     }
 }
 
@@ -303,7 +309,10 @@ impl PartialEq for FieldArray {
                 let Some(_guard) = ComparisonGuard::enter(identity) else {
                     return true;
                 };
-                match (left.get(), right.get()) {
+                // Recursive comparisons must not retain either array lock.
+                let left = left.lock().clone();
+                let right = right.lock().clone();
+                match (left, right) {
                     (Some(left), Some(right)) => {
                         left.length == right.length && left.entries == right.entries
                     }
@@ -324,10 +333,11 @@ impl fmt::Debug for FieldArray {
                 let Some(_guard) = FormattingGuard::enter(identity) else {
                     return formatter.write_str("[Circular]");
                 };
+                let values = values.lock().clone();
                 formatter
                     .debug_struct("Array")
-                    .field("length", &values.get().map_or(0, |values| values.length))
-                    .field("entries", &values.get().map(|values| &values.entries))
+                    .field("length", &values.as_ref().map_or(0, |values| values.length))
+                    .field("entries", &values.as_ref().map(|values| &values.entries))
                     .finish()
             }
             ArrayStorage::Live(_) => formatter

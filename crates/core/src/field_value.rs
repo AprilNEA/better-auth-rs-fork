@@ -20,7 +20,7 @@ pub use object::FieldObject;
 pub(crate) use object::{FieldObjectSource, ObjectIdentity};
 mod structured_clone;
 pub use structured_clone::StructuredCloneContext;
-pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, publish_clone};
+pub(crate) use structured_clone::{ArrayCloneSeed, ObjectCloneSeed, prepare_clone};
 mod primitive;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;

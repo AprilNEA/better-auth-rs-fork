@@ -13,12 +13,17 @@ impl AuthRecordFields for MemberUserView {
     }
 
     fn structured_clone(&self, context: &mut crate::StructuredCloneContext) -> AuthResult<Self> {
-        let mut user = self.clone();
-        user.id = context.clone_field(&self.id)?;
-        user.email = context.clone_field(&self.email)?;
-        user.name = context.clone_field(&self.name)?;
-        user.image = context.clone_field(&self.image)?;
-        Ok(user)
+        let fields = self.field_values()?;
+        let state: Vec<_> = fields.values().cloned().collect();
+        context.clone_with(&fields, &state, |_, state| {
+            let mut state = super::record_fields::ClonedFields::new(state);
+            Ok(Self {
+                id: state.field(&self.id)?,
+                name: state.field(&self.name)?,
+                email: state.field(&self.email)?,
+                image: state.field(&self.image)?,
+            })
+        })
     }
 }
 

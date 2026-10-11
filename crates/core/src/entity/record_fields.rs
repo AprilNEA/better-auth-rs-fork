@@ -4,9 +4,43 @@ fn field<T: SchemaField>(value: &T) -> crate::FieldValue {
     value.clone().into_field()
 }
 
+/// Restore native slots and maps from the same prepared graph without narrowing schema variants.
+pub(crate) struct ClonedFields(std::vec::IntoIter<crate::FieldValue>);
+
+impl ClonedFields {
+    pub(crate) fn new(fields: Vec<crate::FieldValue>) -> Self {
+        Self(fields.into_iter())
+    }
+
+    fn next(&mut self) -> AuthResult<crate::FieldValue> {
+        self.0
+            .next()
+            .ok_or_else(|| crate::AuthError::internal("Native record clone state is incomplete"))
+    }
+
+    pub(crate) fn field<T: SchemaField>(&mut self, source: &T) -> AuthResult<T> {
+        source.restore_cloned_field(self.next()?)
+    }
+
+    pub(crate) fn map_values(source: &FieldMap) -> impl Iterator<Item = crate::FieldValue> {
+        let mut fields = source.clone();
+        fields.sort_property_order();
+        fields.into_iter().map(|(_, value)| value)
+    }
+
+    pub(crate) fn map(&mut self, source: &FieldMap) -> AuthResult<FieldMap> {
+        let mut fields = source.clone();
+        fields.sort_property_order();
+        fields
+            .keys()
+            .map(|name| Ok((name.clone(), self.next()?)))
+            .collect()
+    }
+}
+
 macro_rules! record {
-    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
-        record!(serialize $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; serde_omit: [$($private),*])? $(; state: $state => $clone_state)? $(; from: $constructor)?);
+    (serde $type:ty, [$($field:ident => $name:literal $([$json:ident])?),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $capture_state:ident, $restore_state:ident)? $(; from: $constructor:ident)?) => {
+        record!(serialize $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; serde_omit: [$($private),*])? $(; state: $state => $capture_state, $restore_state)? $(; from: $constructor)?);
 
         impl<'de> serde::Deserialize<'de> for $type {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -23,8 +57,8 @@ macro_rules! record {
             crate::field_value::serde::revive_schema_date(value);
         }
     };
-    (serialize $type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
-        record!($type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; state: $state => $clone_state)? $(; from: $constructor)?);
+    (serialize $type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; serde_omit: [$($private:literal),*])? $(; state: $state:ident => $capture_state:ident, $restore_state:ident)? $(; from: $constructor:ident)?) => {
+        record!($type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; state: $state => $capture_state, $restore_state)? $(; from: $constructor)?);
 
         impl serde::Serialize for $type {
             fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
@@ -41,6 +75,14 @@ macro_rules! record {
             }
         }
     };
+    (@visible $source:ident, $fields:expr, $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])?) => {{
+        let mut fields = $fields;
+        $(fields.retain(|name, value| !value.is_undefined() || $source.$order.contains(name));)?
+        $(fields.extend($source.$extra.clone());)?
+        $($(let _ = fields.remove($omit);)*)?
+        $(let fields = fields.in_field_order(&$source.$order);)?
+        fields
+    }};
     (@constructor infallible $type:ty, [$($field:ident => $name:literal),*], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident)?) => {
         impl From<FieldMap> for $type {
             fn from(mut fields: FieldMap) -> Self {
@@ -74,39 +116,35 @@ macro_rules! record {
             }
         }
     };
-    ($type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident => $clone_state:ident)? $(; from: $constructor:ident)?) => {
+    ($type:ty, [$($field:ident => $name:literal),* $(,)?], $($extra:ident)? $(; order: $order:ident)? $(; omit: [$($omit:literal),*])? $(; state: $state:ident => $capture_state:ident, $restore_state:ident)? $(; from: $constructor:ident)?) => {
         impl AuthRecordFields for $type {
             fn field_values(&self) -> AuthResult<FieldMap> {
                 let fields = FieldMap::from_iter([
                     $(($name.to_owned(), field(&self.$field))),*
                 ]);
-                $(let fields = {
-                    let mut fields = fields;
-                    fields.retain(|name, value| !value.is_undefined() || self.$order.contains(name));
-                    fields
-                };)?
-                $(let fields = {
-                    let mut fields = fields;
-                    fields.extend(self.$extra.clone());
-                    fields
-                };)?
-                $(let fields = {
-                    let mut fields = fields;
-                    $(let _ = fields.remove($omit);)*
-                    fields
-                };)?
-                $(let fields = fields.in_field_order(&self.$order);)?
-                Ok(fields)
+                Ok(record!(@visible self, fields, $($extra)? $(; order: $order)? $(; omit: [$($omit),*])?))
             }
 
             fn structured_clone(&self, context: &mut crate::StructuredCloneContext) -> AuthResult<Self> {
-                let mut record = self.clone();
-                $(record.$field = context.clone_field(&self.$field)?;)*
-                $(record.$extra = context.clone_map(&self.$extra)?;)?
-                $(record.$state = self.$clone_state(context)?;)?
-                Ok(record)
+                let native = FieldMap::from_iter([
+                    $(($name.to_owned(), field(&self.$field))),*
+                ]);
+                let fields = record!(@visible self, native.clone(), $($extra)? $(; order: $order)? $(; omit: [$($omit),*])?);
+                let mut state: Vec<_> = native.into_iter().map(|(_, value)| value).collect();
+                $(state.extend(ClonedFields::map_values(&self.$extra));)?
+                $(state.extend(self.$capture_state());)?
+                context.clone_with(&fields, &state, |fields, state| {
+                    let mut state = ClonedFields::new(state);
+                    let mut record = self.clone();
+                    $(record.$field = state.field(&self.$field)?;)*
+                    $(record.$extra = state.map(&self.$extra)?;)?
+                    $(record.$state = self.$restore_state(&mut state)?;)?
+                    $(record.$order = fields.keys().cloned().collect();)?
+                    Ok(record)
+                })
             }
         }
+
         record!(@constructor $($constructor)? $type, [$($field => $name),*], $($extra)? $(; order: $order)? $(; omit: [$($omit),*])? $(; state: $state)?);
     };
 
@@ -188,7 +226,7 @@ record!(serde crate::types::DeviceCode, [
     polling_interval => "pollingInterval",
     client_id => "clientId",
     scope => "scope",
-], additional_fields; order: field_order; state: consumption => clone_consumption; from: infallible);
+], additional_fields; order: field_order; state: consumption => consumption_clone_fields, restore_consumption; from: infallible);
 
 record!(serde crate::types::TwoFactor, [
     id => "id",

@@ -1,4 +1,4 @@
-//! Traverse getters before publishing fresh graph identities or filling cyclic references.
+//! Traverse getters, prepare graph writes, and restore native records before committing clone identities.
 
 #![expect(
     clippy::indexing_slicing,
@@ -15,21 +15,59 @@ use std::sync::Arc;
 
 #[expect(
     clippy::expect_used,
-    reason = "Clone targets remain private until publication; no callback can lock or poison a fresh target."
+    reason = "Clone writes only swap private target state; public accessors release their guards before callbacks run."
 )]
-pub(crate) fn publish_clone<T>(target: &std::sync::Mutex<T>, value: T) {
-    let previous = {
+pub(crate) fn prepare_clone<T: Send + Sync + 'static>(
+    target: Arc<std::sync::Mutex<T>>,
+    mut value: T,
+) -> CloneWrite {
+    CloneWrite::new(move || {
         let mut target = target
             .lock()
             .expect("A private clone target cannot be poisoned");
-        std::mem::replace(&mut *target, value)
-    };
-    drop(previous);
+        std::mem::swap(&mut *target, &mut value);
+    })
 }
 
-type Publish = Box<dyn FnOnce() + Send + Sync>;
-type Prepare = Box<dyn FnOnce(FieldMap, Vec<FieldValue>) -> AuthResult<Publish>>;
-type PrepareArray = Box<dyn FnOnce(usize, Vec<(usize, FieldValue)>) -> AuthResult<Publish>>;
+/// Swap prepared state with a private target without running callbacks or dropping either state under its lock.
+pub(crate) struct CloneWrite(Box<dyn FnMut() + Send + Sync>);
+
+impl CloneWrite {
+    pub(crate) fn new(swap: impl FnMut() + Send + Sync + 'static) -> Self {
+        Self(Box::new(swap))
+    }
+
+    fn swap(&mut self) {
+        (self.0)();
+    }
+}
+
+struct StagedWrites<'a> {
+    writes: &'a mut [CloneWrite],
+    applied: usize,
+}
+
+impl<'a> StagedWrites<'a> {
+    fn new(writes: &'a mut [CloneWrite]) -> Self {
+        let mut staged = Self { writes, applied: 0 };
+        for write in staged.writes.iter_mut() {
+            write.swap();
+            staged.applied += 1;
+        }
+        staged
+    }
+}
+
+impl Drop for StagedWrites<'_> {
+    fn drop(&mut self) {
+        for write in self.writes.iter_mut().take(self.applied).rev() {
+            write.swap();
+        }
+    }
+}
+
+type Prepare = Box<dyn FnOnce(FieldMap, Vec<FieldValue>) -> AuthResult<CloneWrite>>;
+type PrepareArray = Box<dyn FnOnce(usize, Vec<(usize, FieldValue)>) -> AuthResult<CloneWrite>>;
 
 pub(crate) struct ArrayCloneSeed {
     pub(crate) array: FieldArray,
@@ -61,6 +99,7 @@ struct CloneEntry {
 }
 
 type Copies = Vec<(Identity, CloneEntry)>;
+type PreparedGraph = (Vec<FieldValue>, Copies, Vec<CloneWrite>);
 
 /// Copy one value graph with fresh object identities and preserved aliases.
 /// Reuse one context across all records in a transaction snapshot.
@@ -69,7 +108,7 @@ type Copies = Vec<(Identity, CloneEntry)>;
 pub struct StructuredCloneContext {
     // Source handles prevent pointer reuse between calls through the same context.
     copies: HashMap<Identity, CloneEntry>,
-    pending: Option<Vec<Publish>>,
+    pending: Option<Vec<CloneWrite>>,
 }
 
 impl StructuredCloneContext {
@@ -87,21 +126,50 @@ impl StructuredCloneContext {
     pub(crate) fn publish(mut self) {
         // Prepared writes contain no getters or fallible conversions, so publication cannot leave half-filled cycles.
         if let Some(pending) = self.pending.take() {
-            for apply in pending {
-                apply();
+            for mut write in pending {
+                write.swap();
             }
         }
     }
 
-    fn complete(&mut self, copies: Copies, publish: Vec<Publish>) {
+    fn complete(&mut self, copies: Copies, publish: Vec<CloneWrite>) {
         if let Some(pending) = &mut self.pending {
             pending.extend(publish);
         } else {
-            for apply in publish {
-                apply();
+            for mut write in publish {
+                write.swap();
             }
         }
         self.copies.extend(copies);
+    }
+
+    fn restore<T>(
+        &mut self,
+        (values, copies, mut publish): PreparedGraph,
+        restore: impl FnOnce(&[FieldValue]) -> AuthResult<T>,
+    ) -> AuthResult<T> {
+        let value = {
+            // Deferred aliases must also be readable during restoration, then return to their unpublished state.
+            let _pending = self
+                .pending
+                .as_mut()
+                .map(|writes| StagedWrites::new(writes));
+            let _staged = StagedWrites::new(&mut publish);
+            restore(&values)
+        }?;
+        self.complete(copies, publish);
+        Ok(value)
+    }
+
+    fn clone_value_with<T>(
+        &mut self,
+        value: &FieldValue,
+        restore: impl FnOnce(FieldValue) -> AuthResult<T>,
+    ) -> AuthResult<T> {
+        let mut graph = Graph::new(self);
+        let edge = graph.visit(value)?;
+        let prepared = graph.materialize()?;
+        self.restore(prepared, |values| restore(edge.resolve(values)))
     }
 
     /// Copy a value while preserving aliases already copied by this context.
@@ -116,6 +184,17 @@ impl StructuredCloneContext {
 
     /// Copy record fields using the same alias map as other records in this context.
     pub fn clone_map(&mut self, fields: &FieldMap) -> AuthResult<FieldMap> {
+        self.clone_with(fields, &[], |fields, _| Ok(fields))
+    }
+
+    /// Clone enumerable fields in property order, then hidden state through the same object graph.
+    /// Restore the native record while cloned targets are readable. Commit new identities only after restoration succeeds.
+    pub fn clone_with<T>(
+        &mut self,
+        fields: &FieldMap,
+        state: &[FieldValue],
+        restore: impl FnOnce(FieldMap, Vec<FieldValue>) -> AuthResult<T>,
+    ) -> AuthResult<T> {
         let mut ordered = fields.clone();
         ordered.sort_property_order();
         let mut graph = Graph::new(self);
@@ -123,18 +202,26 @@ impl StructuredCloneContext {
             .iter()
             .map(|(name, value)| Ok((name.clone(), graph.visit(value)?)))
             .collect::<AuthResult<Vec<_>>>()?;
-        let (values, copies, publish) = graph.materialize()?;
-        let fields = edges
-            .into_iter()
-            .map(|(name, edge)| (name, edge.resolve(&values)))
-            .collect();
-        self.complete(copies, publish);
-        Ok(fields)
+        let state = state
+            .iter()
+            .map(|value| graph.visit(value))
+            .collect::<AuthResult<Vec<_>>>()?;
+        let prepared = graph.materialize()?;
+        self.restore(prepared, |values| {
+            let fields = edges
+                .into_iter()
+                .map(|(name, edge)| (name, edge.resolve(values)))
+                .collect();
+            let state = state.iter().map(|edge| edge.resolve(values)).collect();
+            restore(fields, state)
+        })
     }
 
     /// Clone one native schema field using the same object graph as its containing record.
     pub fn clone_field<T: crate::SchemaField>(&mut self, value: &T) -> AuthResult<T> {
-        self.clone_value(&value.clone().into_field())?.decode()
+        self.clone_value_with(&value.clone().into_field(), |cloned| {
+            value.restore_cloned_field(cloned)
+        })
     }
 
     pub(crate) fn clone_array(
@@ -280,7 +367,7 @@ impl<'a> Graph<'a> {
         Ok(Edge::Node(index))
     }
 
-    fn materialize(self) -> AuthResult<(Vec<FieldValue>, Copies, Vec<Publish>)> {
+    fn materialize(self) -> AuthResult<PreparedGraph> {
         let values = self
             .nodes
             .iter()

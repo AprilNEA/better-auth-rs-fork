@@ -246,11 +246,16 @@ async fn projected_device_bindings_preserve_clone_identity_and_reject_forgery() 
             FieldValue::Undefined,
             "alias".into(),
         ] {
-            for structured in [false, true] {
+            for (structured, storage_name) in [
+                (false, None),
+                (true, None),
+                (false, Some("stored_binding")),
+                (true, Some("stored_binding")),
+            ] {
                 let output = projection.clone();
                 let (auth, raw) = configured(
                     name,
-                    None,
+                    storage_name,
                     UserFieldTransform::new(move |_| Ok(output.clone())),
                 )
                 .await?;
@@ -275,6 +280,13 @@ async fn projected_device_bindings_preserve_clone_identity_and_reject_forgery() 
                 }
                 assert!(expected.consumption_bindings()?.1);
                 let before = raw.plugin_storage_rows(EntityRole::DeviceCode)?;
+                let stored = before
+                    .first()
+                    .ok_or_else(|| AuthError::internal("Expected the stored Device binding row"))?;
+                assert!(stored.contains_key(storage_name.unwrap_or(name)));
+                if storage_name.is_some() {
+                    assert!(!stored.contains_key(name));
+                }
                 let ownership = DeviceCodeOwnership::ClientId("binding-client".into());
                 let mut forged = expected.clone();
                 replace_binding(&mut forged, name, object())?;

@@ -26,7 +26,9 @@ pub trait AuthRecordFields {
     where
         Self: FromFieldMap,
     {
-        Self::from_field_values(context.clone_map(&self.field_values()?)?)
+        context.clone_with(&self.field_values()?, &[], |fields, _| {
+            Self::from_field_values(fields)
+        })
     }
 }
 
@@ -388,7 +390,7 @@ pub struct MemberUserView {
 }
 
 mod member_user_view;
-mod record_fields;
+pub(crate) mod record_fields;
 
 impl MemberUserView {
     /// Retain the runtime identity fields used in organization member responses.

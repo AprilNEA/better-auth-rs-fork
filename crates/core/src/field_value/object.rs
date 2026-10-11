@@ -127,9 +127,7 @@ impl FieldObject {
             state: Vec::new(),
             original_record: None,
             prepare: Box::new(move |values, _| {
-                Ok(Box::new(move || {
-                    super::structured_clone::publish_clone(&fields, values);
-                }))
+                Ok(super::structured_clone::prepare_clone(fields, values))
             }),
         })
     }

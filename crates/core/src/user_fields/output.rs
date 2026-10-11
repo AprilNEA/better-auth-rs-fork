@@ -472,15 +472,19 @@ macro_rules! user_fields {
             }
 
             fn structured_clone(&self, context: &mut crate::StructuredCloneContext) -> AuthResult<Self> {
-                let (fields, state) = self.clone().into_row_parts();
-                let cloned_fields = context.clone_map(&fields)?;
-                // Rust-only hidden slots follow enumerable properties and share their graph aliases.
-                let hidden_values = state.hidden_values().iter()
-                    .map(|value| context.clone_value(value))
-                    .collect::<AuthResult<_>>()?;
-                let mut cloned_state = state.with_cloned_fields(&fields, &cloned_fields, hidden_values)?;
-                cloned_state.visible_fields = state.visible_fields;
-                cloned_state.into_user(cloned_fields)
+                let fields = self.field_values()?;
+                let mut state = vec![$(self.$field.field_value(),)* self.metadata.clone()];
+                state.extend(crate::entity::record_fields::ClonedFields::map_values(&self.additional_fields));
+                context.clone_with(&fields, &state, |fields, state| {
+                    let mut state = crate::entity::record_fields::ClonedFields::new(state);
+                    Ok(Self {
+                        field_order: fields.keys().cloned().collect(),
+                        visible_fields: self.visible_fields.clone(),
+                        $($field: state.field(&self.$field)?,)*
+                        metadata: state.field(&self.metadata)?,
+                        additional_fields: state.map(&self.additional_fields)?,
+                    })
+                })
             }
         }
     };

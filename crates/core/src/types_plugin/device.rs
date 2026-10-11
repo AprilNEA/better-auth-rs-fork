@@ -1,6 +1,6 @@
 use crate::{
-    AuthError, AuthRecordFields, AuthResult, FieldDate, FieldMap, SchemaValue,
-    StructuredCloneContext,
+    AuthError, AuthRecordFields, AuthResult, FieldDate, FieldMap, FieldValue, SchemaValue,
+    entity::record_fields::ClonedFields,
 };
 
 /// Device authorization fields after adapter output projection.
@@ -67,16 +67,26 @@ impl DeviceCode {
         Ok((&saved.physical, unchanged))
     }
 
-    pub(crate) fn clone_consumption(
+    pub(crate) fn consumption_clone_fields(&self) -> Vec<FieldValue> {
+        self.consumption
+            .iter()
+            .flat_map(|saved| {
+                ClonedFields::map_values(&saved.physical)
+                    .chain(ClonedFields::map_values(&saved.projected))
+            })
+            .collect()
+    }
+
+    pub(crate) fn restore_consumption(
         &self,
-        context: &mut StructuredCloneContext,
+        fields: &mut ClonedFields,
     ) -> AuthResult<Option<ConsumptionBindings>> {
         self.consumption
             .as_ref()
             .map(|saved| {
                 Ok(ConsumptionBindings {
-                    physical: context.clone_map(&saved.physical)?,
-                    projected: context.clone_map(&saved.projected)?,
+                    physical: fields.map(&saved.physical)?,
+                    projected: fields.map(&saved.projected)?,
                 })
             })
             .transpose()
@@ -111,7 +121,7 @@ impl PartialEq for DeviceCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::FieldValue;
+    use crate::StructuredCloneContext;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},

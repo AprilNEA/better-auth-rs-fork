@@ -8,6 +8,11 @@ use crate::AuthRecordFields;
 use crate::field_value::FieldObjectSource;
 use std::sync::Mutex;
 
+#[path = "structured_clone_tests/native_records.rs"]
+mod native_records;
+#[path = "structured_clone_tests/restoration.rs"]
+mod restoration;
+
 type Events = Arc<Mutex<Vec<String>>>;
 type OnRead = Box<dyn Fn(&str) -> AuthResult<()> + Send + Sync>;
 

@@ -258,9 +258,7 @@ impl<T: ObjectRow> crate::field_value::FieldArraySource for TableRef<T> {
                     })?;
                     *slot = Some(source.0.clone());
                 }
-                Ok(Box::new(move || {
-                    crate::field_value::publish_clone(&target.rows, rows)
-                }))
+                Ok(crate::field_value::prepare_clone(target.rows, rows))
             }),
         }))
     }

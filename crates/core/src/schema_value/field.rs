@@ -1,4 +1,4 @@
-use crate::{FieldDate, FieldValue, types::InvitationStatus};
+use crate::{AuthError, AuthResult, FieldDate, FieldValue, types::InvitationStatus};
 use std::borrow::Cow;
 
 /// Convert a schema's default Rust type without crossing a JSON boundary.
@@ -8,6 +8,11 @@ pub trait SchemaField: Clone {
 
     /// Move this Rust value into an adapter field while retaining object handles.
     fn into_field(self) -> FieldValue;
+
+    /// Restore this field's native representation from its fully cloned adapter value.
+    fn restore_cloned_field(&self, value: FieldValue) -> AuthResult<Self> {
+        value.decode()
+    }
 }
 
 impl SchemaField for FieldValue {
@@ -114,6 +119,13 @@ impl<T: SchemaField> SchemaField for Option<T> {
     fn into_field(self) -> FieldValue {
         self.map_or(FieldValue::Null, SchemaField::into_field)
     }
+
+    fn restore_cloned_field(&self, value: FieldValue) -> AuthResult<Self> {
+        match self {
+            Some(source) => source.restore_cloned_field(value).map(Some),
+            None => value.decode(),
+        }
+    }
 }
 
 impl<T: SchemaField> SchemaField for Vec<T> {
@@ -136,6 +148,19 @@ impl<T: SchemaField> SchemaField for Vec<T> {
             .map(SchemaField::into_field)
             .collect::<Vec<_>>()
             .into()
+    }
+
+    fn restore_cloned_field(&self, value: FieldValue) -> AuthResult<Self> {
+        let values = value.decode::<Vec<FieldValue>>()?;
+        if values.len() != self.len() {
+            return Err(AuthError::internal(
+                "Cloned array does not retain the source field count",
+            ));
+        }
+        self.iter()
+            .zip(values)
+            .map(|(source, value)| source.restore_cloned_field(value))
+            .collect()
     }
 }
 

@@ -169,6 +169,14 @@ impl<T: SchemaField> SchemaField for SchemaValue<T> {
     fn into_field(self) -> FieldValue {
         self.into_field_value()
     }
+
+    fn restore_cloned_field(&self, value: FieldValue) -> AuthResult<Self> {
+        match self {
+            Self::Typed(source) => source.restore_cloned_field(value).map(Self::Typed),
+            Self::Dynamic(_) => Ok(Self::Dynamic(value)),
+            Self::Undefined => Ok(Self::Undefined),
+        }
+    }
 }
 
 /// Format a number with ECMAScript's string conversion, including exponent thresholds.
