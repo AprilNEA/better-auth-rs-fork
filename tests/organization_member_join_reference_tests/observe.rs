@@ -25,9 +25,10 @@ fn assert_error(error: AuthError, expected: &Value) -> AuthResult<()> {
             );
         }
         Some("TypeError") => {
-            assert!(
-                matches!(&error, AuthError::Internal(message) if message == "User not found for member"),
-                "{error:?}"
+            assert!(matches!(error, AuthError::TypeError(_)), "{error:?}");
+            assert_eq!(
+                Value::String(error.instrumentation_message()),
+                *error_field(expected, "message")?
             );
             assert_eq!(
                 error_field(expected, "sameCallbackError")?,

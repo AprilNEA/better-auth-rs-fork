@@ -18,10 +18,14 @@ enum Case {
     Accept,
     Reject,
     Cancel,
+    RejectDeleted,
+    CancelDeleted,
+    RejectDeletedAfterError,
+    CancelDeletedAfterError,
 }
 
 impl Case {
-    const ALL: [Self; 9] = [
+    const ALL: [Self; 13] = [
         Self::Get,
         Self::GetClone,
         Self::List,
@@ -31,6 +35,10 @@ impl Case {
         Self::Accept,
         Self::Reject,
         Self::Cancel,
+        Self::RejectDeleted,
+        Self::CancelDeleted,
+        Self::RejectDeletedAfterError,
+        Self::CancelDeletedAfterError,
     ];
     fn user_list(self) -> bool {
         matches!(
@@ -39,7 +47,7 @@ impl Case {
         )
     }
     fn actor(self) -> &'static str {
-        if matches!(self, Self::List | Self::Cancel) {
+        if self == Self::List || self.cancel() {
             "user-a"
         } else {
             "user-b"
@@ -53,9 +61,34 @@ impl Case {
                 ("list-user-invitations", HttpMethod::Get)
             }
             Self::Accept => ("accept-invitation", HttpMethod::Post),
-            Self::Reject => ("reject-invitation", HttpMethod::Post),
-            Self::Cancel => ("cancel-invitation", HttpMethod::Post),
+            Self::Reject | Self::RejectDeleted | Self::RejectDeletedAfterError => {
+                ("reject-invitation", HttpMethod::Post)
+            }
+            Self::Cancel | Self::CancelDeleted | Self::CancelDeletedAfterError => {
+                ("cancel-invitation", HttpMethod::Post)
+            }
         }
+    }
+    fn cancel(self) -> bool {
+        matches!(
+            self,
+            Self::Cancel | Self::CancelDeleted | Self::CancelDeletedAfterError
+        )
+    }
+    fn deletes(self) -> bool {
+        matches!(
+            self,
+            Self::RejectDeleted
+                | Self::CancelDeleted
+                | Self::RejectDeletedAfterError
+                | Self::CancelDeletedAfterError
+        )
+    }
+    fn after_error(self) -> bool {
+        matches!(
+            self,
+            Self::RejectDeletedAfterError | Self::CancelDeletedAfterError
+        )
     }
     fn status(self) -> &'static str {
         match self {
@@ -154,6 +187,12 @@ fn expected_response(case: Case, values: &support::Values) -> FieldValue {
         ])
         .into(),
         Case::Cancel => invitation.into(),
+        Case::RejectDeleted | Case::RejectDeletedAfterError => FieldMap::from_iter([
+            ("invitation".into(), FieldValue::Null),
+            ("member".into(), FieldValue::Null),
+        ])
+        .into(),
+        Case::CancelDeleted | Case::CancelDeletedAfterError => FieldValue::Null,
     }
 }
 
@@ -196,12 +235,7 @@ fn expected_hook(case: Case, values: &support::Values, status: &str, after: bool
             visible_invitation(values, status).into(),
         ),
         (
-            if case == Case::Cancel {
-                "cancelledBy"
-            } else {
-                "user"
-            }
-            .into(),
+            if case.cancel() { "cancelledBy" } else { "user" }.into(),
             user(case.actor()),
         ),
         ("organization".into(), organization.into()),
@@ -221,7 +255,7 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
         return member.into_iter().chain(invitation).collect();
     }
     let mut events = invitation.clone();
-    if case == Case::Cancel {
+    if case.cancel() {
         events.extend(member.clone());
     }
     events.push(organization);
@@ -233,8 +267,8 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
     } else if !case.user_list() {
         let action = match case {
             Case::Accept => "Accept",
-            Case::Reject => "Reject",
-            Case::Cancel => "Cancel",
+            Case::Reject | Case::RejectDeleted | Case::RejectDeletedAfterError => "Reject",
+            Case::Cancel | Case::CancelDeleted | Case::CancelDeletedAfterError => "Cancel",
             _ => unreachable!(),
         };
         events.push(event(
@@ -242,7 +276,21 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
             "hook",
             expected_hook(case, values, "pending", false),
         ));
-        events.extend(invitation);
+        if case.deletes() {
+            events.push(event(
+                "invitation.status",
+                "input",
+                if case.cancel() {
+                    "canceled"
+                } else {
+                    "rejected"
+                }
+                .into(),
+            ));
+        }
+        if !case.deletes() {
+            events.extend(invitation);
+        }
         if case == Case::Accept {
             events.push(event("member.createdAt", "input", "native-date".into()));
             events.extend(output_events(storage, "member", "member"));
@@ -356,6 +404,26 @@ async fn check<S: AuthSchema>(
         }
         assert_eq!(events.take()?, expected_events(&storage, case, &values));
         assert_eq!(fixture::snapshot(&storage).await?, before);
+        return Ok(());
+    }
+    if case.after_error() {
+        if native {
+            let error = response.expect_err("Native route must preserve the after hook failure");
+            assert!(
+                matches!(error, AuthError::Internal(message) if message == "invitation-after-hook-failed")
+            );
+        } else {
+            let response = response?;
+            assert_eq!(response.status, 500, "{case:?}");
+            assert!(response.body.bytes()?.is_empty(), "{case:?}");
+        }
+        assert_eq!(
+            events.take()?,
+            expected_events(&storage, case, &values),
+            "{case:?}"
+        );
+        fixture::update_expected(&storage, case, &mut before)?;
+        assert_eq!(fixture::snapshot(&storage).await?, before, "{case:?}");
         return Ok(());
     }
     let response = response?;

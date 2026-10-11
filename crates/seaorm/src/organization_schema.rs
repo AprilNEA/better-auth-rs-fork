@@ -125,3 +125,65 @@ where
     type TeamMember = TM;
     type OrganizationRole = R;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use better_auth_core::{AuthRecordFields, FieldValue};
+
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic while model conversion errors retain their types"
+    )]
+    fn check_projected_record<M: SeaOrmOrganizationModel>(model: &M) -> AuthResult<()>
+    where
+        M::Record: AuthRecordFields,
+    {
+        let role: FieldValue = FieldMap::from([("custom".into(), true.into())]).into();
+        let projected = FieldMap::from([
+            ("role".into(), role.clone()),
+            ("extra".into(), false.into()),
+            ("id".into(), FieldValue::Undefined),
+            ("createdAt".into(), FieldValue::Null),
+        ]);
+        let record = model.record_from_fields(&UserConfig::default(), projected.clone())?;
+        let actual = record.field_values()?;
+        assert_eq!(actual, projected);
+        assert_eq!(
+            actual.keys().collect::<Vec<_>>(),
+            projected.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            actual
+                .get("role")
+                .and_then(FieldValue::as_object)
+                .zip(role.as_object())
+                .is_some_and(|(actual, expected)| actual.same_object(expected))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn member_and_invitation_preserve_projected_presence_order_and_identity() -> AuthResult<()> {
+        use crate::store::entities::{invitation, member};
+
+        check_projected_record(&member::Model {
+            id: "member".into(),
+            organization_id: "organization".into(),
+            user_id: "user".into(),
+            role: "member".into(),
+            created_at: Default::default(),
+        })?;
+        check_projected_record(&invitation::Model {
+            team_id: Some("team".into()),
+            id: "invitation".into(),
+            organization_id: "organization".into(),
+            email: "invitee@example.com".into(),
+            role: "member".into(),
+            status: "pending".into(),
+            inviter_id: "user".into(),
+            expires_at: Default::default(),
+            created_at: Default::default(),
+        })
+    }
+}

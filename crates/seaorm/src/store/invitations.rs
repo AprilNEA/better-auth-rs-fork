@@ -177,7 +177,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> I
         &self,
         id: &str,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         self.update_invitation_status_value(&id.into(), status)
             .await
     }
@@ -186,8 +186,8 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> I
         &self,
         id: &FieldValue,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
-        self.update_organization_model::<O::Invitation>(
+    ) -> AuthResult<Option<Invitation>> {
+        self.update_organization_model_optional::<O::Invitation>(
             self.connection(),
             better_auth_core::store::schema::EntityRole::Invitation,
             id,
@@ -585,7 +585,8 @@ mod tests {
         let canceled = store
             .update_invitation_status_value(&invitation_id, InvitationStatus::Canceled)
             .await
-            .expect("native invitation selector should cancel");
+            .expect("native invitation selector should cancel")
+            .expect("fixture invitation must still exist");
         assert_eq!(
             canceled
                 .status

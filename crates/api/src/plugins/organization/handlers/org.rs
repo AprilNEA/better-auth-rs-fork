@@ -66,7 +66,7 @@ pub(crate) async fn create_organization_core(
     }
     let user_orgs = ctx
         .database
-        .list_user_organizations_value(user.model_property("id")?)
+        .list_user_organizations_value(&user.model_property("id")?)
         .await?;
     if config
         .organization_limit_reached(user, user_orgs.len())
@@ -119,7 +119,7 @@ pub(crate) async fn create_organization_core(
         team_id: SchemaValue::Undefined,
         created_at: None,
         organization_id: organization.id().into_owned(),
-        user_id: SchemaValue::from_field(user.model_property("id")?.clone()),
+        user_id: SchemaValue::from_field(user.model_property("id")?),
         role: if config.creator_role.is_empty() {
             "owner".into()
         } else {
@@ -181,7 +181,7 @@ pub(crate) async fn create_organization_core(
         };
         let team_member = ctx
             .database
-            .add_team_member_value(&team.id.field_value(), user.model_property("id")?, None)
+            .add_team_member_value(&team.id.field_value(), &user.model_property("id")?, None)
             .await?;
         if let Some(hooks) = &config.hooks {
             hooks

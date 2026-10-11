@@ -89,6 +89,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/model-alias-order.test.ts \
         ./compat-tests/reference-server/contracts/team-details-null-selector.test.ts \
         ./compat-tests/reference-server/contracts/native-join-property-collision.test.ts \
+        ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
         ./compat-tests/reference-server/contracts/sql-relation-property.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
         ./compat-tests/reference-server/contracts/organization-serial-references.test.ts \
@@ -544,7 +545,7 @@ run_stage() {
       cargo fmt --all -- --check
       cargo clippy --locked --keep-going -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings
       cargo clippy --locked --keep-going --features axum,seaorm2,redis-cache --test schema_join_reference_tests --test account_user_selected_relations_reference_tests --test account_user_auth_boundary_reference_tests --test account_user_signin_snapshot_tests --test nullable_user_update_tests --test cookie_cleanup_tests --test cookie_expires_tests --test cookie_http_errors_tests --test schema_join_reference_conflict_tests --test sql_relation_property_tests --test organization_member_join_reference_tests --test organization_native_join_tests --test organization_serial_reference_tests -- -D warnings
-      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- store::joins:: store::ephemeral::user_serial_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils::
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-seaorm --lib -- store::joins:: store::ephemeral::user_serial_tests:: store::ephemeral::organization_joins::detail_dependencies_tests:: schema_history session::native::tests:: session::cookie_cache:: utils::cookie_utils::
       cargo test --locked --no-fail-fast -p better-auth-api --lib -- plugins::helpers::session_tests:: plugins::jwt::tests:: plugins::oauth::signin::
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test schema_join_reference_tests --test join_binding_tests \
@@ -569,6 +570,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/account-user-auth-email.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/organization-member-singular-existing.test.ts \
+        ./compat-tests/reference-server/contracts/organization-detail-dependencies.test.ts \
         ./compat-tests/reference-server/contracts/sql-relation-property.test.ts
       ;;
     passkey)

@@ -352,7 +352,9 @@ impl MemberUser {
         } else if let Some(user) = users.first() {
             user.clone()
         } else if require_user {
-            return Err(AuthError::internal("User not found for member"));
+            return Err(AuthError::type_error(
+                "null is not an object (evaluating 'user.id')",
+            ));
         } else {
             return Ok(None);
         };

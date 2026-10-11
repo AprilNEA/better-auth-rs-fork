@@ -32,7 +32,10 @@ pub(super) async fn seed<S: AuthSchema>(
             additional_fields: Default::default(),
         })
         .await?;
-    for (id, name) in [("team-a", "Team A"), ("team-b", "Team B")] {
+    for (id, name) in [("team-a", "Team A"), ("team-b", "Team B")]
+        .into_iter()
+        .filter(|_| !case.deletes())
+    {
         let _ = store
             .create_team(CreateTeam {
                 id: Some(id.into()),
@@ -158,6 +161,14 @@ pub(super) fn update_expected(
     case: Case,
     snapshot: &mut Snapshot,
 ) -> AuthResult<()> {
+    if case.deletes() {
+        for model in ["member", "invitation", "organization"] {
+            snapshot
+                .get_mut(model)
+                .ok_or_else(|| AuthError::internal("Missing deleted organization snapshot"))?
+                .clear();
+        }
+    }
     if matches!(case, Case::Accept | Case::Reject | Case::Cancel) {
         let rows = snapshot
             .get_mut("invitation")

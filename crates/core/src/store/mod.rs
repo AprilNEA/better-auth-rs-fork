@@ -1576,16 +1576,17 @@ pub trait InvitationStore: Send + Sync {
         let id = crate::SchemaValue::<String>::from_field(org_id.clone());
         self.get_pending_invitation(id.typed()?, email).await
     }
+    /// Update an invitation through the adapter policies; return `None` when the row is absent.
     async fn update_invitation_status(
         &self,
         id: &str,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation>;
+    ) -> AuthResult<Option<Invitation>>;
     async fn update_invitation_status_value(
         &self,
         id: &crate::FieldValue,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         let id = crate::SchemaValue::<String>::from_field(id.clone());
         self.update_invitation_status(id.typed()?, status).await
     }

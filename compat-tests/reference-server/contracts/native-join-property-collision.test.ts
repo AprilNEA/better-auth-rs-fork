@@ -12,10 +12,10 @@ const user = (id: string, name: string): Fields => ({
 
 type OrganizationRelation = "member-user" | "team-members" | "membership-team";
 const team = (id: string, name: string): Fields => ({
-  id, name, organizationId: "relation-organization", createdAt: date(0), updatedAt: null,
+  id, name, organizationId: "relation-organization", memberCount: 0, createdAt: date(0), updatedAt: null,
 });
 const teamMember = (id: string, userId: string, teamId: string): Fields => ({
-  id, userId, teamId, createdAt: date(0),
+  id, userId, teamId, membershipKey: `membership:${id}`, createdAt: date(0),
 });
 
 async function check(many: boolean, alias: boolean, joins: boolean, reject: boolean, missing = false, relation?: OrganizationRelation) {

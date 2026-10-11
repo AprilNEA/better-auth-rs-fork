@@ -9,7 +9,7 @@ import { serializeSignedCookie } from "better-call";
 import { date, storedDate, team, type Backend, type Events, type Fields, type Policies } from "./organization-team-member-contract";
 
 type Route = "get" | "list" | "list-user" | "accept" | "reject" | "cancel";
-type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean };
+type Scenario = { name: string; route: Route; joins?: boolean; undefinedName?: boolean; cloneError?: boolean; deleteBefore?: boolean; afterError?: boolean };
 const cases: Scenario[] = [
   { name: "get-collision", route: "get" },
   { name: "get-clone-before-inviter", route: "get", cloneError: true },
@@ -20,6 +20,10 @@ const cases: Scenario[] = [
   { name: "accept", route: "accept" },
   { name: "reject", route: "reject" },
   { name: "cancel", route: "cancel" },
+  { name: "reject-deleted", route: "reject", deleteBefore: true },
+  { name: "cancel-deleted", route: "cancel", deleteBefore: true },
+  { name: "reject-deleted-after-error", route: "reject", deleteBefore: true, afterError: true },
+  { name: "cancel-deleted-after-error", route: "cancel", deleteBefore: true, afterError: true },
 ];
 const baseURL = "http://team-member-fields.test";
 const models = ["user", "session", "account", "verification", "organization", "member", "invitation", "team", "teamMember"] as const;
@@ -52,7 +56,9 @@ async function setup(backend: Backend, scenario: Scenario) {
   await create("organization", {
     id: "organization", name: "Organization", slug: "organization", logo: null, metadata: "{}", createdAt: date(0),
   });
-  for (const row of [team("team-a", "Team A"), team("team-b", "Team B")]) await create("team", row);
+  if (!scenario.deleteBefore) {
+    for (const row of [team("team-a", "Team A"), team("team-b", "Team B")]) await create("team", row);
+  }
   await create("member", member("owner-member", "user-a", "owner"));
   await create("invitation", invitation());
   const actor = scenario.route === "list" || scenario.route === "cancel" ? "user-a" : "user-b";
@@ -63,6 +69,11 @@ async function setup(backend: Backend, scenario: Scenario) {
   });
   return {
     options,
+    deleteOrganizationRecords: async () => {
+      for (const model of ["member", "invitation", "organization"]) {
+        await context.adapter.deleteMany({ model, where: [{ field: model === "organization" ? "id" : "organizationId", value: "organization" }] });
+      }
+    },
     snapshot: () => Object.fromEntries(models.map(model => [model, structuredClone(database
       ? database.query(`SELECT * FROM "${model}" ORDER BY id`).all()
       : memory[model].toSorted((left, right) => String(left.id).localeCompare(String(right.id))))])) as Record<string, Fields[]>,
@@ -86,14 +97,19 @@ function nativeValues(events: Events) {
   const invitationFunction = () => { events.push(["invitation.createdAt", "called"]); return "invitation-function"; };
   const memberFunction = () => { events.push(["member.probeFunction", "called"]); return "member-function"; };
   const organizationFunction = () => { events.push(["organization.name", "called"]); return "organization-function"; };
-  return { invitationFunction, memberFunction, organizationFunction };
+  return { invitationFunction, memberFunction, organizationFunction, afterError: new Error("invitation-after-hook-failed") };
 }
 type NativeValues = ReturnType<typeof nativeValues>;
 
-function responseAuth(options: BetterAuthOptions, scenario: Scenario, events: Events, values: NativeValues) {
+function responseAuth(options: BetterAuthOptions, scenario: Scenario, events: Events, values: NativeValues, deleteOrganizationRecords: () => Promise<void>) {
+  let originalInvitation: object | undefined;
   const invitationFields: Policies = {
     createdAt: outputField("invitation.createdAt", events, () => values.invitationFunction, { type: "date" }),
   };
+  if (scenario.deleteBefore) invitationFields.status = { type: "string", transform: { input(value) {
+    events.push(["invitation.status", "input", value]);
+    return value;
+  } } };
   for (const [name, value] of [
     ["probeUndefined", undefined], ["probeNull", null], ["organizationName", "shadow-name"],
     ["organizationSlug", "shadow-slug"], ["inviterEmail", "shadow-email"],
@@ -132,10 +148,26 @@ function responseAuth(options: BetterAuthOptions, scenario: Scenario, events: Ev
       organizationHooks: {
         beforeAcceptInvitation(data) { events.push(["beforeAcceptInvitation", "hook", data]); return Promise.resolve(); },
         afterAcceptInvitation(data) { events.push(["afterAcceptInvitation", "hook", data]); return Promise.resolve(); },
-        beforeRejectInvitation(data) { events.push(["beforeRejectInvitation", "hook", data]); return Promise.resolve(); },
-        afterRejectInvitation(data) { events.push(["afterRejectInvitation", "hook", data]); return Promise.resolve(); },
-        beforeCancelInvitation(data) { events.push(["beforeCancelInvitation", "hook", data]); return Promise.resolve(); },
-        afterCancelInvitation(data) { events.push(["afterCancelInvitation", "hook", data]); return Promise.resolve(); },
+        async beforeRejectInvitation(data) {
+          originalInvitation = data.invitation;
+          events.push(["beforeRejectInvitation", "hook", data]);
+          if (scenario.deleteBefore) await deleteOrganizationRecords();
+        },
+        async afterRejectInvitation(data) {
+          if (scenario.deleteBefore) expect(data.invitation).toBe(originalInvitation);
+          events.push(["afterRejectInvitation", "hook", data]);
+          if (scenario.afterError) throw values.afterError;
+        },
+        async beforeCancelInvitation(data) {
+          originalInvitation = data.invitation;
+          events.push(["beforeCancelInvitation", "hook", data]);
+          if (scenario.deleteBefore) await deleteOrganizationRecords();
+        },
+        async afterCancelInvitation(data) {
+          if (scenario.deleteBefore) expect(data.invitation).toBe(originalInvitation);
+          events.push(["afterCancelInvitation", "hook", data]);
+          if (scenario.afterError) throw values.afterError;
+        },
       },
     }), { id: "ordinary-invitation-response-fields", schema: {
       invitation: { fields: invitationFields }, member: { fields: memberFields }, organization: { fields: organizationFields },
@@ -168,8 +200,8 @@ function expectedResponse(scenario: Scenario, values: NativeValues) {
     case "list": return [visibleInvitation(values)];
     case "list-user": return [{ ...visibleInvitation(values), organizationName: scenario.undefinedName ? undefined : values.organizationFunction }];
     case "accept": return { invitation: visibleInvitation(values, "accepted"), member: visibleMember(values) };
-    case "reject": return { invitation: visibleInvitation(values, "rejected"), member: null };
-    case "cancel": return visibleInvitation(values, "canceled");
+    case "reject": return { invitation: scenario.deleteBefore ? null : visibleInvitation(values, "rejected"), member: null };
+    case "cancel": return scenario.deleteBefore ? null : visibleInvitation(values, "canceled");
   }
 }
 
@@ -198,14 +230,16 @@ function expectedEvents(backend: Backend, scenario: Scenario, values: NativeValu
       ["afterAcceptInvitation", "hook", { invitation: visibleInvitation(values, "accepted"), member: visibleMember(values), user: user("user-b"), organization }],
     ];
     case "reject": return [
-      ...invitationEvents, ...organizationEvents, ["beforeRejectInvitation", "hook", beforeHook], ...invitationEvents,
-      ["afterRejectInvitation", "hook", { ...beforeHook, invitation: visibleInvitation(values, "rejected") }],
+      ...invitationEvents, ...organizationEvents, ["beforeRejectInvitation", "hook", beforeHook], ...(scenario.deleteBefore ? [] : invitationEvents),
+      ...(scenario.deleteBefore ? [["invitation.status", "input", "rejected"]] : []),
+      ["afterRejectInvitation", "hook", { ...beforeHook, invitation: visibleInvitation(values, scenario.deleteBefore ? "pending" : "rejected") }],
     ];
     case "cancel": return [
       ...invitationEvents, ...outputEvents(backend, "member", "owner"), ...organizationEvents,
       ["beforeCancelInvitation", "hook", { invitation: visibleInvitation(values), cancelledBy: user("user-a"), organization }],
-      ...invitationEvents,
-      ["afterCancelInvitation", "hook", { invitation: visibleInvitation(values, "canceled"), cancelledBy: user("user-a"), organization }],
+      ...(scenario.deleteBefore ? [] : invitationEvents),
+      ...(scenario.deleteBefore ? [["invitation.status", "input", "canceled"]] : []),
+      ["afterCancelInvitation", "hook", { invitation: visibleInvitation(values, scenario.deleteBefore ? "pending" : "canceled"), cancelledBy: user("user-a"), organization }],
     ];
   }
 }
@@ -248,7 +282,7 @@ for (const backend of ["memory", "sqlite"] as const) {
         const values = nativeValues(events);
         try {
           const before = fixture.snapshot();
-          const auth = responseAuth(fixture.options, scenario, events, values);
+          const auth = responseAuth(fixture.options, scenario, events, values, fixture.deleteOrganizationRecords);
           const cookie = (await serializeSignedCookie("better-auth.session_token", "invitation-response-token", fixture.options.secret!)).split(";", 1)[0];
           const headers = new Headers({ cookie, origin: baseURL, "content-type": "application/json" });
           const expected = expectedResponse(scenario, values);
@@ -257,19 +291,25 @@ for (const backend of ["memory", "sqlite"] as const) {
               let caught: unknown;
               try { await nativeCall(auth, scenario.route, headers); } catch (error) { caught = error; }
               expect(caught).toMatchObject({ name: "DataCloneError", message: "The object can not be cloned." });
+            } else if (scenario.afterError) {
+              let caught: unknown;
+              try { await nativeCall(auth, scenario.route, headers); } catch (error) { caught = error; }
+              expect(caught).toBe(values.afterError);
             } else expectOrdered(await nativeCall(auth, scenario.route, headers), expected);
           }
           else {
             const response = await auth.handler(httpRequest(scenario.route, headers));
-            expect(response.status).toBe(scenario.cloneError ? 500 : 200);
-            if (scenario.cloneError) expect(await response.text()).toBe("");
+            expect(response.status).toBe(scenario.cloneError || scenario.afterError ? 500 : 200);
+            if (scenario.cloneError || scenario.afterError) expect(await response.text()).toBe("");
             else {
               expect(response.headers.get("content-type")).toContain("application/json");
               expect(await response.text()).toBe(JSON.stringify(expected));
             }
           }
           expect(events).toStrictEqual(expectedEvents(backend, scenario, values));
-          if (scenario.route === "accept" || scenario.route === "reject" || scenario.route === "cancel") {
+          if (scenario.deleteBefore) {
+            for (const model of ["member", "invitation", "organization"]) before[model] = [];
+          } else if (scenario.route === "accept" || scenario.route === "reject" || scenario.route === "cancel") {
             const status = scenario.route === "accept" ? "accepted" : scenario.route === "reject" ? "rejected" : "canceled";
             before.invitation = [fixture.stored(invitation(status))];
           }

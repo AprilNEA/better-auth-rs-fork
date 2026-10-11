@@ -109,9 +109,14 @@ fn record_fields(events: &Events, model: &str, values: &Values) -> UserConfig {
     fields
 }
 
-struct Hooks(Events);
+struct Hooks<S: AuthSchema> {
+    events: Events,
+    raw: Arc<dyn AuthStore<S>>,
+    case: Case,
+    original_invitation: AtomicUsize,
+}
 
-impl Hooks {
+impl<S: AuthSchema> Hooks<S> {
     fn event(
         &self,
         name: &str,
@@ -143,12 +148,48 @@ impl Hooks {
         if let Some(member) = member {
             let _ = value.insert("member".into(), member.field_values()?.into());
         }
-        self.0.push(name, "hook", value.into())
+        self.events.push(name, "hook", value.into())
+    }
+
+    async fn before(
+        &self,
+        name: &str,
+        event: OrganizationInvitationEvent<'_>,
+        cancel: bool,
+    ) -> AuthResult<()> {
+        self.original_invitation.store(
+            std::ptr::from_ref(event.invitation) as usize,
+            Ordering::Relaxed,
+        );
+        self.event(name, event, None, cancel)?;
+        if self.case.deletes() {
+            self.raw.delete_organization_records("organization").await?;
+        }
+        Ok(())
+    }
+
+    fn after(
+        &self,
+        name: &str,
+        event: OrganizationInvitationEvent<'_>,
+        cancel: bool,
+    ) -> AuthResult<()> {
+        if self.case.deletes() {
+            assert_eq!(
+                self.original_invitation.load(Ordering::Relaxed),
+                std::ptr::from_ref(event.invitation) as usize
+            );
+        }
+        self.event(name, event, None, cancel)?;
+        if self.case.after_error() {
+            return Err(AuthError::internal("invitation-after-hook-failed"));
+        }
+        Ok(())
     }
 }
 
 #[async_trait]
-impl OrganizationHooks for Hooks {
+impl<S: AuthSchema> OrganizationHooks for Hooks<S> {
     async fn before_accept_invitation(
         &self,
         event: OrganizationInvitationEvent<'_>,
@@ -166,25 +207,25 @@ impl OrganizationHooks for Hooks {
         &self,
         event: OrganizationInvitationEvent<'_>,
     ) -> AuthResult<()> {
-        self.event("beforeRejectInvitation", event, None, false)
+        self.before("beforeRejectInvitation", event, false).await
     }
     async fn after_reject_invitation(
         &self,
         event: OrganizationInvitationEvent<'_>,
     ) -> AuthResult<()> {
-        self.event("afterRejectInvitation", event, None, false)
+        self.after("afterRejectInvitation", event, false)
     }
     async fn before_cancel_invitation(
         &self,
         event: OrganizationInvitationEvent<'_>,
     ) -> AuthResult<()> {
-        self.event("beforeCancelInvitation", event, None, true)
+        self.before("beforeCancelInvitation", event, true).await
     }
     async fn after_cancel_invitation(
         &self,
         event: OrganizationInvitationEvent<'_>,
     ) -> AuthResult<()> {
-        self.event("afterCancelInvitation", event, None, true)
+        self.after("afterCancelInvitation", event, true)
     }
 }
 
@@ -220,7 +261,12 @@ pub(super) async fn auth<S: AuthSchema>(
     )]);
     options.schema.invitation = hidden_date.clone();
     options.schema.member = hidden_date;
-    options.hooks = Some(Arc::new(Hooks(events.clone())));
+    options.hooks = Some(Arc::new(Hooks {
+        events: events.clone(),
+        raw: raw.clone(),
+        case,
+        original_invitation: AtomicUsize::new(0),
+    }));
     let name = if case == Case::UserUndefined {
         FieldValue::Undefined
     } else if case.user_list() || case == Case::GetClone {
@@ -260,14 +306,28 @@ pub(super) async fn auth<S: AuthSchema>(
             ..Default::default()
         },
     )]);
+    let mut invitation = record_fields(events, "invitation", values);
+    if case.deletes() {
+        let events = events.clone();
+        let _ = invitation.fields_mut().insert(
+            "status".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new(move |value| {
+                        events.push("invitation.status", "input", value.clone())?;
+                        Ok(value)
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+    }
     BetterAuth::new(config)
         .store_arc(raw)
         .plugin(OrganizationPlugin::with_config(options))
         .plugin(Fields(vec![
-            (
-                EntityRole::Invitation,
-                record_fields(events, "invitation", values),
-            ),
+            (EntityRole::Invitation, invitation),
             (EntityRole::Member, record_fields(events, "member", values)),
             (EntityRole::Organization, organization),
             (EntityRole::Session, session),

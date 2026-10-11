@@ -411,7 +411,7 @@ impl EmailOtpPlugin {
         if !self.config.change_email {
             return Err(AuthError::bad_request("Change email with OTP is disabled"));
         }
-        let email = crate::plugins::helpers::user_email_field(user.model_property("email")?)?
+        let email = crate::plugins::helpers::user_email_field(&user.model_property("email")?)?
             .to_lowercase();
         let new_email = body.get("newEmail").to_lowercase();
         validate_email(&new_email)?;

@@ -110,6 +110,20 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
         input: FieldMap,
         config: &UserConfig,
     ) -> AuthResult<M::Record> {
+        self.update_organization_model_optional::<M>(conn, role, id, core, input, config)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Organization record not found"))
+    }
+
+    pub(super) async fn update_organization_model_optional<M: SeaOrmOrganizationModel>(
+        &self,
+        conn: &impl ConnectionTrait,
+        role: EntityRole,
+        id: &FieldValue,
+        core: FieldMap,
+        input: FieldMap,
+        config: &UserConfig,
+    ) -> AuthResult<Option<M::Record>> {
         let selector = self.bind_organization_query_field(role, "id", id)?;
         let active = active::<M>(
             core,
@@ -130,8 +144,10 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
                 .filter(filter.clone()),
             filter,
         )
-        .await?
-        .ok_or_else(|| AuthError::not_found("Organization record not found"))?;
+        .await?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
         let row = M::from_query_result(&row, "").map_err(super::map_db_err)?;
         record(
             &row,
@@ -140,6 +156,7 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
             (&self.model_fields, role),
         )
         .await
+        .map(Some)
     }
 }
 

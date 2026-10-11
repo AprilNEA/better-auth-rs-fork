@@ -43,7 +43,7 @@ fn required_page<T>(value: JoinValue<T>, name: &str) -> AuthResult<Vec<T>> {
 impl EphemeralStore {
     async fn detail_relation(
         &self,
-        parent: &FieldMap,
+        parent: &mut FieldMap,
         parent_fields: &UserConfig,
         runtime: &ModelFields,
         relation: &DetailRelation,
@@ -90,11 +90,23 @@ impl EphemeralStore {
         };
         let mut pages = self.output_record_pages(relation.role, vec![&rows]).await?;
         let rows = pages.remove(0);
-        Ok(if relation.join.many {
+        let result = if relation.join.many {
             JoinValue::Many(rows)
         } else {
             JoinValue::One(rows.into_iter().next())
-        })
+        };
+        let value = match &result {
+            JoinValue::One(row) => row.clone().map_or(Value::Null, Value::from),
+            JoinValue::Many(rows) => rows
+                .iter()
+                .cloned()
+                .map(Value::from)
+                .collect::<Vec<_>>()
+                .into(),
+        };
+        // Later fallback joins read the parent after each preceding join replaces its logical property.
+        let _ = parent.insert(relation.model.into(), value);
+        Ok(result)
     }
 
     pub(in crate::store::ephemeral) async fn read_organization_details(
@@ -225,7 +237,7 @@ impl EphemeralStore {
         };
         let invitation_rows = self
             .detail_relation(
-                &parent,
+                &mut parent,
                 &fields,
                 &runtime,
                 &invitations,
@@ -233,11 +245,11 @@ impl EphemeralStore {
             )
             .await?;
         let member_rows = self
-            .detail_relation(&parent, &fields, &runtime, &members, selected_members)
+            .detail_relation(&mut parent, &fields, &runtime, &members, selected_members)
             .await?;
         let team_rows = if let Some(relation) = &teams {
             Some(
-                self.detail_relation(&parent, &fields, &runtime, relation, selected_teams)
+                self.detail_relation(&mut parent, &fields, &runtime, relation, selected_teams)
                     .await?,
             )
         } else {

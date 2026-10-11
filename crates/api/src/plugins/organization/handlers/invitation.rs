@@ -599,7 +599,7 @@ pub(crate) async fn reject_invitation_core(
     session: &NativeSessionData,
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<AcceptInvitationResponse<InvitationView, Option<BasicMemberResponse>>> {
+) -> AuthResult<AcceptInvitationResponse<Option<InvitationView>, Option<BasicMemberResponse>>> {
     let invitation = ctx
         .database
         .get_invitation_by_id(&body.invitation_id)
@@ -646,13 +646,16 @@ pub(crate) async fn reject_invitation_core(
     if let Some(hooks) = &config.hooks {
         hooks
             .after_reject_invitation(OrganizationInvitationEvent {
-                invitation: &updated_invitation,
+                invitation: updated_invitation.as_ref().unwrap_or(&invitation),
                 ..event
             })
             .await?;
     }
     Ok(AcceptInvitationResponse {
-        invitation: InvitationView::try_from_invitation(&updated_invitation)?,
+        invitation: updated_invitation
+            .as_ref()
+            .map(InvitationView::try_from_invitation)
+            .transpose()?,
         member: None,
     })
 }
@@ -662,7 +665,7 @@ pub(crate) async fn cancel_invitation_core(
     session: &NativeSessionData,
     config: &OrganizationConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<InvitationView> {
+) -> AuthResult<Option<InvitationView>> {
     let invitation = ctx
         .database
         .get_invitation_by_id(&body.invitation_id)
@@ -716,12 +719,15 @@ pub(crate) async fn cancel_invitation_core(
     if let Some(hooks) = &config.hooks {
         hooks
             .after_cancel_invitation(OrganizationInvitationEvent {
-                invitation: &updated_invitation,
+                invitation: updated_invitation.as_ref().unwrap_or(&invitation),
                 ..event
             })
             .await?;
     }
-    InvitationView::try_from_invitation(&updated_invitation)
+    updated_invitation
+        .as_ref()
+        .map(InvitationView::try_from_invitation)
+        .transpose()
 }
 
 // ---------------------------------------------------------------------------
@@ -857,8 +863,15 @@ pub async fn handle_cancel_invitation(
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
     let body: CancelInvitationRequest = super::super::request::read(req, &config.schema)?;
-    let response = cancel_invitation_core(&body, &session, config, ctx).await?;
-    Ok(AuthResponse::native(None, response.field_values()?.into()))
+    let response = cancel_invitation_core(&body, &session, config, ctx)
+        .await?
+        .as_ref()
+        .map(AuthRecordFields::field_values)
+        .transpose()?;
+    Ok(AuthResponse::native(
+        None,
+        response.map(FieldValue::from).unwrap_or(FieldValue::Null),
+    ))
 }
 
 #[cfg(test)]

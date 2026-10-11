@@ -114,10 +114,13 @@ pub(super) fn generate(
         }
     }
     let ident = &input.ident;
-    let field_order = matches!(role, EntityRole::Team | EntityRole::TeamMember)
-        .then(|| quote!(let field_order = projected.keys().cloned().collect();));
-    let order_output =
-        matches!(role, EntityRole::Team | EntityRole::TeamMember).then(|| quote!(field_order,));
+    let ordered = matches!(
+        role,
+        EntityRole::Member | EntityRole::Invitation | EntityRole::Team | EntityRole::TeamMember
+    );
+    let field_order =
+        ordered.then(|| quote!(let field_order = projected.keys().cloned().collect();));
+    let order_output = ordered.then(|| quote!(field_order,));
     let record_fields = quote! {
             let model = #core_root::entity::AuthRecordFields::field_values(self)?;
             let core = #core_root::FieldMap::from_iter([#(#core_values),*]);

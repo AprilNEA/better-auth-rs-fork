@@ -91,15 +91,25 @@ impl AuthRecordFields for AcceptInvitationResponse<InvitationView, BasicMemberRe
     }
 }
 
-impl AuthRecordFields for AcceptInvitationResponse<InvitationView, Option<BasicMemberResponse>> {
+impl AuthRecordFields
+    for AcceptInvitationResponse<Option<InvitationView>, Option<BasicMemberResponse>>
+{
     fn field_values(&self) -> AuthResult<FieldMap> {
+        let invitation = self
+            .invitation
+            .as_ref()
+            .map(AuthRecordFields::field_values)
+            .transpose()?;
         let member = self
             .member
             .as_ref()
             .map(AuthRecordFields::field_values)
             .transpose()?;
         Ok([
-            ("invitation".into(), self.invitation.field_values()?.into()),
+            (
+                "invitation".into(),
+                invitation.map(FieldValue::from).unwrap_or(FieldValue::Null),
+            ),
             (
                 "member".into(),
                 member.map(FieldValue::from).unwrap_or(FieldValue::Null),

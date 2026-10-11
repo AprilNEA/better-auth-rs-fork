@@ -5,6 +5,8 @@ use crate::store::{
 };
 use better_auth_schema_registry::EntityRole;
 
+#[cfg(test)]
+mod detail_dependencies_tests;
 mod details;
 mod member_user;
 #[cfg(test)]

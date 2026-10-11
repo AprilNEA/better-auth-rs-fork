@@ -314,14 +314,14 @@ impl<S: AuthSchema> InvitationStore for SecondaryStore<S> {
         &self,
         id: &crate::FieldValue,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         self.inner.update_invitation_status_value(id, status).await
     }
     async fn update_invitation_status(
         &self,
         id: &str,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         self.inner.update_invitation_status(id, status).await
     }
     async fn update_invitation_expiry_value(

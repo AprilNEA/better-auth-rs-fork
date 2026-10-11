@@ -73,7 +73,7 @@ impl InvitationStore for EphemeralStore {
         &self,
         id: &str,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         self.update_invitation_status_value(&id.into(), status)
             .await
     }
@@ -81,7 +81,7 @@ impl InvitationStore for EphemeralStore {
         &self,
         id: &Value,
         status: InvitationStatus,
-    ) -> AuthResult<Invitation> {
+    ) -> AuthResult<Option<Invitation>> {
         let id = self.organization_query(EntityRole::Invitation, "id", id.clone())?;
         let patch = self
             .prepare_record_patch(
@@ -94,14 +94,13 @@ impl InvitationStore for EphemeralStore {
             .await?;
         let result = {
             let state = self.lock()?;
-            let mut value = state
-                .invitations
-                .get_mut(&id)?
-                .ok_or_else(|| AuthError::not_found("Invitation not found"))?;
+            let Some(mut value) = state.invitations.get_mut(&id)? else {
+                return Ok(None);
+            };
             *value = patch.apply(value.clone());
             value.clone()
         };
-        self.output_invitation(result).await
+        self.output_invitation(result).await.map(Some)
     }
     async fn update_invitation_expiry(
         &self,

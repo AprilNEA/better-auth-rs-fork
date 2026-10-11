@@ -419,9 +419,11 @@ async fn organization_relations_rebind_stored_keys_through_the_write_policy() ->
                 required(store.get_invitation_by_id(invitation.id.typed()?).await?)?,
                 invitation
             );
-            let updated = store
-                .update_invitation_status(invitation.id.typed()?, InvitationStatus::Accepted)
-                .await?;
+            let updated = required(
+                store
+                    .update_invitation_status(invitation.id.typed()?, InvitationStatus::Accepted)
+                    .await?,
+            )?;
             assert_eq!(updated.status, InvitationStatus::Accepted);
             assert_eq!(
                 required(store.get_invitation_by_id(invitation.id.typed()?).await?)?,

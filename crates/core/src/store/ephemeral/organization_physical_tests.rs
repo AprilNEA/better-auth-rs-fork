@@ -138,6 +138,7 @@ async fn update(store: &EphemeralStore, role: EntityRole, id: &str) -> AuthResul
         EntityRole::Invitation => store
             .update_invitation_status(id, InvitationStatus::Accepted)
             .await?
+            .ok_or_else(|| AuthError::internal("Physical fixture invitation is missing"))?
             .field_values(),
         EntityRole::Team => store
             .update_team(
