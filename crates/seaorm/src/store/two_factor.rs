@@ -318,24 +318,19 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let active = self
             .prepare_two_factor_fields(input, WriteOperation::Increment)
             .await?;
-        let (id_column, by_id) =
-            self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-        let (previous_column, previous) =
-            self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, previous)?;
-        let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
-        let previous = QueryPredicate::equals(previous_column, previous).parse()?;
-        let backend = self.connection().get_database_backend();
-        let by_id = by_id.encode(backend)?;
-        let guard = by_id.clone().and(previous.encode(backend)?);
         let row =
             database_operation::<Entity<P::TwoFactor>, _>(self.config(), "incrementOne", async {
+                let (id_column, by_id) =
+                    self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+                let (previous_column, previous) = self
+                    .resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, previous)?;
                 super::updates::increment_returning_raw::<Entity<P::TwoFactor>>(
                     self.connection(),
-                    active
-                        .update(self.connection().get_database_backend())?
-                        .filter(guard.clone()),
-                    guard,
-                    by_id,
+                    active,
+                    vec![
+                        QueryPredicate::equals(id_column, by_id),
+                        QueryPredicate::equals(previous_column, previous),
+                    ],
                 )
                 .await
             })
@@ -352,20 +347,20 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         max_attempts: i64,
         locked_until: &(dyn Fn() -> AuthResult<FieldDate> + Send + Sync),
     ) -> AuthResult<()> {
-        let by_id = self.plugin_id_filter::<P::TwoFactor>(EntityRole::TwoFactor, id)?;
+        let by_id = self.bind_plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
         let counter =
             self.plugin_column::<P::TwoFactor>(EntityRole::TwoFactor, "failedVerificationCount")?;
         // An increment without SET does not run input transforms or update factories.
-        let query = Entity::<P::TwoFactor>::update_many()
-            .col_expr(counter, Expr::col(counter).add(1))
-            .filter(by_id.clone());
+        let mut active = super::plugin_models::Write::<P::TwoFactor>::default();
+        active.expression(counter, Expr::col(counter).add(1));
         let row =
             database_operation::<Entity<P::TwoFactor>, _>(self.config(), "incrementOne", async {
+                let (column, by_id) =
+                    self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
                 super::updates::increment_returning_raw::<Entity<P::TwoFactor>>(
                     self.connection(),
-                    query,
-                    by_id.clone(),
-                    by_id.clone(),
+                    active,
+                    vec![QueryPredicate::equals(column, by_id)],
                 )
                 .await
             })
@@ -396,33 +391,30 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
                     WriteOperation::Increment,
                 )
                 .await?;
-            let (id_column, by_id) =
-                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-            let (selected_counter, maximum) =
-                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, maximum)?;
-            let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
-            let maximum = QueryPredicate::new(
-                selected_counter,
-                WhereOperator::Gte,
-                WhereMode::Sensitive,
-                maximum,
-            )
-            .with_save_as()
-            .parse()?;
-            let backend = self.connection().get_database_backend();
-            let by_id = by_id.encode(backend)?;
-            let guard = by_id.clone().and(maximum.encode(backend)?);
             let row = database_operation::<Entity<P::TwoFactor>, _>(
                 self.config(),
                 "incrementOne",
                 async {
+                    let (id_column, by_id) = self
+                        .resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+                    let (selected_counter, maximum) = self
+                        .resolve_plugin_query_field::<P::TwoFactor>(
+                            EntityRole::TwoFactor,
+                            maximum,
+                        )?;
                     super::updates::increment_returning_raw::<Entity<P::TwoFactor>>(
                         self.connection(),
-                        active
-                            .update(self.connection().get_database_backend())?
-                            .filter(guard.clone()),
-                        guard,
-                        by_id,
+                        active,
+                        vec![
+                            QueryPredicate::equals(id_column, by_id),
+                            QueryPredicate::new(
+                                selected_counter,
+                                WhereOperator::Gte,
+                                WhereMode::Sensitive,
+                                maximum,
+                            )
+                            .with_save_as(),
+                        ],
                     )
                     .await
                 },
@@ -462,24 +454,24 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             .await?;
         let backend = self.connection().get_database_backend();
         let row = if let Some(expired) = expired {
-            let (id_column, by_id) =
-                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
-            let (column, value) =
-                self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, expired)?;
-            let by_id = QueryPredicate::equals(id_column, by_id).parse()?;
-            let expired =
-                QueryPredicate::new(column, WhereOperator::Lte, WhereMode::Sensitive, value)
-                    .with_save_as()
-                    .parse()?;
-            let by_id = by_id.encode(backend)?;
-            let guard = by_id.clone().and(expired.encode(backend)?);
             database_operation::<Entity<P::TwoFactor>, _>(self.config(), "incrementOne", async {
-                let query = active.update_returning(backend)?.filter(guard.clone());
+                let (id_column, by_id) =
+                    self.resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, by_id)?;
+                let (column, value) = self
+                    .resolve_plugin_query_field::<P::TwoFactor>(EntityRole::TwoFactor, expired)?;
                 super::updates::increment_returning_raw::<Entity<P::TwoFactor>>(
                     self.connection(),
-                    query.query,
-                    guard,
-                    by_id,
+                    active,
+                    vec![
+                        QueryPredicate::equals(id_column, by_id),
+                        QueryPredicate::new(
+                            column,
+                            WhereOperator::Lte,
+                            WhereMode::Sensitive,
+                            value,
+                        )
+                        .with_save_as(),
+                    ],
                 )
                 .await
             })

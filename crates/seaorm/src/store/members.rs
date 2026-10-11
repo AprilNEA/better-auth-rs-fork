@@ -683,7 +683,7 @@ impl<
                 &team.id.field_value(),
                 deleted.rows_affected,
                 &self.organization_fields()?.team,
-                self.config().advanced.database.generate_id(),
+                self.config(),
                 (
                     &self.model_fields,
                     better_auth_core::store::schema::EntityRole::Team,

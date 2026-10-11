@@ -13,17 +13,22 @@ pub(super) enum Binding {
     Raw(FieldValue),
     Date(FieldDate),
     Json(FieldValue),
+    Expression(SimpleExpr),
 }
 
 pub(super) struct ParsedBinding(Binding);
 
 impl Binding {
+    pub(super) fn is_expression(&self) -> bool {
+        matches!(self, Self::Expression(_))
+    }
+
     pub(super) fn is_null(&self) -> bool {
         match self {
             Self::Native(value) => *value == value.as_null(),
             Self::Raw(value) | Self::Json(value) => value.is_null(),
             // An invalid Date encodes as SQL NULL but remains a non-null source value.
-            Self::Date(_) => false,
+            Self::Date(_) | Self::Expression(_) => false,
         }
     }
 
@@ -58,8 +63,13 @@ impl Binding {
 }
 
 impl ParsedBinding {
+    pub(super) fn is_expression(&self) -> bool {
+        self.0.is_expression()
+    }
+
     pub(super) fn encode(self, backend: DbBackend) -> AuthResult<SimpleExpr> {
         match self.0 {
+            Binding::Expression(expression) => Ok(expression),
             Binding::Native(value) => native_parameter(value, backend),
             Binding::Json(value) if backend == DbBackend::Postgres => {
                 driver_parameter(value, backend)

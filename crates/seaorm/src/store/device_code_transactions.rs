@@ -8,7 +8,6 @@ use better_auth_core::{
     AuthResult, FieldMap, SchemaValue,
     store::{DeviceCodeStore, schema::EntityRole},
 };
-use sea_orm::QueryFilter;
 
 #[async_trait]
 impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
@@ -124,20 +123,29 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         id: &better_auth_core::SchemaValue<String>,
         user_id: &SchemaValue<String>,
     ) -> AuthResult<bool> {
-        let (query, guard, reselect) = self.store.prepare_device_code_claim(id, user_id).await?;
-        let row =
-            database_operation::<Entity<P::DeviceCode>, _>(
-                self.store.config(),
-                "incrementOne",
-                async {
-                    super::updates::increment_returning_raw_with_connection::<
-                        Entity<P::DeviceCode>,
-                        _,
-                    >(&self.tx, query.filter(guard.clone()), guard, reselect)
-                    .await
-                },
-            )
-            .await?;
+        let (write, selectors) = self.store.prepare_device_code_claim(id, user_id).await?;
+        let row = database_operation::<Entity<P::DeviceCode>, _>(
+            self.store.config(),
+            "incrementOne",
+            async {
+                let predicates = selectors
+                    .into_iter()
+                    .map(|selector| {
+                        let (column, value) =
+                            self.store.resolve_plugin_query_field::<P::DeviceCode>(
+                                EntityRole::DeviceCode,
+                                selector,
+                            )?;
+                        Ok(super::value_filter::QueryPredicate::equals(column, value))
+                    })
+                    .collect::<AuthResult<Vec<_>>>()?;
+                super::updates::increment_returning_raw_with_connection::<Entity<P::DeviceCode>, _>(
+                    &self.tx, write, predicates,
+                )
+                .await
+            },
+        )
+        .await?;
         Ok(!self
             .store
             .project_device_code_models(row.into_iter().collect())

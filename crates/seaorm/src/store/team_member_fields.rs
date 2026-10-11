@@ -153,7 +153,7 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
                 team_id,
                 1,
                 &self.organization_fields()?.team,
-                self.config().advanced.database.generate_id(),
+                self.config(),
                 (&self.model_fields, EntityRole::Team),
             )
             .await?;
@@ -176,7 +176,7 @@ impl<S: crate::schema::AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate:
                 db,
                 team_id,
                 &self.organization_fields()?.team,
-                self.config().advanced.database.generate_id(),
+                self.config(),
                 (&self.model_fields, EntityRole::Team),
             )
             .await?;

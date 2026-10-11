@@ -613,6 +613,37 @@ run_stage() {
       cargo test --locked --test telemetry_options_tests --test telemetry_environment_tests
       bun --no-install test ./compat-tests/reference-server/contracts/telemetry-*.test.ts
       ;;
+    atomic-updates)
+      cargo fmt --all -- --check
+      local atomic_status=0
+      local atomic_tests=(
+        --test query_binding_order_tests --test api_key_additional_fields_tests
+        --test two_factor_additional_fields_tests --test device_runtime_transaction_tests
+        --test device_additional_fields_tests --test organization_native_team_tests
+        --test rate_limit_database_tests --test observability_tests
+      )
+      cargo clippy --locked -p better-auth-seaorm -- -D warnings || atomic_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        "${atomic_tests[@]}" --test plugin_model_fields_tests -- -D warnings || atomic_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- \
+        store::record_write::tests:: store::record_bindings:: store::updates:: \
+        team_capacity device_code_consume async_capacity_output_failure || atomic_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        "${atomic_tests[@]}" || atomic_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test query_binding_order_tests increment_phases:: -- --ignored || atomic_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- \
+        organization::team_member organization::team_transaction device_ownership:: device_redemption:: || atomic_status=1
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
+        ./compat-tests/reference-server/consumer-contracts/increment-binding-phases.test.ts \
+        ./compat-tests/reference-server/consumer-contracts/rate-limit-server-runtime.test.ts \
+        ./compat-tests/reference-server/contracts/native-atomic-update.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-date-usage.test.ts \
+        ./compat-tests/reference-server/consumer-contracts/api-key-date-usage.test.ts || atomic_status=1
+      return "$atomic_status"
+      ;;
     account-user-auth)
       cargo fmt --all -- --check
       local account_status=0

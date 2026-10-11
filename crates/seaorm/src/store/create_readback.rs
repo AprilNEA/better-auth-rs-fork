@@ -181,7 +181,8 @@ fn is_undefined(value: &Binding) -> bool {
 fn is_truthy(value: &Binding) -> bool {
     match value {
         Binding::Raw(value) | Binding::Json(value) => value.is_truthy(),
-        Binding::Date(_) => true,
+        // SQL assignment nodes are objects, even when the expression produces SQL NULL.
+        Binding::Date(_) | Binding::Expression(_) => true,
         Binding::Native(value) if *value == value.as_null() => false,
         Binding::Native(value) => match value {
             Value::Bool(Some(value)) => *value,

@@ -177,58 +177,63 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> RateLimi
                     false,
                 )
                 .await?;
-            let (key_column, key_value) =
-                self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, by_key)?;
-            let (last_request, previous) =
-                self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, previous)?;
-            let maximum = maximum
-                .map(|bound| {
-                    self.resolve_plugin_query_field::<P::RateLimit>(EntityRole::RateLimit, bound)
-                })
-                .transpose()?;
-            let by_key = QueryPredicate::equals(key_column, key_value).parse()?;
-            let previous = QueryPredicate::new(
-                last_request,
-                if reset {
-                    WhereOperator::Lte
-                } else {
-                    WhereOperator::Gt
-                },
-                WhereMode::Sensitive,
-                previous,
-            )
-            .with_save_as()
-            .parse()?;
-            let maximum = maximum
-                .map(|(column, value)| {
-                    QueryPredicate::new(column, WhereOperator::Lt, WhereMode::Sensitive, value)
-                        .with_save_as()
-                        .parse()
-                })
-                .transpose()?;
-            let backend = self.connection().get_database_backend();
-            let reselect = by_key.encode(backend)?;
-            let mut guard = reselect.clone().and(previous.encode(backend)?);
-            if let Some(maximum) = maximum {
-                guard = guard.and(maximum.encode(backend)?);
-            }
-            if let Some(count) = increment {
-                // Kysely replaces a colliding set assignment after applying all input policies.
-                fields.not_set(count);
-            }
-            let mut query = fields.update(backend)?;
-            if let Some(count) = increment {
-                query = query.col_expr(count, Expr::col(count).add(1));
-            }
+            better_auth_core::store::validate_increment_one_update(
+                increment.is_some(),
+                !fields.is_empty(),
+            )?;
             let row = database_operation::<Entity<P::RateLimit>, _>(
                 self.config(),
                 "incrementOne",
                 async {
+                    let (key_column, key_value) = self.resolve_plugin_query_field::<P::RateLimit>(
+                        EntityRole::RateLimit,
+                        by_key,
+                    )?;
+                    let (last_request, previous) = self
+                        .resolve_plugin_query_field::<P::RateLimit>(
+                            EntityRole::RateLimit,
+                            previous,
+                        )?;
+                    let maximum = maximum
+                        .map(|bound| {
+                            self.resolve_plugin_query_field::<P::RateLimit>(
+                                EntityRole::RateLimit,
+                                bound,
+                            )
+                        })
+                        .transpose()?;
+                    let mut predicates = vec![
+                        QueryPredicate::equals(key_column, key_value),
+                        QueryPredicate::new(
+                            last_request,
+                            if reset {
+                                WhereOperator::Lte
+                            } else {
+                                WhereOperator::Gt
+                            },
+                            WhereMode::Sensitive,
+                            previous,
+                        )
+                        .with_save_as(),
+                    ];
+                    if let Some((column, value)) = maximum {
+                        predicates.push(
+                            QueryPredicate::new(
+                                column,
+                                WhereOperator::Lt,
+                                WhereMode::Sensitive,
+                                value,
+                            )
+                            .with_save_as(),
+                        );
+                    }
+                    if let Some(count) = increment {
+                        fields.expression(count, Expr::col(count).add(1));
+                    }
                     super::updates::increment_returning_raw::<Entity<P::RateLimit>>(
                         self.connection(),
-                        query.filter(guard.clone()),
-                        guard,
-                        reselect,
+                        fields,
+                        predicates,
                     )
                     .await
                 },

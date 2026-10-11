@@ -299,7 +299,7 @@ where
             team_id,
             deleted.rows_affected,
             &self.organization_fields()?.team,
-            self.config().advanced.database.generate_id(),
+            self.config(),
             (
                 &self.model_fields,
                 better_auth_core::store::schema::EntityRole::Team,
@@ -394,7 +394,7 @@ impl<
             team_id,
             count,
             &fields,
-            self.config().advanced.database.generate_id(),
+            self.config(),
             (&self.model_fields, EntityRole::Team),
         )
         .await?;
@@ -404,7 +404,7 @@ impl<
                 team_id,
                 maximum,
                 &fields,
-                self.config().advanced.database.generate_id(),
+                self.config(),
                 (&self.model_fields, EntityRole::Team),
             )
             .await?

@@ -204,7 +204,6 @@ where
         }
         // Upstream does not run update policies for an increment without a set patch.
         let has_set = !matches!(&write, ApiKeyUsageWrite::Decrement);
-        let backend = self.connection().get_database_backend();
         let by_id = self.bind_plugin_query_field(EntityRole::ApiKey, "id", id.field_value())?;
         let mut comparisons = Vec::new();
         let mut increment = None;
@@ -283,52 +282,32 @@ where
             Default::default()
         };
         validate_increment_one_update(increment.is_some(), !fields.is_empty())?;
-        let (column, id) =
-            self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, by_id)?;
-        let by_id = QueryPredicate::equals(column, id);
-        let comparisons = comparisons
-            .into_iter()
-            .map(|(bound, operator)| {
-                let (column, value) =
-                    self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, bound)?;
-                Ok(match operator {
-                    Some(operator) => QueryPredicate::new(
-                        column,
-                        operator,
-                        better_auth_core::WhereMode::Sensitive,
-                        value,
-                    )
-                    .with_save_as(),
-                    None => QueryPredicate::equals(column, value),
-                })
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
-        let by_id = by_id.parse()?;
-        let comparisons = comparisons
-            .into_iter()
-            .map(QueryPredicate::parse)
-            .collect::<AuthResult<Vec<_>>>()?;
-        let reselect = by_id.encode(backend)?;
-        let mut guard = reselect.clone();
-        for comparison in comparisons {
-            guard = guard.and(comparison.encode(backend)?);
-        }
-        if let Some((column, _)) = &increment {
-            // Kysely evaluates set policies, then replaces colliding assignments with increments.
-            fields.not_set(*column);
-        }
-        let mut query = fields.update_returning(backend)?;
-        if let Some((column, expression)) = increment {
-            query.query = query.query.col_expr(column, expression);
-        }
-        let query = query.filter(guard.clone());
         let model =
             database_operation::<Entity<P::ApiKey>, _>(self.config(), "incrementOne", async {
+                let (column, id) =
+                    self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, by_id)?;
+                let mut predicates = vec![QueryPredicate::equals(column, id)];
+                for (bound, operator) in comparisons {
+                    let (column, value) =
+                        self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, bound)?;
+                    predicates.push(match operator {
+                        Some(operator) => QueryPredicate::new(
+                            column,
+                            operator,
+                            better_auth_core::WhereMode::Sensitive,
+                            value,
+                        )
+                        .with_save_as(),
+                        None => QueryPredicate::equals(column, value),
+                    });
+                }
+                if let Some((column, expression)) = increment {
+                    fields.expression(column, expression);
+                }
                 super::updates::increment_returning_raw::<Entity<P::ApiKey>>(
                     self.connection(),
-                    query.query,
-                    guard,
-                    reselect,
+                    fields,
+                    predicates,
                 )
                 .await
             })

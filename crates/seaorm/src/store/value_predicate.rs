@@ -6,6 +6,7 @@ use sea_orm::{
 
 use super::super::record_bindings::{Binding, ParsedBinding};
 
+#[derive(Clone)]
 pub(in crate::store) struct QueryPredicate<C> {
     column: C,
     operator: WhereOperator,

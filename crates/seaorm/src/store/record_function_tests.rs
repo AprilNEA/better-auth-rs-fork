@@ -176,7 +176,16 @@ fn captured_expression_failures_run_once_before_parameter_encoding() -> AuthResu
                     function(result, &calls, &returned),
                 );
                 write.field(user::Column::Email, function("string", &later, &returned));
-                assert_rejection(write.update(backend), operation(case, "update:function")?)?;
+                assert_rejection(
+                    write.update_where(
+                        backend,
+                        [crate::store::value_filter::QueryPredicate::equals(
+                            user::Column::Id,
+                            "selected".into(),
+                        )],
+                    ),
+                    operation(case, "update:function")?,
+                )?;
                 assert_eq!(calls.load(Ordering::SeqCst), 1);
                 assert_eq!(returned.load(Ordering::SeqCst), 0);
                 assert_eq!(later.load(Ordering::SeqCst), 0);

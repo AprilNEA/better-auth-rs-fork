@@ -438,6 +438,7 @@ if [[ $# -eq 0 ]]; then
   bun --no-install test ./compat-tests/reference-server/consumer-contracts/team-member-catalog.test.ts --test-name-pattern sqlite
 fi
 server_catalog_tests=(
+  ./compat-tests/reference-server/consumer-contracts/increment-binding-phases.test.ts
   ./compat-tests/reference-server/consumer-contracts/api-key-date-usage.test.ts
   ./compat-tests/reference-server/consumer-contracts/mysql-create-readback.test.ts
   ./compat-tests/reference-server/consumer-contracts/update-fields-server.test.ts

@@ -1,6 +1,6 @@
 use super::instrumentation::database_operation;
 use super::plugin_models::Entity;
-use super::value_filter::{QueryPredicate, all};
+use super::value_filter::{BoundQueryField, QueryPredicate, all};
 use async_trait::async_trait;
 use better_auth_core::{FieldMap, FieldValue, SchemaValue};
 use sea_orm::{
@@ -115,14 +115,23 @@ where
         id: &better_auth_core::SchemaValue<String>,
         user_id: &SchemaValue<String>,
     ) -> AuthResult<bool> {
-        let (query, guard, reselect) = self.prepare_device_code_claim(id, user_id).await?;
+        let (write, selectors) = self.prepare_device_code_claim(id, user_id).await?;
         let row =
             database_operation::<Entity<P::DeviceCode>, _>(self.config(), "incrementOne", async {
+                let predicates = selectors
+                    .into_iter()
+                    .map(|selector| {
+                        let (column, value) = self.resolve_plugin_query_field::<P::DeviceCode>(
+                            EntityRole::DeviceCode,
+                            selector,
+                        )?;
+                        Ok(QueryPredicate::equals(column, value))
+                    })
+                    .collect::<AuthResult<Vec<_>>>()?;
                 super::updates::increment_returning_raw::<Entity<P::DeviceCode>>(
                     self.connection(),
-                    query.filter(guard.clone()),
-                    guard,
-                    reselect,
+                    write,
+                    predicates,
                 )
                 .await
             })
@@ -407,9 +416,8 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         id: &better_auth_core::SchemaValue<String>,
         user_id: &SchemaValue<String>,
     ) -> AuthResult<(
-        sea_orm::UpdateMany<Entity<P::DeviceCode>>,
-        sea_orm::sea_query::SimpleExpr,
-        sea_orm::sea_query::SimpleExpr,
+        super::plugin_models::Write<P::DeviceCode>,
+        [BoundQueryField; 3],
     )> {
         let selector =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "id", id.field_value())?;
@@ -424,23 +432,7 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             })
             .await?;
         validate_increment_one_update(false, !active.is_empty())?;
-        let (column, selector) =
-            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, selector)?;
-        let (status_column, status) =
-            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, status)?;
-        let (owner_column, owner) =
-            self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, owner)?;
-        let selector = QueryPredicate::equals(column, selector).parse()?;
-        let status = QueryPredicate::equals(status_column, status).parse()?;
-        let owner = QueryPredicate::equals(owner_column, owner).parse()?;
-        let backend = self.connection().get_database_backend();
-        let reselect = selector.encode(backend)?;
-        let guard = reselect
-            .clone()
-            .and(status.encode(backend)?)
-            .and(owner.encode(backend)?);
-        let query = active.update(backend)?;
-        Ok((query, guard, reselect))
+        Ok((active, [selector, status, owner]))
     }
 
     async fn prepare_device_code_update(

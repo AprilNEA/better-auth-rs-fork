@@ -228,6 +228,76 @@ fn returning_update_keeps_all_conditions_and_reuses_only_the_first_selector() ->
     Ok(())
 }
 
+#[expect(
+    unreachable_pub,
+    reason = "SeaORM derives require public fixture entity types"
+)]
+mod mapped {
+    use sea_orm::entity::prelude::*;
+
+    #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+    #[sea_orm(table_name = "mapped_assignments")]
+    pub struct Model {
+        #[sea_orm(primary_key, auto_increment = false)]
+        pub id: String,
+        #[sea_orm(save_as = "integer")]
+        pub remaining: i32,
+        pub label: String,
+    }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {}
+
+    impl ActiveModelBehavior for ActiveModel {}
+}
+
+#[test]
+fn increment_expression_keeps_assignment_position_and_bypasses_column_casts() -> AuthResult<()> {
+    use sea_orm::sea_query::{Expr, ExprTrait};
+
+    for backend in [DbBackend::Sqlite, DbBackend::Postgres, DbBackend::MySql] {
+        for expression in [false, true] {
+            let mut write = RecordWrite::<mapped::Entity>::default();
+            write.field(mapped::Column::Remaining, FieldValue::Null);
+            write.field(mapped::Column::Label, "after".into());
+            if expression {
+                write.expression(
+                    mapped::Column::Remaining,
+                    Expr::col(mapped::Column::Remaining).add(1),
+                );
+            } else {
+                write.set(mapped::Column::Remaining, Value::Int(Some(2)));
+            }
+            let update = write.update_where(
+                backend,
+                [QueryPredicate::equals(
+                    mapped::Column::Id,
+                    "selected".into(),
+                )],
+            )?;
+            assert!(!update.source_is_null(mapped::Column::Remaining));
+            let quote = if backend == DbBackend::MySql {
+                '`'
+            } else {
+                '"'
+            };
+            let remaining = format!("{quote}remaining{quote}");
+            let assigned = if expression {
+                format!("{remaining} + 1")
+            } else {
+                "CAST(2 AS integer)".into()
+            };
+            assert_eq!(
+                update.query.build(backend).to_string(),
+                format!(
+                    "UPDATE {quote}mapped_assignments{quote} SET {remaining} = {assigned}, {quote}label{quote} = 'after' WHERE {quote}mapped_assignments{quote}.{quote}id{quote} = 'selected'"
+                )
+            );
+        }
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn declared_undefined_keeps_database_default_instead_of_legacy_initializer() -> AuthResult<()>
 {

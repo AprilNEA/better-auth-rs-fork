@@ -20,6 +20,8 @@ type Trace = Arc<Mutex<Vec<&'static str>>>;
 
 #[path = "query_binding_order_tests/empty_in.rs"]
 mod empty_in;
+#[path = "query_binding_order_tests/increment_phases.rs"]
+mod increment_phases;
 #[path = "query_binding_order_tests/insensitive.rs"]
 mod insensitive;
 #[path = "query_binding_order_tests/memory_where.rs"]

@@ -1,4 +1,5 @@
 import "./update-binding-phases.mjs";
+import { checkIncrementBindingPhases } from "./increment-binding-phases.mjs";
 import "./session-predicate-binding.mjs";
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -8,6 +9,10 @@ import { deviceAuthorization, organization } from "better-auth/plugins";
 import { walletPlugin } from "./wallet-additional-fields";
 import "./plugin-selector-binding.mjs";
 import "./predicate-case-mode.mjs";
+
+test("SQLite incrementOne preserves expression phases and unchanged storage", async () => {
+  await checkIncrementBindingPhases("sqlite");
+});
 
 const date = (offset: number) => new Date(1_893_456_000_000 + offset * 1000);
 

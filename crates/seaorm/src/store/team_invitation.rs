@@ -86,25 +86,35 @@ where
             ),
         )
         .await?;
-        let backend = self.connection().get_database_backend();
-        let (id_column, id) =
-            self.resolve_organization_query_field::<O::Invitation>(EntityRole::Invitation, id)?;
-        let (status_column, from) =
-            self.resolve_organization_query_field::<O::Invitation>(EntityRole::Invitation, from)?;
-        let id = super::value_filter::QueryPredicate::equals(id_column, id).parse()?;
-        let from = super::value_filter::QueryPredicate::equals(status_column, from).parse()?;
-        let id = id.encode(backend)?;
-        let condition = id.clone().and(from.encode(backend)?);
-        let tx = self.connection().begin().await.map_err(map_db_err)?;
-        let row =
-            super::updates::increment_returning_raw_with_connection::<Entity<O::Invitation>, _>(
-                &tx,
-                active.update(backend)?.filter(condition.clone()),
-                condition,
-                id,
-            )
-            .await?;
-        tx.commit().await.map_err(map_db_err)?;
+        better_auth_core::store::validate_increment_one_update(false, !active.is_empty())?;
+        let row = super::instrumentation::database_operation::<Entity<O::Invitation>, _>(
+            self.config(),
+            "incrementOne",
+            async {
+                let (id_column, id) = self.resolve_organization_query_field::<O::Invitation>(
+                    EntityRole::Invitation,
+                    id,
+                )?;
+                let (status_column, from) = self
+                    .resolve_organization_query_field::<O::Invitation>(
+                        EntityRole::Invitation,
+                        from,
+                    )?;
+                let predicates = vec![
+                    super::value_filter::QueryPredicate::equals(id_column, id),
+                    super::value_filter::QueryPredicate::equals(status_column, from),
+                ];
+                let tx = self.connection().begin().await.map_err(map_db_err)?;
+                let row = super::updates::increment_returning_raw_with_connection::<
+                    Entity<O::Invitation>,
+                    _,
+                >(&tx, active, predicates)
+                .await?;
+                tx.commit().await.map_err(map_db_err)?;
+                Ok(row)
+            },
+        )
+        .await?;
         // Output transforms run after the claim is committed, before the member transaction starts.
         match row {
             Some(row) => models::record::<O::Invitation>(
@@ -202,7 +212,7 @@ where
                         &team_value,
                         count,
                         &config.team,
-                        store.config().advanced.database.generate_id(),
+                        store.config(),
                         (&store.model_fields, EntityRole::Team),
                     )
                     .await?;
@@ -212,7 +222,7 @@ where
                             &team_value,
                             maximum,
                             &config.team,
-                            store.config().advanced.database.generate_id(),
+                            store.config(),
                             (&store.model_fields, EntityRole::Team),
                         )
                         .await?

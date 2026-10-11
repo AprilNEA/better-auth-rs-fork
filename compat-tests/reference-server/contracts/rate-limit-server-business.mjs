@@ -24,7 +24,6 @@ async function call(context, label) {
   const retryAfter = Number(response.headers.get("x-retry-after"));
   assert.ok(Number.isInteger(retryAfter));
   assert.deepEqual([...response.headers], [
-    ["content-type", "text/plain;charset=utf-8"],
     ["x-retry-after", String(retryAfter)],
   ]);
   assert.equal(await response.text(), JSON.stringify({ message }));

@@ -26,13 +26,13 @@ pub(super) struct RecordUpdate<E: EntityTrait> {
     null_columns: Vec<E::Column>,
 }
 
-struct ParsedRecordWrite<E: EntityTrait> {
+pub(super) struct ParsedRecordWrite<E: EntityTrait> {
     fields: Vec<(E::Column, ParsedBinding)>,
     null_columns: Vec<E::Column>,
 }
 
 impl<E: EntityTrait> ParsedRecordWrite<E> {
-    fn encode(
+    pub(super) fn encode(
         self,
         mut query: sea_orm::UpdateMany<E>,
         backend: sea_orm::DbBackend,
@@ -40,10 +40,20 @@ impl<E: EntityTrait> ParsedRecordWrite<E> {
         let (columns, bindings): (Vec<_>, Vec<_>) = self.fields.into_iter().unzip();
         let values = bindings
             .into_iter()
-            .map(|binding| binding.encode(backend))
+            .map(|binding| {
+                let expression = binding.is_expression();
+                Ok((binding.encode(backend)?, expression))
+            })
             .collect::<AuthResult<Vec<_>>>()?;
-        for (column, value) in columns.into_iter().zip(values) {
-            query = query.col_expr(column, column.save_as(value));
+        for (column, (value, expression)) in columns.into_iter().zip(values) {
+            query = query.col_expr(
+                column,
+                if expression {
+                    value
+                } else {
+                    column.save_as(value)
+                },
+            );
         }
         Ok(RecordUpdate {
             query,
@@ -53,11 +63,6 @@ impl<E: EntityTrait> ParsedRecordWrite<E> {
 }
 
 impl<E: EntityTrait> RecordUpdate<E> {
-    pub(super) fn filter(mut self, filter: sea_orm::sea_query::SimpleExpr) -> Self {
-        self.query = self.query.filter(filter);
-        self
-    }
-
     pub(super) fn source_is_null(&self, column: E::Column) -> bool {
         self.null_columns
             .iter()
@@ -136,11 +141,6 @@ impl<E: EntityTrait> RecordWrite<E> {
         Ok(())
     }
 
-    pub(super) fn not_set(&mut self, column: E::Column) {
-        self.fields
-            .retain(|(stored, _)| stored.to_string() != column.to_string());
-    }
-
     fn assign(&mut self, column: E::Column, value: Binding) {
         if let Some((_, stored)) = self
             .fields
@@ -157,6 +157,10 @@ impl<E: EntityTrait> RecordWrite<E> {
         if !value.is_undefined() {
             self.assign(column, Binding::for_column(column, value));
         }
+    }
+
+    pub(super) fn expression(&mut self, column: E::Column, expression: SimpleExpr) {
+        self.assign(column, Binding::Expression(expression));
     }
 
     pub(super) fn native_field(&mut self, column: E::Column, value: FieldValue) {
@@ -178,26 +182,7 @@ impl<E: EntityTrait> RecordWrite<E> {
         self.assign(column, binding);
     }
 
-    pub(super) fn apply_to(
-        self,
-        query: sea_orm::UpdateMany<E>,
-        backend: sea_orm::DbBackend,
-    ) -> AuthResult<sea_orm::UpdateMany<E>> {
-        Ok(self.parse_update()?.encode(query, backend)?.query)
-    }
-
-    pub(super) fn update(self, backend: sea_orm::DbBackend) -> AuthResult<sea_orm::UpdateMany<E>> {
-        self.apply_to(E::update_many(), backend)
-    }
-
-    pub(super) fn update_returning(
-        self,
-        backend: sea_orm::DbBackend,
-    ) -> AuthResult<RecordUpdate<E>> {
-        self.parse_update()?.encode(E::update_many(), backend)
-    }
-
-    fn parse_update(self) -> AuthResult<ParsedRecordWrite<E>> {
+    pub(super) fn parse_update(self) -> AuthResult<ParsedRecordWrite<E>> {
         let null_columns = self
             .fields
             .iter()
@@ -266,10 +251,17 @@ impl<E: EntityTrait> RecordWrite<E> {
         let backend = db.get_database_backend();
         let (columns, bindings): (Vec<_>, Vec<_>) = self.fields.iter().cloned().unzip();
         let values = super::record_bindings::bind(backend, bindings)?;
-        let values = columns
+        let values = self
+            .fields
             .iter()
             .zip(values)
-            .map(|(column, value)| column.save_as(value));
+            .map(|((column, binding), value)| {
+                if binding.is_expression() {
+                    value
+                } else {
+                    column.save_as(value)
+                }
+            });
         let mut query = Query::insert();
         let _ = query
             .into_table(E::default())

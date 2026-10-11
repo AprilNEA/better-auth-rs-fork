@@ -114,7 +114,11 @@ async fn check(database: DatabaseConnection) -> TestResult {
     Ok(())
 }
 
-async fn isolated(backend: DbBackend) -> TestResult {
+pub(super) async fn isolated<F, Fut>(backend: DbBackend, check: F) -> TestResult
+where
+    F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = TestResult> + Send + 'static,
+{
     let variable = if backend == DbBackend::Postgres {
         "BETTER_AUTH_TEST_POSTGRES_URL"
     } else {
@@ -123,7 +127,7 @@ async fn isolated(backend: DbBackend) -> TestResult {
     let mut options = ConnectOptions::new(std::env::var(variable)?);
     let _ = options.max_connections(1).sqlx_logging(false);
     let database = Database::connect(options).await?;
-    let name = format!("ba_empty_role_in_{}", uuid::Uuid::new_v4().simple());
+    let name = format!("ba_query_binding_{}", uuid::Uuid::new_v4().simple());
     let (create, select, drop) = if backend == DbBackend::Postgres {
         (
             format!("CREATE SCHEMA {name}"),
@@ -160,11 +164,11 @@ async fn sqlite_empty_role_in_returns_no_rows_and_preserves_storage() -> TestRes
 #[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
 async fn live_postgres_empty_role_in_retains_syntax_error_and_preserves_storage() -> TestResult {
-    isolated(DbBackend::Postgres).await
+    isolated(DbBackend::Postgres, check).await
 }
 
 #[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
 async fn live_mysql_empty_role_in_retains_syntax_error_and_preserves_storage() -> TestResult {
-    isolated(DbBackend::MySql).await
+    isolated(DbBackend::MySql, check).await
 }

@@ -1,10 +1,14 @@
 use sea_orm::{
     ColumnTrait, ConnectionTrait, EntityTrait, Iden, IdenStatic, Iterable, PrimaryKeyToColumn,
     QueryFilter, QueryResult, QuerySelect, QueryTrait,
-    sea_query::{BinOper, ExprTrait, Query, SimpleExpr},
+    sea_query::{BinOper, Condition, ExprTrait, IntoCondition, Query, SimpleExpr},
 };
 
-use super::{map_db_err, record_write::RecordUpdate};
+use super::{
+    map_db_err,
+    record_write::{RecordUpdate, RecordWrite},
+    value_filter::QueryPredicate,
+};
 use crate::error::{AuthError, AuthResult};
 
 pub(super) async fn execute_update_returning_raw<E, C>(
@@ -81,13 +85,7 @@ where
     C: ConnectionTrait,
 {
     if db.support_returning() {
-        let backend = db.get_database_backend();
-        let mut query = query.into_query();
-        let _ = query.returning(Query::returning().all());
-        return db
-            .query_one_raw(backend.build(&query))
-            .await
-            .map_err(map_db_err);
+        return execute_with_returning(db, query).await;
     }
     if query.exec(db).await.map_err(map_db_err)?.rows_affected == 0 {
         return Ok(None);
@@ -102,21 +100,31 @@ where
     .map_err(map_db_err)
 }
 
+async fn execute_with_returning<E: EntityTrait>(
+    db: &impl ConnectionTrait,
+    query: sea_orm::UpdateMany<E>,
+) -> AuthResult<Option<QueryResult>> {
+    let mut query = query.into_query();
+    let _ = query.returning(Query::returning().all());
+    db.query_one_raw(db.get_database_backend().build(&query))
+        .await
+        .map_err(map_db_err)
+}
+
 pub(super) async fn increment_returning_raw<E>(
     db: &sea_orm::DbConn,
-    query: sea_orm::UpdateMany<E>,
-    filter: SimpleExpr,
-    reselect: SimpleExpr,
+    write: RecordWrite<E>,
+    predicates: Vec<QueryPredicate<E::Column>>,
 ) -> AuthResult<Option<QueryResult>>
 where
     E: EntityTrait,
 {
     use sea_orm::TransactionTrait;
     if db.get_database_backend() != sea_orm::DbBackend::MySql {
-        return increment_returning_raw_with_connection(db, query, filter, reselect).await;
+        return increment_returning_raw_with_connection(db, write, predicates).await;
     }
     let tx = db.begin().await.map_err(map_db_err)?;
-    let result = increment_returning_raw_with_connection(&tx, query, filter, reselect).await;
+    let result = increment_returning_raw_with_connection(&tx, write, predicates).await;
     if result.is_ok() {
         tx.commit().await.map_err(map_db_err)?;
     } else {
@@ -125,7 +133,10 @@ where
     result
 }
 
-fn increment_target<E: EntityTrait>(primary: E::Column, filter: SimpleExpr) -> sea_orm::Select<E> {
+fn increment_target<E: EntityTrait>(
+    primary: E::Column,
+    filter: impl IntoCondition,
+) -> sea_orm::Select<E> {
     E::find()
         .select_only()
         .column(primary)
@@ -133,12 +144,47 @@ fn increment_target<E: EntityTrait>(primary: E::Column, filter: SimpleExpr) -> s
         .limit(1)
 }
 
+fn compile_increment<E: EntityTrait>(
+    primary: E::Column,
+    write: RecordWrite<E>,
+    predicates: Vec<QueryPredicate<E::Column>>,
+    backend: sea_orm::DbBackend,
+) -> AuthResult<sea_orm::UpdateMany<E>> {
+    // Kysely constructs the target WHERE, SET, and outer WHERE before encoding the final UPDATE.
+    let target_predicates = predicates
+        .iter()
+        .cloned()
+        .map(QueryPredicate::parse)
+        .collect::<AuthResult<Vec<_>>>()?;
+    let write = write.parse_update()?;
+    let predicates = predicates
+        .into_iter()
+        .map(QueryPredicate::parse)
+        .collect::<AuthResult<Vec<_>>>()?;
+    let update = write.encode(E::update_many(), backend)?;
+    // Driver encoding follows SQL order: SET, outer WHERE, then the target subquery WHERE.
+    let filter = predicates
+        .into_iter()
+        .try_fold(Condition::all(), |condition, predicate| {
+            Ok::<_, AuthError>(condition.add(predicate.encode(backend)?))
+        })?;
+    let target_filter = target_predicates
+        .into_iter()
+        .try_fold(Condition::all(), |condition, predicate| {
+            Ok::<_, AuthError>(condition.add(predicate.encode(backend)?))
+        })?;
+    let target = increment_target::<E>(primary, target_filter);
+    Ok(update
+        .query
+        .filter(filter)
+        .filter(primary.in_subquery(target.into_query())))
+}
+
 /// The caller must hold a transaction when the connection uses MySQL.
 pub(super) async fn increment_returning_raw_with_connection<E, C>(
     db: &C,
-    query: sea_orm::UpdateMany<E>,
-    filter: SimpleExpr,
-    reselect: SimpleExpr,
+    write: RecordWrite<E>,
+    predicates: Vec<QueryPredicate<E::Column>>,
 ) -> AuthResult<Option<QueryResult>>
 where
     E: EntityTrait,
@@ -148,16 +194,13 @@ where
         .next()
         .ok_or_else(|| AuthError::config("An auth model requires a primary key"))?
         .into_column();
-    let target = increment_target::<E>(primary, filter);
-    if db.get_database_backend() != sea_orm::DbBackend::MySql {
-        return execute_returning_raw(
-            db,
-            query.filter(primary.in_subquery(target.into_query())),
-            reselect,
-        )
-        .await;
-    }
     let backend = db.get_database_backend();
+    if backend != sea_orm::DbBackend::MySql {
+        return execute_with_returning(db, compile_increment(primary, write, predicates, backend)?)
+            .await;
+    }
+    let filter = super::value_filter::all(predicates.iter().cloned(), backend)?;
+    let target = increment_target::<E>(primary, filter);
     let Some(target) = db
         .query_one_raw(target.lock_exclusive().build(backend))
         .await
@@ -166,6 +209,10 @@ where
         return Ok(None);
     };
     let value = super::plugin_rows::value(&target, primary.as_str())?;
+    if value.is_undefined() || value.is_null() {
+        return Ok(None);
+    }
+    let query = write.update_where(backend, predicates)?.query;
     let value = super::record_bindings::Binding::for_column(primary, value).bind(backend)?;
     let selected_id = primary.into_expr().eq(primary.save_as(value));
     // Keep the original guards in UPDATE, then read by the locked ID even if SET changes the ID.
@@ -320,3 +367,7 @@ mod tests {
 #[cfg(test)]
 #[path = "increment_target_tests.rs"]
 mod increment_target_tests;
+
+#[cfg(test)]
+#[path = "increment_phase_tests.rs"]
+mod increment_phase_tests;
