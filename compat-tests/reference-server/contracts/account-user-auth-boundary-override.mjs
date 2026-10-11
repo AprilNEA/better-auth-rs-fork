@@ -6,10 +6,10 @@ export const overrideScenarios = [
   { name: "social-owner-many-callback-override", route: "social", relation: "reverse-user-reference-many", many: true, overrideUserInfo: true, callback: true },
 ];
 
-export async function prepareCallbackOverride(auth, recorder, { origin, requestHeaders, idToken }) {
+export async function prepareCallbackOverride(auth, recorder, { origin, requestHeaders, idToken, route = "sign-in/social" }) {
   const callbackURL = `${origin}/welcome`;
   const input = { provider: "google", callbackURL, disableRedirect: true };
-  const start = new Request(`${origin}/api/auth/sign-in/social`, {
+  const start = new Request(`${origin}/api/auth/${route}`, {
     method: "POST", headers: requestHeaders, body: JSON.stringify(input),
   });
   const response = await auth.handler(start);

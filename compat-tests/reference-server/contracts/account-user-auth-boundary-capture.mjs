@@ -297,48 +297,55 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
     for (const model of scenario.many ? ["account", "user"] : ["user", "account"]) for (const data of seed[model]) {
       await seedAdapter.create({ model, forceAllowId: true, data });
     }
+    await capture?.seed?.(seedAdapter);
     const before = stored();
     const observationBefore = capture?.snapshot?.(before);
-    const callback = scenario.callback ? await prepareCallbackOverride(auth, recorder, { origin, requestHeaders, idToken }) : null;
+    const callback = scenario.callback
+      ? await (capture?.prepareCallback ?? prepareCallbackOverride)(auth, recorder, { origin, requestHeaders, idToken }) : null;
     if (callback) assert.deepEqual(stored(), before, "Cookie state setup must not change database rows");
     const input = scenario.route === "social" ? { provider: "google", idToken: { token: idToken, nonce } }
       : { email: "a@account-user-auth-boundary.test", password };
     capture?.input?.(input);
-    const request = callback?.request ?? new Request(`${origin}/api/auth/sign-in/${scenario.route}`, {
+    const request = callback?.request ?? capture?.request?.({ origin, requestHeaders, input }) ?? new Request(`${origin}/api/auth/sign-in/${scenario.route}`, {
       method: "POST", headers: requestHeaders, body: JSON.stringify(input),
     });
     state.enabled = true;
     recorder.events = state.events;
     const requestWindow = { start: Date.now() };
     let response;
-    try { response = await auth.handler(request); }
+    let nativeResult;
+    try {
+      if (capture?.invokeNative) nativeResult = await capture.invokeNative(auth, request);
+      else response = await auth.handler(request);
+    }
     finally { requestWindow.end = Date.now(); state.enabled = false; recorder.events = null; }
-    const body = await response.text();
+    const body = response ? await response.text() : "";
     const after = stored();
     const observationAfter = capture?.snapshot?.(after);
     let verified;
     try { verified = extension ? await extension.verify({ backend, scenario, joins, before, after, response, body,
       events: state.events, requestWindow, requestHeaders, idToken, nonce, milliseconds,
-      observationBefore, observationAfter, secret, expiresIn, callback }) : callback
+      observationBefore, observationAfter, secret, expiresIn, callback, nativeResult }) : callback
       ? verifyCallbackOverride({ backend, joins, before, after, response, body, events: state.events, requestWindow, callback,
         requestHeaders, idToken, secret, expiresIn, milliseconds })
       : verifyResult(backend, scenario, joins, before, after, response, body, state.events, requestWindow); }
     catch (error) {
       const evidence = `${JSON.stringify(observeValue({ backend, scenario, joins, requestWindow, before, after, observationBefore, observationAfter, events: state.events,
-        response: { status: response.status, statusText: response.statusText, headers: [...response.headers], cookies: response.headers.getSetCookie(), body }, error: native(error) }), null, 2)}\n`;
+        response: response ? { status: response.status, statusText: response.statusText, headers: [...response.headers], cookies: response.headers.getSetCookie(), body } : null,
+        nativeResult, error: native(error) }), null, 2)}\n`;
       if (process.argv[2]) writeFileSync(`${process.argv[2]}.failure.json`, evidence);
       else process.stderr.write(evidence);
       throw error;
     }
     const { dynamic, replacements, cookie } = verified;
     const record = verified.normalizeRecord ?? ((model, row) => normalizeRecord(model, row, dynamic, replacements));
-    const headers = [...response.headers].map(([name, value]) => {
+    const headers = [...(response?.headers ?? [])].map(([name, value]) => {
       if (name !== "set-cookie" || !cookie) return [name, value];
       if (callback) return [name, value.replaceAll(cookie.raw, cookie.normalized)];
       assert.equal(value, cookie.raw);
       return [name, cookie.normalized];
     });
-    const cookies = response.headers.getSetCookie().map(value => cookie && value === cookie.raw ? cookie.normalized : value);
+    const cookies = (response?.headers.getSetCookie() ?? []).map(value => cookie && value === cookie.raw ? cookie.normalized : value);
     const normalizedBody = verified.normalizedBody ?? [...replacements].reduce((text, [from, to]) => text.replaceAll(from, to), body);
     return {
       backend, scenario: scenario.name, joins,
@@ -353,9 +360,10 @@ async function captureCase(backend, scenario, joins, recorder, extension) {
           ? normalize({ ...observed, data: record(observed.model, observed.data) }, replacements, Boolean(callback) || verified.embeddedStrings)
           : normalize(observed, replacements, Boolean(callback) || verified.embeddedStrings);
       }),
-      response: { status: response.status, statusText: response.statusText,
+      response: response ? { status: response.status, statusText: response.statusText,
         headers: verified.normalizeHeaders ? verified.normalizeHeaders(headers) : headers,
-        cookies: verified.normalizeCookies ? verified.normalizeCookies(cookies) : cookies, body: normalizedBody },
+        cookies: verified.normalizeCookies ? verified.normalizeCookies(cookies) : cookies, body: normalizedBody } : null,
+      ...(nativeResult ? { native: normalize(nativeResult, replacements, true) } : {}),
       after: Object.fromEntries(tables.map(model => [model, after[model]?.map(row => record(model, row)) ?? null])),
       ...(verified.observations ? { observations: normalize(verified.observations, replacements, true) } : {}),
       checked: verified.checked ?? { noNetwork: true, completeStorage: true, admissionMatchesSessionInput: !scenario.accountsOne && (!callback || Boolean(dynamic.session)),
@@ -400,11 +408,12 @@ export async function captureAccountUserAuthCases(selectedScenarios, extension) 
     }
     assert.equal(warmup, true, "The query recorder must be active before sampling");
     const cases = [];
-    for (const scenario of selectedScenarios) for (const backend of ["memory", "sqlite"]) for (const joins of [false, true]) {
+    const joinModes = extension?.joins ?? [false, true];
+    for (const scenario of selectedScenarios) for (const backend of ["memory", "sqlite"]) for (const joins of joinModes) {
       cases.push(await captureCase(backend, scenario, joins, recorder, extension));
       assert.deepEqual(networkCalls, []);
     }
-    assert.equal(cases.length, selectedScenarios.length * 4);
+    assert.equal(cases.length, selectedScenarios.length * 2 * joinModes.length);
     return { version, scenarios: selectedScenarios, cases };
   } finally { globalThis.fetch = originalFetch; console.error = originalConsoleError; trace.disable(); }
 }

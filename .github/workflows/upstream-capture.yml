@@ -12,12 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - contract: team-member-catalog
-            regressions: []
-            backend: postgres
-          - contract: team-member-catalog
-            regressions: []
-            backend: mysql
+          - contract: account-user-auth-link
+            regressions:
+              - account-user-auth-boundary
+              - account-user-auth-email
+              - account-user-auth-secondary
+              - account-user-auth-order
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
