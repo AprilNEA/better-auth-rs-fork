@@ -6,7 +6,10 @@ use better_auth_core::{AuthConfig, store::EphemeralStore};
 
 pub(super) async fn capture(scenario: Scenario) -> AuthResult<Value> {
     let state = State::new(scenario);
-    let store = EphemeralStore::new(Arc::new(AuthConfig::new(SECRET).base_url(ORIGIN)));
+    let store = EphemeralStore::from_storage(
+        Arc::new(AuthConfig::new(SECRET).base_url(ORIGIN)),
+        ["user", "session", "account", "verification"].map(|name| (name.into(), Vec::new())),
+    )?;
     let before = capture::Before::capture(&state, &store)?;
     let callbacks = Arc::new(callbacks::Callbacks(state.clone()));
     let provider = ResolvedGenericOAuth {
