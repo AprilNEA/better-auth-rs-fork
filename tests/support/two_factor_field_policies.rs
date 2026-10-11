@@ -24,10 +24,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         Vec::new()
     }
 
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut better_auth::plugin::ModelFields) -> AuthResult<()> {
         context.register_model_fields(EntityRole::TwoFactor, self.0.clone())
     }
 

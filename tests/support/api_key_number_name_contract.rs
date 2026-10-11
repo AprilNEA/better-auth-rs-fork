@@ -184,10 +184,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
     ) -> AuthResult<Option<AuthResponse>> {
         Ok(None)
     }
-    fn schema(
-        &self,
-        context: &mut better_auth_core::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
+    fn schema(&self, context: &mut better_auth::plugin::ModelFields) -> AuthResult<()> {
         let scenario = self.scenario;
         let transform = |kind| {
             let state = self.state.clone();
