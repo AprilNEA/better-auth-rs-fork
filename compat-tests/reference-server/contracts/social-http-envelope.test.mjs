@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { cloudflare, huggingface, kick, linear, notion } from "@better-auth/core/social-providers";
 import { runWithEndpointContext } from "@better-auth/core/context";
 import { createLogger } from "@better-auth/core/env";
+import { once } from "node:events";
+import { createServer } from "node:net";
 import fixture from "../../../tests/fixtures/social-http-providers-1.7.6.json" with { type: "json" };
 
 const factories = { cloudflare, huggingface, kick, linear, notion };
@@ -11,25 +13,51 @@ async function run(id, body, { status = 200, statusText = "OK", contentType = "a
   const events = [];
   const inputs = [];
   const logs = [];
-  const server = Bun.serve({
-    hostname: "127.0.0.1", port: 0,
-    async fetch(request) {
-      expect(new URL(request.url).pathname).toBe("/profile");
-      expect(request.method).toBe(id === "linear" ? "POST" : "GET");
-      expect(request.headers.get("authorization")).toBe("Bearer ordinary-access");
-      if (id === "linear") {
-        const posted = await request.json();
-        expect(posted.query.replace(/\s+/g, " ").trim()).toBe(fixture.providers.linear.profileBody.query);
+  const sockets = new Set();
+  let serverFailure;
+  const server = createServer(socket => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+    socket.once("error", error => { serverFailure ??= error; });
+    let bytes = Buffer.alloc(0);
+    socket.on("data", function receive(chunk) {
+      try {
+        bytes = Buffer.concat([bytes, chunk]);
+        const end = bytes.indexOf("\r\n\r\n");
+        if (end === -1) return;
+        const [start, ...lines] = bytes.subarray(0, end).toString().split("\r\n");
+        const [method, target] = start.split(" ");
+        const headers = new Headers(lines.map(line => {
+          const colon = line.indexOf(":");
+          return [line.slice(0, colon), line.slice(colon + 1).trim()];
+        }));
+        const length = Number(headers.get("content-length") ?? 0);
+        if (bytes.length < end + 4 + length) return;
+        socket.removeListener("data", receive);
+        expect(new URL(target, "http://127.0.0.1").pathname).toBe("/profile");
+        expect(method).toBe(id === "linear" ? "POST" : "GET");
+        expect(headers.get("authorization")).toBe("Bearer ordinary-access");
+        if (id === "linear") {
+          const posted = JSON.parse(bytes.subarray(end + 4, end + 4 + length).toString());
+          expect(posted.query.replace(/\s+/g, " ").trim()).toBe(fixture.providers.linear.profileBody.query);
+        }
+        events.push("http");
+        // Raw HTTP preserves the reason phrase that Bun.serve replaces with canonical text.
+        socket.end(`HTTP/1.1 ${status} ${statusText}\r\nContent-Type: ${contentType}\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
+      } catch (error) {
+        serverFailure ??= error;
+        socket.destroy();
       }
-      events.push("http");
-      return new Response(body, { status, statusText, headers: { "content-type": contentType } });
-    },
+    });
   });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const profileURL = `http://127.0.0.1:${server.address().port}/profile`;
   const original = globalThis.fetch;
   globalThis.fetch = Object.assign((input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     expect(url).toBe(fixture.providers[id].userinfoEndpoint);
-    return original(new URL("/profile", server.url), init);
+    return original(profileURL, init);
   }, original);
   try {
     const provider = factories[id]({
@@ -48,10 +76,14 @@ async function run(id, body, { status = 200, statusText = "OK", contentType = "a
       try { response = await provider.getUserInfo(tokens); }
       catch (thrown) { error = thrown; }
     });
+    if (serverFailure !== undefined) throw serverFailure;
     return { response, error, events, inputs, logs };
   } finally {
     globalThis.fetch = original;
-    await server.stop(true);
+    await new Promise((resolve, reject) => {
+      server.close(error => error ? reject(error) : resolve());
+      for (const socket of sockets) socket.destroy();
+    });
   }
 }
 

@@ -65,10 +65,10 @@ impl fmt::Display for LogArgument<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Text(value) => formatter.write_str(value),
-            Self::Value(value) => fmt::Display::fmt(
-                &Self::Native(&crate::FieldValue::from((*value).clone())),
-                formatter,
-            ),
+            Self::Value(value) => {
+                let native = crate::FieldValue::from((*value).clone());
+                fmt::Display::fmt(&LogArgument::Native(&native), formatter)
+            }
             Self::Native(value) => formatter.write_str(&String::from_utf16_lossy(
                 value.display_utf16().map_err(|_| fmt::Error)?.as_utf16(),
             )),
