@@ -296,21 +296,23 @@ async fn apple_signed_profiles_preserve_callback_names_mapper_precedence_and_dat
                 },
             }));
         }
+        let profile_request = OAuthUserInfoRequest {
+            id_token: (Some(server.token.clone())).into(),
+            user: sample
+                .get("user")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()?
+                .into(),
+            ..Default::default()
+        };
         let response = social_profile::fetch_user_info_for_code(
             &resolved::ResolvedProvider {
                 config: config.resolve(),
                 generic: None,
             },
-            OAuthUserInfoRequest {
-                id_token: (Some(server.token.clone())).into(),
-                user: sample
-                    .get("user")
-                    .cloned()
-                    .map(serde_json::from_value)
-                    .transpose()?
-                    .into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await?
@@ -378,12 +380,14 @@ async fn apple_valid_signed_tokens_use_audience_precedence_and_both_nonce_forms(
             json!(verified.is_some()),
             *sample.get("accepted").ok_or("Missing acceptance")?
         );
+        let profile_request = OAuthUserInfoRequest {
+            id_token: (Some(server.token.clone())).into(),
+            ..Default::default()
+        };
         let response = social_profile::fetch_user_info_with_claims(
             &provider,
-            OAuthUserInfoRequest {
-                id_token: (Some(server.token.clone())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             request.nonce.as_deref(),
             verified,
         )

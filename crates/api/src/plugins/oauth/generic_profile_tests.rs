@@ -68,10 +68,15 @@ async fn id_token_profile_is_preferred_and_mapping_cannot_change_account_subject
         .into(),
         ..Default::default()
     };
-    let response = fetch_user_info(&provider, &tokens, None)
-        .await
-        .unwrap()
-        .unwrap();
+    let response = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(tokens.fields()),
+        &tokens,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(response.user.id, "immutable-subject");
     assert_eq!(
         response.user.email.typed().unwrap().as_deref(),
@@ -126,10 +131,15 @@ async fn mapped_null_omits_image_without_changing_raw_profile() {
         .into(),
         ..Default::default()
     };
-    let response = fetch_user_info(&provider, &tokens, None)
-        .await
-        .unwrap()
-        .unwrap();
+    let response = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(tokens.fields()),
+        &tokens,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(response.user.name, None);
     assert_eq!(response.user.image, None);
     assert_eq!(response.data["name"], "Provider name");
@@ -384,10 +394,15 @@ async fn custom_generic_callbacks_preserve_native_tokens_and_separate_nonce_meta
         false,
     );
     let request = OAuthUserInfoRequest::from_fields(fields);
-    let response = fetch_user_info(&provider, &request, None)
-        .await
-        .unwrap()
-        .unwrap();
+    let response = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(request.fields()),
+        &request,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(response.user.id, "native-subject");
     assert_eq!(
         response.data,
@@ -429,10 +444,15 @@ async fn custom_profile_and_subject_callbacks_receive_original_data() {
         access_token: (Some("access".to_string())).into(),
         ..Default::default()
     };
-    let response = fetch_user_info(&provider, &tokens, None)
-        .await
-        .unwrap()
-        .unwrap();
+    let response = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(tokens.fields()),
+        &tokens,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(response.user.id, "tenant:42");
     assert_eq!(
         response.user.email.typed().unwrap().as_deref(),
@@ -490,10 +510,15 @@ async fn id_token_without_email_falls_back_to_userinfo_with_access_token() {
         id_token: (Some(encoded_claims(json!({ "sub": "id-token-subject" })))).into(),
         ..Default::default()
     };
-    let response = fetch_user_info(&provider, &tokens, None)
-        .await
-        .unwrap()
-        .unwrap();
+    let response = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(tokens.fields()),
+        &tokens,
+        None,
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(response.user.id, "userinfo-subject");
     assert_eq!(
         response.user.email.typed().unwrap().as_deref(),
@@ -534,7 +559,14 @@ async fn invalid_verified_id_token_cannot_fall_back_to_custom_profile() {
         expected_id_token_nonce: Some("expected-nonce".to_string()).into(),
         ..Default::default()
     };
-    let error = fetch_user_info(&provider, &tokens, None).await.unwrap_err();
+    let error = fetch_user_info(
+        &provider,
+        &OAuthTokenSet::from_fields(tokens.fields()),
+        &tokens,
+        None,
+    )
+    .await
+    .unwrap_err();
     assert!(error.to_string().contains("ID token verification failed"));
     assert_eq!(raw.calls.load(Ordering::SeqCst), 0);
 }
@@ -558,9 +590,14 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             },
             false,
         );
-        let error = fetch_user_info(&provider, &OAuthUserInfoRequest::default(), None)
-            .await
-            .unwrap_err();
+        let error = fetch_user_info(
+            &provider,
+            &OAuthTokenSet::default(),
+            &OAuthUserInfoRequest::default(),
+            None,
+        )
+        .await
+        .unwrap_err();
         assert!(error.to_string().contains("OAUTH_ACCOUNT_SUBJECT_INVALID"));
     }
     for (subject, expected) in [(42.0, "42"), (-0.0, "0"), (1e-7, "1e-7"), (1e21, "1e+21")] {
@@ -575,12 +612,17 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             false,
         );
         assert_eq!(
-            fetch_user_info(&provider, &OAuthUserInfoRequest::default(), None)
-                .await
-                .unwrap()
-                .unwrap()
-                .user
-                .id,
+            fetch_user_info(
+                &provider,
+                &OAuthTokenSet::default(),
+                &OAuthUserInfoRequest::default(),
+                None
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .user
+            .id,
             expected
         );
     }

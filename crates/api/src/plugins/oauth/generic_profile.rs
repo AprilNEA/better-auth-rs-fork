@@ -3,7 +3,7 @@ use better_auth_core::{AuthError, AuthResult};
 use serde_json::{Map, Value};
 
 use super::generic::GenericOAuthProfileContext;
-use super::providers::{OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::providers::{OAuthTokenSet, OAuthUserInfo, OAuthUserInfoRequest, OAuthUserInfoResponse};
 use super::resolved::ResolvedGenericOAuth;
 use super::types::AccountInfoUser;
 
@@ -31,6 +31,7 @@ impl GenericProfileError {
 
 pub(super) async fn fetch_user_info(
     provider: &ResolvedGenericOAuth,
+    subject_tokens: &OAuthTokenSet,
     tokens: &OAuthUserInfoRequest,
     verified_claims: Option<Value>,
 ) -> Result<Option<OAuthUserInfoResponse>, GenericProfileError> {
@@ -38,8 +39,9 @@ pub(super) async fn fetch_user_info(
         return Ok(None);
     };
     let subject = if let Some(resolver) = &provider.config.account_subject {
+        let subject_tokens = OAuthUserInfoRequest::from_fields(subject_tokens.fields());
         resolver
-            .resolve_subject(tokens, &response.data)
+            .resolve_subject(&subject_tokens, &response.data)
             .await
             .map_err(GenericProfileError::Identity)?
     } else {

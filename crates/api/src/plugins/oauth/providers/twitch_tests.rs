@@ -7,8 +7,8 @@ use std::{error::Error, sync::Arc};
 use tokio::sync::Mutex;
 
 use crate::plugins::oauth::{
-    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthUserInfo, OAuthUserInfoHandler,
-    OAuthUserInfoRequest, OAuthUserInfoResponse, TwitchOptions,
+    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfo,
+    OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse, TwitchOptions,
     authorization::{AuthorizationRequest, build_authorization_url},
     resolved::ResolvedProvider,
     social_profile::fetch_user_info_from_provider,
@@ -138,10 +138,15 @@ async fn twitch_profiles_match_the_pinned_ordinary_contract() -> TestResult<()> 
         .as_array()
         .ok_or("missing Twitch profiles")?
     {
-        let response =
-            fetch_user_info_from_provider(&provider, tokens(&fixture, &case["profile"])?, None)
-                .await?
-                .ok_or("missing Twitch profile")?;
+        let profile_request = tokens(&fixture, &case["profile"])?;
+        let response = fetch_user_info_from_provider(
+            &provider,
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
+            None,
+        )
+        .await?
+        .ok_or("missing Twitch profile")?;
         assert_eq!(json!(response.user.id), case["profile"]["sub"]);
         assert_eq!(
             profile_json(response, false),
@@ -198,9 +203,11 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
     let inputs = Arc::new(Mutex::new(Vec::new()));
     let mut config = config(&fixture, &json!({}))?;
     config.map_profile_to_user = Some(Arc::new(Mapper(inputs.clone())));
+    let profile_request = tokens(&fixture, &fixture["profiles"][0]["profile"])?;
     let response = fetch_user_info_from_provider(
         &resolved(config.clone()),
-        tokens(&fixture, &fixture["profiles"][0]["profile"])?,
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await?
@@ -216,9 +223,11 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
     let calls = Arc::new(Mutex::new(0));
     config.map_profile_to_user = Some(Arc::new(Mapper(custom_inputs.clone())));
     config.get_user_info = Some(Arc::new(Custom(calls.clone())));
+    let profile_request = tokens(&fixture, &fixture["profiles"][0]["profile"])?;
     let response = fetch_user_info_from_provider(
         &resolved(config),
-        tokens(&fixture, &fixture["profiles"][0]["profile"])?,
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await?

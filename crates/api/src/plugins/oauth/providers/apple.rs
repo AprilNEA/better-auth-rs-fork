@@ -193,12 +193,9 @@ mod tests {
     )]
 
     use super::*;
-    use better_auth_core::{FieldFunction, FieldMap, FieldObject, field_value::FieldObjectSource};
+    use better_auth_core::{FieldFunction, FieldMap, FieldObject};
     use serde_json::json;
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn native_callback_names_keep_truthiness_and_template_conversion() -> AuthResult<()> {
@@ -228,104 +225,68 @@ mod tests {
         Ok(())
     }
 
-    struct LiveNames {
-        reads: AtomicUsize,
-        events: Arc<Mutex<Vec<String>>>,
-        fail: bool,
-        first: FieldValue,
-    }
-
-    impl FieldObjectSource for LiveNames {
-        fn own_keys(&self) -> AuthResult<Vec<String>> {
-            Err(AuthError::internal(
-                "Apple must not enumerate the callback user",
-            ))
-        }
-
-        fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
-            assert_eq!(name, "name");
-            let read = self.reads.fetch_add(1, Ordering::SeqCst);
-            self.events.lock().unwrap().push(format!("name:{read}"));
-            match read {
-                0 => Ok(Some(true.into())),
-                1 if self.fail => Err(AuthError::internal("native Apple getter failure")),
-                1 => Ok(Some(
-                    FieldMap::from([("firstName".into(), self.first.clone())]).into(),
-                )),
-                2 => Ok(Some(
-                    FieldMap::from([("lastName".into(), "Second".into())]).into(),
-                )),
-                _ => Err(AuthError::internal(
-                    "Apple read callback name too many times",
-                )),
-            }
-        }
-
-        fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
-            Err(AuthError::internal(
-                "Apple must not mutate the callback user",
-            ))
-        }
-
-        fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
-            Err(AuthError::internal(
-                "Apple must not mutate the callback user",
-            ))
-        }
-
-        fn snapshot_fields(&self) -> AuthResult<FieldMap> {
-            Err(AuthError::internal(
-                "Apple must not snapshot the callback user",
-            ))
-        }
-
-        fn identity(&self) -> usize {
-            std::ptr::from_ref(self) as usize
-        }
-    }
-
     #[test]
-    fn native_callback_name_getters_repeat_around_string_conversion_and_keep_errors()
-    -> AuthResult<()> {
+    fn native_callback_names_observe_conversion_mutations_and_keep_errors() -> AuthResult<()> {
         for fail in [false, true] {
             let events = Arc::new(Mutex::new(Vec::new()));
+            let user = FieldObject::from(FieldMap::new());
+            let changed_user = user.clone();
             let converted = events.clone();
+            let last_converted = events.clone();
+            let last: FieldValue = FieldMap::from([(
+                "toString".into(),
+                FieldFunction::contextual(move |receiver, arguments| {
+                    assert!(receiver.is_object());
+                    assert!(arguments.is_empty());
+                    last_converted.lock().unwrap().push("last:toString".into());
+                    Ok("Second".into())
+                })
+                .into(),
+            )])
+            .into();
             let first = FieldMap::from([(
                 "toString".into(),
                 FieldFunction::contextual(move |receiver, arguments| {
                     assert!(receiver.is_object());
                     assert!(arguments.is_empty());
                     converted.lock().unwrap().push("first:toString".into());
+                    let _ = changed_user.set(
+                        "name",
+                        FieldMap::from([("lastName".into(), last.clone())]).into(),
+                    )?;
+                    if fail {
+                        return Err(AuthError::internal("native Apple conversion failure"));
+                    }
                     Ok("First".into())
                 })
                 .into(),
             )])
             .into();
-            let user = FieldObject::from_source(Arc::new(LiveNames {
-                reads: AtomicUsize::new(0),
-                events: events.clone(),
-                fail,
-                first,
-            }));
+            let _ = user.set(
+                "name",
+                FieldMap::from([
+                    ("firstName".into(), first),
+                    ("lastName".into(), "stale".into()),
+                ])
+                .into(),
+            )?;
             let request = OAuthUserInfoRequest {
-                user: SchemaValue::from_field(user.into()),
+                user: SchemaValue::from_field(user.clone().into()),
                 ..Default::default()
             };
             let result = profile(&request, Some(json!({"sub":"apple-owner"})));
+            let _ = user.delete("name")?;
             if fail {
                 assert!(
-                    matches!(result, Err(AuthError::Internal(message)) if message == "native Apple getter failure")
+                    matches!(result, Err(AuthError::Internal(message)) if message == "native Apple conversion failure")
                 );
-                assert_eq!(*events.lock().unwrap(), ["name:0", "name:1"]);
+                assert_eq!(*events.lock().unwrap(), ["first:toString"]);
             } else {
                 assert_eq!(
                     result?,
                     Some(json!({"sub":"apple-owner","name":"First Second"}))
                 );
-                assert_eq!(
-                    *events.lock().unwrap(),
-                    ["name:0", "name:1", "first:toString", "name:2"]
-                );
+                assert_eq!(*events.lock().unwrap(), ["first:toString", "last:toString"]);
             }
         }
         Ok(())

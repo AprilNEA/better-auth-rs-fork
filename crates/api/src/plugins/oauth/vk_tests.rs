@@ -236,12 +236,14 @@ async fn fetch(
     config: OAuthProvider,
     access_token: String,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some(access_token)).into(),
+        ..Default::default()
+    };
     social_profile::fetch_user_info_for_code(
         &resolved(config),
-        OAuthUserInfoRequest {
-            access_token: (Some(access_token)).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await

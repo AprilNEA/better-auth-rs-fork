@@ -417,12 +417,14 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
             config,
             generic: None,
         };
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-github-token".into())).into(),
+            ..Default::default()
+        };
         let response = crate::plugins::oauth::social_profile::fetch_user_info_for_code(
             &provider,
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-github-token".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await

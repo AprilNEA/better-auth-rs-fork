@@ -134,17 +134,33 @@ async fn signed_claims_match_pinned_profiles_on_code_direct_and_account_reads() 
                     user: None,
                 };
                 let verified = id_token::verify(&resolved, &token, None).await.unwrap();
-                social_profile::fetch_user_info_with_claims(&resolved, request, None, verified)
-                    .await
-                    .unwrap()
+                social_profile::fetch_user_info_with_claims(
+                    &resolved,
+                    &OAuthTokenSet::from_fields(request.fields()),
+                    request,
+                    None,
+                    verified,
+                )
+                .await
+                .unwrap()
             } else if entry == "code" {
-                social_profile::fetch_user_info_for_code(&resolved, request, None)
-                    .await
-                    .unwrap()
+                social_profile::fetch_user_info_for_code(
+                    &resolved,
+                    &OAuthTokenSet::from_fields(request.fields()),
+                    request,
+                    None,
+                )
+                .await
+                .unwrap()
             } else {
-                social_profile::fetch_user_info_from_provider(&resolved, request, None)
-                    .await
-                    .unwrap()
+                social_profile::fetch_user_info_from_provider(
+                    &resolved,
+                    &OAuthTokenSet::from_fields(request.fields()),
+                    request,
+                    None,
+                )
+                .await
+                .unwrap()
             }
             .unwrap();
             assert_eq!(
@@ -177,16 +193,18 @@ async fn signed_mapper_failure_uses_the_separate_http_mapper_stage() {
         patch: json!({}),
         fail_first: AtomicBool::new(true),
     }));
+    let profile_request = OAuthUserInfoRequest {
+        id_token: (Some(server.token.clone())).into(),
+        access_token: (Some("ordinary-access".into())).into(),
+        ..Default::default()
+    };
     let response = social_profile::fetch_user_info_for_code(
         &resolved::ResolvedProvider {
             config,
             generic: None,
         },
-        OAuthUserInfoRequest {
-            id_token: (Some(server.token.clone())).into(),
-            access_token: (Some("ordinary-access".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await
@@ -310,12 +328,14 @@ async fn application_verified_signed_claims_are_not_verified_a_second_time() {
         user: None,
     };
     let verified = id_token::verify(&resolved, &token, None).await.unwrap();
+    let profile_request = OAuthUserInfoRequest {
+        id_token: (Some(server.token.clone())).into(),
+        ..Default::default()
+    };
     let response = social_profile::fetch_user_info_with_claims(
         &resolved,
-        OAuthUserInfoRequest {
-            id_token: (Some(server.token.clone())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         Some("ordinary-nonce"),
         verified,
     )

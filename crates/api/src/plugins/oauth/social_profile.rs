@@ -2,19 +2,21 @@ use better_auth_core::{AuthError, AuthResult, SchemaValue};
 
 use super::google;
 use super::id_token::VerifiedIdToken;
-use super::providers::{OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::providers::{OAuthTokenSet, OAuthUserInfoRequest, OAuthUserInfoResponse};
 use super::resolved::ResolvedProvider;
 
 pub(super) async fn fetch_user_info_from_provider(
     provider: &ResolvedProvider,
+    subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
-    fetch_user_info_with_claims(provider, request, expected_nonce, None).await
+    fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, None).await
 }
 
 pub(super) async fn fetch_user_info_with_claims(
     provider: &ResolvedProvider,
+    subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
     claims: Option<VerifiedIdToken>,
@@ -37,7 +39,7 @@ pub(super) async fn fetch_user_info_with_claims(
                 ));
             }
         };
-        return super::generic_profile::fetch_user_info(generic, &request, claims)
+        return super::generic_profile::fetch_user_info(generic, subject_tokens, &request, claims)
             .await
             .map_err(super::generic_profile::GenericProfileError::into_auth_error);
     }
@@ -213,11 +215,19 @@ pub(super) async fn fetch_user_info_with_claims(
 
 pub(super) async fn fetch_user_info_for_code(
     provider: &ResolvedProvider,
+    subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
 ) -> AuthResult<Option<OAuthUserInfoResponse>> {
     if let Some(generic) = &provider.generic {
-        return match super::generic_profile::fetch_user_info(generic, &request, None).await {
+        return match super::generic_profile::fetch_user_info(
+            generic,
+            subject_tokens,
+            &request,
+            None,
+        )
+        .await
+        {
             Ok(response) => Ok(response),
             Err(super::generic_profile::GenericProfileError::Identity(_)) => Ok(None),
             Err(super::generic_profile::GenericProfileError::Profile(error)) => Err(error),
@@ -247,7 +257,7 @@ pub(super) async fn fetch_user_info_for_code(
     } else {
         None
     };
-    fetch_user_info_with_claims(provider, request, expected_nonce, claims).await
+    fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, claims).await
 }
 
 async fn fetch_default_user_info(

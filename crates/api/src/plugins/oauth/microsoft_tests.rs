@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 
 use super::{
     ClientAssertion, ClientAssertionContext, MicrosoftOptions, MicrosoftProfilePhotoSize,
-    OAuthPlugin, OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthUserInfo,
+    OAuthPlugin, OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfo,
     OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse,
     authorization::{AuthorizationRequest, build_authorization_url},
     google_test_support::GoogleFixture,
@@ -300,13 +300,15 @@ async fn microsoft_profile_photo_and_mapper_match_pinned_results() -> TestResult
                     .as_bytes(),
             ),
         )?;
+        let profile_request = OAuthUserInfoRequest {
+            id_token: (Some(token)).into(),
+            access_token: (sample["accessToken"].as_str().map(str::to_owned)).into(),
+            ..Default::default()
+        };
         let response = fetch_user_info_from_provider(
             &resolved(config),
-            OAuthUserInfoRequest {
-                id_token: (Some(token)).into(),
-                access_token: (sample["accessToken"].as_str().map(str::to_owned)).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await?
@@ -369,12 +371,14 @@ async fn microsoft_custom_handler_precedes_the_profile_mapper() -> TestResult<()
         inputs: inputs.clone(),
         patch: json!({"name":"Unused"}),
     }));
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("ordinary-access".into())).into(),
+        ..Default::default()
+    };
     let response = fetch_user_info_from_provider(
         &resolved(config),
-        OAuthUserInfoRequest {
-            access_token: (Some("ordinary-access".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await?
@@ -419,12 +423,14 @@ async fn microsoft_signed_ordinary_tenants_use_the_shared_oidc_boundary() -> Tes
         )
         .await?;
         assert_eq!(json!(verified.is_some()), sample["verified"]);
+        let profile_request = OAuthUserInfoRequest {
+            id_token: (Some(server.token.clone())).into(),
+            ..Default::default()
+        };
         let response = super::social_profile::fetch_user_info_with_claims(
             &provider,
-            OAuthUserInfoRequest {
-                id_token: (Some(server.token.clone())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             Some("ordinary-nonce"),
             verified,
         )

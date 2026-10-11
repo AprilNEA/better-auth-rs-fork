@@ -630,6 +630,7 @@ impl OAuthProxyPlugin {
         };
         let info = match handlers::fetch_user_info_for_code(
             provider,
+            &tokens,
             handlers::callback_user_request(&tokens, params.get("user").map(String::as_str), None)?,
             state.id_token_nonce.as_deref(),
         )

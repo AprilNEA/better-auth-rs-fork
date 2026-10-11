@@ -301,11 +301,13 @@ fn public_response(response: Option<OAuthUserInfoResponse>) -> Value {
 }
 
 async fn fetch(config: OAuthProvider, token: &Value) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    let profile_request = OAuthUserInfoRequest::from_fields(better_auth_core::FieldMap::from_json(
+        token.as_object().unwrap().clone(),
+    )?);
     social_profile::fetch_user_info_for_code(
         &resolved(config),
-        OAuthUserInfoRequest::from_fields(better_auth_core::FieldMap::from_json(
-            token.as_object().unwrap().clone(),
-        )?),
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await

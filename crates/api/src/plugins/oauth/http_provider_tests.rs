@@ -257,9 +257,11 @@ async fn custom_handler_errors_remain_outside_the_default_profile_catch() {
         config.user_info_url = None;
         config.get_user_info = Some(Arc::new(FailedCustomProfile));
         let resolved = resolve(id, config).await;
+        let profile_request = OAuthUserInfoRequest::default();
         let error = social_profile::fetch_user_info_for_code(
             &resolved.providers[id],
-            OAuthUserInfoRequest::default(),
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await
@@ -522,12 +524,14 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             }
             let resolved = resolve(id, config).await;
             let response = tokio::spawn(async move {
+                let profile_request = OAuthUserInfoRequest {
+                    access_token: (Some("ordinary-access".into())).into(),
+                    ..Default::default()
+                };
                 social_profile::fetch_user_info_for_code(
                     &resolved.providers[id],
-                    OAuthUserInfoRequest {
-                        access_token: (Some("ordinary-access".into())).into(),
-                        ..Default::default()
-                    },
+                    &OAuthTokenSet::from_fields(profile_request.fields()),
+                    profile_request,
                     None,
                 )
                 .await
@@ -586,12 +590,14 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             let mut config = provider(id);
             config.user_info_url = Some(format!("{}/profile", server.url));
             let resolved = resolve(id, config).await;
+            let profile_request = OAuthUserInfoRequest {
+                access_token: (Some("ordinary-access".into())).into(),
+                ..Default::default()
+            };
             let response = social_profile::fetch_user_info_for_code(
                 &resolved.providers[id],
-                OAuthUserInfoRequest {
-                    access_token: (Some("ordinary-access".into())).into(),
-                    ..Default::default()
-                },
+                &OAuthTokenSet::from_fields(profile_request.fields()),
+                profile_request,
                 None,
             )
             .await
@@ -618,12 +624,14 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             resume: Default::default(),
         }));
         let resolved = resolve("gitlab", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["gitlab"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;
@@ -650,12 +658,14 @@ async fn cloudflare_api_failures_return_no_profile_before_mapping() {
             resume: Default::default(),
         }));
         let resolved = resolve("cloudflare", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["cloudflare"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;
@@ -689,12 +699,14 @@ async fn linear_missing_viewer_returns_no_profile_before_mapping() {
             resume,
         }));
         let resolved = resolve("linear", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["linear"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;
@@ -727,12 +739,14 @@ async fn cloudflare_mapper_errors_propagate() {
     config.user_info_url = Some(format!("{}/profile", server.url));
     config.map_profile_to_user = Some(Arc::new(FailedCloudflareMapper));
     let resolved = resolve("cloudflare", config).await;
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("ordinary-access".into())).into(),
+        ..Default::default()
+    };
     let error = social_profile::fetch_user_info_for_code(
         &resolved.providers["cloudflare"],
-        OAuthUserInfoRequest {
-            access_token: (Some("ordinary-access".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await
@@ -795,12 +809,14 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
     }));
     let resolved = resolve("atlassian", config).await;
     for access_token in [None, Some(String::new())] {
+        let profile_request = OAuthUserInfoRequest {
+            access_token: access_token.into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["atlassian"],
-            OAuthUserInfoRequest {
-                access_token: access_token.into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await
@@ -808,12 +824,14 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
         assert!(result.is_none());
         assert!(events.lock().unwrap().is_empty());
     }
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("ordinary-access".into())).into(),
+        ..Default::default()
+    };
     let result = social_profile::fetch_user_info_for_code(
         &resolved.providers["atlassian"],
-        OAuthUserInfoRequest {
-            access_token: (Some("ordinary-access".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await
@@ -862,12 +880,14 @@ async fn reddit_placeholder_follows_mapper_email_presence() {
             events.clone(),
         )));
         let resolved = resolve("reddit", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let response = social_profile::fetch_user_info_for_code(
             &resolved.providers["reddit"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await
@@ -907,12 +927,14 @@ async fn reddit_http_failure_skips_mapper_and_mapper_error_propagates() {
         config.user_info_url = Some(format!("{}/profile", server.url));
         config.map_profile_to_user = Some(Arc::new(FailedRedditMapper));
         let resolved = resolve("reddit", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["reddit"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;
@@ -954,12 +976,14 @@ async fn zoom_http_failure_skips_mapper_and_mapper_error_propagates() {
         config.user_info_url = Some(format!("{}/profile", server.url));
         config.map_profile_to_user = Some(Arc::new(FailedZoomMapper(events.clone())));
         let resolved = resolve("zoom", config).await;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["zoom"],
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;

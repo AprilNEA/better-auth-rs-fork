@@ -130,6 +130,8 @@ pub trait OAuthProfileMapper: Send + Sync {
 #[async_trait]
 pub trait OAuthAccountSubject: Send + Sync {
     /// Return a nonempty immutable identifier; mapped local fields are not supplied.
+    /// Code flows supply the original token exchange record, before callback metadata is added.
+    /// Direct ID-token flows supply the endpoint's token record.
     async fn resolve_subject(
         &self,
         tokens: &OAuthUserInfoRequest,

@@ -549,3 +549,6 @@ async fn social_verification_policy_uses_configured_profile_and_sender() {
 
 #[path = "signin_name_tests.rs"]
 mod signin_name_tests;
+
+#[path = "subject_source_tests.rs"]
+mod subject_source_tests;

@@ -331,13 +331,15 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
                     .map_err(|_| "callback log poisoned")?
                     .is_empty()
             );
+            let profile_request = OAuthUserInfoRequest {
+                access_token: (Some("normal-profile-token".into())).into(),
+                id_token: ((id == "google").then(|| google.token.clone())).into(),
+                ..Default::default()
+            };
             let response = handlers::fetch_user_info_for_code(
                 config.providers.get(id).ok_or("missing provider")?,
-                OAuthUserInfoRequest {
-                    access_token: (Some("normal-profile-token".into())).into(),
-                    id_token: ((id == "google").then(|| google.token.clone())).into(),
-                    ..Default::default()
-                },
+                &OAuthTokenSet::from_fields(profile_request.fields()),
+                profile_request,
                 None,
             )
             .await?
@@ -375,12 +377,14 @@ async fn google_stored_account_profile_keeps_access_token_userinfo()
     let mut provider = provider("google")?;
     provider.user_info_url = Some(format!("{}/google", server.url));
     let config = resolve("google", provider).await?;
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("normal-account-info-token".into())).into(),
+        ..Default::default()
+    };
     let response = handlers::fetch_user_info_from_provider(
         config.providers.get("google").ok_or("missing provider")?,
-        OAuthUserInfoRequest {
-            access_token: (Some("normal-account-info-token".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await?
@@ -439,13 +443,15 @@ async fn social_profile_callback_errors_propagate_without_running_later_callback
             provider.get_user_info = Some(callbacks);
         }
         let config = resolve("google", provider).await?;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("normal-profile-token".into())).into(),
+            id_token: (Some(google.token.clone())).into(),
+            ..Default::default()
+        };
         let error = handlers::fetch_user_info_for_code(
             config.providers.get("google").ok_or("missing provider")?,
-            OAuthUserInfoRequest {
-                access_token: (Some("normal-profile-token".into())).into(),
-                id_token: (Some(google.token.clone())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await

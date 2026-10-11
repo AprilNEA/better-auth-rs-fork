@@ -412,6 +412,7 @@ async fn social_line_configuration_and_profiles_match_pinned_capture() {
         };
         let response = super::super::handlers::fetch_user_info_from_provider(
             &resolved.providers["line"],
+            &OAuthTokenSet::from_fields(tokens.fields()),
             tokens,
             None,
         )
@@ -534,12 +535,14 @@ async fn social_line_mapper_matches_pinned_input_and_result() {
         .unwrap()
         .config
         .map_profile_to_user = Some(Arc::new(SocialMapper(inputs.clone())));
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("ordinary-access".into())).into(),
+        ..Default::default()
+    };
     let response = super::super::handlers::fetch_user_info_from_provider(
         &resolved.providers["line"],
-        OAuthUserInfoRequest {
-            access_token: (Some("ordinary-access".into())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await

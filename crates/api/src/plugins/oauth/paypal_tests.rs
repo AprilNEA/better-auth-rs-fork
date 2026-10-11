@@ -363,14 +363,16 @@ async fn paypal_profiles_preserve_http_data_mapping_and_optional_verified_token(
         } else {
             None
         };
+        let profile_request = OAuthUserInfoRequest {
+            access_token: ((sample["missingAccess"] != true).then(|| "ordinary-access".into()))
+                .into(),
+            id_token: (signed.as_ref().map(|s| s.token.clone())).into(),
+            ..Default::default()
+        };
         let result = social_profile::fetch_user_info_for_code(
             &resolved(config),
-            OAuthUserInfoRequest {
-                access_token: ((sample["missingAccess"] != true).then(|| "ordinary-access".into()))
-                    .into(),
-                id_token: (signed.as_ref().map(|s| s.token.clone())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await
@@ -427,9 +429,22 @@ async fn paypal_explicit_verifier_runs_once_for_direct_and_stored_profile_reads(
             )
             .await
             .unwrap();
-            social_profile::fetch_user_info_with_claims(&provider, request, None, verified).await
+            social_profile::fetch_user_info_with_claims(
+                &provider,
+                &OAuthTokenSet::from_fields(request.fields()),
+                request,
+                None,
+                verified,
+            )
+            .await
         } else {
-            social_profile::fetch_user_info_from_provider(&provider, request, None).await
+            social_profile::fetch_user_info_from_provider(
+                &provider,
+                &OAuthTokenSet::from_fields(request.fields()),
+                request,
+                None,
+            )
+            .await
         }
         .unwrap()
         .unwrap();
@@ -460,13 +475,15 @@ async fn paypal_optional_token_requires_the_explicit_application_verifier() {
         events: Default::default(),
         error: None,
     }));
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (Some("ordinary-access".into())).into(),
+        id_token: (Some(signed.token.clone())).into(),
+        ..Default::default()
+    };
     let response = social_profile::fetch_user_info_for_code(
         &resolved(config),
-        OAuthUserInfoRequest {
-            access_token: (Some("ordinary-access".into())).into(),
-            id_token: (Some(signed.token.clone())).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await
@@ -546,12 +563,14 @@ async fn paypal_default_mapper_catch_and_custom_callbacks_keep_distinct_errors()
             if mode.starts_with("custom") {
                 config.get_user_info = Some(Arc::new(Custom(mode.into())));
             }
+            let profile_request = OAuthUserInfoRequest {
+                access_token: (Some("ordinary-access".into())).into(),
+                ..Default::default()
+            };
             social_profile::fetch_user_info_for_code(
                 &resolved(config),
-                OAuthUserInfoRequest {
-                    access_token: (Some("ordinary-access".into())).into(),
-                    ..Default::default()
-                },
+                &OAuthTokenSet::from_fields(profile_request.fields()),
+                profile_request,
                 None,
             )
             .await

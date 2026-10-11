@@ -19,8 +19,8 @@ use super::resolved::ResolvedProvider;
 use super::social_profile::fetch_user_info_from_provider;
 use super::types::AccountInfoUser;
 use super::{
-    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthUserInfo, OAuthUserInfoHandler,
-    OAuthUserInfoRequest, OAuthUserInfoResponse,
+    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfo,
+    OAuthUserInfoHandler, OAuthUserInfoRequest, OAuthUserInfoResponse,
 };
 
 type TestResult<T> = Result<T, Box<dyn Error>>;
@@ -281,12 +281,14 @@ async fn tiktok_profiles_preserve_envelope_and_skip_mapper_like_pinned_capture()
             Vec::new()
         };
         let server = tokio::spawn(async move { axum::serve(listener, router).await });
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let response = fetch_user_info_from_provider(
             &provider,
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await;

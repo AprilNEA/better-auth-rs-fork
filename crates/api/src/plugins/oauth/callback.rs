@@ -281,6 +281,7 @@ pub(super) async fn handle_callback(
 
     let user_info = match fetch_user_info_for_code(
         provider,
+        &tokens,
         callback_user_request(
             &tokens,
             merged.get("user").map(String::as_str),

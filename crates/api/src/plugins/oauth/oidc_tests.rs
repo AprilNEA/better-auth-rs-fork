@@ -312,16 +312,21 @@ async fn generic_profile_uses_request_nonce_for_callback_proxy_and_native_extens
         if let Some(extension) = extension {
             let _ = fields.insert("expectedIdTokenNonce".into(), extension);
         }
-        let request =
-            callback_user_request(&OAuthTokenSet::from_fields(fields), None, state_nonce).unwrap();
+        let subject_tokens = OAuthTokenSet::from_fields(fields);
+        let request = callback_user_request(&subject_tokens, None, state_nonce).unwrap();
         *handler.expected_nonce.lock().unwrap() = request
             .expected_id_token_nonce
             .field_value()
             .as_str()
             .map(str::to_owned);
-        let response = fetch_user_info_for_code(&provider, request, Some("unused-flow-nonce"))
-            .await
-            .unwrap();
+        let response = fetch_user_info_for_code(
+            &provider,
+            &subject_tokens,
+            request,
+            Some("unused-flow-nonce"),
+        )
+        .await
+        .unwrap();
         assert_eq!(response.is_some(), accepted, "{label}");
         accepted_count += usize::from(accepted);
         assert_eq!(

@@ -268,12 +268,14 @@ async fn code_and_refresh_match_captured_post_requests_and_token_fields() {
 }
 
 async fn fetch(config: OAuthProvider, input: Value) -> AuthResult<Option<OAuthUserInfoResponse>> {
+    let profile_request = OAuthUserInfoRequest {
+        access_token: (input["accessToken"].as_str().map(str::to_owned)).into(),
+        ..Default::default()
+    };
     social_profile::fetch_user_info_for_code(
         &resolved(config),
-        OAuthUserInfoRequest {
-            access_token: (input["accessToken"].as_str().map(str::to_owned)).into(),
-            ..Default::default()
-        },
+        &OAuthTokenSet::from_fields(profile_request.fields()),
+        profile_request,
         None,
     )
     .await

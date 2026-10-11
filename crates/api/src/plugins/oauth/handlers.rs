@@ -15,7 +15,7 @@ use better_auth_core::{
 use super::authorization::{AuthorizationRequest, build_authorization_url};
 use super::encryption::encrypt_token_set;
 pub(super) use super::provider_tokens::refresh_tokens_via_provider;
-use super::providers::{OAuthUserInfo, OAuthUserInfoRequest};
+use super::providers::{OAuthTokenSet, OAuthUserInfo, OAuthUserInfoRequest};
 use super::resolved::{ResolvedOAuthConfig as OAuthConfig, ResolvedProvider};
 pub(super) use super::social_profile::{fetch_user_info_for_code, fetch_user_info_from_provider};
 use super::state::{
@@ -425,35 +425,37 @@ async fn sign_in_with_id_token_core(
     let claims =
         super::id_token::verify_in_endpoint(&body.provider, provider, id_token, &endpoint).await?;
 
+    let subject_tokens = OAuthTokenSet::from_fields(FieldMap::from([
+        ("idToken".into(), id_token.token.clone().into()),
+        (
+            "accessToken".into(),
+            id_token
+                .access_token
+                .clone()
+                .map(Into::into)
+                .unwrap_or_default(),
+        ),
+        (
+            "refreshToken".into(),
+            id_token
+                .refresh_token
+                .clone()
+                .map(Into::into)
+                .unwrap_or_default(),
+        ),
+        (
+            "user".into(),
+            id_token
+                .user
+                .clone()
+                .map(better_auth_core::SchemaField::into_field)
+                .unwrap_or_default(),
+        ),
+    ]));
     let user_info = super::social_profile::fetch_user_info_with_claims(
         provider,
-        OAuthUserInfoRequest::from_fields(FieldMap::from([
-            ("idToken".into(), id_token.token.clone().into()),
-            (
-                "accessToken".into(),
-                id_token
-                    .access_token
-                    .clone()
-                    .map(Into::into)
-                    .unwrap_or_default(),
-            ),
-            (
-                "refreshToken".into(),
-                id_token
-                    .refresh_token
-                    .clone()
-                    .map(Into::into)
-                    .unwrap_or_default(),
-            ),
-            (
-                "user".into(),
-                id_token
-                    .user
-                    .clone()
-                    .map(better_auth_core::SchemaField::into_field)
-                    .unwrap_or_default(),
-            ),
-        ])),
+        &subject_tokens,
+        OAuthUserInfoRequest::from_fields(subject_tokens.fields()),
         id_token.nonce.as_deref(),
         claims,
     )
@@ -533,27 +535,29 @@ async fn link_with_id_token_core(
     let claims =
         super::id_token::verify_in_endpoint(&body.provider, provider, id_token, &endpoint).await?;
 
+    let subject_tokens = OAuthTokenSet::from_fields(FieldMap::from([
+        ("idToken".into(), id_token.token.clone().into()),
+        (
+            "accessToken".into(),
+            id_token
+                .access_token
+                .clone()
+                .map(Into::into)
+                .unwrap_or_default(),
+        ),
+        (
+            "refreshToken".into(),
+            id_token
+                .refresh_token
+                .clone()
+                .map(Into::into)
+                .unwrap_or_default(),
+        ),
+    ]));
     let response = super::social_profile::fetch_user_info_with_claims(
         provider,
-        OAuthUserInfoRequest::from_fields(FieldMap::from([
-            ("idToken".into(), id_token.token.clone().into()),
-            (
-                "accessToken".into(),
-                id_token
-                    .access_token
-                    .clone()
-                    .map(Into::into)
-                    .unwrap_or_default(),
-            ),
-            (
-                "refreshToken".into(),
-                id_token
-                    .refresh_token
-                    .clone()
-                    .map(Into::into)
-                    .unwrap_or_default(),
-            ),
-        ])),
+        &subject_tokens,
+        OAuthUserInfoRequest::from_fields(subject_tokens.fields()),
         id_token.nonce.as_deref(),
         claims,
     )

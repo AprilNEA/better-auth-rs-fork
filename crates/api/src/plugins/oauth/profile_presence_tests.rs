@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use super::fetch_user_info_for_code;
 use crate::plugins::oauth::{
-    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthUserInfoHandler, OAuthUserInfoRequest,
-    OAuthUserInfoResponse, resolved::ResolvedProvider,
+    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfoHandler,
+    OAuthUserInfoRequest, OAuthUserInfoResponse, resolved::ResolvedProvider,
 };
 
 struct EmptyProfile(Arc<Mutex<Vec<&'static str>>>);
@@ -70,12 +70,14 @@ async fn custom_null_skips_default_http_and_mapper() -> AuthResult<()> {
             config,
             generic: None,
         };
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-profile-token".into())).into(),
+            ..Default::default()
+        };
         let result = fetch_user_info_for_code(
             &provider,
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-profile-token".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await?;
@@ -211,12 +213,14 @@ mod discord {
                 config,
                 generic: None,
             };
+            let profile_request = OAuthUserInfoRequest {
+                access_token: (Some("ordinary-profile-token".into())).into(),
+                ..Default::default()
+            };
             let response = fetch_user_info_for_code(
                 &provider,
-                OAuthUserInfoRequest {
-                    access_token: (Some("ordinary-profile-token".into())).into(),
-                    ..Default::default()
-                },
+                &OAuthTokenSet::from_fields(profile_request.fields()),
+                profile_request,
                 None,
             )
             .await?

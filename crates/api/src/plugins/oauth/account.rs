@@ -536,9 +536,14 @@ pub(super) async fn handle_account_info(
             .ok_or_else(super::social_profile::missing_profile)?;
         (info.user, info.data)
     } else {
-        let info = fetch_user_info_from_provider(provider, request, None)
-            .await?
-            .ok_or_else(super::social_profile::missing_profile)?;
+        let info = fetch_user_info_from_provider(
+            provider,
+            &OAuthTokenSet::from_fields(request.fields()),
+            request,
+            None,
+        )
+        .await?
+        .ok_or_else(super::social_profile::missing_profile)?;
         (
             AccountInfoUser {
                 id: provider

@@ -206,12 +206,14 @@ async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
             &case.refresh_tokens,
             &format!("{} refresh tokens", case.name),
         )?;
+        let profile_request = OAuthUserInfoRequest {
+            access_token: (Some("ordinary-access".into())).into(),
+            ..Default::default()
+        };
         let info = fetch_user_info_for_code(
             &provider,
-            OAuthUserInfoRequest {
-                access_token: (Some("ordinary-access".into())).into(),
-                ..Default::default()
-            },
+            &OAuthTokenSet::from_fields(profile_request.fields()),
+            profile_request,
             None,
         )
         .await?

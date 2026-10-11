@@ -379,7 +379,7 @@ For `OAuthProfile.name`, `None` preserves the provider value, `Some(SchemaValue:
 
 For a social provider's `OAuthUserInfo.image`, `None` omits the field, `Some(None)` supplies explicit null, and `Some(Some(url))` supplies a string. Profile updates preserve the local image when omitted and clear it for explicit null. New-user creation, user admission, `/account-info`, and OAuth Proxy retain this distinction. Raw JSON mappers must preserve key presence before decoding a nullable image.
 
-The account subject comes from the original profile's `sub` for OIDC or `id` for OAuth. Implement `OAuthAccountSubject` through `account_subject` for providers with another stable identifier. Mapped user fields cannot change that identifier. `/account-info` fetches the profile for an existing linked account and keeps the stored account subject.
+The account subject comes from the original profile's `sub` for OIDC or `id` for OAuth. Implement `OAuthAccountSubject` through `account_subject` for providers with another stable identifier. Code callbacks and OAuth Proxy supply the original token exchange record to this resolver, before adding or replacing callback `user` and state nonce metadata. Direct ID-token sign-in supplies its token record including `user`; direct linking supplies the token fields without `user`. Mapped user fields cannot change the identifier. `/account-info` fetches the profile for an existing linked account and keeps the stored account subject.
 
 ### Sign-up and email verification
 
