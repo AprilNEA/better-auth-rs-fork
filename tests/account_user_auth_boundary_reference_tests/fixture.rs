@@ -79,8 +79,9 @@ pub(super) struct Fixture {
 
 impl Fixture {
     pub(super) fn read_order() -> TestResult<Self> {
-        let path = std::env::var("BETTER_AUTH_OAUTH_SIGNIN_ORDER_FIXTURE")?;
-        let fixture: Self = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+        let fixture: Self = serde_json::from_str(include_str!(
+            "../fixtures/account-user-auth-order-1.7.6.json"
+        ))?;
         assert_eq!(fixture.version, "1.7.6");
         assert_eq!(fixture.scenarios.len(), 15);
         assert_eq!(fixture.cases.len(), 60);

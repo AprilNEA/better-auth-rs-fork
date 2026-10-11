@@ -137,7 +137,11 @@ pub(super) async fn request<S: AuthSchema>(
         .iter()
         .map(|(name, value)| Ok([name.to_string(), value.to_str()?.to_owned()]))
         .collect::<TestResult<Vec<_>>>()?;
-    headers.sort_by(|left, right| left[0].cmp(&right[0]));
+    headers.sort_by(|left, right| {
+        (left[0] == "set-cookie")
+            .cmp(&(right[0] == "set-cookie"))
+            .then_with(|| left[0].cmp(&right[0]))
+    });
     let cookies = response
         .headers()
         .get_all("set-cookie")

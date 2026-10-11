@@ -63,14 +63,18 @@ async fn anonymous_signin_uses_the_injected_native_session_before_database_state
         "/sign-in/anonymous",
         serde_json::json!({}),
     )?;
-    let error = dispatch_plugin(&request, &context, &plugin)
-        .await
-        .err()
-        .ok_or_else(|| AuthError::internal("Anonymous sign-in ignored its native session"))?;
-    assert_eq!(error.status_code()?, 400);
+    let response = dispatch_plugin(&request, &context, &plugin)
+        .await?
+        .ok_or_else(|| AuthError::internal("Anonymous sign-in did not return a response"))?;
+    assert_eq!(response.status, 400);
+    assert!(!response.is_api_error()?);
+    assert!(!response.headers.contains_key("set-cookie"));
     assert_eq!(
-        error.body_value()?.model_property("code")?,
-        "ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY".into()
+        serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+        serde_json::json!({
+            "code":"ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY",
+            "message":"Anonymous users cannot sign in again anonymously"
+        })
     );
     let snapshot = request
         .native_session_snapshot()?

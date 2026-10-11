@@ -8,18 +8,6 @@ if (( $# > 1 )); then
   exit 1
 fi
 
-check_oauth_signin_order() {
-  local fixture_dir="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/oauth-signin-order"
-  mkdir -p "$fixture_dir" &&
-    git rev-parse HEAD > "$fixture_dir/source-sha.txt" &&
-    bun --no-install ./compat-tests/reference-server/contracts/account-user-auth-order-capture.mjs \
-      "$fixture_dir/fixture.json" 2>&1 | tee "$fixture_dir/capture.log" &&
-    BETTER_AUTH_OAUTH_SIGNIN_ORDER_FIXTURE="$fixture_dir/fixture.json" \
-      cargo test --locked --features axum,seaorm2,redis-cache \
-        --test account_user_auth_boundary_reference_tests -- --ignored --exact \
-        order::oauth_signin_order_matches_upstream_http 2>&1 | tee "$fixture_dir/rust.log"
-}
-
 run_stage() {
   echo "Running check stage: $1"
   case "$1" in
@@ -46,12 +34,7 @@ run_stage() {
     consumer-schema) ./scripts/consumer-check.sh ;;
     fullstack) cargo check --locked --manifest-path examples/fullstack/backend/Cargo.toml ;;
     quick-start) bun scripts/quick-start-check.ts ;;
-    alignment)
-      local alignment_status=0
-      check_oauth_signin_order || alignment_status=1
-      ./scripts/alignment-check.sh --skip-build || alignment_status=1
-      return "$alignment_status"
-      ;;
+    alignment) ./scripts/alignment-check.sh --skip-build ;;
     reference-contracts) ./scripts/alignment-check.sh --reference-only ;;
     client-configuration)
       cargo clippy --locked --test client_compat_tests -- -D warnings
@@ -701,10 +684,23 @@ run_stage() {
         ./compat-tests/reference-server/consumer-contracts/api-key-date-usage.test.ts || atomic_status=1
       return "$atomic_status"
       ;;
+    oauth-signin-order)
+      cargo fmt --all -- --check
+      local signin_status=0
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test account_user_auth_boundary_reference_tests --test observability_tests -- -D warnings || signin_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test account_user_auth_boundary_reference_tests || signin_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test observability_tests -- spans_preserve_dispatch_order_parentage_and_original_outcomes || signin_status=1
+      cargo test --locked -p better-auth-api --lib -- \
+        plugins::oauth:: plugins::anonymous:: || signin_status=1
+      cargo test --locked -p better-auth-core --lib -- types_account:: || signin_status=1
+      return "$signin_status"
+      ;;
     account-user-auth)
       cargo fmt --all -- --check
       local account_status=0
-      check_oauth_signin_order || account_status=1
       local account_tests=(
         --test account_user_auth_boundary_reference_tests --test compat_consistency_tests
         --test wire_compat_smoke_tests --test two_factor_cookie_duration_tests

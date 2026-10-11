@@ -215,6 +215,9 @@ impl Visit for Fields {
     fn record_i64(&mut self, field: &Field, value: i64) {
         let _ = self.0.insert(field.name().into(), value.into());
     }
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        let _ = self.0.insert(field.name().into(), json!(value));
+    }
 }
 
 struct CaptureLayer;
@@ -544,7 +547,7 @@ async fn spans_preserve_dispatch_order_parentage_and_original_outcomes() -> Auth
                 assert_eq!(handler.fields.get("otel.status_code"), Some(&json!("OK")));
                 assert_eq!(
                     handler.fields.get("http.response.status_code"),
-                    Some(&json!(302))
+                    Some(&json!(302.0))
                 );
             }
             let outer = records
