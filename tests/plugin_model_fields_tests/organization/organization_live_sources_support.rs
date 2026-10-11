@@ -162,6 +162,10 @@ pub(super) async fn seed_parents<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> A
     Ok(token)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 pub(super) fn output<T: AuthRecordFields + serde::Serialize>(record: T) -> AuthResult<FieldMap> {
     let fields = record.field_values()?;
     assert_eq!(

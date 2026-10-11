@@ -166,6 +166,10 @@ pub(super) async fn snapshot(storage: &Storage) -> AuthResult<Snapshot> {
     Ok(result)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 pub(super) fn update_expected(
     storage: &Storage,
     case: Case,
@@ -184,7 +188,8 @@ pub(super) fn update_expected(
             .get_mut("invitation")
             .ok_or_else(|| AuthError::internal("Missing Invitation snapshot"))?;
         assert_eq!(rows.len(), 1);
-        let _ = rows[0].insert("status".into(), case.status().into());
+        let _ = required(rows.first_mut(), "Expected one Invitation row")?
+            .insert("status".into(), case.status().into());
     }
     if case == Case::Accept {
         let sql = matches!(storage, Storage::Sqlite(_));
@@ -218,7 +223,8 @@ pub(super) fn update_expected(
             .get_mut("session")
             .ok_or_else(|| AuthError::internal("Missing Session snapshot"))?;
         assert_eq!(sessions.len(), 1);
-        let _ = sessions[0].insert(
+        let session = required(sessions.first_mut(), "Expected one Session row")?;
+        let _ = session.insert(
             if sql {
                 "active_organization_id"
             } else {
@@ -227,7 +233,7 @@ pub(super) fn update_expected(
             .into(),
             "organization".into(),
         );
-        let _ = sessions[0].insert(
+        let _ = session.insert(
             if sql { "updated_at" } else { "updatedAt" }.into(),
             storage.stored_date(0),
         );

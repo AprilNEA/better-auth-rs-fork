@@ -565,12 +565,12 @@ async fn check<S: AuthSchema>(
                 "team-after-hook-failed"
             };
             assert!(
-                matches!(response.expect_err("Native deletion must propagate callback failure"),
+                matches!(required(response.err(), "Native deletion must propagate callback failure")?,
                 AuthError::Internal(message) if message == expected)
             );
         }
         Case::WrongProjectedOwner => {
-            let error = response.expect_err("Projected owner must determine access");
+            let error = required(response.err(), "Projected owner must determine access")?;
             assert_eq!(error.status_code(), 400);
             assert_eq!(
                 error.to_auth_response().body.bytes()?.as_ref(),

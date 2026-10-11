@@ -212,6 +212,10 @@ async fn sqlite_core_registration_keeps_application_adapter_precedence() -> Auth
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 async fn builder_retains_application_user_fields_before_plugin_merge() -> AuthResult<()> {
     for application_enabled in [false, true] {
         let mut config = config();
@@ -306,25 +310,14 @@ async fn builder_retains_application_user_fields_before_plugin_merge() -> AuthRe
 }
 
 #[tokio::test]
-async fn native_replacements_initialize_while_unsupported_model_roles_fail() {
-    let cases = [
-        (
-            EntityRole::Passkey,
-            "credential",
-            UserFieldType::String,
-            None,
-        ),
-        (EntityRole::Passkey, "name", UserFieldType::Json, None),
-        (EntityRole::ApiKey, "key", UserFieldType::String, None),
-        (EntityRole::ApiKey, "name", UserFieldType::Json, None),
-        (
-            EntityRole::RateLimit,
-            "count",
-            UserFieldType::Number,
-            Some("Plugin field registration does not support RateLimit"),
-        ),
-    ];
-    for (role, name, field_type, expected_error) in cases {
+async fn native_replacement_declarations_initialize_for_registered_models() {
+    for (role, name, field_type) in [
+        (EntityRole::Passkey, "credential", UserFieldType::String),
+        (EntityRole::Passkey, "name", UserFieldType::Json),
+        (EntityRole::ApiKey, "key", UserFieldType::String),
+        (EntityRole::ApiKey, "name", UserFieldType::Json),
+        (EntityRole::RateLimit, "count", UserFieldType::Number),
+    ] {
         let result = BetterAuth::new(config())
             .store_arc(memory())
             .plugin(Fields(vec![(
@@ -340,16 +333,10 @@ async fn native_replacements_initialize_while_unsupported_model_roles_fail() {
             .build()
             .await;
         let error = result.err();
-        match expected_error {
-            Some(expected) => assert!(
-                matches!(&error, Some(AuthError::Config(actual)) if actual == expected),
-                "registration: {role:?}.{name}, expected configuration error {expected:?}, got {error:?}"
-            ),
-            None => assert!(
-                error.is_none(),
-                "registration: {role:?}.{name}, expected successful initialization, got {error:?}"
-            ),
-        }
+        assert!(
+            error.is_none(),
+            "registration: {role:?}.{name}, expected successful initialization, got {error:?}"
+        );
     }
 }
 

@@ -342,9 +342,7 @@ async fn check<S: AuthSchema>(
         }
     } else if let Some(expected) = case.business_error() {
         let response = if native {
-            result
-                .expect_err("Native route must reject the Team")
-                .to_auth_response()
+            required(result.err(), "Native route must reject the Team")?.to_auth_response()
         } else {
             result?
         };
@@ -355,7 +353,10 @@ async fn check<S: AuthSchema>(
             "{case:?}"
         );
     } else if native {
-        let error = result.expect_err("Native route must preserve the public clone failure");
+        let error = required(
+            result.err(),
+            "Native route must preserve the public clone failure",
+        )?;
         assert!(matches!(error, AuthError::DataClone), "{case:?}: {error:?}");
         assert_eq!(error.to_string(), "The object can not be cloned.");
     } else {

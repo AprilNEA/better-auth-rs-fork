@@ -35,6 +35,10 @@ impl Case {
             3
         }
     }
+    #[expect(
+        clippy::unreachable,
+        reason = "Error cases must return before constructing successful result rows"
+    )]
     fn ids(self) -> &'static [&'static str] {
         match self {
             Self::Insertion => &["member-z", "member-a", "member-m"],
@@ -47,6 +51,10 @@ impl Case {
     }
 }
 
+#[expect(
+    clippy::unreachable,
+    reason = "Fixture rows use only the three declared member IDs"
+)]
 fn values(id: &str, visible: bool) -> FieldMap {
     let (user, seconds) = match id {
         "member-z" => ("user-z", 30),
@@ -162,28 +170,34 @@ async fn check<S: AuthSchema>(
             format!("better-auth.session_token={signed}"),
         ),
     ]);
-    let mut query =
-        json!({"organizationId":"organization","filterField":"role","filterValue":"selected"});
+    let mut query = serde_json::Map::from_iter([
+        ("organizationId".into(), json!("organization")),
+        ("filterField".into(), json!("role")),
+        ("filterValue".into(), json!("selected")),
+    ]);
     match case {
         Case::Insertion => {}
         Case::Page => {
-            query["limit"] = json!(1);
-            query["offset"] = json!(1);
+            let _ = query.insert("limit".into(), json!(1));
+            let _ = query.insert("offset".into(), json!(1));
         }
         Case::Chronological => {
-            query["sortBy"] = json!("createdAt");
-            query["sortDirection"] = json!("asc");
+            let _ = query.insert("sortBy".into(), json!("createdAt"));
+            let _ = query.insert("sortDirection".into(), json!("asc"));
         }
         Case::InvalidSort(size) => {
-            query["sortBy"] = json!("unknown");
+            let _ = query.insert("sortBy".into(), json!("unknown"));
             if size < 2 {
-                query["filterField"] = json!("userId");
-                query["filterValue"] = json!(if size == 0 { "absent" } else { "user-a-query" });
+                let _ = query.insert("filterField".into(), json!("userId"));
+                let _ = query.insert(
+                    "filterValue".into(),
+                    json!(if size == 0 { "absent" } else { "user-a-query" }),
+                );
             }
         }
         Case::ScalarIn(field) => {
-            query["filterField"] = json!(field);
-            query["filterOperator"] = json!("in");
+            let _ = query.insert("filterField".into(), json!(field));
+            let _ = query.insert("filterOperator".into(), json!("in"));
         }
     }
     let result = auth
@@ -192,7 +206,7 @@ async fn check<S: AuthSchema>(
             "/organization/list-members",
             EndpointInput {
                 headers: Some(headers),
-                query: Some(query),
+                query: Some(Value::Object(query)),
                 ..Default::default()
             },
         )
@@ -204,12 +218,12 @@ async fn check<S: AuthSchema>(
     ])];
     if matches!(case, Case::ScalarIn(_)) {
         assert!(
-            matches!(result.expect_err("Scalar in values must fail before resolving the filter field"),
+            matches!(required(result.err(), "Scalar in values must fail before resolving the filter field")?,
             AuthError::Config(message) if message == "Value must be an array")
         );
     } else if matches!(case, Case::InvalidSort(size) if !storage.memory() || size >= 2) {
         assert!(
-            matches!(result.expect_err("Invalid sort must fail at the backend's resolution boundary"),
+            matches!(required(result.err(), "Invalid sort must fail at the backend's resolution boundary")?,
             AuthError::Config(message) if message == "Field unknown not found in model member")
         );
     } else {

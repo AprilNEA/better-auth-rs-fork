@@ -163,7 +163,10 @@ async fn check_function<S: AuthSchema>(
             );
         }
     } else if native {
-        let error = result.expect_err("Native invitation must preserve the public output failure");
+        let error = required(
+            result.err(),
+            "Native invitation must preserve the public output failure",
+        )?;
         if matches!(case, Case::SingularUnconfigured) {
             assert!(matches!(error, AuthError::TypeError(_)), "{error:?}");
         } else {

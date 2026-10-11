@@ -113,6 +113,10 @@ fn stored(storage: &Storage, expected: &FieldMap) -> FieldMap {
         .collect()
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn check_output<T: AuthRecordFields + serde::Serialize>(
     actual: T,
     expected: &FieldMap,

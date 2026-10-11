@@ -161,6 +161,10 @@ async fn call<S: AuthSchema>(
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn response(
     response: AuthResponse,
     native: bool,

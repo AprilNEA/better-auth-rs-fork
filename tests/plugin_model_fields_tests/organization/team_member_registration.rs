@@ -181,7 +181,7 @@ async fn check<S: AuthSchema>(
             .into_iter()
             .map(public)
             .collect::<AuthResult<Vec<_>>>()?,
-        [expected.clone()]
+        std::slice::from_ref(&expected)
     );
     assert_eq!(events.take()?, projected);
     assert_eq!(

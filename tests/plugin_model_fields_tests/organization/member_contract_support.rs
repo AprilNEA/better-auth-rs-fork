@@ -8,7 +8,7 @@ pub(super) fn date() -> FieldDate {
 
 #[derive(Clone)]
 pub(super) enum Storage {
-    Memory(EphemeralStore),
+    Memory(Box<EphemeralStore>),
     Sqlite(DatabaseConnection),
 }
 
@@ -90,7 +90,7 @@ impl Storage {
 
 pub(super) fn memory_fixture() -> (Arc<dyn AuthStore<StatelessSchema>>, Storage) {
     let store = EphemeralStore::new(Arc::new(config()));
-    (Arc::new(store.clone()), Storage::Memory(store))
+    (Arc::new(store.clone()), Storage::Memory(Box::new(store)))
 }
 
 pub(super) async fn sqlite_fixture() -> AuthResult<(Arc<dyn AuthStore<BundledSchema>>, Storage)> {
@@ -183,6 +183,10 @@ pub(super) async fn seed<S: AuthSchema>(
     Ok(session.token.typed()?.clone())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 pub(super) fn ordered(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> {
     assert_eq!(actual, expected);
     if let (Some(actual), Some(expected)) = (actual.as_object(), expected.as_object()) {

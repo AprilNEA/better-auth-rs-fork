@@ -318,9 +318,12 @@ async fn duplicates<S: AuthSchema>(
     )]);
     let reader = auth(raw, ids.clone(), vec![(model.role(), policies)]).await?;
     if !storage.memory() {
-        let error = create(reader.store().as_ref(), &ids, model, "source-a", "Second")
-            .await
-            .expect_err("SQLite must reject duplicate primary IDs");
+        let error = required(
+            create(reader.store().as_ref(), &ids, model, "source-a", "Second")
+                .await
+                .err(),
+            "SQLite must reject duplicate primary IDs",
+        )?;
         assert!(
             error.to_string().contains("UNIQUE constraint failed"),
             "{error}"

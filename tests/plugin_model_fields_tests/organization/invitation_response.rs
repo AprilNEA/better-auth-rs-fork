@@ -249,6 +249,10 @@ fn expected_hook(case: Case, values: &support::Values, status: &str, after: bool
     fields.into()
 }
 
+#[expect(
+    clippy::unreachable,
+    reason = "Read-only fixture cases return before constructing mutation hook events"
+)]
 fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> Vec<FieldValue> {
     let invitation = output_events(storage, "invitation", "member");
     let organization = event("organization.name", "output", "Organization".into());
@@ -307,6 +311,10 @@ fn expected_events(storage: &Storage, case: Case, values: &support::Values) -> V
     events
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn assert_ordered(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> {
     assert_eq!(actual, expected);
     if let (Some(actual), Some(expected)) = (actual.as_object(), expected.as_object()) {
@@ -317,7 +325,7 @@ fn assert_ordered(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> 
             expected.keys().collect::<Vec<_>>()
         );
         for (name, value) in &expected {
-            assert_ordered(&actual[name], value)?;
+            assert_ordered(required(actual.get(name), "Expected ordered field")?, value)?;
         }
     } else if let (Some(actual), Some(expected)) = (actual.as_array(), expected.as_array()) {
         for (actual, expected) in actual.iter().zip(expected) {
@@ -395,8 +403,10 @@ async fn check<S: AuthSchema>(
     };
     if case == Case::GetClone {
         if native {
-            let error =
-                response.expect_err("Configured organization output must clone before filtering");
+            let error = required(
+                response.err(),
+                "Configured organization output must clone before filtering",
+            )?;
             assert!(matches!(error, AuthError::DataClone));
             assert_eq!(error.to_string(), "The object can not be cloned.");
         } else {
@@ -410,7 +420,10 @@ async fn check<S: AuthSchema>(
     }
     if case.after_error() {
         if native {
-            let error = response.expect_err("Native route must preserve the after hook failure");
+            let error = required(
+                response.err(),
+                "Native route must preserve the after hook failure",
+            )?;
             assert!(
                 matches!(error, AuthError::Internal(message) if message == "invitation-after-hook-failed")
             );

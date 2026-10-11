@@ -414,6 +414,10 @@ async fn sqlite_device_scope_callbacks_surround_real_storage() -> AuthResult<()>
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 async fn native_device_scope_declaration_replacement_uses_shared_json_policies() -> AuthResult<()> {
     // Behavior source: @better-auth/core adapter-factory transformInput/transformOutput JSON policies.
     let raw = Arc::new(EphemeralStore::new(Arc::new(config())));
@@ -443,20 +447,23 @@ async fn native_device_scope_declaration_replacement_uses_shared_json_policies()
         .await?;
     assert_eq!(created.scope.field_value(), value);
     assert_eq!(
-        auth.store()
-            .get_device_code_by_device_code("ordinary-device:json-replacement")
-            .await?
-            .expect("created device")
-            .scope
-            .field_value(),
+        required(
+            auth.store()
+                .get_device_code_by_device_code("ordinary-device:json-replacement")
+                .await?,
+            "Expected created device"
+        )?
+        .scope
+        .field_value(),
         value
     );
     let stored = raw.plugin_storage_rows(EntityRole::DeviceCode)?;
     assert_eq!(stored.len(), 1);
+    let stored = required(stored.first(), "Expected one stored device")?;
     assert_eq!(
-        stored[0].get("scope_payload"),
+        stored.get("scope_payload"),
         Some(&FieldValue::from("{\"read\":[\"profile\"]}"))
     );
-    assert!(!stored[0].contains_key("scope"));
+    assert!(!stored.contains_key("scope"));
     Ok(())
 }

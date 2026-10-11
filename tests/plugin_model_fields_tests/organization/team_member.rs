@@ -69,6 +69,10 @@ impl Events {
         self.push("createdAt", "input", "native-date".into())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions report mismatches while setup and callback errors propagate"
+    )]
     fn assert_dates(&self, count: usize, started: i64, ended: i64) -> AuthResult<()> {
         let dates = trace_lock(&self.dates)?;
         assert_eq!(dates.len(), count);

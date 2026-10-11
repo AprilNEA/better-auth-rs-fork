@@ -118,6 +118,10 @@ fn policy(name: &'static str, value: Option<FieldValue>, events: &Events) -> Use
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn policies(values: &Values, mode: RoleValue, events: &Events) -> AuthResult<UserConfig> {
     let role_value =
         (!matches!(mode, RoleValue::String)).then(|| values.role(mode, FieldValue::Undefined));

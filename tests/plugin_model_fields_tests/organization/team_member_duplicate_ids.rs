@@ -3,6 +3,10 @@ use super::*;
 use better_auth_seaorm::sea_orm::SqlErr;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 async fn sqlite_duplicate_parent_ids_retain_the_primary_key_constraint() -> AuthResult<()> {
     for joins in [false, true] {
         let (raw, storage) = sqlite_fixture().await?;

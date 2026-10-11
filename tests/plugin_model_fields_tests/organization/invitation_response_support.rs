@@ -55,7 +55,7 @@ fn date_input(events: &Events, name: &'static str) -> UserFieldTransform {
     })
 }
 
-fn record_fields(events: &Events, model: &str, values: &Values) -> UserConfig {
+fn record_fields(events: &Events, model: &str, values: &Values) -> AuthResult<UserConfig> {
     let invitation = model == "invitation";
     let mut timestamp = output(
         events,
@@ -71,11 +71,11 @@ fn record_fields(events: &Events, model: &str, values: &Values) -> UserConfig {
         },
     );
     if !invitation {
-        timestamp
-            .transform
-            .as_mut()
-            .expect("Output field has transforms")
-            .input = Some(date_input(events, "member.createdAt"));
+        required(
+            timestamp.transform.as_mut(),
+            "Output field must have transforms",
+        )?
+        .input = Some(date_input(events, "member.createdAt"));
     }
     let mut fields = declaration([("createdAt", timestamp)]);
     let mut extra = vec![
@@ -106,7 +106,7 @@ fn record_fields(events: &Events, model: &str, values: &Values) -> UserConfig {
             ),
         );
     }
-    fields
+    Ok(fields)
 }
 
 struct Hooks<S: AuthSchema> {
@@ -168,6 +168,10 @@ impl<S: AuthSchema> Hooks<S> {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions report mismatches while setup and callback errors propagate"
+    )]
     fn after(
         &self,
         name: &str,
@@ -306,7 +310,7 @@ pub(super) async fn auth<S: AuthSchema>(
             ..Default::default()
         },
     )]);
-    let mut invitation = record_fields(events, "invitation", values);
+    let mut invitation = record_fields(events, "invitation", values)?;
     if case.deletes() {
         let events = events.clone();
         let _ = invitation.fields_mut().insert(
@@ -328,7 +332,7 @@ pub(super) async fn auth<S: AuthSchema>(
         .plugin(OrganizationPlugin::with_config(options))
         .plugin(Fields(vec![
             (EntityRole::Invitation, invitation),
-            (EntityRole::Member, record_fields(events, "member", values)),
+            (EntityRole::Member, record_fields(events, "member", values)?),
             (EntityRole::Organization, organization),
             (EntityRole::Session, session),
         ]))

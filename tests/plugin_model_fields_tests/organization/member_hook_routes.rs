@@ -166,6 +166,10 @@ struct Hooks {
 }
 
 impl Hooks {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions report mismatches while setup and callback errors propagate"
+    )]
     fn common(&self, event: OrganizationMemberEvent<'_>) -> AuthResult<()> {
         assert_eq!(event.user, &independent_user(self.case));
         assert_eq!(
@@ -208,6 +212,10 @@ impl Hooks {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions report mismatches while setup and callback errors propagate"
+    )]
     fn after(&self, hook: &'static str, event: OrganizationMemberEvent<'_>) -> AuthResult<()> {
         self.common(event)?;
         let member = event.member.field_values()?;
@@ -312,12 +320,14 @@ async fn check<S: AuthSchema>(
             ..Default::default()
         },
     );
-    let mut organization = OrganizationConfig::default();
-    organization.hooks = Some(Arc::new(Hooks {
-        case,
-        failure,
-        observations: observations.clone(),
-    }));
+    let organization = OrganizationConfig {
+        hooks: Some(Arc::new(Hooks {
+            case,
+            failure,
+            observations: observations.clone(),
+        })),
+        ..Default::default()
+    };
     let auth = BetterAuth::new(options)
         .store_arc(raw)
         .plugin(OrganizationPlugin::with_config(organization))

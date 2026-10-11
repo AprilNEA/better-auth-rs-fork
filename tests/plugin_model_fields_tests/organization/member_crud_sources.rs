@@ -128,6 +128,10 @@ fn replace(snapshot: &mut Snapshot, row: FieldMap) -> AuthResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn check_member(actual: &Member, expected: &FieldValue) -> AuthResult<()> {
     ordered(&actual.field_values()?.into(), expected)?;
     assert_eq!(
@@ -682,6 +686,10 @@ async fn memory_member_crud_preserves_live_records_and_write_failures() -> AuthR
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 async fn sqlite_member_crud_preserves_raw_snapshots_and_write_failures() -> AuthResult<()> {
     for operation in [Write::Insert, Write::Create, Write::Update] {
         for mode in [

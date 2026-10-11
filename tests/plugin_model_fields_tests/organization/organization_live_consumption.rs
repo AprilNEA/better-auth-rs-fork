@@ -76,6 +76,10 @@ async fn endpoint<S: AuthSchema>(
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions report mismatches while setup and callback errors propagate"
+)]
 fn response(
     actual: AuthResult<AuthResponse>,
     native: bool,
@@ -85,7 +89,10 @@ fn response(
     let actual = if status == 200 || !native {
         actual?
     } else {
-        let error = actual.expect_err("Native endpoint must reject the business operation");
+        let error = required(
+            actual.err(),
+            "Native endpoint must reject the business operation",
+        )?;
         assert_eq!(error.status_code(), status);
         error.to_auth_response()
     };
