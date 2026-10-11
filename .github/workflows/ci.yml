@@ -48,6 +48,7 @@ on:
           - memory-sorting
           - memory-query
           - memory-joins
+          - oauth-profile
           - organization-fields
           - organization-details
           - organization-transactions
@@ -98,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'postgres:18.6' || '' }}
+        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'postgres:18.6' || '' }}
         env:
           POSTGRES_USER: better_auth
           POSTGRES_PASSWORD: better_auth_ci
@@ -111,7 +112,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       mysql:
-        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'mysql:8.4.11' || '' }}
+        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'mysql:8.4.11' || '' }}
         env:
           MYSQL_ROOT_PASSWORD: better_auth_ci
           MYSQL_ROOT_HOST: "%"
@@ -124,7 +125,7 @@ jobs:
           --health-retries 10
     env:
       CHECK_STAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
-      RUST_CACHE_STAGE: ${{ contains(fromJSON('["oauth-duration", "oauth-proxy"]'), inputs.stage) && 'provider-options' || inputs.stage == 'totp-period' && 'two-factor' || contains(fromJSON('["api-key-cache", "atomic-updates"]'), inputs.stage) && 'plugin-fields' || contains(fromJSON('["native-create", "native-json", "native-errors", "memory-query", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "field-projection", "validation-errors", "rate-limit-declarations"]'), inputs.stage) && 'user-fields' || inputs.stage == 'memory-sorting' && 'plugin-display-values' || contains(fromJSON('["credential-timing", "oauth-signin-order", "memory-joins"]'), inputs.stage) && 'account-user-auth' || github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
+      RUST_CACHE_STAGE: ${{ contains(fromJSON('["oauth-duration", "oauth-proxy"]'), inputs.stage) && 'provider-options' || inputs.stage == 'totp-period' && 'two-factor' || contains(fromJSON('["api-key-cache", "atomic-updates"]'), inputs.stage) && 'plugin-fields' || contains(fromJSON('["native-create", "native-json", "native-errors", "memory-query", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "field-projection", "validation-errors", "rate-limit-declarations"]'), inputs.stage) && 'user-fields' || inputs.stage == 'memory-sorting' && 'plugin-display-values' || contains(fromJSON('["credential-timing", "oauth-signin-order", "memory-joins", "oauth-profile"]'), inputs.stage) && 'account-user-auth' || github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
       BETTER_AUTH_TEST_POSTGRES_URL: postgres://better_auth:better_auth_ci@127.0.0.1:5432/better_auth_test
       BETTER_AUTH_TEST_MYSQL_URL: mysql://root:better_auth_ci@127.0.0.1:3306/mysql
     steps:
@@ -170,6 +171,23 @@ jobs:
             "BETTER_AUTH_TELEMETRY_OBSERVATION_DIR=$RUNNER_TEMP/telemetry-host-observations/rust" \
             "BETTER_AUTH_TELEMETRY_UPSTREAM_OBSERVATION=$RUNNER_TEMP/telemetry-host-observations/upstream.json.system-observation.json" \
             "TELEMETRY_CPU_ERROR_OUTPUT=$RUNNER_TEMP/telemetry-host-observations/cpu-errors.json" >> "$GITHUB_ENV"
+      - name: Capture native OAuth profile contract
+        id: profile-capture
+        if: ${{ !cancelled() && env.CHECK_STAGE == 'oauth-profile' && steps.dependencies.outcome == 'success' }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/oauth-native-profile"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/oauth-native-profile/source-sha.txt"
+          devenv shell -- bun --no-install compat-tests/reference-server/contracts/oauth-native-profile-capture.mjs "$RUNNER_TEMP/oauth-native-profile/first.json"
+          devenv shell -- bun --no-install compat-tests/reference-server/contracts/oauth-native-profile-capture.mjs "$RUNNER_TEMP/oauth-native-profile/second.json"
+          cmp "$RUNNER_TEMP/oauth-native-profile/first.json" "$RUNNER_TEMP/oauth-native-profile/second.json"
+      - name: Preserve native OAuth profile capture
+        if: always() && (steps.profile-capture.outcome == 'success' || steps.profile-capture.outcome == 'failure')
+        uses: actions/upload-artifact@v4
+        with:
+          name: oauth-native-profile-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/oauth-native-profile/
+          if-no-files-found: error
+          retention-days: 14
       - name: Check formatting
         if: ${{ !cancelled() && env.CHECK_STAGE == 'all' && steps.dependencies.outcome == 'success' }}
         run: devenv shell -- ./scripts/check.sh format

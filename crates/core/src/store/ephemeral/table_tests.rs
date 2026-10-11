@@ -109,7 +109,11 @@ impl FieldObjectSource for ComparisonSource {
     }
 
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
-        Ok(self.snapshot_fields()?.get(name).cloned())
+        if name == "value" {
+            Ok(self.snapshot_fields()?.get(name).cloned())
+        } else {
+            Ok(None)
+        }
     }
 
     fn snapshot_fields(&self) -> AuthResult<FieldMap> {

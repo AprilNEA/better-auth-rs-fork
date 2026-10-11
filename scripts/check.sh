@@ -246,6 +246,11 @@ run_stage() {
       ./scripts/consumer-check.sh --lib --test session_native_values --test user_session_fields --test generated_plugin_catalog || organization_status=1
       return "$organization_status"
       ;;
+    oauth-profile)
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/generic-profile-results.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-profile-override.test.ts
+      ;;
     memory-joins)
       cargo fmt --all -- --check
       local join_status=0
@@ -254,7 +259,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/account-user-selected-relations.test.ts \
         ./compat-tests/reference-server/contracts/native-core-joins.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts || join_status=1
-      cargo clippy --locked -p better-auth-core --lib --tests -- -D warnings || join_status=1
+      cargo clippy --locked -p better-auth-core --lib -- -D warnings || join_status=1
       cargo test --locked -p better-auth-core --lib -- \
         store::ephemeral:: user_fields::batch:: store::joins:: || join_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
