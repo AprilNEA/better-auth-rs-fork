@@ -1,8 +1,10 @@
 use better_auth_core::{
-    AuthError, AuthResult, FieldValue, WhereMode, WhereOperator,
+    AuthError, AuthResult, FieldValue,
     store::schema::{EntityRole, resolve_field_name},
     user_fields::{UserConfig, UserFieldConfig, UserFieldType},
 };
+#[cfg(test)]
+use better_auth_core::{WhereMode, WhereOperator};
 use sea_orm::{
     ColumnTrait, DbBackend,
     sea_query::{ExprTrait, SimpleExpr},

@@ -7,13 +7,6 @@ type UserRef = RowRef<UserView>;
 type UserPage = (Arc<[UserRef]>, usize);
 type AccountRef = RowRef<FieldMap>;
 
-pub(super) fn user_value(user: &UserView, _logical: &str, physical: &str) -> Value {
-    FieldMap::from(user.clone())
-        .get(physical)
-        .cloned()
-        .unwrap_or_default()
-}
-
 pub(super) fn native_relation<T: Clone>(
     rows: Vec<RowRef<T>>,
     relation: &ResolvedJoin,

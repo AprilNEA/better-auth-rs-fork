@@ -2,7 +2,7 @@ use super::*;
 use crate::{
     CreateTeam, UpdateTeam,
     organization_fields::OrganizationFields,
-    store::TeamStore,
+    store::{TeamStore, schema::EntityRole},
     user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType},
 };
 use tokio::sync::{Barrier, Notify};

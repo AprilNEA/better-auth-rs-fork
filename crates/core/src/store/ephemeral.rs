@@ -98,7 +98,9 @@ mod wallets;
 use crate::store::database_hooks::DatabaseHooks;
 use hooks::{PendingHook, PendingHookQueue};
 use operation::{MemoryGate, MemoryOperation};
-use organization_rows::{OrganizationRows, id as organization_id, value as organization_value};
+#[cfg(test)]
+use organization_rows::id as organization_id;
+use organization_rows::{OrganizationRows, value as organization_value};
 use state::State;
 use transactions::EphemeralTransaction;
 

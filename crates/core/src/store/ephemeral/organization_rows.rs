@@ -153,7 +153,7 @@ impl EphemeralStore {
             } else {
                 selected.len()
             };
-            for source in &selected[..count] {
+            for source in selected.iter().take(count) {
                 source.apply_patch(patch.clone())?;
             }
             Ok(selected.into_iter().next())

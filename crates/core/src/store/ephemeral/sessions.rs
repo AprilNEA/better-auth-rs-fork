@@ -908,14 +908,3 @@ async fn invitation_fields_update_atomically_with_team_membership() {
         1
     );
 }
-
-pub(super) fn session_token_matches(
-    fields: &FieldMap,
-    column: &str,
-    token: &crate::FieldValue,
-) -> bool {
-    crate::query::field_matches_equality(
-        fields.get(column).unwrap_or(&crate::FieldValue::Undefined),
-        token,
-    )
-}
