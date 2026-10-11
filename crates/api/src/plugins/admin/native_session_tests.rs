@@ -107,6 +107,12 @@ fn body(response: &AuthResponse) -> Value {
     serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
+fn assert_http_error(response: &AuthResponse, status: u16, expected: Value) {
+    assert_eq!(response.status, status);
+    assert!(!response.is_api_error().unwrap());
+    assert_eq!(body(response), expected);
+}
+
 #[tokio::test]
 async fn admin_permission_reads_reject_null_and_deny_primitive_users_before_writes()
 -> AuthResult<()> {
@@ -118,15 +124,19 @@ async fn admin_permission_reads_reject_null_and_deny_primitive_users_before_writ
             "/admin/update-user",
             json!({"userId":fixture.owner.id,"data":{"name":"must not persist"}}),
         )?;
-        let error = fixture.dispatch(&request, &plugin).await.unwrap_err();
+        let result = fixture.dispatch(&request, &plugin).await;
         if user.is_null() {
+            let error = result.unwrap_err();
             assert!(matches!(error, AuthError::TypeError(ref message)
                 if message == "Cannot read properties of null (reading 'id')"));
         } else {
-            assert_eq!(error.status_code().unwrap(), 403);
-            assert_eq!(
-                body(&error.to_auth_response())["message"],
-                "You are not allowed to update users"
+            assert_http_error(
+                &result?,
+                403,
+                json!({
+                    "code":"YOU_ARE_NOT_ALLOWED_TO_UPDATE_USERS",
+                    "message":"You are not allowed to update users"
+                }),
             );
         }
         assert_eq!(
@@ -255,9 +265,11 @@ async fn admin_has_permission_uses_user_truthiness_before_request_fallback() -> 
                 "/admin/has-permission",
                 json!({"permissions":{"user":["create"]}}),
             )?;
-            let error = fixture.dispatch(&request, &plugin).await.unwrap_err();
-            assert_eq!(error.status_code().unwrap(), 400);
-            assert_eq!(body(&error.to_auth_response())["message"], "user not found");
+            assert_http_error(
+                &fixture.dispatch(&request, &plugin).await?,
+                400,
+                json!({"message":"user not found"}),
+            );
         }
     }
     Ok(())
@@ -280,11 +292,13 @@ async fn admin_self_ban_compares_native_ids_without_string_coercion() -> AuthRes
         let result = fixture.dispatch(&request, &plugin).await;
         let same_id = actor_id.strict_equals(&FieldValue::from("17"));
         if same_id {
-            let error = result.unwrap_err();
-            assert_eq!(error.status_code().unwrap(), 400);
-            assert_eq!(
-                body(&error.to_auth_response())["message"],
-                "You cannot ban yourself"
+            assert_http_error(
+                &result?,
+                400,
+                json!({
+                    "code":"YOU_CANNOT_BAN_YOURSELF",
+                    "message":"You cannot ban yourself"
+                }),
             );
         } else {
             assert_eq!(body(&result?)["banned"], true);
@@ -346,11 +360,13 @@ async fn admin_impersonation_keeps_native_actor_ids_and_allows_authorized_self_t
                 assert_eq!(session.impersonated_by.field_value(), actor_id);
                 assert_eq!(request.new_session()?.unwrap().session.token, session.token);
             } else {
-                let error = result.unwrap_err();
-                assert_eq!(error.status_code().unwrap(), 403);
-                assert_eq!(
-                    body(&error.to_auth_response())["message"],
-                    "You cannot impersonate admins"
+                assert_http_error(
+                    &result?,
+                    403,
+                    json!({
+                        "code":"YOU_CANNOT_IMPERSONATE_ADMINS",
+                        "message":"You cannot impersonate admins"
+                    }),
                 );
                 assert!(request.new_session()?.is_none());
                 assert_eq!(fixture.ctx.database.get_user_sessions("17").await?.len(), 1);

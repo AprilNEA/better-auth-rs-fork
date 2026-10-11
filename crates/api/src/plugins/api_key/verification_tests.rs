@@ -421,16 +421,15 @@ async fn session_header_cannot_authenticate_a_different_configuration() {
     .await;
     let mut request = create_auth_request(HttpMethod::Get, "/get-session", None, None, None);
     request.headers.insert("x-api-key".to_owned(), key);
-    let result = plugin
-        .before_request(&request, &ctx)
-        .await
-        .unwrap()
-        .unwrap();
-    let BeforeRequestAction::Respond(response) = result else {
-        panic!("Expected credential rejection")
-    };
-    assert_eq!(response.status, 401);
-    assert_eq!(json_body(&response)["code"], "INVALID_API_KEY");
+    let error = plugin.before_request(&request, &ctx).await.unwrap_err();
+    assert_eq!(error.status_code().unwrap(), 401);
+    assert_eq!(
+        error.body_value().unwrap().json().unwrap(),
+        Some(serde_json::json!({
+            "code":"INVALID_API_KEY",
+            "message":"Invalid API key."
+        }))
+    );
     assert_eq!(
         ctx.database
             .get_api_key_by_id(&id)
@@ -490,18 +489,14 @@ async fn organization_key_verifies_without_emulating_a_user_session() {
         .unwrap();
     let mut request = create_auth_request(HttpMethod::Get, "/get-session", None, None, None);
     request.headers.insert("x-api-key".to_owned(), key);
-    let result = plugin
-        .before_request(&request, &ctx)
-        .await
-        .unwrap()
-        .unwrap();
-    let BeforeRequestAction::Respond(response) = result else {
-        panic!("Expected organization rejection")
-    };
-    assert_eq!(response.status, 401);
+    let error = plugin.before_request(&request, &ctx).await.unwrap_err();
+    assert_eq!(error.status_code().unwrap(), 401);
     assert_eq!(
-        json_body(&response)["code"],
-        "INVALID_REFERENCE_ID_FROM_API_KEY"
+        error.body_value().unwrap().json().unwrap(),
+        Some(serde_json::json!({
+            "code":"INVALID_REFERENCE_ID_FROM_API_KEY",
+            "message":"The reference id from the API key is invalid."
+        }))
     );
 }
 

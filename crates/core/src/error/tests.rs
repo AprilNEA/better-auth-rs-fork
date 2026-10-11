@@ -355,7 +355,7 @@ fn request_validation_uses_native_errors_and_preserves_http_bodies() -> AuthResu
     let response = error.to_auth_response().into_http_response()?;
     assert_eq!(response.status, 400);
     assert_eq!(
-        response.body.bytes()?,
+        response.body.bytes()?.as_ref(),
         br#"{"code":"VALIDATION_ERROR","message":"[body.name] Name is too short"}"#
     );
 

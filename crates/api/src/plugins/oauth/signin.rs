@@ -335,7 +335,8 @@ pub(super) async fn process_oauth_sign_in(
             )?;
         }
         if let Some(update) = token_update {
-            ctx.database
+            let _ = ctx
+                .database
                 .update_account_by_id_value(&existing_account.id.field_value(), update)
                 .await?
                 .ok_or_else(|| OAuthSignInError::Generic("unable to update account".to_owned()))?;
@@ -448,7 +449,7 @@ pub(super) async fn process_oauth_sign_in(
             return Err(OAuthSignInError::Generic("account not linked".to_string()));
         }
 
-        async {
+        let _ = async {
             validate_provider_user(
                 user_info,
                 existing_user.id().field_value(),

@@ -329,7 +329,7 @@ impl BeforeEndpointHook<S> for RawBeforeError {
     ) -> AuthResult<Option<BeforeRequestAction>> {
         self.trace.push("before")?;
         request.set_response_header("x-before", "1")?;
-        request.append_response_header("set-cookie", "context=1")?;
+        request.append_response_header("set-cookie", "context=1".into())?;
         Err(AuthError::from_thrown(self.value.clone()))
     }
 }
