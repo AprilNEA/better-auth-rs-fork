@@ -56,7 +56,7 @@ impl PreparedTeamSeats {
         let (source, patch) = self.pending_write();
         super::rows::RecordSource::Live(source)
             .with_patch(patch)
-            .read(|fields| Ok(fields.clone()))
+            .shallow_fields()
     }
 
     pub(super) fn current(&self, teams: &Rows<FieldMap>) -> AuthResult<FieldMap> {
@@ -65,7 +65,7 @@ impl PreparedTeamSeats {
                 "Team changed while field transforms were pending",
             ));
         }
-        self.source.read(|row| Ok(row.clone()))
+        self.source.shallow_fields()
     }
 
     pub(super) fn is_current(&self, teams: &Rows<FieldMap>, actual: usize) -> AuthResult<bool> {
@@ -269,7 +269,7 @@ impl EphemeralStore {
         actual: usize,
         maximum: Option<usize>,
     ) -> AuthResult<PreparedTeamSeats> {
-        let mut team = source.read(|row| Ok(row.clone()))?;
+        let mut team = source.shallow_fields()?;
         let column = self
             .field_config(EntityRole::Team)?
             .record_storage_key("memberCount")

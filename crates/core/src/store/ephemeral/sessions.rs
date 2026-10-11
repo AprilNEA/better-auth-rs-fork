@@ -33,7 +33,7 @@ impl EphemeralStore {
         let rows: Vec<_> = sessions
             .into_iter()
             .map(|source| {
-                let stored = source.read(|row| Ok(row.clone()))?;
+                let stored = source.shallow_fields()?;
                 let implicit: FieldMap = ["impersonatedBy", "activeOrganizationId", "activeTeamId"]
                     .into_iter()
                     .filter(|name| {
@@ -70,15 +70,12 @@ impl EphemeralStore {
                     runtime.begin_id_output(EntityRole::Session)?;
                     *started = true;
                 }
-                source.read(|row| {
-                    if name == "id" {
-                        return Ok(row.get("id").cloned().unwrap_or_default());
-                    }
-                    Ok(row
-                        .get(resolve_field_name(field.field_name.as_deref(), name))
-                        .cloned()
-                        .unwrap_or_default())
-                })
+                let physical = if name == "id" {
+                    "id"
+                } else {
+                    resolve_field_name(field.field_name.as_deref(), name)
+                };
+                Ok(source.field(physical)?.unwrap_or_default())
             },
             |(session, _, _), name, field, value| {
                 Box::pin(async move {

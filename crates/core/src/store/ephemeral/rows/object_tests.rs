@@ -4,7 +4,10 @@
 )]
 
 use super::*;
+use crate::field_value::FieldObjectSource;
 use crate::store::ephemeral::EphemeralStore;
+use std::sync::Weak;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn required<T>(value: Option<T>) -> AuthResult<T> {
     value.ok_or_else(|| AuthError::internal("Expected a retained object fixture"))
@@ -105,5 +108,147 @@ async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> Aut
         .into()
     );
     assert_eq!(live.read(AuthRecordFields::field_values)?, original);
+    Ok(())
+}
+
+struct InvitationGraphSource {
+    row: Weak<Mutex<FieldMap>>,
+    reads: AtomicUsize,
+    failure: Mutex<Option<AuthError>>,
+}
+
+impl FieldObjectSource for InvitationGraphSource {
+    fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(self.snapshot_fields()?.get(name).cloned())
+    }
+
+    fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal("Clone probe fields are immutable"))
+    }
+
+    fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal("Clone probe fields are immutable"))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        let source = required(self.row.upgrade())?;
+        // A failed try_lock reports the regression without blocking the test process.
+        let row = source
+            .try_lock()
+            .map_err(|_| AuthError::internal("Invitation graph copy retained its row lock"))?;
+        if self.reads.fetch_add(1, Ordering::SeqCst) == 1
+            && let Some(error) = lock(&self.failure)?.take()
+        {
+            return Err(error);
+        }
+        Ok([("name".into(), row.get("name").cloned().unwrap_or_default())].into())
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self) as usize
+    }
+}
+
+#[tokio::test]
+async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_ownership()
+-> AuthResult<()> {
+    use crate::store::{InvitationStore, SessionStore, TeamMemberLimits};
+    use chrono::Utc;
+
+    for fail_copy in [false, true] {
+        let store = EphemeralStore::default();
+        let sources: Vec<_> = ["first", "second"]
+            .into_iter()
+            .map(|id| {
+                Ok(store.lock()?.teams.push_ref(
+                    [
+                        ("id".into(), id.into()),
+                        ("name".into(), "Shared graph".into()),
+                        ("organizationId".into(), "organization".into()),
+                        ("createdAt".into(), Utc::now().into()),
+                        ("memberCount".into(), 0.into()),
+                    ]
+                    .into(),
+                ))
+            })
+            .collect::<AuthResult<_>>()?;
+        let failure = "Invitation graph source failed".to_owned();
+        let original_error = failure.as_ptr() as usize;
+        let graph = Arc::new(InvitationGraphSource {
+            row: Arc::downgrade(&required(sources.first())?.0),
+            reads: AtomicUsize::new(0),
+            failure: Mutex::new(fail_copy.then_some(AuthError::Internal(failure))),
+        });
+        let shared = FieldValue::Object(crate::FieldObject::from_source(graph.clone()));
+        for row in &sources {
+            row.write(|fields| {
+                let _ = fields.insert("graph".into(), shared.clone());
+                let _ = fields.insert("alias".into(), shared.clone());
+                Ok(())
+            })?;
+        }
+        let mut input = crate::CreateInvitation::new(
+            "organization",
+            "recipient@example.com",
+            "member",
+            "inviter",
+            (Utc::now() + chrono::Duration::days(1)).into(),
+        );
+        input.team_id = Some("first,second".into());
+        let invitation = store.create_invitation(input).await?;
+        let result = store
+            .accept_invitation_with_teams(
+                invitation.id.typed()?,
+                "recipient",
+                None,
+                true,
+                TeamMemberLimits::Fixed(Some(1)),
+            )
+            .await;
+        assert_eq!(graph.reads.load(Ordering::SeqCst), 2);
+        if fail_copy {
+            assert!(matches!(result, Err(AuthError::Internal(message))
+                if message == "Invitation graph source failed"
+                    && message.as_ptr() as usize == original_error));
+        } else {
+            let (member, accepted, session) = result?;
+            assert_eq!(member.user_id, "recipient");
+            assert_eq!(accepted.status.field_value(), "accepted".into());
+            assert!(session.is_none());
+        }
+        let state = store.lock()?;
+        assert_eq!(state.members.len(), usize::from(!fail_copy));
+        assert_eq!(state.team_members.len(), if fail_copy { 0 } else { 2 });
+        assert_eq!(state.sessions.len(), 0);
+        assert_eq!(
+            required(state.invitations.snapshot()?.first())?.get("status"),
+            Some(&FieldValue::from(if fail_copy {
+                "pending"
+            } else {
+                "accepted"
+            }))
+        );
+        let teams = state.teams.snapshot()?;
+        let first = required(teams.first())?;
+        let cloned = required(required(first.get("graph"))?.as_object())?;
+        if !fail_copy {
+            assert_eq!(
+                cloned.snapshot_fields()?,
+                [("name".into(), "Shared graph".into())].into()
+            );
+        }
+        for (team, original) in teams.iter().zip(&sources) {
+            assert_eq!(
+                team.get("memberCount"),
+                Some(&FieldValue::from(if fail_copy { 0 } else { 1 }))
+            );
+            assert_eq!(state.teams.contains_ref(original), fail_copy);
+            for name in ["graph", "alias"] {
+                let value = required(required(team.get(name))?.as_object())?;
+                assert!(cloned.same_object(value));
+                assert_eq!(value.same_object(required(shared.as_object())?), fail_copy);
+            }
+        }
+    }
     Ok(())
 }

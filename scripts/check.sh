@@ -666,6 +666,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/projection-error-lifecycle.test.ts \
         ./compat-tests/reference-server/contracts/team-projection-error-lifecycle.test.ts \
         ./compat-tests/reference-server/contracts/async-field-transforms.test.ts \
+        ./compat-tests/reference-server/contracts/memory-user-live-reads.test.ts \
+        ./compat-tests/reference-server/contracts/session-live-output.test.ts \
         ./compat-tests/reference-server/contracts/account-owner-batch.test.ts \
         ./compat-tests/reference-server/contracts/session-user-join-reference.test.ts \
         ./compat-tests/reference-server/contracts/organization-list-relations.test.ts \
@@ -682,6 +684,8 @@ run_stage() {
         -- -D warnings || projection_status=1
       cargo test --locked -p better-auth-core --lib -- \
         request_runtime::concurrent::tests:: organization_fields::tests:: user_fields:: \
+        field_value::function::tests:: store::ephemeral::rows::object_tests:: \
+        store::ephemeral::invitation_accept::tests:: \
         store::ephemeral::sessions::live_output_tests:: store::ephemeral::sessions::native_owner_tests:: \
         store::ephemeral::organization_joins:: store::secondary:: || projection_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \

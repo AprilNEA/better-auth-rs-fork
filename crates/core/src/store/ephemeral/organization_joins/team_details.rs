@@ -37,17 +37,16 @@ impl EphemeralStore {
                     for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(&row)) {
                         source = source.with_patch(patch.clone());
                     }
-                    if source.read(|row| {
-                        Ok(crate::query::field_matches_equality(
-                            row.get("id").unwrap_or(&Value::Undefined),
-                            &team_id.field_value(),
-                        ) && organization_id.as_ref().is_none_or(|id| {
-                            crate::query::field_matches_equality(
-                                &organization_value(row, &team_fields, "organizationId"),
-                                &id.field_value(),
-                            )
-                        }))
-                    })? {
+                    let fields = source.shallow_fields()?;
+                    if crate::query::field_matches_equality(
+                        fields.get("id").unwrap_or(&Value::Undefined),
+                        &team_id.field_value(),
+                    ) && organization_id.as_ref().is_none_or(|id| {
+                        crate::query::field_matches_equality(
+                            &organization_value(&fields, &team_fields, "organizationId"),
+                            &id.field_value(),
+                        )
+                    }) {
                         parents.push(source);
                     }
                 }
@@ -57,7 +56,7 @@ impl EphemeralStore {
                     })?;
                     let snapshots = parents
                         .iter()
-                        .map(|row| row.read(|row| Ok(row.clone())))
+                        .map(RecordSource::shallow_fields)
                         .collect::<AuthResult<Vec<_>>>()?;
                     let Some(mut group) =
                         native_relationships(snapshots, &[(&state.team_members, relation, limit)])?

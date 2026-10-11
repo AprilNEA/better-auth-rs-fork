@@ -1,4 +1,4 @@
-use super::rows::{RecordSource, RowRef, Rows};
+use super::rows::{RowRef, Rows};
 use super::sessions::session_token_matches;
 use super::*;
 use crate::SchemaValue;
@@ -335,7 +335,8 @@ impl EphemeralStore {
         let mut copies = crate::StructuredCloneContext::new();
         for (_, prepared, _) in &reservations {
             let (source, patch) = prepared.pending_write();
-            let mut fields = RecordSource::Live(source).read(|fields| copies.clone_map(fields))?;
+            let fields = source.shallow_fields()?;
+            let mut fields = copies.clone_map(&fields)?;
             fields.extend(patch);
             let id = fields.get("id").cloned().unwrap_or_default();
             let mut state = staged.lock()?;
@@ -357,7 +358,7 @@ impl EphemeralStore {
                 .sessions
                 .first_ref(|row| session_token_matches(row, column, token))?
                 .ok_or(AuthError::SessionNotFound)?;
-            let original = source.read(|row| Ok(row.clone()))?;
+            let original = source.shallow_fields()?;
             Some((source, original))
         } else {
             None

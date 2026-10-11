@@ -21,12 +21,9 @@ fn read_field(
         runtime.begin_id_output(role)?;
         *started = true;
     }
-    source.read(|row| {
-        Ok(row
-            .get(resolve_field_name(field.field_name.as_deref(), name))
-            .cloned()
-            .unwrap_or_default())
-    })
+    Ok(source
+        .field(resolve_field_name(field.field_name.as_deref(), name))?
+        .unwrap_or_default())
 }
 
 fn apply_field<'a>(

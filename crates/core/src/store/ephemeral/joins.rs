@@ -28,7 +28,7 @@ fn read_user_field(
         *started = true;
     }
     let physical = resolve_field_name(field.field_name.as_deref(), name);
-    source.read(|user| Ok(FieldMap::from(user.clone()).get(physical).cloned()))
+    source.field(physical)
 }
 
 fn apply_user_field<'a>(
@@ -134,7 +134,7 @@ impl EphemeralStore {
                             if !native {
                                 return Ok((RecordSource::Live(source), None));
                             }
-                            let session = source.read(|session| Ok(session.clone()))?;
+                            let session = source.shallow_fields()?;
                             let value = session.get(&relation.from).cloned().unwrap_or_default();
                             let users = native_relation(
                                 state.users.select_refs(|user| {

@@ -52,30 +52,46 @@ impl RecordSource {
         Self::Snapshot(Box::new(parent))
     }
 
-    pub(super) fn read<T>(&self, read: impl FnOnce(&FieldMap) -> AuthResult<T>) -> AuthResult<T> {
+    pub(super) fn field(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         match self {
-            Self::Live(source) => source.read(read),
-            Self::LiveWithPatch(source, patch) => source.read(|fields| {
-                // Pending writes override only their own columns; each read observes other live fields.
-                let mut fields = fields.clone();
+            Self::Live(source) => source.field(name),
+            Self::LiveWithPatch(source, patch) => {
+                let live = source.field(name)?;
+                Ok(patch.get(name).cloned().or(live))
+            }
+            Self::Snapshot(record) => Ok(record.get(name).cloned()),
+        }
+    }
+
+    pub(super) fn shallow_fields(&self) -> AuthResult<FieldMap> {
+        match self {
+            Self::Live(source) => source.shallow_fields(),
+            Self::LiveWithPatch(source, patch) => {
+                let mut fields = source.shallow_fields()?;
                 fields.extend(
                     patch
                         .iter()
                         .map(|(name, value)| (name.clone(), value.clone())),
                 );
-                read(&fields)
-            }),
-            Self::Snapshot(record) => read(record),
+                Ok(fields)
+            }
+            Self::Snapshot(record) => Ok((**record).clone()),
         }
     }
 }
 
+/// Read properties as shallow handles; implementations must not evaluate child values.
 pub(super) trait ObjectRow: AuthRecordFields {
+    fn property(&self, name: &str) -> AuthResult<Option<FieldValue>>;
     fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>>;
     fn delete_property(&mut self, name: &str) -> AuthResult<Option<FieldValue>>;
 }
 
 impl ObjectRow for FieldMap {
+    fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(self.get(name).cloned())
+    }
+
     fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
         let previous = self.insert(name, value);
         self.sort_property_order();
@@ -88,6 +104,10 @@ impl ObjectRow for FieldMap {
 }
 
 impl ObjectRow for crate::UserView {
+    fn property(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        Ok(self.field_values()?.get(name).cloned())
+    }
+
     fn set_property(&mut self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
         let mut fields = self.field_values()?;
         let previous = fields.set_property(name, value)?;
@@ -105,11 +125,11 @@ impl ObjectRow for crate::UserView {
 
 impl<T: ObjectRow + Send> crate::field_value::FieldObjectSource for RowRef<T> {
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
-        self.read(|row| Ok(row.field_values()?.get(name).cloned()))
+        self.field(name)
     }
 
     fn snapshot_fields(&self) -> AuthResult<FieldMap> {
-        self.read(AuthRecordFields::field_values)
+        self.shallow_fields()
     }
 
     fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>> {
@@ -122,6 +142,16 @@ impl<T: ObjectRow + Send> crate::field_value::FieldObjectSource for RowRef<T> {
 
     fn identity(&self) -> usize {
         Arc::as_ptr(&self.0) as usize
+    }
+}
+
+impl<T: ObjectRow> RowRef<T> {
+    pub(super) fn field(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        lock(&self.0)?.property(name)
+    }
+
+    pub(super) fn shallow_fields(&self) -> AuthResult<FieldMap> {
+        lock(&self.0)?.field_values()
     }
 }
 
