@@ -407,6 +407,7 @@ macro_rules! user_fields {
                 }
             }
 
+            #[cfg(test)]
             pub(crate) fn into_row_parts(self) -> (FieldMap, UserRowState) {
                 let visible = FieldMap::from(self.clone());
                 let mut hidden_values = vec![
@@ -431,6 +432,7 @@ macro_rules! user_fields {
         }
 
         impl UserRowState {
+            #[cfg(test)]
             pub(crate) fn into_user(self, mut fields: FieldMap) -> AuthResult<UserView> {
                 let mut values = self.hidden_values.into_iter();
                 let mut next = || values.next().ok_or_else(|| crate::AuthError::internal("User clone state is incomplete"));

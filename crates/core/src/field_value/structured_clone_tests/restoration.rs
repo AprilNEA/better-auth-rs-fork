@@ -36,7 +36,7 @@ fn default_record_restoration_reads_populated_targets_and_retries_after_decode_f
         fields: [
             ("strings".into(), strings.clone().into_field()),
             ("json".into(), json.clone().into()),
-            ("gate".into(), gate.clone().into()),
+            ("gate".into(), FieldValue::Object(gate.clone())),
         ]
         .into(),
         strings: Vec::new(),
@@ -53,7 +53,7 @@ fn default_record_restoration_reads_populated_targets_and_retries_after_decode_f
     assert_eq!(cloned.strings, strings);
     assert_eq!(cloned.json, json);
     assert_eq!(cloned.fields, source.fields);
-    assert!(!cloned.fields["gate"].strict_equals(&gate.clone().into()));
+    assert!(!cloned.fields["gate"].strict_equals(&FieldValue::Object(gate.clone())));
     assert!(!cloned.fields["strings"].strict_equals(&source.fields["strings"]));
     Ok(())
 }
@@ -111,7 +111,7 @@ fn restoration_errors_and_panics_clear_new_cycles_without_polluting_the_context(
 {
     for panics in [false, true] {
         let object = FieldObject::from(FieldMap::from([("value".into(), 1.into())]));
-        let array = FieldArray::from(vec![object.clone().into(), "tail".into()]);
+        let array = FieldArray::from(vec![FieldValue::Object(object.clone()), "tail".into()]);
         let _ = object.set("array", array.clone().into())?;
         let date = FieldValue::from(FieldDate::from_milliseconds(42.0));
         let mut context = StructuredCloneContext::new();
