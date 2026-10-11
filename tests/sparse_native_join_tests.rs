@@ -18,6 +18,10 @@ use serde_json::Value;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare counts, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn adapter_counts_exclude_null_ids_without_projecting_or_mutating_records() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
@@ -64,6 +68,10 @@ async fn adapter_counts_exclude_null_ids_without_projecting_or_mutating_records(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare page counts, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn nullable_user_ids_remain_in_pages_but_do_not_contribute_to_sql_counts() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
@@ -111,6 +119,10 @@ async fn nullable_user_ids_remain_in_pages_but_do_not_contribute_to_sql_counts()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare errors, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn sparse_native_and_fallback_joins_match_complete_results_callbacks_and_storage()
 -> TestResult {
     let cases: Value =
@@ -146,6 +158,10 @@ async fn sparse_native_and_fallback_joins_match_complete_results_callbacks_and_s
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare database errors, callback order, and storage; Result propagates fixture errors"
+)]
 async fn missing_declared_child_columns_keep_native_and_fallback_error_order() -> TestResult {
     use better_auth_seaorm::sea_orm::ConnectionTrait;
 
@@ -173,6 +189,10 @@ async fn missing_declared_child_columns_keep_native_and_fallback_error_order() -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare child callbacks and storage; Result propagates fixture and adapter errors"
+)]
 async fn null_child_ids_preserve_present_rows_and_empty_relationships() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
@@ -219,6 +239,10 @@ async fn null_child_ids_preserve_present_rows_and_empty_relationships() -> TestR
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare duplicate child callbacks and storage; Result propagates fixture and adapter errors"
+)]
 async fn zero_child_ids_are_not_deduplicated_before_id_output_conversion() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
@@ -249,6 +273,10 @@ async fn zero_child_ids_are_not_deduplicated_before_id_output_conversion() -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare row presence, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn native_joins_discard_falsy_parent_ids_before_any_output_callbacks() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;
@@ -286,6 +314,10 @@ async fn native_joins_discard_falsy_parent_ids_before_any_output_callbacks() -> 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare alias callbacks and storage; Result propagates fixture and adapter errors"
+)]
 async fn reserved_child_aliases_remove_parent_fields_without_losing_own_undefined() -> TestResult {
     let cases: Value =
         serde_json::from_str(include_str!("fixtures/sparse-native-join-cases.json"))?;

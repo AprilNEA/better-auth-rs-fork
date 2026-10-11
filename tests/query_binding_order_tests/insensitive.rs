@@ -9,6 +9,10 @@ use better_auth_seaorm::{
 };
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare consumed rows, errors, and storage; Result propagates database and adapter errors"
+)]
 async fn sqlite_device_insensitive_ownership_distinguishes_scalar_and_array_operands()
 -> Result<(), Box<dyn std::error::Error>> {
     for operator in [

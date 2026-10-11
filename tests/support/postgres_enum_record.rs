@@ -18,16 +18,26 @@ mod model {
         sea_orm::{self, entity::prelude::*},
     };
 
-    #[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
-    #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "raw_jwk_label")]
-    pub enum KeyLabel {
-        #[sea_orm(string_value = "stored:source")]
-        Source,
-        #[sea_orm(string_value = "stored:next")]
-        Next,
-        #[sea_orm(string_value = "stored:reject")]
-        Reject,
+    #[expect(
+        clippy::enum_variant_names,
+        reason = "SeaORM derives a sibling variant enum from the fixed PostgreSQL labels with a shared stored prefix"
+    )]
+    mod labels {
+        use super::*;
+
+        #[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
+        #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "raw_jwk_label")]
+        pub enum KeyLabel {
+            #[sea_orm(string_value = "stored:source")]
+            Source,
+            #[sea_orm(string_value = "stored:next")]
+            Next,
+            #[sea_orm(string_value = "stored:reject")]
+            Reject,
+        }
     }
+
+    pub use labels::KeyLabel;
 
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel, AuthEntity)]
     #[auth(role = "jwk")]

@@ -66,6 +66,10 @@ fn callbacks(trace: &Trace, input: &'static str, output: &'static str) -> FieldT
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare alias errors, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn device_consumption_binds_every_operand_before_resolving_the_first_id_alias() -> TestResult
 {
     for invalid_ownership in [false, true] {
@@ -181,6 +185,10 @@ async fn device_consumption_binds_every_operand_before_resolving_the_first_id_al
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare complete wallet values, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn wallet_mixed_aliases_resolve_twice_without_converting_operands_twice() -> TestResult {
     let database = database().await?;
     let _ = database
@@ -256,6 +264,10 @@ async fn wallet_mixed_aliases_resolve_twice_without_converting_operands_twice() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare role results, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn organization_role_names_convert_as_one_array_and_keep_the_organization_filter()
 -> TestResult {
     let database = database().await?;
@@ -336,6 +348,10 @@ async fn organization_role_names_convert_as_one_array_and_keep_the_organization_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare error identity, callback order, and storage; Result propagates fixture and adapter errors"
+)]
 async fn organization_role_conditions_parse_before_driver_encoding() -> TestResult {
     use better_auth_core::{FieldFunction, UpdateOrganizationRole};
     use std::sync::atomic::{AtomicUsize, Ordering};

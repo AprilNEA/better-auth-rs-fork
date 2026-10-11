@@ -343,7 +343,7 @@ impl AuthError {
                     500 => {
                         crate::observability::logger::current().error(
                             "Internal server error",
-                            &[crate::observability::LogArgument::Error(&self)],
+                            &[crate::observability::LogArgument::Error(self)],
                         );
                         "Internal server error".to_string()
                     }

@@ -4,6 +4,7 @@
     reason = "The paired contract propagates setup errors and asserts complete values, callback order, and storage."
 )]
 
+use super::super::test_support::snapshot_tree;
 use super::*;
 use crate::FieldDate;
 use crate::organization_fields::OrganizationFields;
@@ -29,10 +30,7 @@ async fn check(native: bool, mapped: bool, reject: bool) -> AuthResult<()> {
                     events
                         .lock()
                         .map_err(|error| AuthError::internal(error.to_string()))?
-                        .push((
-                            name,
-                            crate::StructuredCloneContext::new().clone_value(&value)?,
-                        ));
+                        .push((name, snapshot_tree(&value)?));
                     if reject && name == "invitation.role" {
                         return Err(AuthError::type_error("detail-dependency-output-rejected"));
                     }

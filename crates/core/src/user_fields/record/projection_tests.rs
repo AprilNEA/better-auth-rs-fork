@@ -131,6 +131,9 @@ async fn raw_helpers_share_native_replacements_and_defer_dynamic_ids() -> AuthRe
                 .collect();
             let _ = expected.insert("name".into(), vec![payload.clone()].into());
             let _ = expected.insert("id".into(), "after-name".into());
+            if role == EntityRole::ApiKey {
+                let _ = expected.insert("metadata".into(), Value::Null);
+            }
             assert_eq!(actual, [expected]);
             assert_eq!(
                 actual

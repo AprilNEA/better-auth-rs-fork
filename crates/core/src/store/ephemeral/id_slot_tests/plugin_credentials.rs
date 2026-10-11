@@ -329,20 +329,24 @@ async fn memory_plugin_typed_reads_preserve_raw_output_values_and_presence() -> 
             let raw = required(model.read(&store, "selected".into()).await?)?;
             assert_eq!(raw, created);
             assert_eq!(raw.get(model.field()), Some(&expected_value));
-            let mut typed = model.typed_fields(&store, "selected").await?;
+            let typed = model.typed_fields(&store, "selected").await?;
             if matches!(model, Model::Passkey) {
                 for internal in ["credential", "updatedAt"] {
-                    assert!(!raw.contains_key(internal));
-                    assert_eq!(typed.shift_remove(internal), Some(Value::Undefined));
+                    assert_eq!(raw.get(internal), None);
+                    assert_eq!(typed.get(internal), None);
                 }
             }
             if matches!(model, Model::TwoFactor) {
                 for internal in ["createdAt", "updatedAt"] {
-                    assert!(!raw.contains_key(internal));
-                    assert_eq!(typed.shift_remove(internal), Some(Value::Undefined));
+                    assert_eq!(raw.get(internal), None);
+                    assert_eq!(typed.get(internal), None);
                 }
             }
             assert_eq!(typed, raw, "{model:?}");
+            assert_eq!(
+                typed.keys().collect::<Vec<_>>(),
+                raw.keys().collect::<Vec<_>>()
+            );
             assert_eq!(store.plugin_storage_rows(model.role())?, before);
             assert_eq!(calls.load(Ordering::SeqCst), 3);
         }

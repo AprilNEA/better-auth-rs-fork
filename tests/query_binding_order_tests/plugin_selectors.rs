@@ -30,6 +30,10 @@ fn callback(trace: &Trace, allocation: &Arc<AtomicUsize>, event: &'static str) -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare selector error identity, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn wallet_and_two_factor_parse_all_selector_expressions_before_driver_values()
 -> Result<(), Box<dyn std::error::Error>> {
     for model in ["walletAddress", "twoFactor"] {
@@ -104,6 +108,10 @@ async fn wallet_and_two_factor_parse_all_selector_expressions_before_driver_valu
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare selector error identity, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn user_id_in_parses_all_items_before_driver_values() -> Result<(), Box<dyn std::error::Error>>
 {
     let mut options = ConnectOptions::new("sqlite::memory:");

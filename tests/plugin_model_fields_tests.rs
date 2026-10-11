@@ -407,7 +407,7 @@ async fn next_callback<C, T>(
     tokio::select! {
         call = calls.recv() => required(call, "Expected the next field callback"),
         result = pending => {
-            result.map_err(|error| AuthError::internal(format!("Model field task failed: {error}")))??;
+            let _ = result.map_err(|error| AuthError::internal(format!("Model field task failed: {error}")))??;
             Err(AuthError::internal("Model operation completed before the expected field callback"))
         }
     }

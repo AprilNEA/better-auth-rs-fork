@@ -145,7 +145,7 @@ fn input(name: FieldValue, counter: u64, storage: PasskeyStorage) -> CreatePassk
 }
 
 enum Storage {
-    Memory(EphemeralStore),
+    Memory(Box<EphemeralStore>),
     Sqlite(DatabaseConnection),
 }
 
@@ -164,7 +164,7 @@ impl Storage {
 }
 
 enum Returned {
-    Typed(Passkey),
+    Typed(Box<Passkey>),
     Raw(FieldMap),
 }
 
@@ -186,7 +186,7 @@ async fn execute<S: AuthSchema>(
             store
                 .create_passkey(data)
                 .await
-                .map(|row| Some(Returned::Typed(row)))
+                .map(|row| Some(Returned::Typed(Box::new(row))))
         } else {
             let mut fields = data.into_adapter_fields()?;
             let _ = fields.insert("id".into(), ID.into());
@@ -201,7 +201,7 @@ async fn execute<S: AuthSchema>(
             store
                 .get_passkey_by_id(ID)
                 .await
-                .map(|row| row.map(Returned::Typed))
+                .map(|row| row.map(|row| Returned::Typed(Box::new(row))))
         } else {
             store
                 .get_passkey_record(&id)
@@ -222,7 +222,7 @@ async fn execute<S: AuthSchema>(
         return store
             .update_passkey_authentication(&id, update)
             .await
-            .map(|row| Some(Returned::Typed(row)));
+            .map(|row| Some(Returned::Typed(Box::new(row))));
     }
     let update = UpdatePasskey {
         name: if stage == "auth" {
@@ -237,7 +237,7 @@ async fn execute<S: AuthSchema>(
         store
             .update_passkey(&id, update)
             .await
-            .map(|row| Some(Returned::Typed(row)))
+            .map(|row| Some(Returned::Typed(Box::new(row))))
     } else {
         store
             .update_passkey_record(&id, update.into_adapter_fields()?)
@@ -410,7 +410,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
             }
             let observed = match returned {
                 Some(Returned::Typed(row)) => {
-                    let view = PasskeyView::from(&row);
+                    let view = PasskeyView::from(row.as_ref());
                     let public = view.field_values()?;
                     assert_record(&public, &expected, stage);
                     let json = serde_json::to_value(&view)?;
@@ -480,7 +480,7 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
 async fn memory_typed_passkey_declarations_match_raw_records_and_keep_private_state_separate()
 -> TestResult {
     let raw = EphemeralStore::new(Arc::new(config()));
-    contract(Arc::new(raw.clone()), Storage::Memory(raw)).await
+    contract(Arc::new(raw.clone()), Storage::Memory(Box::new(raw))).await
 }
 
 #[tokio::test]
@@ -493,6 +493,10 @@ async fn sqlite_typed_passkey_declarations_need_only_declared_physical_columns()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare private credentials, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_omission()
 -> TestResult {
     for omit in [false, true] {
@@ -551,7 +555,11 @@ async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_
                 ("counter".into(), format!("count:{counter}").into()),
                 ("id".into(), ID.into()),
             ]);
-            assert_record(&PasskeyView::from(&row).field_values()?, &public, stage);
+            assert_record(
+                &PasskeyView::from(row.as_ref()).field_values()?,
+                &public,
+                stage,
+            );
             assert_eq!(
                 row.credential.field_value(),
                 credential,

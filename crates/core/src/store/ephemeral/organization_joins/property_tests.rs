@@ -4,6 +4,7 @@
     reason = "The relation contract propagates setup failures and asserts callback values, identity, and durable storage."
 )]
 
+use super::super::test_support::snapshot_tree as copy;
 use super::*;
 use crate::FieldDate;
 use crate::organization_fields::OrganizationFields;
@@ -41,10 +42,6 @@ impl Relation {
 
 fn date() -> FieldDate {
     FieldDate::from_milliseconds(1_893_456_000_000.0)
-}
-
-fn copy(value: &Value) -> AuthResult<Value> {
-    crate::StructuredCloneContext::new().clone_value(value)
 }
 
 fn joined(row: &FieldMap, many: bool) -> Value {

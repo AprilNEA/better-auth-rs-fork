@@ -174,6 +174,7 @@ impl<S: AuthSchema> Fixture<S> {
 
     #[expect(
         clippy::expect_used,
+        clippy::panic_in_result_fn,
         reason = "The contract requires a complete flattened record with only the declared native and additional fields"
     )]
     fn visible(&self, row: Option<&TwoFactor>) -> AuthResult<Value> {
@@ -353,7 +354,10 @@ impl<S: AuthSchema> Fixture<S> {
             )
             .await?;
         if mode == 1 {
-            assert_eq!(observation["stored"], before);
+            assert_eq!(
+                observation.get("stored").expect("stored observation"),
+                &before
+            );
         }
         Ok(observation)
     }
@@ -371,8 +375,13 @@ impl<S: AuthSchema> Fixture<S> {
             .record_two_factor_failure(&created.id, 2, &|| Ok(deadline.into()))
             .await?;
         let before = self.stored().await?;
-        assert_eq!(before["failedVerificationCount"], 1);
-        assert!(before["lockedUntil"].is_null());
+        assert_eq!(
+            before
+                .get("failedVerificationCount")
+                .expect("stored failure count"),
+            &json!(1)
+        );
+        assert!(before.get("lockedUntil").expect("stored lock").is_null());
         let _ = take(&self.events);
 
         match scenario {
@@ -396,8 +405,13 @@ impl<S: AuthSchema> Fixture<S> {
                     )
                     .await?;
                 let mut expected_stored = before;
-                expected_stored["failedVerificationCount"] = json!(2);
-                assert_eq!(observation["stored"], expected_stored);
+                *expected_stored
+                    .get_mut("failedVerificationCount")
+                    .expect("stored failure count") = json!(2);
+                assert_eq!(
+                    observation.get("stored").expect("stored observation"),
+                    &expected_stored
+                );
                 Ok(observation)
             }
             Scenario::ResetNullLockBeforeEpoch | Scenario::ResetNullLock => {
@@ -420,7 +434,10 @@ impl<S: AuthSchema> Fixture<S> {
                     .await?;
                 let observation = self.observe(name, Value::Null).await?;
                 if before_epoch {
-                    assert_eq!(observation["stored"], before);
+                    assert_eq!(
+                        observation.get("stored").expect("stored observation"),
+                        &before
+                    );
                 }
                 Ok(observation)
             }
@@ -440,8 +457,11 @@ pub(crate) async fn contract<S: AuthSchema>(
 ) -> AuthResult<()> {
     let expected: Value =
         serde_json::from_str(include_str!("../fixtures/two-factor-fields-1.7.6.json"))?;
-    assert_eq!(expected["version"], "1.7.6");
-    let backends = expected["backends"].as_array().expect("captured backends");
+    assert_eq!(expected.get("version").expect("captured version"), "1.7.6");
+    let backends = expected
+        .get("backends")
+        .and_then(Value::as_array)
+        .expect("captured backends");
     assert_eq!(
         backends
             .iter()
@@ -467,13 +487,19 @@ pub(crate) async fn contract<S: AuthSchema>(
     };
     if let Some(index) = boundary_index {
         assert_eq!(
-            fixture.boundary(scenario).await?,
-            expected["boundaries"][index]
+            &fixture.boundary(scenario).await?,
+            expected
+                .get("boundaries")
+                .and_then(|boundaries| boundaries.get(index))
+                .expect("captured boundary")
         );
     } else if let Some((operation, mode, index)) = scenario.failure() {
         assert_eq!(
-            fixture.error(operation, mode).await?,
-            expected["failures"][index]
+            &fixture.error(operation, mode).await?,
+            expected
+                .get("failures")
+                .and_then(|failures| failures.get(index))
+                .expect("captured failure")
         );
     } else {
         assert_eq!(fixture.operations().await?, expected["operations"]);

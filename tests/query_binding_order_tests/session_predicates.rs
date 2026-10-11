@@ -105,6 +105,10 @@ fn callback(trace: &Trace, allocation: &Arc<AtomicUsize>) -> FieldValue {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare query error identity, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn session_active_reads_keep_query_errors_through_declared_aliases() -> TestResult {
     for array in [false, true] {
         let database = database().await?;
@@ -152,6 +156,10 @@ async fn session_active_reads_keep_query_errors_through_declared_aliases() -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare repeated query errors, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn session_preservation_repeats_query_parsing_after_the_caught_snapshot() -> TestResult {
     for by_token in [false, true] {
         for array in [false, true] {
@@ -213,6 +221,10 @@ async fn session_preservation_repeats_query_parsing_after_the_caught_snapshot() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare complete Session results, callbacks, and storage; Result propagates fixture and adapter errors"
+)]
 async fn session_singleton_eq_keeps_complete_outputs_and_only_preserves_live_matches() -> TestResult
 {
     let database = database().await?;

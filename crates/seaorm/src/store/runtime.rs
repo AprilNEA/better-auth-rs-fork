@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use better_auth_core::store::database_hooks::{
     DatabaseHookContext, DatabaseHookControl, DatabaseHookUpdate, DatabaseHooks,
 };
-use better_auth_core::store::{AuthStore, RuntimeStore};
+use better_auth_core::store::{AuthStore, RuntimeStore, schema::EntityRole};
 use better_auth_core::{AuthConfig, AuthResult, AuthSchema, CreateAccount, CreateVerification};
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> RuntimeStore<S>
@@ -51,13 +51,22 @@ where
         let mut store = self.clone();
         store.config = config;
         store.model_fields = model_fields.fresh_runtime();
-        store.validate_api_key_fields()?;
-        store.validate_session_fields()?;
-        store.validate_device_code_fields()?;
-        store.validate_passkey_fields()?;
-        store.validate_two_factor_fields()?;
-        store.validate_jwk_fields()?;
-        store.validate_wallet_fields()?;
+        let active_models = store.model_fields.active_models();
+        // Keep validation error order; a typed binding does not activate a runtime model.
+        let validators: [(EntityRole, fn(&Self) -> AuthResult<()>); 7] = [
+            (EntityRole::ApiKey, Self::validate_api_key_fields),
+            (EntityRole::Session, Self::validate_session_fields),
+            (EntityRole::DeviceCode, Self::validate_device_code_fields),
+            (EntityRole::Passkey, Self::validate_passkey_fields),
+            (EntityRole::TwoFactor, Self::validate_two_factor_fields),
+            (EntityRole::Jwk, Self::validate_jwk_fields),
+            (EntityRole::WalletAddress, Self::validate_wallet_fields),
+        ];
+        for (role, validate) in validators {
+            if active_models.iter().any(|(active, _)| *active == role) {
+                validate(&store)?;
+            }
+        }
         store.organization_fields = Arc::new(RwLock::new(self.organization_fields()?));
         store.set_organization_fields(
             store

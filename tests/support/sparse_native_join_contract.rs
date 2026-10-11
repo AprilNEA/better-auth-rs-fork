@@ -333,6 +333,10 @@ pub(super) fn assert_value(actual: &FieldValue, expected: &Value) -> AuthResult<
     assert_fields(actual, &values::revive(expected)?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare complete fields and key order; Result propagates field access errors"
+)]
 fn assert_fields(actual: &FieldValue, expected: &FieldValue) -> AuthResult<()> {
     assert_eq!(actual, expected);
     match expected {

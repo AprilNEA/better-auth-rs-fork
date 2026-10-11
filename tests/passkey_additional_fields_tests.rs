@@ -69,6 +69,10 @@ async fn secondary_passkey_fields_forward_policies_and_extra_values() -> AuthRes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare accepted declarations and configuration errors; Result propagates fixture and cleanup errors"
+)]
 async fn passkey_additional_fields_accept_complete_declarations_for_existing_columns()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     for (name, column) in [

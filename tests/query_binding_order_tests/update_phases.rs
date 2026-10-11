@@ -211,6 +211,10 @@ fn rejecting(trace: &Trace, allocation: &Arc<AtomicUsize>, phase: &'static str) 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare update error identity, callback order, and storage; Result propagates fixture and adapter errors"
+)]
 async fn ordinary_updates_keep_name_parse_and_driver_phase_order() -> TestResult {
     for model in [Model::ApiKey, Model::Passkey, Model::User] {
         for scenario in [

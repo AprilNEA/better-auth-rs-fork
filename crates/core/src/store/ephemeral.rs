@@ -84,6 +84,8 @@ mod state;
 mod table;
 mod team_capacity;
 mod teams;
+#[cfg(test)]
+mod test_support;
 mod transactions;
 mod two_factor;
 #[cfg(test)]

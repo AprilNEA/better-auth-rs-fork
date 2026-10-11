@@ -4,10 +4,11 @@
     reason = "The paired contract propagates setup errors and asserts full output, identity, callbacks, and durable storage."
 )]
 
+use super::test_support::snapshot_tree as snapshot;
 use super::*;
 use crate::store::{JoinValue, RuntimeStore, schema::EntityRole};
 use crate::user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform};
-use crate::{FieldDate, FieldValue, StructuredCloneContext};
+use crate::{FieldDate, FieldValue};
 
 fn date(offset: u32) -> FieldDate {
     FieldDate::from_milliseconds(1_893_456_000_000.0 + f64::from(offset) * 1_000.0)
@@ -44,10 +45,6 @@ fn user(id: &str, name: &str, extra: FieldMap) -> CreateUser {
         additional_fields: extra,
         ..Default::default()
     }
-}
-
-fn snapshot(value: &FieldValue) -> AuthResult<FieldValue> {
-    StructuredCloneContext::new().clone_value(value)
 }
 
 fn joined(many: bool, rows: &[FieldMap]) -> FieldValue {
@@ -428,7 +425,7 @@ async fn check(
             let _ = child.insert(value_field.into(), value.into());
         }
         let _ = expected.insert(child_model.into(), joined(many, &projected));
-        assert_eq!(StructuredCloneContext::new().clone_map(&output)?, expected);
+        assert_eq!(snapshot(&output.into())?, expected.into());
     }
     let mut expected_events = vec![("collision".to_owned(), raw_before)];
     if !missing {

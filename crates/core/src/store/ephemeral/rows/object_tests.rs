@@ -273,6 +273,7 @@ async fn mutable_handles_keep_transaction_rollback_and_commit_ownership() -> Aut
 struct InvitationGraphSource {
     row: Weak<Mutex<RowCell<FieldMap>>>,
     reads: AtomicUsize,
+    failure_at: Option<usize>,
     failure: Mutex<Option<AuthError>>,
 }
 
@@ -299,7 +300,8 @@ impl FieldObjectSource for InvitationGraphSource {
         let row = source
             .try_lock()
             .map_err(|_| AuthError::internal("Invitation graph copy retained its row lock"))?;
-        if self.reads.fetch_add(1, Ordering::SeqCst) == 1
+        let read = self.reads.fetch_add(1, Ordering::SeqCst);
+        if self.failure_at == Some(read)
             && let Some(error) = lock(&self.failure)?.take()
         {
             return Err(error);
@@ -322,7 +324,14 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
     use crate::store::{InvitationStore, SessionStore, TeamMemberLimits};
     use chrono::Utc;
 
-    for fail_copy in [false, true] {
+    // Guarded acceptance rebases live Team fields after independent base and working snapshots.
+    for (phase, failure_at, expected_reads) in [
+        ("commit", None, 3),
+        ("base", Some(0), 1),
+        ("working", Some(1), 2),
+        ("rebase", Some(2), 3),
+    ] {
+        let fail_copy = failure_at.is_some();
         let store = EphemeralStore::default();
         let sources: Vec<_> = ["first", "second"]
             .into_iter()
@@ -346,6 +355,7 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
         let graph = Arc::new(InvitationGraphSource {
             row: Arc::downgrade(&required(sources.first())?.0),
             reads: AtomicUsize::new(0),
+            failure_at,
             failure: Mutex::new(fail_copy.then_some(AuthError::Internal(failure))),
         });
         let shared = FieldValue::Object(crate::FieldObject::from_source(graph.clone()));
@@ -376,11 +386,18 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
                 TeamMemberLimits::Fixed(Some(1)),
             )
             .await;
-        assert_eq!(graph.reads.load(Ordering::SeqCst), 2);
+        assert_eq!(
+            graph.reads.load(Ordering::SeqCst),
+            expected_reads,
+            "{phase}"
+        );
         if fail_copy {
-            assert!(matches!(result, Err(AuthError::Internal(message))
+            assert!(
+                matches!(result, Err(AuthError::Internal(message))
                 if message == "Invitation graph source failed"
-                    && message.as_ptr() as usize == original_error));
+                    && message.as_ptr() as usize == original_error),
+                "{phase}"
+            );
         } else {
             let (member, accepted, session) = result?;
             assert_eq!(member.user_id, "recipient");
