@@ -126,8 +126,8 @@ impl Fixture {
 
 fn plugin() -> OAuthProxyPlugin {
     OAuthProxyPlugin::new()
-        .current_url(ORIGIN)
-        .production_url(PRODUCTION)
+        .current_url(ORIGIN.to_owned())
+        .production_url(PRODUCTION.to_owned())
 }
 
 fn request() -> AuthRequest {
@@ -214,16 +214,16 @@ async fn native_result_shallow_copy_preserves_values_order_identity_and_status()
         })
         .into();
         let shared = FieldObject::from(FieldMap::new());
-        let _ = shared.set("self", shared.clone().into())?;
+        let _ = shared.set("self", FieldValue::Object(shared.clone()))?;
         let original: FieldValue = FieldMap::from([
             ("9".into(), "nine".into()),
             ("url".into(), URL.into()),
             ("2".into(), "two".into()),
-            ("left".into(), shared.clone().into()),
+            ("left".into(), FieldValue::Object(shared.clone())),
             ("date".into(), FieldValue::Date(FieldDate::invalid())),
             ("missing".into(), FieldValue::Undefined),
             ("nan".into(), FieldValue::Number(f64::NAN)),
-            ("right".into(), shared.clone().into()),
+            ("right".into(), FieldValue::Object(shared.clone())),
             ("toJSON".into(), function),
         ])
         .into();
@@ -471,15 +471,15 @@ async fn native_result_after_hook_rechecks_skip_and_ignores_explicit_json_bytes(
     for same_origin in [false, true] {
         let proxy = if same_origin {
             OAuthProxyPlugin::new()
-                .current_url(ORIGIN)
-                .production_url(ORIGIN)
+                .current_url(ORIGIN.to_owned())
+                .production_url(ORIGIN.to_owned())
         } else {
             plugin()
         };
         let mut req = request();
         req.set_server_context(REDIRECT_BASE_CONTEXT, PRODUCTION.into())?;
         if !same_origin {
-            let _ = req.headers.insert("x-skip-oauth-proxy", "1");
+            let _ = req.headers.insert("x-skip-oauth-proxy".into(), "1".into());
         }
         let original = object(URL.into());
         let mut response = AuthResponse::native(None, original.clone());

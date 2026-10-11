@@ -58,14 +58,13 @@ impl FieldObjectSource for Probe {
 }
 
 fn probe(fields: FieldMap, reads: Reads, events: &Events) -> ResponseBody {
-    ResponseBody::Native(
-        FieldObject::from_source(Arc::new(Probe {
+    ResponseBody::Native(FieldValue::Object(FieldObject::from_source(Arc::new(
+        Probe {
             fields,
             reads: Mutex::new(reads),
             events: events.clone(),
-        }))
-        .into(),
-    )
+        },
+    ))))
 }
 
 fn values(

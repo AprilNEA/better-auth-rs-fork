@@ -327,7 +327,8 @@ impl HttpReferences {
             ancestor = entry.parent;
         }
         let next_id = self.objects.len();
-        self.objects
+        let _ = self
+            .objects
             .entry(identity)
             .and_modify(|entry| entry.parent = holder)
             .or_insert_with(|| HttpReference {

@@ -505,6 +505,7 @@ run_stage() {
       local json_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/native-json.test.ts \
+        ./compat-tests/reference-server/contracts/endpoint-content-type.test.ts \
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
@@ -516,7 +517,8 @@ run_stage() {
         --test oauth_token_duration_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
         field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: \
-        plugin::tests::response_values:: response_body::http_tests:: types::response:: || json_status=1
+        plugin::tests::response_values:: plugin::tests::response_headers:: \
+        plugin::tests::response_status:: response_body::http_tests:: types::response:: || json_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
         plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::oauth:: \
         plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
