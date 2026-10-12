@@ -98,11 +98,11 @@ for (const scenario of callbackCases) {
   });
 }
 
-const completionCases: (Selection & { name: string; errorURL?: string; expected: string })[] = [
+const completionCases: (Selection & { name: string; errorURL?: string; expected: string; invalid?: boolean })[] = [
   { name: "static wins", optionURL: origin, runtimeURL: runtime, expected: `${origin}/api/auth/error` },
   { name: "static path retained", optionURL: `${origin}/tenant///`, runtimeURL: runtime, expected: `${origin}/tenant/api/auth/error` },
   { name: "static empty retained", optionURL: "", runtimeURL: runtime, expected: "/api/auth/error" },
-  { name: "invalid static retained", optionURL: "invalid", runtimeURL: runtime, expected: "invalid/api/auth/error" },
+  { name: "invalid static retained", optionURL: "invalid", runtimeURL: runtime, expected: "invalid/api/auth/error", invalid: true },
   { name: "dynamic runtime origin", optionURL: dynamic, runtimeURL: runtime, expected: "https://runtime.proxy-runtime.test/api/auth/error" },
   { name: "absent runtime origin", optionURL: undefined, runtimeURL: runtime, expected: "https://runtime.proxy-runtime.test/api/auth/error" },
   { name: "invalid runtime empty origin", optionURL: dynamic, runtimeURL: "invalid", expected: "/api/auth/error" },
@@ -115,7 +115,7 @@ const completionCases: (Selection & { name: string; errorURL?: string; expected:
 for (const scenario of completionCases) {
   test(`OAuth Proxy completion runtime URL: ${scenario.name}`, async () => {
     const database = { user: [], session: [], account: [], verification: [] };
-    const logs: unknown[] = [];
+    const logs: [string, unknown, unknown[]][] = [];
     const auth = betterAuth({
       baseURL: origin, basePath: "/custom-auth", secret,
       database: memoryAdapter(database), telemetry: { enabled: false },
@@ -130,13 +130,21 @@ for (const scenario of completionCases) {
     const root = await auth.$context;
     logs.length = 0;
     const response = await auth.handler(new Request(`${origin}/custom-auth/callback/test/oauth-proxy?callbackURL=%2Fcomplete`));
-    expect(response.status).toBe(302);
-    expect([...response.headers]).toStrictEqual([
+    expect(response.status).toBe(scenario.invalid ? 500 : 302);
+    expect([...response.headers]).toStrictEqual(scenario.invalid ? [] : [
       ["content-type", "application/json"],
       ["location", `${scenario.expected}${scenario.expected.includes("?") ? "&" : "?"}error=missing_profile`],
     ]);
     expect(await response.text()).toBe("");
-    expect(logs).toStrictEqual([["error", missing, []]]);
+    if (scenario.invalid) {
+      expect(logs).toHaveLength(2);
+      const cause = logs[1]?.[2][0];
+      expect(cause).toBeInstanceOf(TypeError);
+      expect(cause).toHaveProperty("message", "Invalid URL");
+      expect(logs).toStrictEqual([["error", missing, []], ["error", "TypeError", [cause]]]);
+    } else {
+      expect(logs).toStrictEqual([["error", missing, []]]);
+    }
     expect(root.baseURL).toBe(`${origin}/custom-auth`);
     expect(root.options.baseURL).toBe(origin);
     expect(database).toStrictEqual({ user: [], session: [], account: [], verification: [] });
@@ -153,5 +161,26 @@ test("OAuth Proxy skip distinguishes empty URL from nonempty invalid origins", a
     ["invalid-runtime", origin, false],
   ] as const) {
     expect(checkSkipProxy({ context: { baseURL: runtimeURL } }, { currentURL })).toBe(expected);
+  }
+});
+
+test("shared redirect query composition validates before preserving an empty query", async () => {
+  const { appendQueryParams } = await import(new URL("../node_modules/@better-auth/core/dist/utils/url.mjs", import.meta.url).href);
+  for (const [input, params, expected] of [
+    ["https://query.proxy-runtime.test/a b?one=1&", "", "https://query.proxy-runtime.test/a b?one=1&"],
+    ["/a b?one=1&#fragment", "", "/a b?one=1&#fragment"],
+    ["/space path+keep?one=1&#fragment", "two=2", "/space%20path+keep?one=1&two=2#fragment"],
+  ]) {
+    expect(appendQueryParams(input, new URLSearchParams(params))).toBe(expected);
+  }
+  for (const [input, message] of [
+    ["invalid/api/auth/error", "Invalid URL"],
+    ["//other.example/error", "Expected an absolute or root-relative URL"],
+    ["/\\other.example/error", "Expected an absolute or root-relative URL"],
+  ]) {
+    for (const params of ["", "error=missing_profile"]) {
+      expect(() => appendQueryParams(input, new URLSearchParams(params))).toThrow(TypeError);
+      expect(() => appendQueryParams(input, new URLSearchParams(params))).toThrow(message);
+    }
   }
 });
