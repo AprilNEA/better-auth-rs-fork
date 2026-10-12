@@ -335,6 +335,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-query-id-alias.test.ts \
         ./compat-tests/reference-server/contracts/organization-query-id-alias-boundaries.test.ts \
         ./compat-tests/reference-server/contracts/invitation-claim-status.test.ts \
+        ./compat-tests/reference-server/contracts/invitation-claim-selector-values.test.ts \
         ./compat-tests/reference-server/contracts/plugin-model-fields.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-input.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-output.test.ts \
@@ -642,6 +643,7 @@ run_stage() {
       local json_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/native-json.test.ts \
+        ./compat-tests/reference-server/contracts/invitation-claim-selector-values.test.ts \
         ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
         ./compat-tests/reference-server/contracts/error-construction.test.ts \
         ./compat-tests/reference-server/contracts/endpoint-content-type.test.ts \
@@ -668,14 +670,16 @@ run_stage() {
         --tests -- -D warnings || json_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test native_endpoint_tests --test server_api_tests \
-        --test organization_body_schema_tests \
+        --test organization_body_schema_tests --test request_query_tests --test required_headers_tests \
         --test api_key_number_name_tests --test api_key_additional_fields_tests \
         --test oauth_token_duration_tests --test oauth_proxy_hooks_tests \
         --test oauth_proxy_request_url_tests --test request_runtime_mutation_tests \
         --test dynamic_runtime_tests --test http_api_error_logging_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
         error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
-        request_runtime:: observability::logger:: observability::telemetry:: \
+        request_runtime:: query:: plugin::tests::async_body_dispatch:: \
+        store::ephemeral::id_slot_tests::organization_query_alias_tests::selector_values:: \
+        observability::logger:: observability::telemetry:: \
         store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
@@ -692,7 +696,7 @@ run_stage() {
         organization::organization_live_business::output_boundary:: || json_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test native_endpoint_tests --test server_api_tests \
-        --test organization_body_schema_tests \
+        --test organization_body_schema_tests --test request_query_tests --test required_headers_tests \
         --test api_key_number_name_tests --test oauth_token_duration_tests \
         --test oauth_proxy_hooks_tests --test oauth_proxy_request_url_tests \
         --test request_runtime_mutation_tests --test dynamic_runtime_tests \

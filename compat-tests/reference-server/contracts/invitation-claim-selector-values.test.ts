@@ -6,6 +6,8 @@ test("Invitation selector writes retain native values and Memory transaction ide
   const observation = await captureInvitationClaimSelectorValues(async captured => {
     await writeObservation(`${JSON.stringify({ contract: "invitation-claim-selector-values", version: "1.7.6", backend: "memory", case: captured })}\n`);
   });
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/invitation-claim-selector-values-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
   expect(observation.version).toBe("1.7.6");
   expect(observation.backend).toBe("memory");
   expect(observation.cases.map(captured => captured.scenario)).toStrictEqual([

@@ -4,6 +4,7 @@ use crate::store::{OrganizationRoleStore, TeamStore};
 use crate::user_fields::UserConfig;
 
 mod operations;
+mod selector_values;
 mod status_policies;
 
 const MODELS: [(&str, EntityRole, &str); 5] = [

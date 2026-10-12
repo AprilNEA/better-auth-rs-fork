@@ -1,0 +1,38 @@
+{
+  "version": "1.7.6",
+  "sourceRun": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38202082192",
+  "sourceCommit": "24db89ed",
+  "artifactSha256": "4f54d08773c1da061568a246262bcc170e997f84f38fb3023dea4ea31f07177f",
+  "fixtureSha256": "b6e800b187919512df2c19532416afbf198745ba9294cd78a17184adbf3d1eb4",
+  "records": [
+    {
+      "scenario": "invitation-own-selector-id-nan",
+      "line": 95,
+      "byteOffset": 255509,
+      "bytes": 3030,
+      "sha256": "01f937d97f48384f2e7e12c5c0bb70f2b790b7072e46455b894f89254f1f131b"
+    },
+    {
+      "scenario": "invitation-own-selector-id-object",
+      "line": 96,
+      "byteOffset": 258539,
+      "bytes": 3540,
+      "sha256": "b725819247a06db08e31dd4ea4e580209ec0f7034e8d248e58a03ba5ddbbd058"
+    },
+    {
+      "scenario": "invitation-own-selector-lookup-nan",
+      "line": 97,
+      "byteOffset": 262079,
+      "bytes": 3207,
+      "sha256": "af600e5903f80773c18910b2c2780082a7bf3899cab8f9cfb88bf49e48ffe390"
+    },
+    {
+      "scenario": "invitation-own-selector-lookup-object",
+      "line": 98,
+      "byteOffset": 265286,
+      "bytes": 3431,
+      "sha256": "1433adefd225ebaf83d379c92377d2b9008ddb8593376fabb5c2730f24c9a4ee"
+    }
+  ],
+  "normalizations": []
+}

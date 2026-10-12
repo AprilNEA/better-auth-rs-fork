@@ -1,0 +1,939 @@
+{
+  "version": "1.7.6",
+  "backend": "memory",
+  "cases": [
+    {
+      "scenario": "invitation-own-selector-id-nan",
+      "column": "id",
+      "kind": "nan",
+      "surface": "getOrgAdapter.updateInvitation + adapter.transaction",
+      "steps": [
+        {
+          "input": {
+            "invitationId": "invitation-alias",
+            "status": "accepted",
+            "fromStatus": "pending"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "invitation-alias",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "pending",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "email": "recipient@organization-query-id.test",
+            "role": "member",
+            "teamId": null,
+            "status": "accepted",
+            "expiresAt": {
+              "type": "date",
+              "value": "2100-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "inviterId": "owner",
+            "id": "NaN",
+            "claimLookup": "NaN"
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "email",
+                "role",
+                "teamId",
+                "status",
+                "expiresAt",
+                "createdAt",
+                "inviterId",
+                "id",
+                "claimLookup"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "onUpdate",
+              "invitation.claimLookup",
+              {
+                "type": "number",
+                "value": "NaN"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "type": "number",
+                  "value": "NaN"
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": false
+          }
+        },
+        {
+          "input": {
+            "operation": "read-only-adapter-transaction"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "type": "number",
+                  "value": "NaN"
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": true,
+          "keyOrder": [],
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "type": "number",
+                  "value": "NaN"
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "invitation-own-selector-id-object",
+      "column": "id",
+      "kind": "object",
+      "surface": "getOrgAdapter.updateInvitation + adapter.transaction",
+      "steps": [
+        {
+          "input": {
+            "invitationId": "invitation-alias",
+            "status": "accepted",
+            "fromStatus": "pending"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "invitation-alias",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "pending",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "email": "recipient@organization-query-id.test",
+            "role": "member",
+            "teamId": null,
+            "status": "accepted",
+            "expiresAt": {
+              "type": "date",
+              "value": "2100-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "inviterId": "owner",
+            "id": "[object Object]",
+            "claimLookup": "[object Object]"
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "email",
+                "role",
+                "teamId",
+                "status",
+                "expiresAt",
+                "createdAt",
+                "inviterId",
+                "id",
+                "claimLookup"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "onUpdate",
+              "invitation.claimLookup",
+              {
+                "marker": "claimed-object",
+                "ownUndefined": {
+                  "type": "undefined"
+                }
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": false
+          }
+        },
+        {
+          "input": {
+            "operation": "read-only-adapter-transaction"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": true,
+          "keyOrder": [],
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              },
+              {
+                "id": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                },
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true,
+              false
+            ],
+            "originalValues": [
+              true,
+              false
+            ],
+            "returnedLookupIsReplacement": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "invitation-own-selector-lookup-nan",
+      "column": "lookup",
+      "kind": "nan",
+      "surface": "getOrgAdapter.updateInvitation + adapter.transaction",
+      "steps": [
+        {
+          "input": {
+            "invitationId": "invitation-alias",
+            "status": "accepted",
+            "fromStatus": "pending"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "pending",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": "invitation-alias"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "email": "recipient@organization-query-id.test",
+            "role": "member",
+            "teamId": null,
+            "status": "accepted",
+            "expiresAt": {
+              "type": "date",
+              "value": "2100-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "inviterId": "owner",
+            "id": "canonical-invitation",
+            "claimLookup": {
+              "type": "number",
+              "value": "NaN"
+            }
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "email",
+                "role",
+                "teamId",
+                "status",
+                "expiresAt",
+                "createdAt",
+                "inviterId",
+                "id",
+                "claimLookup"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "onUpdate",
+              "invitation.claimLookup",
+              {
+                "type": "number",
+                "value": "NaN"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "type": "number",
+                  "value": "NaN"
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": true
+          }
+        },
+        {
+          "input": {
+            "operation": "read-only-adapter-transaction"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "type": "number",
+                  "value": "NaN"
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": true,
+          "keyOrder": [],
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "type": "number",
+                  "value": "NaN"
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": true
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "invitation-own-selector-lookup-object",
+      "column": "lookup",
+      "kind": "object",
+      "surface": "getOrgAdapter.updateInvitation + adapter.transaction",
+      "steps": [
+        {
+          "input": {
+            "invitationId": "invitation-alias",
+            "status": "accepted",
+            "fromStatus": "pending"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "pending",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": "invitation-alias"
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "email": "recipient@organization-query-id.test",
+            "role": "member",
+            "teamId": null,
+            "status": "accepted",
+            "expiresAt": {
+              "type": "date",
+              "value": "2100-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "inviterId": "owner",
+            "id": "canonical-invitation",
+            "claimLookup": {
+              "marker": "claimed-object",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "email",
+                "role",
+                "teamId",
+                "status",
+                "expiresAt",
+                "createdAt",
+                "inviterId",
+                "id",
+                "claimLookup"
+              ]
+            },
+            {
+              "path": [
+                "claimLookup"
+              ],
+              "keys": [
+                "marker",
+                "ownUndefined"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "onUpdate",
+              "invitation.claimLookup",
+              {
+                "marker": "claimed-object",
+                "ownUndefined": {
+                  "type": "undefined"
+                }
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": true
+          }
+        },
+        {
+          "input": {
+            "operation": "read-only-adapter-transaction"
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": true,
+          "keyOrder": [],
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [],
+            "invitation": [
+              {
+                "id": "canonical-invitation",
+                "organizationId": "parent",
+                "email": "recipient@organization-query-id.test",
+                "role": "member",
+                "status": "accepted",
+                "teamId": null,
+                "expiresAt": {
+                  "type": "date",
+                  "value": "2100-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "inviterId": "owner",
+                "lookup": {
+                  "marker": "claimed-object",
+                  "ownUndefined": {
+                    "type": "undefined"
+                  }
+                }
+              }
+            ],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "identities": {
+            "originalRows": [
+              true
+            ],
+            "originalValues": [
+              true
+            ],
+            "returnedLookupIsReplacement": true
+          }
+        }
+      ]
+    }
+  ]
+}
