@@ -70,13 +70,13 @@ api_key_model!(serial, i32, crate::SqlNumber, "Integer");
 pub(super) mod user {
     use sea_orm::entity::prelude::*;
 
-    #[derive(Clone, Debug, PartialEq, DeriveEntityModel, crate::AuthEntity)]
+    #[derive(Clone, Debug, PartialEq, serde::Serialize, DeriveEntityModel, crate::AuthEntity)]
     #[auth(role = "user")]
     #[sea_orm(table_name = "user")]
     pub struct Model {
         #[sea_orm(primary_key, auto_increment = false)]
         pub id: i32,
-        pub name: String,
+        pub name: Option<String>,
         pub email: String,
         #[sea_orm(column_name = "emailVerified")]
         pub email_verified: bool,

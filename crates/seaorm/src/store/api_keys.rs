@@ -9,8 +9,8 @@ use super::value_filter::QueryPredicate;
 use async_trait::async_trait;
 use chrono::Utc;
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder,
-    QuerySelect, QueryTrait, sea_query::Expr,
+    ConnectionTrait, EntityTrait, ExprTrait, Order, QueryFilter, QueryOrder, QuerySelect,
+    QueryTrait, sea_query::Expr,
 };
 
 use better_auth_core::store::{

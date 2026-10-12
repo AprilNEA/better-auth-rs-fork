@@ -64,6 +64,11 @@ async fn rows(database: &DatabaseConnection, sql: &str) -> AuthResult<JsonValue>
                 .iter()
                 .map(|column| column.name())
                 .collect(),
+            backend => {
+                return Err(AuthError::internal(format!(
+                    "Unsupported SQL cleanup backend: {backend:?}"
+                )));
+            }
         };
         let fields = columns
             .into_iter()
