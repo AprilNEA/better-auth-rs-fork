@@ -107,10 +107,6 @@ fn catch_errors(
     result
 }
 
-async fn first_poll(task: &mut BackgroundFuture) -> Poll<AuthResult<FieldValue>> {
-    std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut *task).poll(context))).await
-}
-
 /// Start an unowned promise and report its terminal rejection without an application catch.
 #[doc(hidden)]
 pub async fn start_unowned(task: BackgroundFuture, boundary: &'static str) {
@@ -131,7 +127,7 @@ pub async fn start_unowned_with_error_messages(
     error_messages: &'static [&'static str],
     boundary: &'static str,
 ) {
-    let first = first_poll(&mut task).await;
+    let first = crate::request_runtime::concurrent::first_poll(Pin::new(&mut task)).await;
     let logger = logger.clone();
     let finish = move |result| {
         if let Err(error) = catch_errors(&logger, result, error_messages) {
@@ -227,7 +223,7 @@ async fn run(
     }
     // JavaScript callbacks start before the handler receives their promise. Poll once
     // in the caller's context before transferring the pending Rust future.
-    let first = first_poll(&mut task).await;
+    let first = crate::request_runtime::concurrent::first_poll(Pin::new(&mut task)).await;
     let ready = match first {
         Poll::Ready(result) => Some(result),
         Poll::Pending => None,

@@ -427,19 +427,24 @@ pub(super) async fn verify_authentication_core(
 fn validate_counter(counter: u32, stored: &FieldValue) -> AuthResult<()> {
     use std::cmp::Ordering;
 
-    let counter = FieldValue::Number(f64::from(counter));
-    if (counter.is_truthy()
+    let value = FieldValue::Number(f64::from(counter));
+    if (value.is_truthy()
         || better_auth_core::query::field_compare(stored, &0.0.into())? == Some(Ordering::Greater))
         && matches!(
-            better_auth_core::query::field_compare(&counter, stored)?,
+            better_auth_core::query::field_compare(&value, stored)?,
             Some(Ordering::Less | Ordering::Equal)
         )
     {
-        return Err(AuthError::internal(format!(
-            "Response counter value {} was lower than expected {}",
-            counter.display_string()?,
-            stored.display_string()?
-        )));
+        let mut message = format!("Response counter value {counter} was lower than expected ")
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        message.extend_from_slice(stored.display_utf16()?.as_utf16());
+        let error = AuthError::internal("").into_thrown_value()?;
+        error.set_model_property(
+            "message",
+            better_auth_core::Utf16String::from_units(message).into(),
+        )?;
+        return Err(AuthError::from_thrown(error));
     }
     Ok(())
 }

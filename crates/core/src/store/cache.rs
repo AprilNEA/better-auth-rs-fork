@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
+use futures_util::future::BoxFuture;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
@@ -7,9 +8,50 @@ use std::sync::{Arc, Mutex};
 use crate::FieldValue;
 use crate::error::{AuthError, AuthResult};
 
+/// An owned storage completion that can outlive the initiating cache operation.
+pub type SecondaryStorageFuture<T> = BoxFuture<'static, AuthResult<T>>;
+
 /// Shared secondary storage. Values have no expiration when `ttl_seconds` is absent.
 #[async_trait]
 pub trait SecondaryStorage: Send + Sync {
+    /// Invoke a native read. An invocation error occurs before a completion future exists.
+    fn invoke_get_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<SecondaryStorageFuture<Option<FieldValue>>>
+    where
+        Self: 'static,
+    {
+        Ok(Box::pin(async move { self.get_native(&key).await }))
+    }
+
+    /// Invoke a native write. Async implementations retain their existing rejected-future behavior.
+    /// An outer `None` omits the TTL argument; `Some(None)` supplies an undefined TTL.
+    fn invoke_set_native(
+        self: Arc<Self>,
+        key: FieldValue,
+        value: FieldValue,
+        ttl_seconds: Option<Option<f64>>,
+    ) -> AuthResult<SecondaryStorageFuture<()>>
+    where
+        Self: 'static,
+    {
+        Ok(Box::pin(async move {
+            self.set_native(&key, &value, ttl_seconds.flatten()).await
+        }))
+    }
+
+    /// Invoke a native deletion separately from awaiting its completion.
+    fn invoke_delete_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<SecondaryStorageFuture<()>>
+    where
+        Self: 'static,
+    {
+        Ok(Box::pin(async move { self.delete_native(&key).await }))
+    }
+
     async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>>;
     /// Read a projected key without coercing native values into strings.
     async fn get_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {

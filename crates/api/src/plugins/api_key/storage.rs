@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use better_auth_core::request_runtime::concurrent::{self, FailureReporter};
+use better_auth_core::request_runtime::concurrent::{self, FailureReporter, StartedOperation};
 use better_auth_core::store::SecondaryStorage;
 #[cfg(test)]
 use better_auth_core::wire::ApiKeyView;
@@ -57,6 +57,8 @@ use reference::{cache_key, modify_reference};
 #[cfg(test)]
 mod batch_tests;
 #[cfg(test)]
+mod cache_key_order_tests;
+#[cfg(test)]
 mod cache_metadata_tests;
 #[cfg(test)]
 mod date_methods_tests;
@@ -106,15 +108,14 @@ pub(super) fn now() -> better_auth_core::FieldDate {
     Utc::now().into()
 }
 
-fn ttl(key: &ApiKey) -> AuthResult<Option<u64>> {
+fn ttl(key: &ApiKey, clock: impl FnOnce() -> f64) -> AuthResult<Option<u64>> {
     let expires = key.expires_at.field_value();
     if !expires.is_truthy() {
         return Ok(None);
     }
-    let seconds = ((better_auth_core::query::field_date(&expires)?.milliseconds()
-        - Utc::now().timestamp_millis() as f64)
-        / 1000.0)
-        .floor();
+    let now = clock();
+    let seconds =
+        ((better_auth_core::query::field_date(&expires)?.milliseconds() - now) / 1000.0).floor();
     Ok((seconds > 0.0).then_some(seconds as u64))
 }
 
@@ -176,22 +177,24 @@ fn deserialize_fields(value: Option<FieldValue>) -> Option<FieldMap> {
     Some(fields)
 }
 
-async fn cached(storage: &dyn SecondaryStorage, key: &str) -> AuthResult<Option<ApiKey>> {
+async fn cached(storage: Arc<dyn SecondaryStorage>, key: &str) -> AuthResult<Option<ApiKey>> {
     cached_native(storage, &key.into()).await
 }
 
 async fn cached_native(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &FieldValue,
 ) -> AuthResult<Option<ApiKey>> {
-    Ok(deserialize(storage.get_native(key).await?))
+    Ok(deserialize(storage.invoke_get_native(key.clone())?.await?))
 }
 
 async fn cached_native_fields(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &FieldValue,
 ) -> AuthResult<Option<FieldMap>> {
-    Ok(deserialize_fields(storage.get_native(key).await?))
+    Ok(deserialize_fields(
+        storage.invoke_get_native(key.clone())?.await?,
+    ))
 }
 
 pub(super) async fn put(
@@ -199,57 +202,91 @@ pub(super) async fn put(
     key: &ApiKey,
     fallback: bool,
 ) -> AuthResult<()> {
+    let pending = PendingWrite::start(storage.clone(), key, fallback).await?;
     let key = key.clone();
     concurrent::retain("API key cache write", move |reporter| async move {
         let batch = StorageBatch::new(&reporter);
-        put_in_batch(storage.as_ref(), &key, fallback, &batch).await
+        pending.finish(storage, &key, &batch).await
     })
     .await
 }
 
+struct PendingWrite {
+    operations: Vec<StartedOperation<()>>,
+    insert_reference: Option<FieldValue>,
+}
+
+impl PendingWrite {
+    async fn start(
+        storage: Arc<dyn SecondaryStorage>,
+        key: &ApiKey,
+        fallback: bool,
+    ) -> AuthResult<Self> {
+        let ttl = ttl(key, || Utc::now().timestamp_millis() as f64)?.map(|seconds| seconds as f64);
+        let value = serialize(key)?;
+        let reference = cache_key("api-key:by-ref:", &key.reference_id.field_value())?;
+        let hashed = cache_key("api-key:", &key.key_hash.field_value())?;
+        let hashed = StartedOperation::new(
+            "API key unowned cache write",
+            storage
+                .clone()
+                .invoke_set_native(hashed, value.clone(), Some(ttl))?,
+        )
+        .await;
+        let id = cache_key("api-key:by-id:", &key.id.field_value())?;
+        let id = StartedOperation::new(
+            "API key unowned cache write",
+            storage.clone().invoke_set_native(id, value, Some(ttl))?,
+        )
+        .await;
+        let mut operations = vec![hashed, id];
+        let insert_reference = if fallback {
+            operations.push(
+                StartedOperation::new(
+                    "API key unowned cache invalidation",
+                    storage.invoke_delete_native(reference)?,
+                )
+                .await,
+            );
+            None
+        } else {
+            Some(reference)
+        };
+        Ok(Self {
+            operations,
+            insert_reference,
+        })
+    }
+
+    async fn finish(
+        self,
+        storage: Arc<dyn SecondaryStorage>,
+        key: &ApiKey,
+        batch: &StorageBatch<'_>,
+    ) -> Option<()> {
+        future::join_all(
+            self.operations
+                .into_iter()
+                .map(|operation| operation.map(|result| batch.observe(result))),
+        )
+        .await
+        .into_iter()
+        .collect::<Option<Vec<_>>>()?;
+        if let Some(reference) = self.insert_reference {
+            batch.observe(modify_reference(storage, key, reference, true).await)?;
+        }
+        Some(())
+    }
+}
+
 async fn put_in_batch(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &ApiKey,
     fallback: bool,
     batch: &StorageBatch<'_>,
 ) -> Option<()> {
-    let ttl = batch.observe(ttl(key))?;
-    let value = batch.observe(serialize(key))?;
-    let hashed = batch.observe(cache_key("api-key:", &key.key_hash.field_value()))?;
-    let id = batch.observe(cache_key("api-key:by-id:", &key.id.field_value()))?;
-    let reference = batch.observe(cache_key(
-        "api-key:by-ref:",
-        &key.reference_id.field_value(),
-    ))?;
-    let ttl = ttl.map(|seconds| seconds as f64);
-    if fallback {
-        let (hashed, id, reference) = tokio::join!(
-            storage
-                .set_native(&hashed, &value, ttl)
-                .map(|result| batch.observe(result)),
-            storage
-                .set_native(&id, &value, ttl)
-                .map(|result| batch.observe(result)),
-            storage
-                .delete_native(&reference)
-                .map(|result| batch.observe(result))
-        );
-        hashed?;
-        id?;
-        reference
-    } else {
-        let (hashed, id) = tokio::join!(
-            storage
-                .set_native(&hashed, &value, ttl)
-                .map(|result| batch.observe(result)),
-            storage
-                .set_native(&id, &value, ttl)
-                .map(|result| batch.observe(result))
-        );
-        hashed?;
-        id?;
-        batch.observe(modify_reference(storage, key, true).await)
-    }
+    let pending = batch.observe(PendingWrite::start(storage.clone(), key, fallback).await)?;
+    pending.finish(storage, key, batch).await
 }
 
 async fn remove_cached(
@@ -257,31 +294,37 @@ async fn remove_cached(
     key: &ApiKey,
     fallback: bool,
 ) -> AuthResult<()> {
-    let hashed = cache_key("api-key:", &key.key_hash.field_value())?;
-    let id = cache_key("api-key:by-id:", &key.id.field_value())?;
     let reference = cache_key("api-key:by-ref:", &key.reference_id.field_value())?;
+    let hashed = cache_key("api-key:", &key.key_hash.field_value())?;
+    let hashed = StartedOperation::new(
+        "API key unowned cache removal",
+        storage.clone().invoke_delete_native(hashed)?,
+    )
+    .await;
+    let id = cache_key("api-key:by-id:", &key.id.field_value())?;
+    let id = StartedOperation::new(
+        "API key unowned cache removal",
+        storage.clone().invoke_delete_native(id)?,
+    )
+    .await;
     let key = key.clone();
+    let reference = if fallback {
+        storage.invoke_delete_native(reference)?
+    } else {
+        Box::pin(async move { modify_reference(storage, &key, reference, false).await })
+    };
+    let reference = StartedOperation::new("API key unowned reference removal", reference).await;
     concurrent::retain("API key cache removal", move |reporter| async move {
         let batch = StorageBatch::new(&reporter);
-        let reference = async {
-            if fallback {
-                storage.delete_native(&reference).await
-            } else {
-                modify_reference(storage.as_ref(), &key, false).await
-            }
-        };
-        let (hashed, id, reference) = tokio::join!(
-            storage
-                .delete_native(&hashed)
-                .map(|result| batch.observe(result)),
-            storage
-                .delete_native(&id)
-                .map(|result| batch.observe(result)),
-            reference.map(|result| batch.observe(result))
-        );
-        hashed?;
-        id?;
-        reference
+        future::join_all(
+            [hashed, id, reference]
+                .into_iter()
+                .map(|operation| operation.map(|result| batch.observe(result))),
+        )
+        .await
+        .into_iter()
+        .collect::<Option<Vec<_>>>()
+        .map(|_| ())
     })
     .await
 }
@@ -316,7 +359,7 @@ async fn get(
             } else {
                 format!("api-key:by-id:{value}")
             };
-            if let Some(key) = cached(storage.as_ref(), &key).await? {
+            if let Some(key) = cached(storage.clone(), &key).await? {
                 return Ok(Some(key));
             }
         }
@@ -510,15 +553,15 @@ async fn list_in_batch(
     // A failed group stops its own workers; independent groups keep running.
     let batch = StorageBatch::new(reporter);
     let storage = backend(config, ctx);
+    let reference_key = batch.observe(
+        storage
+            .filter(|_| config.storage == ApiKeyStorage::SecondaryStorage)
+            .map(|_| cache_key("api-key:by-ref:", reference))
+            .transpose(),
+    )?;
     if config.storage == ApiKeyStorage::SecondaryStorage {
-        if let Some(storage) = storage {
-            let ids = batch.observe(
-                reference::read(
-                    storage.as_ref(),
-                    &batch.observe(cache_key("api-key:by-ref:", reference))?,
-                )
-                .await,
-            )?;
+        if let (Some(storage), Some(reference_key)) = (storage, reference_key.as_ref()) {
+            let ids = batch.observe(reference::read(storage.clone(), reference_key).await)?;
             if !config.fallback_to_database || batch.observe(reference::has_entries(&ids))? {
                 let mut keys = match batch.observe(reference::items(&ids))? {
                     reference::Items::Complete(values) => values,
@@ -537,7 +580,7 @@ async fn list_in_batch(
                                             &better_auth_core::schema_value::number_string(index),
                                         )?;
                                         cached_native_fields(
-                                            storage.as_ref(),
+                                            storage.clone(),
                                             &cache_key("api-key:by-id:", &id)?,
                                         )
                                         .await
@@ -589,13 +632,14 @@ async fn list_in_batch(
     if config.storage == ApiKeyStorage::SecondaryStorage
         && !keys.is_empty()
         && let Some(storage) = storage
+        && let Some(reference_key) = reference_key
     {
         let mut results = stream::iter(keys.into_iter().enumerate())
             .take_while(|_| future::ready(!batch.failed()))
             .map(|(index, key)| {
                 let batch = &batch;
                 async move {
-                    let result = put_in_batch(storage.as_ref(), &key, true, batch).await;
+                    let result = put_in_batch(storage.clone(), &key, true, batch).await;
                     result.map(|()| (index, key))
                 }
             })
@@ -616,12 +660,12 @@ async fn list_in_batch(
             .collect::<Vec<_>>()
             .into();
         batch.observe(
-            storage
-                .set_native(
-                    &batch.observe(cache_key("api-key:by-ref:", reference))?,
-                    &batch.observe(ids.stringify_native())?,
+            batch
+                .observe(storage.clone().invoke_set_native(
+                    reference_key,
+                    batch.observe(ids.stringify_native())?,
                     None,
-                )
+                ))?
                 .await,
         )?;
     }

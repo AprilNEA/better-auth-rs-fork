@@ -20,7 +20,7 @@ async fn merge_usage(
     changed_rate: bool,
     changed_count: bool,
 ) -> AuthResult<Option<ApiKey>> {
-    let Some(mut fresh) = cached(storage.as_ref(), &format!("api-key:{lookup_hash}")).await? else {
+    let Some(mut fresh) = cached(storage.clone(), &format!("api-key:{lookup_hash}")).await? else {
         return Ok(None);
     };
     fresh.remaining.clone_from(&snapshot.remaining);

@@ -148,27 +148,37 @@ fn context(cache: Arc<Cache>, fallback: bool) -> (ApiKeyConfig, AuthContext<Stat
 
 #[tokio::test]
 async fn reference_mutations_compare_object_identity_and_native_numbers() {
-    let cache = Cache::default();
+    let cache = Arc::new(Cache::default());
     let id = FieldValue::from(vec![7.0.into()]);
     let key = record(id.clone());
     cache.seed(INDEX, "[[7]]".into());
-    modify_reference(&cache, &key, true).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), true)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), Some("[[7],[7]]".into()));
     cache.seed(INDEX, "[[7]]".into());
-    modify_reference(&cache, &key, false).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), false)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), Some("[[7]]".into()));
 
     cache.seed(INDEX, vec![id.clone()].into());
-    modify_reference(&cache, &key, true).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), true)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), Some("[[7]]".into()));
     cache.seed(INDEX, vec![id].into());
-    modify_reference(&cache, &key, false).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), false)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), None);
 
     let key = record(FieldValue::Number(f64::NAN));
     for insert in [true, false] {
         cache.seed(INDEX, vec![FieldValue::Number(f64::NAN)].into());
-        modify_reference(&cache, &key, insert).await.unwrap();
+        modify_reference(cache.clone(), &key, INDEX.into(), insert)
+            .await
+            .unwrap();
         assert_eq!(cache.value(INDEX), Some("[null]".into()));
     }
 }
@@ -180,7 +190,7 @@ async fn valid_non_arrays_fail_at_the_method_without_rewriting_the_index() {
     for source in ["null", "{}", "7", "false"] {
         for insert in [true, false] {
             cache.seed(INDEX, source.into());
-            let error = modify_reference(cache.as_ref(), &key, insert)
+            let error = modify_reference(cache.clone(), &key, INDEX.into(), insert)
                 .await
                 .unwrap_err();
             let method = if insert { "includes" } else { "filter" };
@@ -212,29 +222,33 @@ async fn valid_non_arrays_fail_at_the_method_without_rewriting_the_index() {
     }
     for source in ["malformed", ""] {
         cache.seed(INDEX, source.into());
-        modify_reference(cache.as_ref(), &key, true).await.unwrap();
+        modify_reference(cache.clone(), &key, INDEX.into(), true)
+            .await
+            .unwrap();
         assert_eq!(cache.value(INDEX), Some(r#"["key"]"#.into()));
     }
     cache.seed(INDEX, FieldMap::new().into());
-    modify_reference(cache.as_ref(), &key, true).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), true)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["key"]"#.into()));
 }
 
 #[tokio::test]
 async fn string_reference_lists_use_includes_and_code_point_spread() {
-    let cache = Cache::default();
+    let cache = Arc::new(Cache::default());
     cache.seed(INDEX, r#""A😀B""#.into());
-    modify_reference(&cache, &record("😀".into()), true)
+    modify_reference(cache.clone(), &record("😀".into()), INDEX.into(), true)
         .await
         .unwrap();
     assert_eq!(cache.value(INDEX), Some(r#""A😀B""#.into()));
-    modify_reference(&cache, &record("C".into()), true)
+    modify_reference(cache.clone(), &record("C".into()), INDEX.into(), true)
         .await
         .unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["A","😀","B","C"]"#.into()));
     cache.seed(INDEX, r#""A😀B""#.into());
     assert!(
-        modify_reference(&cache, &record("A".into()), false)
+        modify_reference(cache.clone(), &record("A".into()), INDEX.into(), false)
             .await
             .unwrap_err()
             .to_string()
@@ -350,7 +364,9 @@ async fn raw_utf16_cache_json_preserves_records_and_reference_mutation() {
     );
     assert_eq!(*cache.values.lock().unwrap(), before);
     assert!(cache.writes.lock().unwrap().is_empty());
-    modify_reference(cache.as_ref(), &key, true).await.unwrap();
+    modify_reference(cache.clone(), &key, INDEX.into(), true)
+        .await
+        .unwrap();
     assert_eq!(cache.value(INDEX), Some(r#"["\ud800"]"#.into()));
     remove_cached(cache.clone(), &key, false).await.unwrap();
     assert!(cache.values.lock().unwrap().is_empty());
@@ -368,7 +384,9 @@ async fn raw_utf16_cache_json_preserves_records_and_reference_mutation() {
         let invalid: FieldValue = Utf16String::from_units(units).into();
         assert!(deserialize(Some(invalid.clone())).is_none());
         cache.seed(INDEX, invalid);
-        modify_reference(cache.as_ref(), &key, true).await.unwrap();
+        modify_reference(cache.clone(), &key, INDEX.into(), true)
+            .await
+            .unwrap();
         assert_eq!(cache.value(INDEX), Some(r#"["\ud800"]"#.into()));
     }
 }

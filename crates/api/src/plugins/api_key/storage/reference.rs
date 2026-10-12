@@ -17,10 +17,10 @@ pub(super) fn cache_key(prefix: &str, value: &FieldValue) -> AuthResult<FieldVal
 }
 
 pub(super) async fn read(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &FieldValue,
 ) -> AuthResult<FieldValue> {
-    Ok(match storage.get_native(key).await? {
+    Ok(match storage.invoke_get_native(key.clone())?.await? {
         // The upstream catch applies only to JSON.parse, not to later method calls.
         Some(value @ (FieldValue::String(_) | FieldValue::Utf16String(_))) => {
             better_auth_core::utils::json::parse_native_json(&value)
@@ -105,12 +105,12 @@ fn next(value: FieldValue, id: &FieldValue, insert: bool) -> AuthResult<FieldVal
 }
 
 pub(super) async fn modify_reference(
-    storage: &dyn SecondaryStorage,
+    storage: Arc<dyn SecondaryStorage>,
     key: &ApiKey,
+    index: FieldValue,
     insert: bool,
 ) -> AuthResult<()> {
     // The upstream lock coordinates reference-list writers only within this process.
-    let index = cache_key("api-key:by-ref:", &key.reference_id.field_value())?;
     let units = index.display_utf16()?.as_utf16().to_vec();
     static LOCKS: OnceLock<ReferenceLocks> = OnceLock::new();
     let lock = {
@@ -129,12 +129,18 @@ pub(super) async fn modify_reference(
         }
     };
     let _guard = lock.lock().await;
-    let value = next(read(storage, &index).await?, &key.id.field_value(), insert)?;
+    // Promise.then defers the reference read even when the previous lock owner completed.
+    better_auth_core::request_runtime::concurrent::adapter_result(Ok(())).await?;
+    let value = next(
+        read(storage.clone(), &index).await?,
+        &key.id.field_value(),
+        insert,
+    )?;
     if property(&value, "length")?.strict_equals(&0.0.into()) {
-        storage.delete_native(&index).await
+        storage.invoke_delete_native(index)?.await
     } else {
         storage
-            .set_native(&index, &value.stringify_native()?, None)
+            .invoke_set_native(index, value.stringify_native()?, None)?
             .await
     }
 }

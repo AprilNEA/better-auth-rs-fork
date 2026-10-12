@@ -2,11 +2,18 @@
 
 use crate::{AuthError, AuthResult};
 use std::future::{Future, poll_fn};
-use std::pin::pin;
+use std::pin::{Pin, pin};
+use std::task::Poll;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
+mod started;
 #[cfg(test)]
 mod tests;
+pub use started::StartedOperation;
+
+pub(crate) async fn first_poll<F: Future + ?Sized>(mut future: Pin<&mut F>) -> Poll<F::Output> {
+    poll_fn(|context| Poll::Ready(future.as_mut().poll(context))).await
+}
 
 enum Progress {
     Started,

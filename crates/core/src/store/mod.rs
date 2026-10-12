@@ -40,7 +40,7 @@ use crate::types::{
     UpdateOrganization, UpdatePasskey, UpdatePasskeyAuthentication, UpdateUser,
 };
 
-pub use cache::{CacheAdapter, MemoryCacheAdapter, SecondaryStorage};
+pub use cache::{CacheAdapter, MemoryCacheAdapter, SecondaryStorage, SecondaryStorageFuture};
 
 /// Reject atomic updates after field conversion removes every assignment.
 #[doc(hidden)]

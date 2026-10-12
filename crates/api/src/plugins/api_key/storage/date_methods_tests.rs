@@ -185,3 +185,56 @@ async fn native_date_methods_match_complete_upstream_cache_writes() -> AuthResul
     }
     Ok(())
 }
+
+#[test]
+fn ttl_samples_clock_before_expiration_conversion_and_preserves_original_failure() -> AuthResult<()>
+{
+    for fails in [false, true] {
+        let events = Arc::new(Mutex::new(Vec::<&'static str>::new()));
+        let clock = Arc::new(std::sync::atomic::AtomicI64::new(2_000_000_000_000));
+        let original = FieldValue::from(FieldMap::from([(
+            "cause".into(),
+            "expiry conversion".into(),
+        )]));
+        let projected = Arc::new(FieldValue::from(FieldMap::new()));
+        let expected = Arc::downgrade(&projected);
+        let observed = events.clone();
+        let advanced = clock.clone();
+        let failure = original.clone();
+        projected.set_model_property(
+            "valueOf",
+            FieldFunction::contextual(move |receiver, arguments| {
+                assert!(receiver.strict_equals(&expected.upgrade().unwrap()));
+                assert!(arguments.is_empty());
+                observed.lock().unwrap().push("valueOf");
+                advanced.store(2_000_000_060_000, std::sync::atomic::Ordering::SeqCst);
+                if fails {
+                    Err(AuthError::from_thrown(failure.clone()))
+                } else {
+                    Ok(2_000_000_060_000.0.into())
+                }
+            })
+            .into(),
+        )?;
+        let mut fields = seed();
+        let _ = fields.insert("expiresAt".into(), projected.as_ref().clone());
+        let key = ApiKey::from_field_values(fields)?;
+        let result = ttl(&key, || {
+            events.lock().unwrap().push("Date.now");
+            clock.load(std::sync::atomic::Ordering::SeqCst) as f64
+        });
+        assert_eq!(*events.lock().unwrap(), ["Date.now", "valueOf"]);
+        if fails {
+            assert!(
+                result
+                    .unwrap_err()
+                    .into_thrown_value()?
+                    .strict_equals(&original)
+            );
+        } else {
+            assert_eq!(result?, Some(60));
+        }
+        assert!(key.expires_at.field_value().strict_equals(&projected));
+    }
+    Ok(())
+}
