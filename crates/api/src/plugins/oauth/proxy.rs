@@ -23,6 +23,8 @@ mod config_tests;
 #[cfg(test)]
 mod linking_tests;
 #[cfg(test)]
+mod native_input_tests;
+#[cfg(test)]
 mod native_result_tests;
 
 /// Production-to-preview callback configuration.
@@ -56,7 +58,7 @@ pub(super) fn validate_callback_url<S: AuthSchema>(
     callback: &str,
     ctx: &AuthContext<S>,
 ) -> AuthResult<()> {
-    // The proxy validates the original target before generating this configured receiver.
+    // HTTP origin middleware validates the original target before endpoint hooks run.
     // Exact equality keeps later hooks from substituting an untrusted target.
     if req
         .server_context(CALLBACK_CONTEXT)?
@@ -257,9 +259,7 @@ impl<S: AuthSchema> AuthPlugin<S> for OAuthProxyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<S>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
-        if req.method() == &HttpMethod::Post
-            && matches!(req.path(), "/sign-in/social" | "/link-social")
-        {
+        if req.path().starts_with("/sign-in/social") || req.path() == "/link-social" {
             return better_auth_core::observability::instrumentation::with_endpoint_hook(
                 &ctx.config,
                 req,
@@ -377,49 +377,59 @@ impl OAuthProxyPlugin {
         if self.config.skip_proxy(req, ctx) {
             return Ok(None);
         }
-        let mut body = match json_body::parse(req) {
-            Ok(Some(Value::Object(body))) => body,
-            _ => return Ok(None),
-        };
-        let Some(provider) = body
-            .get("provider")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-        else {
+        let body = req.input_field_value()?;
+        if body.is_null() || body.is_undefined() {
             return Ok(None);
-        };
+        }
+        let provider = body.model_property("provider")?;
+        if !provider.is_truthy() {
+            return Ok(None);
+        }
         let current = self.config.resolve_current_url(req, ctx)?;
-        let original = body
-            .get("callbackURL")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
-            .unwrap_or_else(|| handlers::auth_base_url(ctx));
-        handlers::validate_redirect_target(&original, ctx, "Invalid callbackURL")?;
-        let mut callback = parse_url(&format!(
-            "{}{}{}{}",
-            current.origin().ascii_serialization(),
-            ctx.config.base_path,
-            "/callback/",
-            provider
-        ))?;
-        callback.set_path(&format!("{}/oauth-proxy", callback.path()));
-        let _ = callback
-            .query_pairs_mut()
-            .append_pair("callbackURL", &original);
-        let _ = body.insert("callbackURL".into(), callback.to_string().into());
-        req.set_server_context(CALLBACK_CONTEXT, callback.to_string().into())?;
-        let redirect_base = self
+        let original = body.model_property("callbackURL")?;
+        let original = if original.is_truthy() {
+            original
+        } else {
+            ctx.base_url().into()
+        };
+        let base_path = if ctx.config.base_path.is_empty() {
+            "/api/auth"
+        } else {
+            &ctx.config.base_path
+        };
+        if let Some(production) = self
             .config
             .production_url
             .as_deref()
             .filter(|url| !url.is_empty())
-            .map(|url| format!("{}{}", url.trim_end_matches('/'), ctx.config.base_path))
-            .unwrap_or_else(|| handlers::auth_base_url(ctx));
-        req.set_server_context(REDIRECT_BASE_CONTEXT, redirect_base.into())?;
-        Ok(Some(BeforeRequestAction::ReplaceBody(serde_json::to_vec(
-            &body,
-        )?)))
+        {
+            req.set_server_context(
+                REDIRECT_BASE_CONTEXT,
+                format!("{}{base_path}", production.trim_end_matches('/')).into(),
+            )?;
+        }
+        let mut callback: Vec<u16> = format!(
+            "{}{base_path}/callback/",
+            current.origin().ascii_serialization(),
+        )
+        .encode_utf16()
+        .collect();
+        callback.extend_from_slice(provider.display_utf16()?.as_utf16());
+        callback.extend("/oauth-proxy?callbackURL=".encode_utf16());
+        let original = original
+            .display_utf16()?
+            .to_utf8()
+            .map_err(|_| AuthError::internal("URI malformed"))?;
+        callback.extend(
+            better_auth_core::utils::cookie_utils::encode_cookie_value(&original).encode_utf16(),
+        );
+        let callback: FieldValue = better_auth_core::Utf16String::from_units(callback).into();
+        let object = body
+            .as_object()
+            .ok_or_else(|| AuthError::type_error("Cannot assign callbackURL to this body"))?;
+        let _ = object.set("callbackURL", callback.clone())?;
+        req.set_server_context(CALLBACK_CONTEXT, callback)?;
+        Ok(None)
     }
 
     async fn wrap_authorization<S: AuthSchema>(

@@ -68,7 +68,7 @@ for (const name of ["missing", "null", "false", "number", "string", "array", "em
       if (name === "has-throw" || name === "get-throw") expect(logs[0].args[0]).toBe(sentinel);
       else {
         expect(logs[0].args[0]).toBeInstanceOf(TypeError);
-        console.info("Hook matcher primitive error:", JSON.stringify({ scenario: name, message: (logs[0].args[0] as TypeError).message }));
+        expect((logs[0].args[0] as TypeError).message).toBe("ctx.body is not an Object. (evaluating '\"phoneNumber\" in ctx.body')");
       }
       expect(events).toStrictEqual(name === "has-throw" ? ["has:phoneNumber"] : name === "get-throw" ? ["has:phoneNumber", "get:phoneNumber"] : []);
     } else if (name === "phone-undefined" || name === "phone-value") {

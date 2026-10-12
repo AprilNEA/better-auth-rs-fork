@@ -11,47 +11,6 @@ pub(crate) fn is_truthy(value: &Value) -> bool {
     }
 }
 
-/// Parse the HTTP JSON boundary before endpoint schema validation.
-pub(crate) fn parse(req: &AuthRequest) -> AuthResult<Option<Value>> {
-    let Some(bytes) = req.body.as_deref().filter(|bytes| !bytes.is_empty()) else {
-        return Ok(None);
-    };
-    if better_auth_core::hooks::current_request_hook_context()
-        .is_some_and(|context| !context.is_http)
-    {
-        return decode(bytes).map(Some);
-    }
-    let content_type = req
-        .headers
-        .iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
-        .map(|(_, value)| value.as_str())
-        .unwrap_or_default();
-    if !content_type
-        .split(';')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .to_ascii_lowercase()
-        .contains("application/json")
-    {
-        let message = if content_type.is_empty() {
-            "Content-Type is required. Allowed types: application/json".to_owned()
-        } else {
-            format!(
-                "Content-Type \"{content_type}\" is not allowed. Allowed types: application/json"
-            )
-        };
-        return Err(AuthError::from_code(415, "UNSUPPORTED_MEDIA_TYPE", message));
-    }
-    decode(bytes).map(Some)
-}
-
-pub(crate) fn decode(bytes: &[u8]) -> AuthResult<Value> {
-    serde_json::from_slice(bytes)
-        .map_err(|_| AuthError::from_code(400, "BAD_REQUEST", "Invalid JSON in request body"))
-}
-
 pub(crate) fn type_name(value: Option<&Value>) -> &'static str {
     match value {
         None => "undefined",

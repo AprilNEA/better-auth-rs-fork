@@ -339,6 +339,7 @@ impl FieldValue {
 
     /// Check property presence without reading the value, rejecting primitive receivers as JavaScript `in` does.
     /// Object sources own prototype lookup. Arrays expose indices and length; Date and function handles have no named property storage.
+    // shortcut: Primitive error text lacks source-expression provenance; retain that provenance before matching engine-specific diagnostics.
     pub fn has_property(&self, name: &str) -> AuthResult<bool> {
         match self {
             Self::Object(object) => object.has_property(name),

@@ -623,6 +623,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/hook-matcher-input.test.ts \
         ./compat-tests/reference-server/contracts/api-key-field-policies.test.ts \
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-proxy-native-input.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
