@@ -178,3 +178,18 @@ export function createNativeSortHarness(consumer, scenario) {
 
   return { rows, cells, events, capture, record: event, observe: protectedValues.observe };
 }
+
+export function assertNativeSortObservation(observed) {
+  for (const captured of observed.cases) {
+    const scenario = [...nativeSortScenarios, ...jwkSortScenarios].find(candidate => candidate.name === captured.scenario);
+    assert.ok(scenario);
+    const label = `${captured.consumer}/${captured.scenario}/${captured.direction ?? captured.lane}`;
+    if (scenario.fail) {
+      assert.equal(captured.counts[scenario.fail.phase], scenario.fail.at, `${label}: The configured failure must be reached`);
+      assert.equal(captured.outcome.returned, false, label);
+      assert.equal(captured.outcome.sameOriginal, true, `${label}: The consumer must propagate the original comparison failure`);
+    } else {
+      assert.equal(captured.outcome.returned, true, `${label}: ${JSON.stringify(captured.outcome)}`);
+    }
+  }
+}

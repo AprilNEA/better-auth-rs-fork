@@ -375,7 +375,7 @@ async fn raw_utf16_cache_json_preserves_records_and_reference_mutation() {
     cache.seed(INDEX, native);
     let expected = cache.value(INDEX).unwrap();
     assert!(
-        read(cache.as_ref(), &INDEX.into())
+        read(cache.clone(), &INDEX.into())
             .await
             .unwrap()
             .strict_equals(&expected)

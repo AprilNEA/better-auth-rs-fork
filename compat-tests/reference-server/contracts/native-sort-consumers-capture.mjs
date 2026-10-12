@@ -6,7 +6,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { getJwksAdapter } from "../node_modules/better-auth/dist/plugins/jwt/adapter.mjs";
 import { withClock } from "./email-verification-duration-capture.mjs";
 import { assertSecondaryNativeVersions, withSecondarySourceExports } from "./secondary-native-shared.mjs";
-import { createNativeSortHarness, nativeSortScenarios, jwkSortScenarios } from "./native-sort-consumers-shared.mjs";
+import { assertNativeSortObservation, createNativeSortHarness, nativeSortScenarios, jwkSortScenarios } from "./native-sort-consumers-shared.mjs";
 import { writeObservation } from "./write-observation.mjs";
 
 const version = "1.7.6";
@@ -23,10 +23,17 @@ async function captureMemory(scenario, direction) {
     database: memoryAdapter(memory), baseURL: "http://native-sort-consumers.test",
     secret: "native-sort-consumers-contract-at-least-32-characters",
     logger: { disabled: true }, telemetry: { enabled: false }, rateLimit: { enabled: false },
-    user: { additionalFields: { name: { type: "string", required: false, transform: { output(value) {
-      harness.record("output", { value: value !== null && typeof value === "object" ? "native-object" : harness.observe(value) });
-      return value;
-    } } } },
+    user: {
+      additionalFields: {
+        name: {
+          type: "string", required: false,
+          transform: { output(value) {
+            harness.record("output", { value: value !== null && typeof value === "object" ? "native-object" : harness.observe(value) });
+            return value;
+          } },
+        },
+      },
+    },
   }).$context;
   assert.deepEqual(harness.events, [], "Context initialization must not consume sorting fields");
   const captured = await harness.capture(() => adapter.findMany({
@@ -106,6 +113,7 @@ if (import.meta.main) {
   try {
     await captureNativeSortConsumers(observed);
     assert.equal(observed.cases.length, nativeSortScenarios.length * 5 + (jwkSortScenarios.length + 1) * 4);
+    assertNativeSortObservation(observed);
     writeFileSync(output, `${JSON.stringify(observed, null, 2)}\n`);
   } finally {
     const serialized = `${JSON.stringify(observed, null, 2)}\n`;
