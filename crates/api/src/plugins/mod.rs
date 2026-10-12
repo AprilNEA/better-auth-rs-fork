@@ -45,7 +45,10 @@ pub(crate) struct StatusResponse {
 pub(crate) mod test_helpers {
     #[path = "../../../../../tests/support/secondary_native_observation.rs"]
     pub(crate) mod native_observation;
+    use native_observation as native_test_observation;
     pub(crate) mod native_session;
+    #[path = "../../../../../tests/support/native_sort_contract.rs"]
+    pub(crate) mod native_sort_contract;
     pub(crate) mod verification_consumer_native;
 
     use std::collections::HashMap;
@@ -55,7 +58,7 @@ pub(crate) mod test_helpers {
     use better_auth_core::wire::{SessionView, UserView};
     use better_auth_core::{
         AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResult, AuthSchema,
-        CreateSession, CreateUser, FieldValue, HttpMethod,
+        CreateSession, CreateUser, FieldDate, FieldFunction, FieldMap, FieldValue, HttpMethod,
         plugin_runtime::{AdapterUserFields, ApplicationUserFields},
         store::{AuthStore, schema::SchemaConfiguration},
     };

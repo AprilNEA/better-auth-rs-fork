@@ -1,14 +1,9 @@
-import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { runStandaloneCapture } from "./standalone-capture";
-import { writeObservation } from "./write-observation.mjs";
+import { test } from "bun:test";
+import { expectStandaloneCapture } from "./standalone-capture";
 
 test("data records retain native sorting callbacks, failures, returned identities and complete storage", async () => {
   const capture = new URL("./native-sort-data-capture.mjs", import.meta.url);
-  const first = await runStandaloneCapture(capture);
-  await writeObservation(first.stdout);
-  expect({ status: first.status, stderr: first.stderr }, `Capture evidence: ${first.directory}`).toEqual({ status: 0, stderr: "" });
-  const second = await runStandaloneCapture(capture);
-  expect({ status: second.status, stderr: second.stderr }, `Capture evidence: ${second.directory}`).toEqual({ status: 0, stderr: "" });
-  expect(readFileSync(second.output, "utf8"), `Capture evidence: ${second.directory}`).toBe(readFileSync(first.output, "utf8"));
+  const fixture = new URL("../../../tests/fixtures/native-sort-data-1.7.6.json.gz", import.meta.url);
+  await expectStandaloneCapture(capture, fixture);
+  await expectStandaloneCapture(capture, fixture);
 }, 120_000);

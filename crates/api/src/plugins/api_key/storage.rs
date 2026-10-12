@@ -62,6 +62,8 @@ mod cache_key_order_tests;
 mod cache_metadata_tests;
 #[cfg(test)]
 mod date_methods_tests;
+#[cfg(test)]
+mod native_sort_tests;
 
 /// Persistence used by an API Key configuration.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -678,40 +680,27 @@ async fn list_in_batch(
 
 fn sort_keys(keys: &mut [FieldValue], sort_by: &str, direction: Option<&str>) -> AuthResult<()> {
     use std::cmp::Ordering::{Equal, Greater, Less};
-    let mut values = keys
-        .iter()
-        .map(|key| list_field(key, sort_by))
-        .collect::<AuthResult<Vec<_>>>()?;
-    let compare = |left: &FieldValue, right: &FieldValue| -> AuthResult<std::cmp::Ordering> {
-        let ordering = match (left, right) {
+    let ascending = direction.filter(|value| !value.is_empty()).unwrap_or("asc") == "asc";
+    better_auth_core::query::sort_by(keys, |left, right| {
+        let left = list_field(left, sort_by)?;
+        let right = list_field(right, sort_by)?;
+        let ordering = match (&left, &right) {
             (
                 FieldValue::Null | FieldValue::Undefined,
                 FieldValue::Null | FieldValue::Undefined,
             ) => Equal,
             (FieldValue::Null | FieldValue::Undefined, _) => Less,
             (_, FieldValue::Null | FieldValue::Undefined) => Greater,
-            _ => better_auth_core::query::field_compare(left, right)?.unwrap_or(Equal),
+            _ if better_auth_core::query::field_compare(&left, &right)? == Some(Less) => Less,
+            _ if better_auth_core::query::field_compare(&left, &right)? == Some(Greater) => Greater,
+            _ => Equal,
         };
-        Ok(if direction == Some("desc") {
-            ordering.reverse()
-        } else {
+        Ok(if ascending {
             ordering
+        } else {
+            ordering.reverse()
         })
-    };
-    // Mixed values and invalid dates can violate sort_by's total-order requirement.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "The outer range bounds current; current only decreases while positive"
-    )]
-    for index in 1..keys.len() {
-        let mut current = index;
-        while current > 0 && compare(&values[current], &values[current - 1])? == Less {
-            keys.swap(current - 1, current);
-            values.swap(current - 1, current);
-            current -= 1;
-        }
-    }
-    Ok(())
+    })
 }
 
 pub(super) fn deduplicate(keys: &mut Vec<FieldValue>) -> AuthResult<()> {

@@ -3,8 +3,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 import { assertObservationReplay } from "./observation-replay.mjs";
 import { writeObservation } from "./write-observation.mjs";
+
+export function readStandaloneFixture(fixture: URL): string {
+  const encoded = readFileSync(fixture);
+  return (fixture.pathname.endsWith(".gz") ? gunzipSync(encoded) : encoded).toString("utf8");
+}
 
 export async function runStandaloneCapture(
   capture: URL,
@@ -34,7 +40,7 @@ export async function expectStandaloneCapture(
   fixture: URL,
   args: readonly string[] = [],
 ): Promise<void> {
-  const expected = readFileSync(fixture, "utf8");
+  const expected = readStandaloneFixture(fixture);
   const { directory, output, stderr, status } = await runStandaloneCapture(capture, args);
   expect({ status, stderr }, `Capture evidence: ${directory}`).toEqual({ status: 0, stderr: "" });
   expect(readFileSync(output, "utf8"), `Capture evidence: ${directory}`).toBe(expected);
@@ -61,7 +67,7 @@ export async function expectStandaloneObservation(
     expect(status, `Capture evidence: ${directory}`).toBe(0);
     assertObservationReplay(
       JSON.parse(readFileSync(output, "utf8")),
-      JSON.parse(readFileSync(fixture, "utf8")),
+      JSON.parse(readStandaloneFixture(fixture)),
       label,
       hostPaths,
     );

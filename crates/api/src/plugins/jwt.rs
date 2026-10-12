@@ -452,6 +452,8 @@ fn jose_error(error: josekit::JoseError) -> AuthError {
 }
 
 #[cfg(test)]
+mod native_sort_tests;
+#[cfg(test)]
 mod native_tests;
 #[cfg(test)]
 mod session_contract_tests;

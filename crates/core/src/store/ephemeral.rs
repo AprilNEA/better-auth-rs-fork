@@ -59,6 +59,8 @@ mod native_join_grouping_tests;
 mod native_joins;
 #[cfg(test)]
 mod native_relation_property_tests;
+#[cfg(test)]
+mod native_sort_tests;
 mod operation;
 #[cfg(test)]
 mod operation_contract_tests;
@@ -85,10 +87,10 @@ mod rows;
 mod runtime;
 #[cfg(test)]
 mod serial_primary_tests;
-#[cfg(test)]
-mod shared_column_contract_tests;
 mod session_hooks;
 mod sessions;
+#[cfg(test)]
+mod shared_column_contract_tests;
 mod state;
 mod table;
 mod team_capacity;

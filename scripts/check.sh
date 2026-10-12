@@ -405,13 +405,15 @@ run_stage() {
       ;;
     memory-sorting)
       cargo fmt --all -- --check
-      cargo clippy --locked -p better-auth-core --lib -- -D warnings
+      cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings
       cargo test --locked -p better-auth-core --lib -- \
         store::ephemeral::api_keys::tests::sorting:: \
         store::ephemeral::organization::query_tests:: \
-        field_value::tests::
-      cargo test --locked -p better-auth-api --lib plugins::api_key::tests::list_tests::
+        field_value::tests:: native_sort_
+      cargo test --locked -p better-auth-api --lib -- plugins::api_key::tests::list_tests:: native_sort_
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/native-sort-consumers-capture.test.ts \
+        ./compat-tests/reference-server/contracts/native-sort-data-capture.test.ts \
         ./compat-tests/reference-server/contracts/memory-sort.test.ts \
         ./compat-tests/reference-server/contracts/memory-name-coercion.test.ts \
         ./compat-tests/reference-server/contracts/member-sort-stability.test.ts \
@@ -618,6 +620,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/password-native-boundary-capture.test.ts \
         ./compat-tests/reference-server/contracts/password-query-order-capture.test.ts \
         ./compat-tests/reference-server/contracts/password-session-boundary-capture.test.ts \
+        ./compat-tests/reference-server/contracts/native-sort-consumers-capture.test.ts \
+        ./compat-tests/reference-server/contracts/native-sort-data-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-date-methods-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-date-identity.test.ts \
         ./compat-tests/reference-server/contracts/api-key-session-reference.test.ts \
@@ -650,7 +654,7 @@ run_stage() {
       cargo test --locked -p better-auth-seaorm-macros --lib || cache_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache --test api_key_delete_expired_tests -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: store::ephemeral::shared_column_contract_tests:: passkey wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: store::ephemeral::shared_column_contract_tests:: native_sort_ passkey wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: plugins::passkey:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: plugins::email_password:: plugins::username:: plugins::user_management:: plugins::have_i_been_pwned:: plugins::device_authorization::native_tests || cache_status=1
       cargo test --locked -p better-auth-seaorm --lib -- store::plugin_record_tests:: store::plugin_rows::legacy_private_tests:: store::shared_column_tests:: || cache_status=1

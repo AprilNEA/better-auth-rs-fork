@@ -1,0 +1,152 @@
+{
+  "contract": "native-sort-data",
+  "version": "1.7.6",
+  "status": "Successful source capture with 107 cases and strict repeated-process byte equality. Rust consumer replay requires separate acceptance.",
+  "run": "38243040716",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38243040716",
+  "commit": "f754b589bfc8cb450aa944cc1197a1ded3dad693",
+  "runConclusion": "success",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38243040716-clean.log",
+    "bytes": 69000308,
+    "sha256": "daa8fdec83ba4ae2abb16730c07c8dbe92e2f71e9f80f0b178b59e5b9a6c66f8"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-data-capture.mjs",
+      "bytes": 2079,
+      "sha256": "9c9529e38a8b4e0e274148306d287b96fb78ccfb0ac59617002556d8656cfee9"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-data-capture.test.ts",
+      "bytes": 958,
+      "sha256": "14d9f80cc534702ed3d7337e847d863bfe0f7b166983ab4a252c92764eb70651"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-consumers-capture.mjs",
+      "bytes": 5922,
+      "sha256": "dc164b29936f0a4c31a2fde73b38f96826803bf98564af586a29f1b88371a1cd"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-consumers-shared.mjs",
+      "bytes": 10528,
+      "sha256": "4c8f5dcbdd52b94a9d645f27a8954980954464834b5f839d66ed93387f47decb"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-runtime.mjs",
+      "bytes": 3145,
+      "sha256": "69630e525760cf34de80dbc1ae8717093481316fc426cd50dc7b84e7a179d017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2677,
+      "sha256": "1076a75618059a6ca6fb12fb32fa53fe9443d375ecd96f540bf58cc28612d70b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/native-sort-data-1.7.6.json.gz",
+    "bytes": 681809,
+    "sha256": "ca34b40ff54a42ba0ce0a698757e590cc45f28ed0c841f81646ef44bf438a73c",
+    "compression": "gzip",
+    "decodedBytes": 32149000,
+    "decodedSha256": "292f90ab136a910c40a60b880aba21d435f0d9661b8d322504d0318236dc3681"
+  },
+  "runtimeFixture": {
+    "path": "tests/fixtures/native-sort-data-runtime-1.7.6.json",
+    "bytes": 6926056,
+    "sha256": "6de933a57dc11509d0e1c7165911f80f19b3547a68d88e7202cea99f8914d45b"
+  },
+  "record": {
+    "line": 1037761,
+    "byteOffset": 36851107,
+    "bytes": 32148999
+  },
+  "cases": 107,
+  "normalizations": [],
+  "extraction": "Retain the complete successful capture as exact bytes with lossless gzip compression. Copy every case runtime section unchanged into the executable fixture, together with exact scenario declarations from the byte-identical getter capture. The raw reflection audit remains authoritative.",
+  "getterReplay": {
+    "fixture": "tests/fixtures/native-sort-consumers-1.7.6.json.gz",
+    "completeByteEquality": true,
+    "decodedSha256": "83f31ad131f2f078ae073adb321dde3e3b778d662202ad8bc004ac87bcaf6769",
+    "originalRun": "38242694082"
+  },
+  "runtime": {
+    "bun": "1.4.2",
+    "versions": {
+      "node": "26.3.0",
+      "bun": "1.4.2",
+      "boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+      "openssl": "1.1.0",
+      "llhttp": "9.3.0",
+      "libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+      "mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+      "picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+      "uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+      "webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+      "zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+      "zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+      "tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+      "lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+      "ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+      "libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+      "usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+      "lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+      "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "v8": "14.6.202.34-node.20",
+      "uv": "1.48.0",
+      "napi": "10",
+      "icu": "78.3",
+      "unicode": "17.0",
+      "sqlite": "3.53.2",
+      "modules": "147"
+    },
+    "collator": {
+      "locale": "en-US",
+      "usage": "sort",
+      "sensitivity": "variant",
+      "ignorePunctuation": false,
+      "collation": "default",
+      "numeric": false,
+      "caseFirst": "false"
+    }
+  },
+  "upstreamSources": {
+    "memory": {
+      "path": "../node_modules/@better-auth/memory-adapter/dist/index.mjs",
+      "sha256": "edd1040f94be383b71fb655320c32ab50f1f7efd7796d8234982f977f3f93dbc"
+    },
+    "jwk": {
+      "path": "../node_modules/better-auth/dist/plugins/jwt/adapter.mjs",
+      "sha256": "a1b907e3bafa532aac93834c6a68683962b4d0e7d21152bbd21999834d7f2c99"
+    },
+    "apiKey": {
+      "package": "@better-auth/api-key",
+      "version": "1.7.6",
+      "sha256": "bcf3d507e0045b7766485bcbf55e3ccf31d4424d29fa48cddb77ba20d68e43c0",
+      "addedExports": [
+        "applySortingAndPagination"
+      ],
+      "modification": "Append exports only; preserve the complete original module body."
+    }
+  },
+  "boundaries": [
+    "The raw audit retains all native property descriptors and function metadata. Runtime replay does not claim Rust closures have JavaScript function reflection.",
+    "The getter audit remains a separate frozen contract. Ordinary data records do not replace unsupported Memory top-level accessor injection.",
+    "JWK adapter invocation must be verified separately from the shared keys::latest sorting boundary."
+  ]
+}

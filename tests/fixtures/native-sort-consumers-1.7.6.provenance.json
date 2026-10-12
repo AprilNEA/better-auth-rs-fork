@@ -1,0 +1,131 @@
+{
+  "contract": "native-sort-consumers",
+  "version": "1.7.6",
+  "status": "Successful source capture with 131 cases and strict repeated-process byte equality. Rust consumer replay requires separate acceptance.",
+  "run": "38242694082",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38242694082",
+  "commit": "c9325c1100c81136885831b845d607ca7fe152bb",
+  "runConclusion": "success",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38242694082-clean.log",
+    "bytes": 37694815,
+    "sha256": "0e055bce2d2328948c238a7535ad93c3243adc8c409eb1488c78d6544168b8b3"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-consumers-capture.mjs",
+      "bytes": 5913,
+      "sha256": "11b95971878d76cab3af24fcdade753c6d20d52b849a5cbb68cb5e5482db58ff"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-consumers-capture.test.ts",
+      "bytes": 959,
+      "sha256": "f502c70edd892e3bf9d40435d92e7d0253aba474f7effa60d696371e925047b1"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/native-sort-consumers-shared.mjs",
+      "bytes": 9045,
+      "sha256": "a0d625cc51743a86fa59a1c674772252e19b9a4e9cb122c662576e358027bece"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2677,
+      "sha256": "1076a75618059a6ca6fb12fb32fa53fe9443d375ecd96f540bf58cc28612d70b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/native-sort-consumers-1.7.6.json.gz",
+    "compression": "gzip",
+    "bytes": 733001,
+    "sha256": "3a6ff601812c518cb34b7c4333aab3ebc6183ff9892389b72a5407f407f9b95e",
+    "decodedBytes": 36849836,
+    "decodedSha256": "83f31ad131f2f078ae073adb321dde3e3b778d662202ad8bc004ac87bcaf6769"
+  },
+  "record": {
+    "line": 11382,
+    "byteOffset": 844781,
+    "bytes": 36849835
+  },
+  "cases": 131,
+  "normalizations": [],
+  "extraction": "Preserve the complete JSON document emitted by the successful standalone capture and its final newline. Store those exact bytes with lossless gzip compression.",
+  "runtime": {
+    "bun": "1.4.2",
+    "versions": {
+      "node": "26.3.0",
+      "bun": "1.4.2",
+      "boringssl": "41bf9b59c2ebf277a7aa427e1ecad5cc80dd4d4f",
+      "openssl": "1.1.0",
+      "llhttp": "9.3.0",
+      "libarchive": "ded82291ab41d5e355831b96b0e1ff49e24d8939",
+      "mimalloc": "6a64e1ba7f5b2130d4efccb67ec87fd0003f0f6a",
+      "picohttpparser": "066d2b1e9ab820703db0837a7255d92d30f0c9f5",
+      "uwebsockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+      "webkit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057",
+      "zig": "04e7f6ac1e009525bc00934f20199c68f04e0a24",
+      "zlib": "12731092979c6d07f42da27da673a9f6c7b13586",
+      "tinycc": "05f0fafaa3be31e31d7b4b5c17dc60f62c991171",
+      "lolhtml": "725ce499aa9b71e38b7a2d0a9fbb6d7294a4079e",
+      "ares": "c7a3138dcfe3bb0eaaf10c0c24c36dc66dc790ab",
+      "libdeflate": "c8c56a20f8f621e6a966b716b31f1dedab6a41e3",
+      "usockets": "744846f844374847c902b5e7fd59b4342a51ef99",
+      "lshpack": "8905c024b6d052f083a3d11d0a169b3c2735c8a1",
+      "zstd": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "v8": "14.6.202.34-node.20",
+      "uv": "1.48.0",
+      "napi": "10",
+      "icu": "78.3",
+      "unicode": "17.0",
+      "sqlite": "3.53.2",
+      "modules": "147"
+    },
+    "collator": {
+      "locale": "en-US",
+      "usage": "sort",
+      "sensitivity": "variant",
+      "ignorePunctuation": false,
+      "collation": "default",
+      "numeric": false,
+      "caseFirst": "false"
+    }
+  },
+  "upstreamSources": {
+    "memory": {
+      "path": "../node_modules/@better-auth/memory-adapter/dist/index.mjs",
+      "sha256": "edd1040f94be383b71fb655320c32ab50f1f7efd7796d8234982f977f3f93dbc"
+    },
+    "jwk": {
+      "path": "../node_modules/better-auth/dist/plugins/jwt/adapter.mjs",
+      "sha256": "a1b907e3bafa532aac93834c6a68683962b4d0e7d21152bbd21999834d7f2c99"
+    },
+    "apiKey": {
+      "package": "@better-auth/api-key",
+      "version": "1.7.6",
+      "sha256": "bcf3d507e0045b7766485bcbf55e3ccf31d4424d29fa48cddb77ba20d68e43c0",
+      "addedExports": [
+        "applySortingAndPagination"
+      ],
+      "modification": "Append exports only; preserve the complete original module body."
+    }
+  },
+  "boundaries": [
+    "Record accessors, native methods, callback errors, retained identities, all returned properties, and storage snapshots remain in the raw audit.",
+    "Ordinary data-record consumers have a separate additive capture. That capture must not replace or normalize the accessor audit.",
+    "Runtime function reflection and Memory top-level accessor injection require explicit Rust representation checks."
+  ]
+}

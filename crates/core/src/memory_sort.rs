@@ -8,6 +8,9 @@ use rust_icu_ustring::UChar;
 
 use crate::{AuthError, AuthResult, FieldValue};
 
+mod powersort;
+pub use powersort::sort_by;
+
 #[derive(Default)]
 pub(crate) struct Comparator {
     collator: OnceCell<Result<UCollator, String>>,
@@ -22,10 +25,13 @@ impl Comparator {
             ) => Ordering::Equal,
             (FieldValue::Null | FieldValue::Undefined, _) => Ordering::Less,
             (_, FieldValue::Null | FieldValue::Undefined) => Ordering::Greater,
-            (FieldValue::Date(left), FieldValue::Date(right)) => (left.milliseconds()
-                - right.milliseconds())
-            .partial_cmp(&0.0)
-            .unwrap_or(Ordering::Equal),
+            (FieldValue::Date(_), FieldValue::Date(_)) => {
+                let left = left.get_time_method("aValue")?;
+                let right = right.get_time_method("bValue")?;
+                (crate::query::field_number(&left)? - crate::query::field_number(&right)?)
+                    .partial_cmp(&0.0)
+                    .unwrap_or(Ordering::Equal)
+            }
             (FieldValue::Number(left), FieldValue::Number(right)) => {
                 (left - right).partial_cmp(&0.0).unwrap_or(Ordering::Equal)
             }
@@ -171,31 +177,4 @@ pub(crate) fn sort<T>(
         let order = comparator.compare(&value(left)?, &value(right)?)?;
         Ok(if descending { order.reverse() } else { order })
     })
-}
-
-pub(crate) fn sort_by<T>(
-    values: &mut [T],
-    compare: impl Fn(&T, &T) -> AuthResult<Ordering>,
-) -> AuthResult<()> {
-    // JSC uses binary insertion; mixed values need not form a total order, so comparison order matters.
-    // ponytail: O(n²) moves; JSC's Powersort merging for longer mixed-value runs still needs pairing.
-    #[expect(
-        clippy::indexing_slicing,
-        reason = "The outer range bounds index, and the binary search keeps left and middle within 0..=index"
-    )]
-    for index in 1..values.len() {
-        let mut left = 0;
-        let mut right = index;
-        while left < right {
-            let middle = left + (right - left) / 2;
-            let order = compare(&values[index], &values[middle])?;
-            if order.is_lt() {
-                right = middle;
-            } else {
-                left = middle + 1;
-            }
-        }
-        values[left..=index].rotate_right(1);
-    }
-    Ok(())
 }

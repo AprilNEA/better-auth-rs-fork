@@ -8,6 +8,10 @@ use serde_json::{Map, Value};
 use crate::field_value::PrimitiveHint;
 use crate::{AuthError, AuthResult, FieldValue};
 
+/// Sort native records with the pinned runtime's fallible comparison schedule.
+#[doc(hidden)]
+pub use crate::memory_sort::sort_by;
+
 /// Resolve the adapter operator before field binding, using equality for an unknown name.
 #[doc(hidden)]
 pub fn where_operator(operator: &str) -> crate::WhereOperator {

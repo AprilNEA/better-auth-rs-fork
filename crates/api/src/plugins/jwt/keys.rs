@@ -42,36 +42,20 @@ pub(super) fn latest(
             candidates.push(key);
         }
     }
-    let mut failure = None;
-    candidates.sort_by(|left, right| {
-        if failure.is_some() {
-            return std::cmp::Ordering::Equal;
-        }
-        let compare = || -> AuthResult<_> {
-            let right = right
-                .created_at
-                .field_value()
-                .get_time_method("b.createdAt")?;
-            let left = left
-                .created_at
-                .field_value()
-                .get_time_method("a.createdAt")?;
-            Ok((better_auth_core::query::field_number(&right)?
-                - better_auth_core::query::field_number(&left)?)
-            .partial_cmp(&0.0)
-            .unwrap_or(std::cmp::Ordering::Equal))
-        };
-        match compare() {
-            Ok(order) => order,
-            Err(error) => {
-                failure = Some(error);
-                std::cmp::Ordering::Equal
-            }
-        }
-    });
-    if let Some(error) = failure {
-        return Err(error);
-    }
+    better_auth_core::query::sort_by(&mut candidates, |left, right| {
+        let right = right
+            .created_at
+            .field_value()
+            .get_time_method("b.createdAt")?;
+        let left = left
+            .created_at
+            .field_value()
+            .get_time_method("a.createdAt")?;
+        Ok((better_auth_core::query::field_number(&right)?
+            - better_auth_core::query::field_number(&left)?)
+        .partial_cmp(&0.0)
+        .unwrap_or(std::cmp::Ordering::Equal))
+    })?;
     Ok(candidates.into_iter().next())
 }
 
