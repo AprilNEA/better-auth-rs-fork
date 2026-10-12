@@ -665,6 +665,7 @@ run_stage() {
       bun --no-install test \
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
         ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
+        ./compat-tests/reference-server/contracts/logger-background-ownership-capture.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
@@ -698,6 +699,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
         ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
+        ./compat-tests/reference-server/contracts/logger-background-ownership-capture.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
