@@ -3,6 +3,7 @@ import { writeFileSync } from "node:fs";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { createAuthMiddleware } from "better-auth/api";
+import { getCurrentAuthEndpointContext } from "@better-auth/core/context";
 import { withClock } from "./email-verification-duration-capture.mjs";
 import { assertSecondaryNativeVersions, createSecondaryNativeObserver, withSecondarySourceExports } from "./secondary-native-shared.mjs";
 import { writeObservation } from "./write-observation.mjs";
@@ -54,8 +55,9 @@ async function captureCase(name, source, setClock) {
       plugins: [source.apiKey()],
       hooks: {
         before: createAuthMiddleware(async ctx => {
-          record("before", { instance: label, path: native.snapshot(ctx.path), body: native.snapshot(ctx.body), query: native.snapshot(ctx.query), request: ctx.request?.url, headers: [...ctx.headers] });
-          assert.equal(ctx.path, undefined);
+          record("before", { instance: label, path: native.snapshot(ctx.path), scopePath: native.snapshot(getCurrentAuthEndpointContext().path), body: native.snapshot(ctx.body), query: native.snapshot(ctx.query), request: ctx.request?.url, headers: [...ctx.headers] });
+          assert.equal(ctx.path, "/");
+          assert.equal(getCurrentAuthEndpointContext().path, undefined);
           assert.equal(ctx.body, inputBody);
           assert.equal(ctx.query, inputQuery);
           assert.equal(ctx.request.url, "https://api-key-delete-expired.test/original");
@@ -63,7 +65,9 @@ async function captureCase(name, source, setClock) {
           if (name === "before-stop") return ctx.json(replacement);
         }),
         after: createAuthMiddleware(async ctx => {
-          record("after", { instance: label, returned: native.snapshot(ctx.context.returned) });
+          record("after", { instance: label, path: native.snapshot(ctx.path), scopePath: native.snapshot(getCurrentAuthEndpointContext().path), returned: native.snapshot(ctx.context.returned) });
+          assert.equal(ctx.path, "/");
+          assert.equal(getCurrentAuthEndpointContext().path, undefined);
           const expected = name === "first-logger-error" ? { success: false, error: errors.firstLogger } : { success: true, error: null };
           assert.deepEqual(ctx.context.returned, expected);
           assert.deepEqual(Reflect.ownKeys(ctx.context.returned), ["success", "error"]);
@@ -72,6 +76,8 @@ async function captureCase(name, source, setClock) {
         }),
       },
     });
+    assert.equal(auth.api.deleteAllExpiredApiKeys.path, undefined);
+    assert.equal(auth.api.deleteAllExpiredApiKeys.options.metadata.SERVER_ONLY, true);
     const context = await auth.$context;
     const original = context.adapter.deleteMany;
     const state = { label, auth, context, memory, calls: 0 };

@@ -129,6 +129,7 @@ impl BeforeEndpointHook<StatelessSchema> for Hooks {
             Some("deleteAllExpiredApiKeys")
         );
         assert!(scope.path.is_none());
+        assert_eq!(request.path(), "/");
         assert!(request.input_field_value()?.strict_equals(&self.0.body));
         assert!(
             request
@@ -148,10 +149,17 @@ impl BeforeEndpointHook<StatelessSchema> for Hooks {
 impl AfterEndpointHook<StatelessSchema> for Hooks {
     async fn after(
         &self,
-        _: &AuthRequest,
+        request: &AuthRequest,
         response: &mut AuthResponse,
         _: &AuthContext<StatelessSchema>,
     ) -> AuthResult<()> {
+        assert_eq!(request.path(), "/");
+        assert!(
+            better_auth_core::hooks::current_request_hook_context()
+                .ok_or_else(|| AuthError::internal("Cleanup endpoint scope is missing"))?
+                .path
+                .is_none()
+        );
         lock(&self.0.events)?.push("after");
         let returned = response.body.field_value()?;
         let expected_error = if self.0.mode == "first-logger-error" {
