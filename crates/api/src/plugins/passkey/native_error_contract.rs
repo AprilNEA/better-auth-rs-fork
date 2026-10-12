@@ -163,7 +163,7 @@ impl LogSink for Logger {
         let values = arguments
             .iter()
             .map(|argument| match argument {
-                LogArgument::Native(value) => Ok(value.clone()),
+                LogArgument::Native(value) => Ok((*value).clone()),
                 LogArgument::Error(error) => {
                     observation::logged_error(error.downcast_ref::<AuthError>().unwrap())
                 }
