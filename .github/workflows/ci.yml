@@ -146,26 +146,26 @@ jobs:
         run: |
           devenv_nixpkgs_rev=$(python3 -c 'import json; print(json.load(open("devenv.lock"))["nodes"]["nixpkgs-src"]["locked"]["rev"])')
           nix profile add "github:NixOS/nixpkgs/${devenv_nixpkgs_rev}#devenv"
-      - name: Restore Rust cache
+      - name: Cache Rust dependencies
         if: env.CHECK_STAGE != 'reference-contracts'
         id: rust-cache
-        uses: actions/cache/restore@v6.1.0
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
-          key: rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-${{ env.RUST_CACHE_STAGE }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          # Prefer the current family before other builds with the same environment and Cargo inputs.
-          restore-keys: |
-            rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-${{ env.RUST_CACHE_STAGE }}-
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_CACHE_STAGE }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-            rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-all-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-user-fields-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-plugin-fields-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-            compat-tests/rust-server/target
-            compat-tests/schema-consumer/target
+          prefix-key: rust-deps-v1
+          shared-key: ${{ env.RUST_CACHE_STAGE }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}
+          cmd-format: devenv shell -- {0}
+          cache-on-failure: 'true'
+          cache-bin: 'false'
+          cache-all-crates: 'false'
+          cache-workspace-crates: 'false'
+          # The post action removes workspace artifacts after the uploads below.
+          workspaces: |
+            . -> target
+            compat-tests/rust-server -> target
+            compat-tests/schema-consumer -> target
+      - name: Check lockfiles after cache initialization
+        if: env.CHECK_STAGE != 'reference-contracts'
+        run: git diff --exit-code -- Cargo.lock compat-tests/rust-server/Cargo.lock compat-tests/schema-consumer/Cargo.lock
       - name: Install locked compatibility dependencies
         id: dependencies
         run: devenv shell -- ./scripts/check.sh dependencies
@@ -271,14 +271,3 @@ jobs:
           path: ${{ runner.temp }}/telemetry-host-observations/
           if-no-files-found: error
           retention-days: 14
-      - name: Save Rust cache
-        if: ${{ !cancelled() && steps.rust-cache.outcome == 'success' && steps.rust-cache.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v6.1.0
-        with:
-          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-            compat-tests/rust-server/target
-            compat-tests/schema-consumer/target
