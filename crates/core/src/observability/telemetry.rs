@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::logger::{LogArgument, LoggerConfig};
+use super::logger::LogArgument;
 use crate::{AuthConfig, AuthResult};
 
 /// Usage reporting is disabled unless explicitly enabled here or through BETTER_AUTH_TELEMETRY.
@@ -117,9 +117,9 @@ impl Telemetry {
         };
         if self.debug {
             let value = Value::String(serde_json::to_string_pretty(&event)?);
-            LoggerConfig::default().info("telemetry event", &[LogArgument::Value(&value)]);
+            super::logger::default_logger().info("telemetry event", &[LogArgument::Value(&value)]);
         } else if let Err(error) = transport.send(&event).await {
-            LoggerConfig::default().log(
+            super::logger::default_logger().log(
                 super::logger::LogLevel::Error,
                 LogArgument::Error(&error),
                 &[],

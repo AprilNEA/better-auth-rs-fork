@@ -51,6 +51,7 @@ pub mod core_paths {
 pub struct AuthConfig {
     /// Per-instance diagnostics. Custom sinks receive unformatted messages and arguments.
     pub logger: crate::observability::LoggerConfig,
+    pub(crate) resolved_logger: Option<crate::observability::LoggerConfig>,
     /// Experimental runtime instrumentation.
     pub experimental: crate::observability::ExperimentalConfig,
     /// Usage reporting is disabled by default.
@@ -604,6 +605,7 @@ impl Default for AuthConfig {
     fn default() -> Self {
         Self {
             logger: Default::default(),
+            resolved_logger: None,
             experimental: Default::default(),
             telemetry: Default::default(),
             resolved_cookies: None,
@@ -682,6 +684,19 @@ impl Default for Argon2Config {
 }
 
 impl AuthConfig {
+    /// Read the instance logger without changing the original option presence.
+    /// Before initialization, direct configuration logging uses the supplied options.
+    pub fn logger(&self) -> &crate::observability::LoggerConfig {
+        self.resolved_logger.as_ref().unwrap_or(&self.logger)
+    }
+
+    /// Resolve a new instance's logger before secret validation or plugin initialization.
+    #[doc(hidden)]
+    pub fn initialize_logger(&mut self) {
+        let _ = crate::observability::logger::default_logger();
+        self.resolved_logger = Some(self.logger.resolved());
+    }
+
     /// Evaluate Session creation defaults with plugin input precedence.
     #[doc(hidden)]
     pub fn session_default_fields(&self) -> AuthResult<crate::FieldMap> {
@@ -895,13 +910,13 @@ impl AuthConfig {
     }
     pub fn validate(&self) -> Result<(), AuthError> {
         if self.secrets.is_some() {
-            return self.encryption_secret().validate(&self.logger);
+            return self.encryption_secret().validate(self.logger());
         }
         if self.secret.is_empty() {
             return Err(AuthError::config("Secret key cannot be empty"));
         }
 
-        secrets::warn_secret_strength(&self.secret, &self.logger);
+        secrets::warn_secret_strength(&self.secret, self.logger());
         Ok(())
     }
 }

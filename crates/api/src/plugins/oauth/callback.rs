@@ -308,7 +308,7 @@ pub(super) async fn handle_callback(
     {
         Ok(value) => value,
         Err(error) => {
-            ctx.config.logger.error(
+            ctx.logger().error(
                 "Unable to derive provider account identity",
                 &[better_auth_core::observability::logger::LogArgument::Error(
                     &error,

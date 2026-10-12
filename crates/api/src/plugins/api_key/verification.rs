@@ -249,7 +249,7 @@ impl ApiKeyPlugin {
                     | ApiKeyVerificationError::Endpoint(error) => error,
                     ApiKeyVerificationError::Validation(_) => &error,
                 };
-                ctx.config.logger.error(
+                ctx.logger().error(
                     "Failed to validate API key:",
                     &[better_auth_core::observability::LogArgument::Error(cause)],
                 );

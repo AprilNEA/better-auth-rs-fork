@@ -43,7 +43,7 @@ pub(super) fn run<S: AuthSchema, T>(
     context: Arc<AuthContext<S>>,
     future: impl Future<Output = T>,
 ) -> impl Future<Output = T> {
-    let logger = Some(context.config.logger.clone());
+    let logger = Some(context.logger().clone());
     run_with_logger(context, logger, future)
 }
 

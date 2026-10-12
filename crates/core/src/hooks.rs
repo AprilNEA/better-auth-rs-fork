@@ -11,7 +11,7 @@ pub fn run_before_hook_matcher<T>(
     match matcher() {
         Ok(value) => Ok(value),
         Err(error) => {
-            config.logger.error(
+            config.logger().error(
                 &format!("An error occurred during {source} hook matcher execution:"),
                 &[crate::observability::LogArgument::Error(&error)],
             );

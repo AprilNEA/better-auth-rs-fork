@@ -189,7 +189,7 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
     better_auth_core::background::run_or_await(
         task,
         ctx.config.advanced.background_tasks.as_ref(),
-        &ctx.config.logger,
+        ctx.logger(),
     )
     .await;
     Ok(StatusResponse { status: true })
@@ -320,7 +320,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
         better_auth_core::background::run_or_await(
             task,
             ctx.config.advanced.background_tasks.as_ref(),
-            &ctx.config.logger,
+            ctx.logger(),
         )
         .await;
         return Ok(SuccessMessageResponse {

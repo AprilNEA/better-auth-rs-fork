@@ -392,7 +392,7 @@ pub(crate) async fn invite_member_core(
     better_auth_core::background::run_or_await(
         task,
         ctx.config.advanced.background_tasks.as_ref(),
-        &ctx.config.logger,
+        ctx.logger(),
     )
     .await;
     if !is_resend && let Some(hooks) = &config.hooks {

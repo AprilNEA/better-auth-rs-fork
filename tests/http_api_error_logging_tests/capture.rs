@@ -1,5 +1,4 @@
 use super::*;
-use std::io::IsTerminal;
 use tracing::{
     Event as TraceEvent, Metadata, Subscriber,
     field::{Field, Visit},
@@ -111,7 +110,30 @@ pub(super) fn default_event(
     assert_eq!(name, "message");
     assert_eq!(arguments, &("arguments".into(), "[]".into()));
     assert_eq!(*scope, "none");
-    let colors = std::io::stdout().is_terminal();
+    let colors = match std::env::var_os("BETTER_AUTH_LOGGER_UPSTREAM_OBSERVATION") {
+        Some(path) => {
+            let observation: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(path).map_err(|error| AuthError::internal(error.to_string()))?,
+            )
+            .map_err(|error| AuthError::internal(error.to_string()))?;
+            observation["colors"].as_bool().ok_or_else(|| {
+                AuthError::internal(
+                    "Upstream logger observation must contain a boolean colors value",
+                )
+            })?
+        }
+        None if std::env::var_os("GITHUB_ACTIONS").is_some() => {
+            return Err(AuthError::internal(
+                "CI must supply the upstream logger observation",
+            ));
+        }
+        None => {
+            eprintln!(
+                "Upstream logger environment pairing is not configured; checking renderer shape only"
+            );
+            message.starts_with("\x1b[2m")
+        }
+    };
     let start = if colors { "\x1b[2m".len() } else { 0 };
     let timestamp = message.get(start..start + 24).ok_or_else(|| {
         AuthError::internal("Default logger must include an ISO millisecond timestamp")

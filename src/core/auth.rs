@@ -176,6 +176,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
 
     /// Build the BetterAuth instance.
     pub async fn build(mut self) -> AuthResult<BetterAuth<S>> {
+        self.config.initialize_logger();
         self.config.resolve_secrets()?;
 
         let capabilities = better_auth_core::store::StoreCapabilities {
@@ -255,7 +256,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
 
         // Initialize all plugins.
         for plugin in &self.plugins {
-            plugin.on_init(&mut init_context).await?;
+            init_context.initialize_plugin(plugin.as_ref()).await?;
         }
 
         let config = init_context.config.clone();

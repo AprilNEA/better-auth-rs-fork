@@ -1,4 +1,10 @@
-use std::{error::Error, fmt, io::IsTerminal, sync::Arc};
+use std::{
+    error::Error,
+    fmt,
+    sync::{Arc, LazyLock},
+};
+
+mod colors;
 
 use serde_json::Value;
 
@@ -111,6 +117,20 @@ impl fmt::Debug for LoggerConfig {
 }
 
 impl LoggerConfig {
+    /// Freeze the environment-dependent renderer when creating an auth instance.
+    pub(crate) fn resolved(&self) -> Self {
+        let mut logger = self.clone();
+        logger.disable_colors = Some(!self.colors_enabled());
+        logger
+    }
+
+    fn colors_enabled(&self) -> bool {
+        self.disable_colors.map_or_else(
+            || colors::enabled(|name| std::env::var(name).ok()),
+            |disabled| !disabled,
+        )
+    }
+
     pub fn enabled(&self, level: LogLevel) -> bool {
         !self.disabled.unwrap_or(false) && level >= self.level.unwrap_or_default()
     }
@@ -133,9 +153,7 @@ impl LoggerConfig {
     }
 
     fn prefix(&self, level: LogLevel) -> String {
-        let colors = self
-            .disable_colors
-            .map_or_else(|| std::io::stdout().is_terminal(), |disabled| !disabled);
+        let colors = self.colors_enabled();
         let time = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         if colors {
             format!(
@@ -203,7 +221,12 @@ impl LoggerConfig {
 
 /// Use the nearest endpoint or native helper logger. HTTP policy resolution preserves the caller's logger.
 pub fn current() -> LoggerConfig {
-    crate::request_runtime::current_logger().unwrap_or_default()
+    crate::request_runtime::current_logger().unwrap_or_else(|| default_logger().clone())
+}
+
+pub(crate) fn default_logger() -> &'static LoggerConfig {
+    static LOGGER: LazyLock<LoggerConfig> = LazyLock::new(|| LoggerConfig::default().resolved());
+    &LOGGER
 }
 
 #[cfg(test)]
@@ -238,6 +261,100 @@ mod tests {
                 arguments,
             ));
         }
+    }
+
+    #[tokio::test]
+    async fn instance_snapshot_survives_option_replacement_and_reinitializes_for_new_auth()
+    -> crate::AuthResult<()> {
+        struct ReplaceOptions(crate::AuthConfig);
+        #[async_trait::async_trait]
+        impl crate::AuthPlugin<crate::store::StatelessSchema> for ReplaceOptions {
+            fn name(&self) -> &'static str {
+                "replace-logger-options"
+            }
+            fn routes(&self) -> Vec<crate::AuthRoute> {
+                Vec::new()
+            }
+            async fn on_init(
+                &self,
+                context: &mut crate::AuthInitContext<crate::store::StatelessSchema>,
+            ) -> crate::AuthResult<()> {
+                context.config = Arc::new(self.0.clone());
+                context.logger().error("during initialization", &[]);
+                Ok(())
+            }
+        }
+
+        for disable_colors in [None, Some(true), Some(false)] {
+            let original = Arc::new(Capture::default());
+            let replacement = Arc::new(Capture::default());
+            let mut options = crate::AuthConfig::default();
+            options.logger.disable_colors = disable_colors;
+            options.logger.log = Some(original.clone());
+            options.initialize_logger();
+            let snapshot = options.logger().disable_colors;
+            assert!(snapshot.is_some());
+            assert_eq!(options.logger.disable_colors, disable_colors);
+            let mut next_options = options.clone();
+            next_options.logger.disable_colors = snapshot.map(|value| !value);
+            next_options.logger.log = Some(replacement.clone());
+            let database = Arc::new(crate::store::EphemeralStore::default());
+            let mut init = crate::AuthInitContext::new(Arc::new(options), database.clone());
+            init.initialize_plugin(&ReplaceOptions(next_options))
+                .await?;
+            assert_eq!(init.logger().disable_colors, snapshot);
+            assert_eq!(init.config.logger().disable_colors, snapshot);
+            assert_eq!(
+                init.config.logger.disable_colors,
+                snapshot.map(|value| !value)
+            );
+            let context = crate::AuthContext::new(init.config.clone(), database);
+            let derived = context.clone();
+            derived.logger().error("after initialization", &[]);
+            assert_eq!(derived.logger().disable_colors, snapshot);
+            assert_eq!(
+                original
+                    .0
+                    .lock()
+                    .expect("capture mutex is not poisoned")
+                    .as_slice(),
+                [
+                    (
+                        LogLevel::Error,
+                        "during initialization".to_owned(),
+                        Vec::new()
+                    ),
+                    (
+                        LogLevel::Error,
+                        "after initialization".to_owned(),
+                        Vec::new()
+                    ),
+                ]
+            );
+            assert!(
+                replacement
+                    .0
+                    .lock()
+                    .expect("capture mutex is not poisoned")
+                    .is_empty()
+            );
+            let mut reused_options = (*init.config).clone();
+            reused_options.initialize_logger();
+            assert_eq!(
+                reused_options.logger().disable_colors,
+                snapshot.map(|value| !value)
+            );
+            reused_options.logger().error("new instance", &[]);
+            assert_eq!(
+                replacement
+                    .0
+                    .lock()
+                    .expect("capture mutex is not poisoned")
+                    .as_slice(),
+                [(LogLevel::Error, "new instance".to_owned(), Vec::new())]
+            );
+        }
+        Ok(())
     }
 
     #[test]

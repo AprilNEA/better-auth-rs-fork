@@ -104,7 +104,7 @@ pub(crate) async fn request_password_reset_core(
     better_auth_core::background::run_or_await(
         task,
         ctx.config.advanced.background_tasks.as_ref(),
-        &ctx.config.logger,
+        ctx.logger(),
     )
     .await;
 

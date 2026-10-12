@@ -358,7 +358,7 @@ impl<S: AuthSchema> AuthPlugin<S> for OAuthProxyPlugin {
                     }
                     return Ok(());
                 }
-                ctx.config.logger.warn(
+                ctx.logger().warn(
                     "OAuth proxy: cross-origin callback reached after hook unexpectedly",
                     &[],
                 );
@@ -477,7 +477,7 @@ impl OAuthProxyPlugin {
         {
             Ok(Some(body)) => response.body = ResponseBody::Native(body),
             Ok(None) => {}
-            Err(error) => ctx.config.logger.error(
+            Err(error) => ctx.logger().error(
                 "Failed to prepare OAuth proxy state:",
                 &[better_auth_core::observability::logger::LogArgument::Error(
                     &error,
@@ -526,9 +526,7 @@ impl OAuthProxyPlugin {
             }
         };
         if !payload.is_truthy() {
-            ctx.config
-                .logger
-                .warn("No OAuth state found for proxy", &[]);
+            ctx.logger().warn("No OAuth state found for proxy", &[]);
             return Ok(None);
         }
         if !payload.is_string() {
@@ -711,7 +709,7 @@ impl OAuthProxyPlugin {
         {
             Ok(value) => value,
             Err(error) => {
-                ctx.config.logger.error(
+                ctx.logger().error(
                     "Unable to derive provider account identity",
                     &[better_auth_core::observability::logger::LogArgument::Error(
                         &error,
@@ -823,8 +821,7 @@ impl OAuthProxyPlugin {
             .query_string("profile")?
             .filter(|value| !value.is_empty())
         else {
-            ctx.config
-                .logger
+            ctx.logger()
                 .error("OAuth proxy callback missing profile data", &[]);
             return redirect_error(&default_error, "missing_profile", None);
         };

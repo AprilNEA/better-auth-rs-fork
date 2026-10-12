@@ -149,7 +149,7 @@ impl EmailOtpPlugin {
         better_auth_core::background::run_or_await(
             task,
             endpoint.auth.config.advanced.background_tasks.as_ref(),
-            &endpoint.auth.config.logger,
+            endpoint.auth.logger(),
         )
         .await;
         Ok(())

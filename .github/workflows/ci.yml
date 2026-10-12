@@ -159,6 +159,11 @@ jobs:
       - name: Install locked compatibility dependencies
         id: dependencies
         run: devenv shell -- ./scripts/check.sh dependencies
+      - name: Capture upstream logger environment
+        if: ${{ !cancelled() && contains(fromJSON('["all", "native-json", "workspace-tests"]'), env.CHECK_STAGE) && steps.dependencies.outcome == 'success' }}
+        run: |
+          devenv shell -- bun --no-install compat-tests/reference-server/contracts/logger-host-color-observation.mjs > "$RUNNER_TEMP/logger-host-color.json"
+          printf '%s\n' "BETTER_AUTH_LOGGER_UPSTREAM_OBSERVATION=$RUNNER_TEMP/logger-host-color.json" >> "$GITHUB_ENV"
       - name: Capture upstream telemetry environment
         if: ${{ !cancelled() && contains(fromJSON('["all", "telemetry"]'), env.CHECK_STAGE) && steps.dependencies.outcome == 'success' }}
         env:
@@ -238,6 +243,14 @@ jobs:
         with:
           name: focused-check-${{ inputs.stage }}-${{ github.sha }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/focused-check.log
+          if-no-files-found: error
+          retention-days: 14
+      - name: Preserve logger host observation
+        if: always() && contains(fromJSON('["all", "native-json", "workspace-tests"]'), env.CHECK_STAGE)
+        uses: actions/upload-artifact@v4
+        with:
+          name: logger-host-color-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/logger-host-color.json
           if-no-files-found: error
           retention-days: 14
       - name: Preserve telemetry host observations

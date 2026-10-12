@@ -375,7 +375,7 @@ impl PhoneNumberPlugin {
             better_auth_core::background::run_or_await(
                 task,
                 ctx.config.advanced.background_tasks.as_ref(),
-                &ctx.config.logger,
+                ctx.logger(),
             )
             .await;
         } else if let Some(task) = task {
@@ -569,7 +569,7 @@ impl PhoneNumberPlugin {
                 better_auth_core::background::run_or_await(
                     task,
                     ctx.config.advanced.background_tasks.as_ref(),
-                    &ctx.config.logger,
+                    ctx.logger(),
                 )
                 .await;
             }
@@ -629,7 +629,7 @@ impl PhoneNumberPlugin {
         .map_err(SessionIssueError::into_auth_error)?
         .ok_or_else(|| {
             if !status {
-                ctx.config.logger.error("Failed to create session", &[]);
+                ctx.logger().error("Failed to create session", &[]);
             }
             AuthError::from_code(
                 if status {
@@ -685,7 +685,7 @@ impl PhoneNumberPlugin {
             better_auth_core::background::run_or_await(
                 task,
                 ctx.config.advanced.background_tasks.as_ref(),
-                &ctx.config.logger,
+                ctx.logger(),
             )
             .await;
         }

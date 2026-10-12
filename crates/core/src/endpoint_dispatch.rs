@@ -405,7 +405,7 @@ fn apply_before_action(
     Ok(None)
 }
 fn publishes_debug<S: AuthSchema>(context: &AuthContext<S>) -> bool {
-    context.config.logger.level.unwrap_or_default() == crate::observability::LogLevel::Debug
+    context.logger().level.unwrap_or_default() == crate::observability::LogLevel::Debug
 }
 
 fn restore_error_stack(value: &crate::FieldValue) -> AuthResult<()> {

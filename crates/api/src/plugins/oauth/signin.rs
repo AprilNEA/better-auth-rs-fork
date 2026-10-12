@@ -168,7 +168,7 @@ fn account_query_error(
     request: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> OAuthSignInError {
-    ctx.config.logger.error(
+    ctx.logger().error(
         "Better auth was unable to query your database.\nError: ",
         &[better_auth_core::observability::logger::LogArgument::Error(
             &error,
@@ -479,7 +479,7 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .map_err(|error| {
             api_error_or(error, |error| {
-                ctx.config.logger.error(
+                ctx.logger().error(
                     "Unable to link account",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
                 );
@@ -617,7 +617,7 @@ pub(super) async fn process_oauth_sign_in(
         .await
         .map_err(|error| {
             api_error_or(error, |error| {
-                ctx.config.logger.error(
+                ctx.logger().error(
                     "Unable to create OAuth user",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
                 );

@@ -54,7 +54,7 @@ pub async fn handle_http_error<S: AuthSchema>(
         }
         return error.to_http_response();
     }
-    if let Err(replacement) = error.log_http_error(&context.config.logger) {
+    if let Err(replacement) = error.log_http_error(context.logger()) {
         return rethrow(replacement);
     }
     error.to_http_response()

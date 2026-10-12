@@ -27,13 +27,14 @@ impl AuthConfig {
             let _ = cache.strategy.get_or_insert(CookieCacheStrategy::Jwe);
             let _ = cache.refresh.get_or_insert(CookieCacheRefresh::Enabled);
         }
+        let logger = self.logger().clone();
         if let Some(cache) = &mut self.session.cookie_cache {
             if capabilities.server_sessions() {
                 if matches!(
                     cache.refresh,
                     Some(CookieCacheRefresh::Enabled | CookieCacheRefresh::After(_))
                 ) {
-                    self.logger.warn("session.cookie_cache.refresh is disabled when a database or secondary storage is configured", &[]);
+                    logger.warn("session.cookie_cache.refresh is disabled when a database or secondary storage is configured", &[]);
                 }
                 cache.refresh = Some(CookieCacheRefresh::Disabled);
             } else {

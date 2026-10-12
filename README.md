@@ -163,6 +163,8 @@ The [Admin plugin](docs/content/docs/plugins/admin.mdx) preserves a cancelled us
 
 [HTTP rate limits](docs/content/docs/reference/configuration-options.mdx#ratelimitconfig) support memory, database, secondary, and custom storage. Database selection restores the native RateLimit declarations after plugin registration. `RateLimitConfig.model_name` and `fields` configure the final table alias and column mappings; SQL mappings must match the bound generated entity. Use `BetterAuth::call_endpoint` for trusted [native endpoint calls](docs/content/docs/concepts/plugins.mdx) with the registered plugin hooks.
 
+Use `ctx.logger()` for instance diagnostics. The default renderer follows Better Auth's color environment policy, including `FORCE_COLOR`, `NO_COLOR`, and CI detection. Building an auth instance fixes its logger options; `config.logger` retains the original options for inspection and telemetry.
+
 Passwords use Better Auth's scrypt format by default. The [password guide](docs/content/docs/authentication/email-password.mdx) explains explicit Argon2 migration. Add [HaveIBeenPwnedPlugin](docs/content/docs/plugins/have-i-been-pwned.mdx) to reject compromised passwords before hashing.
 
 | Cargo feature | Purpose |

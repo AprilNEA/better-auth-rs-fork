@@ -400,7 +400,7 @@ pub(super) async fn send_otp_core<S: better_auth_core::AuthSchema>(
     better_auth_core::background::run_or_await_with_error_message(
         task,
         ctx.config.advanced.background_tasks.as_ref(),
-        &ctx.config.logger,
+        ctx.logger(),
         "Failed to send two-factor OTP",
     )
     .await;

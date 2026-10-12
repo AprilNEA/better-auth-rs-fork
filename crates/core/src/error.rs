@@ -383,7 +383,7 @@ impl AuthError {
         if self.is_api_error()? {
             self.to_auth_response().into_http_response()
         } else {
-            crate::observability::LoggerConfig::default().error(
+            crate::observability::logger::default_logger().error(
                 "Authentication request failed",
                 &[crate::observability::LogArgument::Error(&self)],
             );

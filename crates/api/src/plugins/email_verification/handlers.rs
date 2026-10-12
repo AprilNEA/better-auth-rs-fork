@@ -227,7 +227,7 @@ pub(super) async fn verify_email_core(
                 better_auth_core::background::run_or_await(
                     task,
                     ctx.config.advanced.background_tasks.as_ref(),
-                    &ctx.config.logger,
+                    ctx.logger(),
                 )
                 .await;
             }
@@ -277,7 +277,7 @@ pub(super) async fn verify_email_core(
                 better_auth_core::background::run_or_await(
                     task,
                     ctx.config.advanced.background_tasks.as_ref(),
-                    &ctx.config.logger,
+                    ctx.logger(),
                 )
                 .await;
             }

@@ -270,7 +270,7 @@ impl EmailVerificationPlugin {
                     .await
                 })),
                 ctx.config.advanced.background_tasks.as_ref(),
-                &ctx.config.logger,
+                ctx.logger(),
             )
             .await;
             return Ok(());
@@ -284,7 +284,7 @@ impl EmailVerificationPlugin {
         better_auth_core::background::run_or_await(
             task,
             ctx.config.advanced.background_tasks.as_ref(),
-            &ctx.config.logger,
+            ctx.logger(),
         )
         .await;
 

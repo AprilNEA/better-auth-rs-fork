@@ -136,7 +136,7 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                 better_auth_core::background::run_or_await(
                     task,
                     auth.config.advanced.background_tasks.as_ref(),
-                    &auth.config.logger,
+                    auth.logger(),
                 )
                 .await;
                 synthetic_response(&body, &create_user, &config, &auth)
@@ -233,7 +233,7 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                         }
                         return Err(error);
                     }
-                    admission_context.config.logger.error(
+                    admission_context.logger().error(
                         "Failed to create user",
                         &[better_auth_core::observability::LogArgument::Error(&error)],
                     );

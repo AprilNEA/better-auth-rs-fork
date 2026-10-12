@@ -248,6 +248,7 @@ pub struct AuthRoute {
 
 /// Initialization context passed to plugin setup.
 pub struct AuthInitContext<S: AuthSchema> {
+    logger: crate::observability::LoggerConfig,
     request_runtime: crate::request_runtime::RequestRuntime,
     database_hooks: Vec<Arc<dyn crate::store::database_hooks::DatabaseHooks<S>>>,
     runtime: crate::plugin_runtime::PluginRuntime<S>,
@@ -424,10 +425,20 @@ impl AuthRoute {
 }
 
 impl<S: AuthSchema> AuthInitContext<S> {
+    /// Instance logger with renderer options resolved before plugin initialization.
+    pub fn logger(&self) -> &crate::observability::LoggerConfig {
+        &self.logger
+    }
+
     pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> Self {
+        let mut config = config;
+        if config.resolved_logger.is_none() {
+            Arc::make_mut(&mut config).initialize_logger();
+        }
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {
+            logger: config.logger().clone(),
             request_runtime: Default::default(),
             database_hooks: Vec::new(),
             runtime: Default::default(),
@@ -440,6 +451,14 @@ impl<S: AuthSchema> AuthInitContext<S> {
             password_policy,
             metadata: MetadataMap::new(),
         }
+    }
+
+    /// Run a plugin initializer while retaining the logger created for this instance.
+    #[doc(hidden)]
+    pub async fn initialize_plugin(&mut self, plugin: &dyn AuthPlugin<S>) -> AuthResult<()> {
+        let result = plugin.on_init(self).await;
+        Arc::make_mut(&mut self.config).resolved_logger = Some(self.logger.clone());
+        result
     }
 
     /// Resolve initial URL and trust options before plugin initialization.
@@ -489,7 +508,16 @@ impl<S: AuthSchema> AuthInitContext<S> {
 }
 
 impl<S: AuthSchema> AuthContext<S> {
+    /// Instance logger with renderer options resolved before plugin initialization.
+    pub fn logger(&self) -> &crate::observability::LoggerConfig {
+        self.config.logger()
+    }
+
     pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> Self {
+        let mut config = config;
+        if config.resolved_logger.is_none() {
+            Arc::make_mut(&mut config).initialize_logger();
+        }
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {
@@ -510,6 +538,10 @@ impl<S: AuthSchema> AuthContext<S> {
         database: Arc<dyn AuthStore<S>>,
         metadata: MetadataMap,
     ) -> Self {
+        let mut config = config;
+        if config.resolved_logger.is_none() {
+            Arc::make_mut(&mut config).initialize_logger();
+        }
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {

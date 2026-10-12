@@ -39,7 +39,7 @@ async fn write(
         )
         .await
     {
-        ctx.config.logger.warn(
+        ctx.logger().warn(
             &format!(
                 "Failed to migrate double-stringified metadata for API key {}:",
                 id.display_string()?
@@ -101,7 +101,7 @@ pub(super) async fn batch(
             Ok(())
         })),
         ctx.config.advanced.background_tasks.as_ref(),
-        &ctx.config.logger,
+        ctx.logger(),
     )
     .await;
     Ok(())

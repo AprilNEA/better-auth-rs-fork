@@ -228,7 +228,7 @@ impl RateLimitStore for EphemeralStore {
                     store.prune_rate_limits(now, cleanup_window).await
                 })),
                 self.config.advanced.background_tasks.as_ref(),
-                &self.config.logger,
+                self.config.logger(),
                 "Error pruning rate limit rows",
             )
             .await;
