@@ -107,7 +107,7 @@ impl Methods {
         let visits: FieldValue = Vec::<FieldValue>::new().into();
         codes.data("marker", "native-codes".into());
         codes.data("visits", visits.clone());
-        let status = match harness.scenario["status"].as_str().unwrap() {
+        let status: FieldValue = match harness.scenario["status"].as_str().unwrap() {
             "false" => false.into(),
             "object" => FieldMap::from([("marker".into(), "native-status".into())]).into(),
             "true" => true.into(),
@@ -310,10 +310,10 @@ pub(super) async fn capture(scenario: &Json) -> AuthResult<Json> {
         .into_iter()
         .find(|route| route.path == "/two-factor/verify-backup-code")
         .unwrap();
-    let mut headers = better_auth_core::Headers::new();
     let cookie_name = related_cookie_name(&context.config, TWO_FACTOR_COOKIE_SUFFIX);
     let signed = sign_cookie_value(SECRET, IDENTIFIER)?;
-    let _ = headers.insert("cookie", format!("{cookie_name}={signed}"));
+    let headers =
+        std::collections::HashMap::from([("cookie".into(), format!("{cookie_name}={signed}"))]);
     let before = harness.state(&inner)?;
     harness.activate();
     let result =
