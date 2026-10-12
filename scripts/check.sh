@@ -59,7 +59,23 @@ run_stage() {
       cargo test --locked --features axum,seaorm2,redis-cache --test session_additional_fields_tests --test wallet_additional_fields_tests
       ./scripts/consumer-check.sh
       ;;
-    consumer-schema) ./scripts/consumer-check.sh ;;
+    consumer-schema)
+      if [[ -z "${CHECK_COMPAT_PROFILE:-}" ]]; then
+        ./scripts/consumer-check.sh
+      else
+        if [[ ! "$CHECK_COMPAT_PROFILE" =~ ^generated_[[:alnum:]_]+(,generated_[[:alnum:]_]+)*$ ]]; then
+          echo "Use comma-separated generated consumer target names." >&2
+          return 1
+        fi
+        local target
+        local -a targets selection
+        IFS=',' read -r -a targets <<< "$CHECK_COMPAT_PROFILE"
+        for target in "${targets[@]}"; do
+          selection+=(--test "$target")
+        done
+        ./scripts/consumer-check.sh "${selection[@]}"
+      fi
+      ;;
     fullstack) cargo check --locked --manifest-path examples/fullstack/backend/Cargo.toml ;;
     quick-start) bun scripts/quick-start-check.ts ;;
     alignment) ./scripts/alignment-check.sh --skip-build ;;

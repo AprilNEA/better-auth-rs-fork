@@ -9,6 +9,7 @@ use better_auth::{
         store::{OrganizationStore, schema::EntityRole},
         user_fields::UserConfig,
     },
+    plugins::organization::{OrganizationConfig, OrganizationPlugin, OrganizationTeamsConfig},
     prelude::{CreateMember, CreateOrganization, CreateTeam, CreateTwoFactor},
 };
 use std::sync::{
@@ -85,6 +86,13 @@ pub(super) async fn reference_writes<
                 .with_plugin_schema::<P>(),
         )
         .plugin(DeviceOwnerReference)
+        .plugin(OrganizationPlugin::with_config(OrganizationConfig {
+            teams: OrganizationTeamsConfig {
+                enabled: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        }))
         .build()
         .await
         .unwrap();

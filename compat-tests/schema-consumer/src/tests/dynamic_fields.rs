@@ -2,7 +2,7 @@ use better_auth::config::{FieldTransforms, UserFieldTransform};
 use better_auth::{
     AuthConfig, BetterAuth, FieldValue, SchemaValue,
     config::{UserFieldConfig, UserFieldType},
-    plugins::organization::{OrganizationConfig, OrganizationPlugin},
+    plugins::organization::{OrganizationConfig, OrganizationPlugin, OrganizationTeamsConfig},
     prelude::{CreateOrganization, CreateTeam},
     seaorm::{Database, SeaOrmStore, sea_orm::EntityTrait},
 };
@@ -16,7 +16,13 @@ mod generated {
 async fn generated_builtin_replacement_types_preserve_storage_and_wire_values() {
     let database = Database::connect("sqlite::memory:").await.unwrap();
     generated::create_auth_tables(&database).await.unwrap();
-    let mut organization = OrganizationConfig::default();
+    let mut organization = OrganizationConfig {
+        teams: OrganizationTeamsConfig {
+            enabled: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
     organization.schema.organization.fields_mut().extend([
         (
             "name".into(),

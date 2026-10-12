@@ -33,6 +33,19 @@ mod generated {
 
 struct DisplayFields;
 
+struct RequestErrors;
+
+impl<S: AuthSchema> better_auth::__private_core::api_error::ApiErrorHandler<S> for RequestErrors {
+    fn on_error(
+        &self,
+        error: &better_auth::AuthError,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<better_auth::__private_core::api_error::ApiErrorTask>> {
+        eprintln!("Generated schema request failed: {error:?}");
+        Ok(None)
+    }
+}
+
 #[better_auth::__private_core::__private_async_trait::async_trait]
 impl<S: AuthSchema> AuthPlugin<S> for DisplayFields {
     fn name(&self) -> &'static str {
@@ -82,6 +95,7 @@ async fn renamed_plugin_tables_preserve_authentication_and_atomic_storage() {
     config.session.bearer = Some(Default::default());
     let auth = Arc::new(
         BetterAuth::<generated::AppAuthSchema>::new(config.clone())
+            .on_api_error(Arc::new(RequestErrors))
             .store(
                 SeaOrmStore::<generated::AppAuthSchema>::new(config, database.clone())
                     .with_organization_schema::<generated::AppOrganizationSchema>()
