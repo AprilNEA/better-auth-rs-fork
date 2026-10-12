@@ -178,7 +178,14 @@ async fn nan_period_enrollment_uri_encodes_the_persisted_secret() -> AuthResult<
             ctx.config.encryption_secret(),
             &factor.backup_codes,
         )?)?;
-        assert_eq!(codes, serde_json::to_value(response.backup_codes)?);
+        assert_eq!(
+            codes,
+            response
+                .backup_codes
+                .expect("TOTP enrollment backup codes")
+                .json()?
+                .expect("Backup codes serialize to JSON")
+        );
     }
     Ok(())
 }

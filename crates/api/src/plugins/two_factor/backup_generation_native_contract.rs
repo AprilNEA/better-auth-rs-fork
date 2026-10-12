@@ -12,7 +12,7 @@ use crate::plugins::test_helpers::{
     },
 };
 use better_auth_core::{
-    AuthPlugin, FieldFunction, HttpMethod,
+    AuthPlugin, AuthRoute, FieldFunction, FromFieldMap, HttpMethod,
     plugin_runtime::ModelFields,
     store::{StatelessSchema, schema::EntityRole},
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
@@ -108,6 +108,18 @@ struct OutputPolicy(Arc<Harness>);
 impl AuthPlugin<StatelessSchema> for OutputPolicy {
     fn name(&self) -> &'static str {
         "backup-generation-output"
+    }
+
+    fn routes(&self) -> Vec<AuthRoute> {
+        Vec::new()
+    }
+
+    async fn on_request(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<StatelessSchema>,
+    ) -> AuthResult<Option<AuthResponse>> {
+        Ok(None)
     }
 
     fn schema(&self, fields: &mut ModelFields) -> AuthResult<()> {

@@ -4,18 +4,14 @@ use validator::Validate;
 
 // -- Request types --
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub(crate) struct VerifyRegistrationRequest {
     pub(super) response: better_auth_core::FieldValue,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) create_session: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub(crate) struct VerifyAuthenticationRequest {
     pub(super) response: better_auth_core::FieldValue,
 }
