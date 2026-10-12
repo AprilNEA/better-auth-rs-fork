@@ -19,4 +19,6 @@ test("Memory User sorting resolves ID aliases after Where binding and before out
     }
     writeSync(1, `${JSON.stringify({ contract: "core-query-id-sort", version: observation.version, backend: observation.backend, case: captured })}\n`);
   }
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/core-query-id-sort-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
 });

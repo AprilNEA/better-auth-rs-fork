@@ -1,0 +1,3048 @@
+{
+  "version": "1.7.6",
+  "backend": "memory",
+  "cases": [
+    {
+      "model": "user",
+      "operation": "sort-only",
+      "serial": false,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "2",
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "2",
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "1",
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "1",
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": []
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              },
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "second"
+            ],
+            [
+              "output",
+              "label",
+              "first"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": []
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    },
+    {
+      "model": "user",
+      "operation": "sort-only",
+      "serial": true,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 2,
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 2,
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 1,
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 1,
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": []
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              },
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "second"
+            ],
+            [
+              "output",
+              "label",
+              "first"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": []
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    },
+    {
+      "model": "user",
+      "operation": "sort-after-email",
+      "serial": false,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "2",
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "2",
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "1",
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "1",
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    },
+    {
+      "model": "user",
+      "operation": "sort-after-email",
+      "serial": true,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 2,
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 2,
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 1,
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 1,
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "email",
+                  "operator": "contains",
+                  "value": "@core-query-id-sort.test"
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    },
+    {
+      "model": "user",
+      "operation": "sort-after-id-in",
+      "serial": false,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "2",
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "2",
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": "1",
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": "1",
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "2",
+                "label": "first",
+                "id": "1"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": "1",
+                "label": "second",
+                "id": "2"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    },
+    {
+      "model": "user",
+      "operation": "sort-after-id-in",
+      "serial": true,
+      "idFieldName": "old_id",
+      "setup": [
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "1",
+              "name": "Core sort first",
+              "email": "first@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 2,
+              "label": "first"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort first",
+            "email": "first@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 2,
+            "label": "first",
+            "id": "1"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "input": {
+            "model": "user",
+            "forceAllowId": true,
+            "data": {
+              "id": "2",
+              "name": "Core sort second",
+              "email": "second@core-query-id-sort.test",
+              "emailVerified": false,
+              "image": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "selectionId": 1,
+              "label": "second"
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "name": "Core sort second",
+            "email": "second@core-query-id-sort.test",
+            "emailVerified": false,
+            "image": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "selectionId": 1,
+            "label": "second",
+            "id": "2"
+          },
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "listUsers+countTotalUsers",
+          "input": {
+            "findMany": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ],
+              "sortBy": {
+                "field": "id",
+                "direction": "asc"
+              },
+              "limit": 10,
+              "offset": 0
+            },
+            "count": {
+              "model": "user",
+              "where": [
+                {
+                  "field": "id",
+                  "operator": "in",
+                  "value": [
+                    "1",
+                    "2"
+                  ]
+                }
+              ]
+            }
+          },
+          "before": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          },
+          "result": {
+            "users": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "1",
+                "label": "first"
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "id": "2",
+                "label": "second"
+              }
+            ],
+            "total": 2
+          },
+          "events": [
+            [
+              "output",
+              "label",
+              "first"
+            ],
+            [
+              "output",
+              "label",
+              "second"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "name": "Core sort first",
+                "email": "first@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 2,
+                "label": "first",
+                "id": 1
+              },
+              {
+                "name": "Core sort second",
+                "email": "second@core-query-id-sort.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "old_id": 1,
+                "label": "second",
+                "id": 2
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": []
+          }
+        }
+      ]
+    }
+  ]
+}
