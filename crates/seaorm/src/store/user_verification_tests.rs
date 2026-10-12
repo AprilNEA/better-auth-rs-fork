@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "The concurrent verification contract asserts ownership and persisted cleanup after hook failure."
+)]
+
 use super::*;
 use crate::store::{bundled_schema::BundledSchema, migrator::run_migrations};
 use better_auth_core::{
@@ -53,8 +58,8 @@ async fn database_cleanup_reservations_preserve_new_owner_sessions_after_committ
             let user = store.create_user(CreateUser::new().with_email("proof@example.com").with_name("Fixture")).await?;
             let user_id = user.id().into_owned();
             let _ = store.create_account(CreateAccount {
-user_id: (user_id.clone()).into(),
-account_id: (user_id.clone()).into(),
+user_id: user_id.clone(),
+account_id: user_id.clone(),
 provider_id: "credential".into(),
 password: (Some("unproven".into())).into(),
 access_token: Default::default(),
@@ -65,28 +70,28 @@ refresh_token_expires_at: Default::default(),
 scope: Default::default(),
 ..Default::default()
 }).await?;
-            let _ = store.create_session(session(user_id.typed().unwrap())).await?;
+            let _ = store.create_session(session(user_id.typed()?)).await?;
             let failing = SeaOrmStore::<BundledSchema>::new(config, database.clone()).hook(FailAfterVerification);
-            assert!(matches!(failing.verify_user_and_revoke_unproven_access(user_id.typed().unwrap()).await, Err(better_auth_core::AuthError::Internal(message)) if message == "verification hook failed"));
-            assert!(store.get_user_by_id(user_id.typed().unwrap()).await?.unwrap().email_verified().typed().copied().unwrap());
-            assert!(store.get_user_accounts(user_id.typed().unwrap()).await?.is_empty());
-            assert!(store.get_user_sessions(user_id.typed().unwrap()).await?.is_empty());
-            assert!(store.get_verification_by_identifier(&format!("revoke-unproven-account-access:{}", user_id.typed().unwrap())).await?.is_none());
-            let _ = store.update_user(user_id.typed().unwrap(), UpdateUser { email_verified: Some(false), ..Default::default() }).await?;
+            assert!(matches!(failing.verify_user_and_revoke_unproven_access(user_id.typed()?).await, Err(better_auth_core::AuthError::Internal(message)) if message == "verification hook failed"));
+            assert!(store.get_user_by_id(user_id.typed()?).await?.ok_or_else(|| AuthError::internal("Verified user is absent"))?.email_verified().typed().copied()?);
+            assert!(store.get_user_accounts(user_id.typed()?).await?.is_empty());
+            assert!(store.get_user_sessions(user_id.typed()?).await?.is_empty());
+            assert!(store.get_verification_by_identifier(&format!("revoke-unproven-account-access:{}", user_id.typed()?)).await?.is_none());
+            let _ = store.update_user(user_id.typed()?, UpdateUser { email_verified: Some(false), ..Default::default() }).await?;
             let barrier = Arc::new(Barrier::new(8));
             let mut tasks = JoinSet::new();
             for _ in 0..8 {
                 let store = store.clone(); let barrier = barrier.clone(); let user_id = user_id.clone();
                 let _ = tasks.spawn(async move {
                     let _ = barrier.wait().await;
-                    let user = store.verify_user_and_revoke_unproven_access(user_id.typed().unwrap()).await?.unwrap();
-                    assert!(user.email_verified().typed().copied().unwrap());
-                    store.create_session(session(user_id.typed().unwrap())).await
+                    let user = store.verify_user_and_revoke_unproven_access(user_id.typed()?).await?.ok_or_else(|| AuthError::internal("Verified user is absent"))?;
+                    assert!(user.email_verified().typed().copied()?);
+                    store.create_session(session(user_id.typed()?)).await
                 });
             }
             while let Some(result) = tasks.join_next().await { let _ = result??; }
-            assert_eq!(store.get_user_sessions(user_id.typed().unwrap()).await?.len(), 8);
-            assert!(store.get_verification_by_identifier(&format!("revoke-unproven-account-access:{}", user_id.typed().unwrap())).await?.is_none());
+            assert_eq!(store.get_user_sessions(user_id.typed()?).await?.len(), 8);
+            assert!(store.get_verification_by_identifier(&format!("revoke-unproven-account-access:{}", user_id.typed()?)).await?.is_none());
             Ok::<_, Box<dyn std::error::Error>>(())
         }.await;
         database.close().await?;
