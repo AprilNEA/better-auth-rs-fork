@@ -22,7 +22,7 @@ export const twoFactorBackupCodeNativeCases = [
   { name: "filter-cas-conflict", replace: true },
 ].map(scenario => ({ consumer: "two-factor-backup-code", value: "owner", status: "true", updated: "array", ...scenario }));
 
-async function captureCase(scenario) {
+export async function captureTwoFactorBackupCodeNativeCase(scenario) {
   const identifier = "2fa-backup-native";
   const harness = createConsumerHarness(scenario, identifier);
   const { runtime, native } = harness;
@@ -41,7 +41,8 @@ async function captureCase(scenario) {
   const updated = scenario.updated === "undefined" ? undefined : scenario.updated === "null" ? null
     : scenario.updated === "false" ? false : scenario.updated === "zero" ? 0 : scenario.updated === "nan" ? NaN
     : scenario.updated === "empty" ? "" : scenario.updated === "string" ? "kept"
-    : scenario.updated === "object" ? { marker: "native-filter-result", ownUndefined: undefined } : ["keep", 7];
+    : scenario.updated === "function" ? function backupUpdated() {}
+    : scenario.updated.startsWith("object") ? { marker: "native-filter-result", ownUndefined: undefined } : ["keep", 7];
   const method = (object, name, body) => Object.defineProperty(object, name, {
     configurable: true, get() {
       visits.push(`${name}:get`);
@@ -69,8 +70,9 @@ async function captureCase(scenario) {
     harness.event("filter:predicate", { results });
     return updated;
   });
-  if (scenario.updated === "object") method(updated, "toJSON", ([key]) => {
+  if (scenario.updated.startsWith("object")) method(updated, "toJSON", ([key]) => {
     assert.equal(key, "");
+    if (scenario.updated === "object-undefined") return undefined;
     return { codes: ["kept"], tag: "native" };
   });
   const codeState = () => ({ root: codes, visits: [...visits], status, updated });
@@ -90,6 +92,8 @@ async function captureCase(scenario) {
     },
     async encrypt(serialized) {
       harness.event("cipher:encrypt", { value: runtime.value(serialized) });
+      if (scenario.fail === "cipher:encrypt") harness.fail("throw:cipher:encrypt");
+      if (scenario.encrypted === "string") return "encoded-native-backup-codes";
       return serialized;
     },
   };
@@ -105,7 +109,7 @@ async function captureCase(scenario) {
   if (scenario.fail === "includes:get") expectedMethods.splice(1);
   else if (scenario.fail === "includes:call") expectedMethods.splice(2);
   else if (scenario.fail === "filter:get") expectedMethods.splice(3);
-  if (scenario.updated === "object") expectedMethods.push("get:toJSON", "call:toJSON");
+  if (scenario.updated.startsWith("object")) expectedMethods.push("get:toJSON", "call:toJSON");
   assert.deepEqual(methodPhases, expectedMethods);
   const consumedAt = events.findIndex(event => event.phase === "storage.getAndDelete" && event.key === attemptsKey);
   const includesAt = events.findIndex(event => event.phase === "get:includes");
@@ -114,7 +118,7 @@ async function captureCase(scenario) {
   assert.equal(after.targetPresent, true);
   const remaining = harness.cache.has(attemptsKey) ? JSON.parse(harness.cache.get(attemptsKey)) : undefined;
   const invalid = !scenario.fail && (scenario.status === "false" || ["undefined", "null", "false", "zero", "nan", "empty"].includes(scenario.updated));
-  const restored = scenario.fail && scenario.fail !== "toJSON:call";
+  const restored = scenario.fail && scenario.fail !== "toJSON:call" && scenario.fail !== "cipher:encrypt";
   if (scenario.fail) {
     assert.equal(captured.caught, harness.original);
     assert.equal(captured.observation.runtime.outcome.sameOriginal, true);
@@ -131,12 +135,15 @@ async function captureCase(scenario) {
   assert.equal(remaining?.value, invalid ? "1" : restored ? "0" : undefined);
   if (remaining) assert.equal(remaining.expiresAt, new Date(now + 60_000).toISOString());
   const success = !scenario.fail && !invalid && !scenario.replace;
-  const encoded = scenario.updated === "object" ? '{"codes":["kept"],"tag":"native"}' : scenario.updated === "string" ? '"kept"' : '["keep",7]';
+  const encoded = scenario.encrypted === "string" ? "encoded-native-backup-codes" : scenario.updated === "object" ? '{"codes":["kept"],"tag":"native"}' : scenario.updated === "string" ? '"kept"' : '["keep",7]';
   assert.deepEqual(harness.database.twoFactor, [{ ...factor,
     backupCodes: scenario.replace ? "concurrent-backup-ciphertext" : success ? encoded : "native-backup-ciphertext",
     failedVerificationCount: success ? 0 : invalid ? 3 : 2,
   }]);
-  assert.equal(events.filter(event => event.phase === "cipher:encrypt").length, success || scenario.replace ? 1 : 0);
+  assert.equal(events.filter(event => event.phase === "cipher:encrypt").length, success || scenario.replace || scenario.fail === "cipher:encrypt" ? 1 : 0);
+  if (scenario.updated === "function" || scenario.updated === "object-undefined") {
+    assert.deepEqual(events.find(event => event.phase === "cipher:encrypt").value, { type: "undefined" });
+  }
   return { ...captured.observation, codes: { before: codesBefore, after: native.snapshot(codeState()) },
     runtime: { ...captured.observation.runtime, codes: { before: runtimeCodesBefore, after: runtime.value(codeState()) } } };
 }
@@ -151,7 +158,7 @@ export async function captureTwoFactorBackupCodeNative() {
   return withClock(async setClock => {
     setClock(now);
     const cases = [];
-    for (const scenario of twoFactorBackupCodeNativeCases) cases.push(await captureCase(scenario));
+    for (const scenario of twoFactorBackupCodeNativeCases) cases.push(await captureTwoFactorBackupCodeNativeCase(scenario));
     return { version: secondaryNativeVersion, backend: "memory", provenance,
       boundary: "Real TwoFactor verifyBackupCode endpoint with disableSession=true, Memory adapter and secondary storage. A configured decrypt callback returns a native Date object, which safeJSONParse preserves. Complete includes/filter getter and method order, receiver identity, callback failures, attempts, factor rows and storage are observed. JSON encoding occurs through the real custom encrypt path. Concurrent replacement uses the real adapter update before the endpoint compare-and-swap. No consumer algorithm is copied into the harness.", cases };
   });
