@@ -18,6 +18,7 @@ use crate::plugins::api_key::{ApiKeyPlugin, handlers, types::ListKeysQuery};
 use super::super::{ApiKeyConfig, ApiKeyStorage, deserialize, list, put, remove_cached};
 use super::*;
 
+mod native_contract;
 mod native_methods;
 
 const INDEX: &str = "api-key:by-ref:owner";

@@ -9,6 +9,8 @@ use crate::{AuthError, AuthResult, AuthSchema, FieldDate, FieldMap, FieldValue, 
 use async_trait::async_trait;
 
 #[cfg(test)]
+mod native_contract;
+#[cfg(test)]
 mod tests;
 
 impl<S: AuthSchema> SecondaryStore<S> {
@@ -40,13 +42,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
         }
         let user =
             user.ok_or_else(|| AuthError::internal("Cannot refresh sessions for a missing user"))?;
-        let user = UserView::with_internal_fields_for_adapter(
-            user,
-            &self.config.user,
-            &self.metadata,
-            self.inner.supports_native_json(),
-        )
-        .await?;
         let raw = self
             .secondary()?
             .get_native(&active_sessions_key(&user.id.field_value())?)
@@ -77,27 +72,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
             }
             value => return Err(unsupported_map(value.model_property("map")?)),
         };
-        let mut fields = FieldMap::from(user);
-        let mut ordered = FieldMap::new();
-        let configured = self.config.user.user_field_schema_with_plugins(
-            &UserView::active_plugin_fields(&self.metadata).collect::<Vec<_>>(),
-        );
-        // Runtime configuration omits unchanged native fields; emit their slots first and append only an implicit ID after other fields.
-        for name in crate::user_fields::USER_FIELDS
-            .iter()
-            .copied()
-            .chain(configured.fields().keys().map(String::as_str))
-        {
-            if let Some(value) = fields.remove(name) {
-                let _ = ordered.insert(name.to_owned(), value);
-            }
-        }
-        let id = fields.remove("id");
-        ordered.extend(fields);
-        if let Some(id) = id {
-            let _ = ordered.insert("id".into(), id);
-        }
-        let user = FieldValue::from(ordered);
+        let user = FieldValue::from(FieldMap::from(user.clone()));
         crate::request_runtime::concurrent::all(
             "User session refresh task",
             references.snapshot()?.into_iter().map(|reference| {

@@ -112,18 +112,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
             Some(transaction) => transaction.get_user_by_id_field(owner).await?,
             None => self.inner.get_user_by_id_field(owner).await?,
         };
-        let user = match user {
-            Some(user) => Some(
-                UserView::with_internal_fields_for_adapter(
-                    &user,
-                    &self.config.user,
-                    &self.metadata,
-                    self.inner.supports_native_json(),
-                )
-                .await?,
-            ),
-            None => None,
-        };
         let seconds = crate::SchemaValue::<crate::FieldDate>::from_field(expiry).cache_ttl(now)?;
         if seconds > 0.0 {
             let value = cache::session_envelope(session.clone(), user);

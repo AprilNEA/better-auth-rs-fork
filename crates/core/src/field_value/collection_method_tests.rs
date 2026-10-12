@@ -7,6 +7,7 @@ use super::*;
 use crate::{FieldMap, Utf16String};
 use std::sync::{Arc, Mutex};
 
+#[path = "collection_method_tests/sort.rs"]
 mod sort;
 
 #[test]
@@ -157,7 +158,7 @@ fn builtin_map_preserves_holes_and_reads_later_values_after_the_callback() -> Au
         }
         Ok(value.clone())
     });
-    let mapped = array.map_method(&mapper, "array")?;
+    let mapped = array.map_method(&mapper, "array", None)?;
     assert!(!mapped.strict_equals(&array));
     assert_eq!(mapped.model_property("length")?, 4.into());
     assert!(!mapped.has_property("1")?);
@@ -228,7 +229,7 @@ fn custom_native_methods_receive_original_arguments_and_return_native_values() -
             _ => FieldMap::new().into(),
         };
         let actual = match (&argument, name) {
-            (FieldValue::Function(callback), "map") => value.map_method(callback, "value")?,
+            (FieldValue::Function(callback), "map") => value.map_method(callback, "value", None)?,
             (FieldValue::Function(callback), "sort") => value.sort_method(callback, "value")?,
             (_, "concat") => value.concat_method(std::slice::from_ref(&argument), "value")?,
             (_, "getTime") => value.get_time_method("value")?,

@@ -582,7 +582,10 @@ run_stage() {
         ./compat-tests/reference-server/contracts/api-key-cache-batch.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts \
         ./compat-tests/reference-server/contracts/secondary-user-refresh.test.ts \
-        ./compat-tests/reference-server/contracts/secondary-user-refresh-values.test.ts || cache_status=1
+        ./compat-tests/reference-server/contracts/secondary-user-refresh-values.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-reference-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/session-secondary-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/safe-json-native-capture.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --lib -- \
         request_runtime::concurrent:: utils::json::runtime:: field_value:: schema_value:: store::secondary:: wire::api_key_view::tests:: || cache_status=1

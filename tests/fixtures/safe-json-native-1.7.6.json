@@ -1,0 +1,5059 @@
+{
+  "contract": "safe-json-native",
+  "version": "1.7.6",
+  "boundary": "safeJSONParse with the real endpoint-scoped logger; descriptor reflection and Error host metadata remain in the source audit.",
+  "provenance": {
+    "path": "@better-auth/core/dist/utils/json.mjs",
+    "sha256": "2959164c7b961306247c28f29b4d051da60d94ce27b4976a90c19991a50d2275"
+  },
+  "cases": [
+    {
+      "name": "array-own-map-function-result",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "function",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype",
+            "untouched",
+            "preservedDate",
+            "preservedFunction"
+          ],
+          "properties": [
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": false,
+                "value": 0
+              }
+            ],
+            [
+              "name",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": false,
+                "value": "mapResult"
+              }
+            ],
+            [
+              "prototype",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "object",
+                  "ownKeys": [
+                    "constructor"
+                  ],
+                  "properties": [
+                    [
+                      "constructor",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "reference": "object-1"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "untouched",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "preservedDate",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "preservedFunction",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name",
+                    "prototype"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "preservedFunction"
+                      }
+                    ],
+                    [
+                      "prototype",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-5",
+                          "type": "object",
+                          "ownKeys": [
+                            "constructor"
+                          ],
+                          "properties": [
+                            [
+                              "constructor",
+                              {
+                                "enumerable": false,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "reference": "object-4"
+                                }
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-2"
+                  }
+                }
+              }
+            ]
+          ],
+          "value": {
+            "type": "function",
+            "identity": "function-3"
+          }
+        }
+      },
+      "events": [
+        {
+          "phase": "get:map",
+          "sameReceiver": true
+        },
+        {
+          "phase": "call:map",
+          "sameReceiver": true,
+          "arguments": [
+            {
+              "type": "function",
+              "identity": "function-1"
+            }
+          ]
+        },
+        {
+          "phase": "map:reviver-results",
+          "parsed": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "date": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "fn": {
+            "type": "function",
+            "identity": "function-2"
+          },
+          "missing": {
+            "type": "undefined"
+          },
+          "sameDate": true,
+          "sameFunction": true
+        }
+      ],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "preservedFunction",
+          "length": 0,
+          "source": "function preservedFunction() {}",
+          "string": "function preservedFunction() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype"
+          ]
+        },
+        {
+          "identity": "function-3",
+          "name": "mapResult",
+          "length": 0,
+          "source": "function mapResult() {}",
+          "string": "function mapResult() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype",
+            "untouched",
+            "preservedDate",
+            "preservedFunction"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "type": "function",
+            "identity": "function-3"
+          }
+        },
+        "events": [
+          {
+            "phase": "get:map",
+            "sameReceiver": true
+          },
+          {
+            "phase": "call:map",
+            "sameReceiver": true,
+            "arguments": [
+              {
+                "type": "function",
+                "identity": "function-1"
+              }
+            ]
+          },
+          {
+            "phase": "map:reviver-results",
+            "parsed": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "date": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "fn": {
+              "type": "function",
+              "identity": "function-2"
+            },
+            "missing": {
+              "type": "undefined"
+            },
+            "sameDate": true,
+            "sameFunction": true
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": true,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "resultData": {
+          "untouched": "2030-01-02T03:04:05.000Z",
+          "preservedDate": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "preservedFunction": {
+            "type": "function",
+            "identity": "function-2"
+          }
+        },
+        "inputKeysAfter": [
+          "0",
+          "2"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1",
+          "function-2",
+          "function-3"
+        ]
+      }
+    },
+    {
+      "name": "array-own-map-object-result",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "untouched",
+            "preservedDate",
+            "preservedFunction"
+          ],
+          "properties": [
+            [
+              "untouched",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "preservedDate",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "preservedFunction",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name",
+                    "prototype"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "preservedFunction"
+                      }
+                    ],
+                    [
+                      "prototype",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-4",
+                          "type": "object",
+                          "ownKeys": [
+                            "constructor"
+                          ],
+                          "properties": [
+                            [
+                              "constructor",
+                              {
+                                "enumerable": false,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "reference": "object-3"
+                                }
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-2"
+                  }
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [
+        {
+          "phase": "get:map",
+          "sameReceiver": true
+        },
+        {
+          "phase": "call:map",
+          "sameReceiver": true,
+          "arguments": [
+            {
+              "type": "function",
+              "identity": "function-1"
+            }
+          ]
+        },
+        {
+          "phase": "map:reviver-results",
+          "parsed": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "date": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "fn": {
+            "type": "function",
+            "identity": "function-2"
+          },
+          "missing": {
+            "type": "undefined"
+          },
+          "sameDate": true,
+          "sameFunction": true
+        }
+      ],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "preservedFunction",
+          "length": 0,
+          "source": "function preservedFunction() {}",
+          "string": "function preservedFunction() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "untouched": "2030-01-02T03:04:05.000Z",
+            "preservedDate": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "preservedFunction": {
+              "type": "function",
+              "identity": "function-2"
+            }
+          }
+        },
+        "events": [
+          {
+            "phase": "get:map",
+            "sameReceiver": true
+          },
+          {
+            "phase": "call:map",
+            "sameReceiver": true,
+            "arguments": [
+              {
+                "type": "function",
+                "identity": "function-1"
+              }
+            ]
+          },
+          {
+            "phase": "map:reviver-results",
+            "parsed": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "date": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "fn": {
+              "type": "function",
+              "identity": "function-2"
+            },
+            "missing": {
+              "type": "undefined"
+            },
+            "sameDate": true,
+            "sameFunction": true
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": true,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "resultData": {
+          "untouched": "2030-01-02T03:04:05.000Z",
+          "preservedDate": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          },
+          "preservedFunction": {
+            "type": "function",
+            "identity": "function-2"
+          }
+        },
+        "inputKeysAfter": [
+          "0",
+          "2"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1",
+          "function-2"
+        ]
+      }
+    },
+    {
+      "name": "array-map-getter-error",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": null
+      },
+      "events": [
+        {
+          "phase": "get:map",
+          "sameReceiver": true
+        },
+        {
+          "phase": "logger:error",
+          "message": "Error parsing JSON",
+          "argumentCount": 1,
+          "argumentKeys": [
+            "error"
+          ],
+          "sameOriginal": true,
+          "error": {
+            "failure": "array-map-getter-error",
+            "ownUndefined": {
+              "type": "undefined"
+            }
+          }
+        }
+      ],
+      "logs": [
+        {
+          "message": "Error parsing JSON",
+          "arguments": {
+            "identity": "object-1",
+            "type": "array",
+            "ownKeys": [
+              "0",
+              "length"
+            ],
+            "properties": [
+              [
+                "0",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "error"
+                    ],
+                    "properties": [
+                      [
+                        "error",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "object",
+                            "ownKeys": [
+                              "failure",
+                              "ownUndefined"
+                            ],
+                            "properties": [
+                              [
+                                "failure",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "array-map-getter-error"
+                                }
+                              ],
+                              [
+                                "ownUndefined",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": {
+                                    "type": "undefined"
+                                  }
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ],
+              [
+                "length",
+                {
+                  "enumerable": false,
+                  "configurable": false,
+                  "writable": true,
+                  "value": 1
+                }
+              ]
+            ]
+          },
+          "sameOriginal": true
+        }
+      ],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": null
+        },
+        "events": [
+          {
+            "phase": "get:map",
+            "sameReceiver": true
+          },
+          {
+            "phase": "logger:error",
+            "message": "Error parsing JSON",
+            "argumentCount": 1,
+            "argumentKeys": [
+              "error"
+            ],
+            "sameOriginal": true,
+            "error": {
+              "failure": "array-map-getter-error",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "0",
+          "2"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": []
+      }
+    },
+    {
+      "name": "array-map-method-error",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": null
+      },
+      "events": [
+        {
+          "phase": "get:map",
+          "sameReceiver": true
+        },
+        {
+          "phase": "call:map",
+          "sameReceiver": true,
+          "arguments": [
+            {
+              "type": "function",
+              "identity": "function-1"
+            }
+          ]
+        },
+        {
+          "phase": "logger:error",
+          "message": "Error parsing JSON",
+          "argumentCount": 1,
+          "argumentKeys": [
+            "error"
+          ],
+          "sameOriginal": true,
+          "error": {
+            "failure": "array-map-method-error",
+            "ownUndefined": {
+              "type": "undefined"
+            }
+          }
+        }
+      ],
+      "logs": [
+        {
+          "message": "Error parsing JSON",
+          "arguments": {
+            "identity": "object-1",
+            "type": "array",
+            "ownKeys": [
+              "0",
+              "length"
+            ],
+            "properties": [
+              [
+                "0",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "error"
+                    ],
+                    "properties": [
+                      [
+                        "error",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "object",
+                            "ownKeys": [
+                              "failure",
+                              "ownUndefined"
+                            ],
+                            "properties": [
+                              [
+                                "failure",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "array-map-method-error"
+                                }
+                              ],
+                              [
+                                "ownUndefined",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": {
+                                    "type": "undefined"
+                                  }
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ],
+              [
+                "length",
+                {
+                  "enumerable": false,
+                  "configurable": false,
+                  "writable": true,
+                  "value": 1
+                }
+              ]
+            ]
+          },
+          "sameOriginal": true
+        }
+      ],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": null
+        },
+        "events": [
+          {
+            "phase": "get:map",
+            "sameReceiver": true
+          },
+          {
+            "phase": "call:map",
+            "sameReceiver": true,
+            "arguments": [
+              {
+                "type": "function",
+                "identity": "function-1"
+              }
+            ]
+          },
+          {
+            "phase": "logger:error",
+            "message": "Error parsing JSON",
+            "argumentCount": 1,
+            "argumentKeys": [
+              "error"
+            ],
+            "sameOriginal": true,
+            "error": {
+              "failure": "array-map-method-error",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "0",
+          "2"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1"
+        ]
+      }
+    },
+    {
+      "name": "array-map-noncallable",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": null
+      },
+      "events": [
+        {
+          "phase": "get:map",
+          "sameReceiver": true
+        },
+        {
+          "phase": "logger:error",
+          "message": "Error parsing JSON",
+          "argumentCount": 1,
+          "argumentKeys": [
+            "error"
+          ],
+          "sameOriginal": false,
+          "error": {
+            "name": "TypeError",
+            "message": "value.map is not a function. (In 'value.map(reviveDates)', 'value.map' is undefined)",
+            "properties": {}
+          }
+        }
+      ],
+      "logs": [
+        {
+          "message": "Error parsing JSON",
+          "arguments": {
+            "identity": "object-1",
+            "type": "array",
+            "ownKeys": [
+              "0",
+              "length"
+            ],
+            "properties": [
+              [
+                "0",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "error"
+                    ],
+                    "properties": [
+                      [
+                        "error",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "object",
+                            "ownKeys": [
+                              "message",
+                              "originalLine",
+                              "originalColumn",
+                              "line",
+                              "column",
+                              "sourceURL",
+                              "stack"
+                            ],
+                            "properties": [
+                              [
+                                "message",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "value.map is not a function. (In 'value.map(reviveDates)', 'value.map' is undefined)"
+                                }
+                              ],
+                              [
+                                "originalLine",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": 19
+                                }
+                              ],
+                              [
+                                "originalColumn",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": 21
+                                }
+                              ],
+                              [
+                                "line",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": 20
+                                }
+                              ],
+                              [
+                                "column",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": 41
+                                }
+                              ],
+                              [
+                                "sourceURL",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/core/dist/utils/json.mjs"
+                                }
+                              ],
+                              [
+                                "stack",
+                                {
+                                  "enumerable": false,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "TypeError: value.map is not a function. (In 'value.map(reviveDates)', 'value.map' is undefined)\n    at reviveDates (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/core/dist/utils/json.mjs:20:41)\n    at safeJSONParse (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/core/dist/utils/json.mjs:32:11)\n    at run (node:async_hooks:144:29)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/safe-json-native-capture.mjs:101:20)\n    at async capture (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-runtime.mjs:61:28)\n    at async outcome (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-shared.mjs:52:59)\n    at async captureCase (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/safe-json-native-capture.mjs:100:32)\n    at async captureSafeJsonNative (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/safe-json-native-capture.mjs:156:60)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/safe-json-native-capture.test.ts:6:85)"
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ],
+              [
+                "length",
+                {
+                  "enumerable": false,
+                  "configurable": false,
+                  "writable": true,
+                  "value": 1
+                }
+              ]
+            ]
+          },
+          "sameOriginal": false
+        }
+      ],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "length",
+          "map"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "ordinary"
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 3
+            }
+          ],
+          [
+            "map",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": null
+        },
+        "events": [
+          {
+            "phase": "get:map",
+            "sameReceiver": true
+          },
+          {
+            "phase": "logger:error",
+            "message": "Error parsing JSON",
+            "argumentCount": 1,
+            "argumentKeys": [
+              "error"
+            ],
+            "sameOriginal": false,
+            "error": {
+              "name": "TypeError",
+              "message": "value.map is not a function. (In 'value.map(reviveDates)', 'value.map' is undefined)",
+              "properties": {}
+            }
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "0",
+          "2"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": []
+      }
+    },
+    {
+      "name": "array-holes-and-undefined",
+      "before": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "3",
+          "4",
+          "length",
+          "ignoredNamedField"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "3",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "date",
+                "ownKeys": [],
+                "properties": [],
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            }
+          ],
+          [
+            "4",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name",
+                  "prototype"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "preservedFunction"
+                    }
+                  ],
+                  [
+                    "prototype",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "object",
+                        "ownKeys": [
+                          "constructor"
+                        ],
+                        "properties": [
+                          [
+                            "constructor",
+                            {
+                              "enumerable": false,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "reference": "object-3"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              }
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 5
+            }
+          ],
+          [
+            "ignoredNamedField",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "array",
+          "ownKeys": [
+            "0",
+            "2",
+            "3",
+            "4",
+            "length"
+          ],
+          "properties": [
+            [
+              "0",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "2",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "3",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "4",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name",
+                    "prototype"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "preservedFunction"
+                      }
+                    ],
+                    [
+                      "prototype",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-5",
+                          "type": "object",
+                          "ownKeys": [
+                            "constructor"
+                          ],
+                          "properties": [
+                            [
+                              "constructor",
+                              {
+                                "enumerable": false,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "reference": "object-4"
+                                }
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-1"
+                  }
+                }
+              }
+            ],
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": 5
+              }
+            ]
+          ]
+        }
+      },
+      "events": [],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "array",
+        "ownKeys": [
+          "0",
+          "2",
+          "3",
+          "4",
+          "length",
+          "ignoredNamedField"
+        ],
+        "properties": [
+          [
+            "0",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "2",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "3",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "date",
+                "ownKeys": [],
+                "properties": [],
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            }
+          ],
+          [
+            "4",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name",
+                  "prototype"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "preservedFunction"
+                    }
+                  ],
+                  [
+                    "prototype",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "object",
+                        "ownKeys": [
+                          "constructor"
+                        ],
+                        "properties": [
+                          [
+                            "constructor",
+                            {
+                              "enumerable": false,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "reference": "object-3"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              }
+            }
+          ],
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": 5
+            }
+          ],
+          [
+            "ignoredNamedField",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "preservedFunction",
+          "length": 0,
+          "source": "function preservedFunction() {}",
+          "string": "function preservedFunction() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": [
+            {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            {
+              "type": "hole"
+            },
+            {
+              "type": "undefined"
+            },
+            {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            {
+              "type": "function",
+              "identity": "function-1"
+            }
+          ]
+        },
+        "events": [],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "0",
+          "2",
+          "3",
+          "4",
+          "ignoredNamedField"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1"
+        ]
+      }
+    },
+    {
+      "name": "object-key-snapshot-and-late-getters",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "removed",
+          "later",
+          "hidden"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "removed",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-4",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-3"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "hidden",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-5",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-4"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "first",
+            "removed",
+            "later"
+          ],
+          "properties": [
+            [
+              "first",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "object",
+                  "ownKeys": [
+                    "date"
+                  ],
+                  "properties": [
+                    [
+                      "date",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-3",
+                          "type": "date",
+                          "ownKeys": [],
+                          "properties": [],
+                          "value": "2030-01-02T03:04:05.000Z"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "removed",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "later",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [
+        {
+          "phase": "get:first",
+          "sameReceiver": true
+        },
+        {
+          "phase": "get:date",
+          "sameReceiver": true
+        },
+        {
+          "phase": "get:later",
+          "sameReceiver": true
+        }
+      ],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "later",
+          "hidden",
+          "added"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-3"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "hidden",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-4",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-4"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "added",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-5",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-5"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-3",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-4",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-5",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "first": {
+              "date": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            },
+            "removed": {
+              "type": "undefined"
+            },
+            "later": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          }
+        },
+        "events": [
+          {
+            "phase": "get:first",
+            "sameReceiver": true
+          },
+          {
+            "phase": "get:date",
+            "sameReceiver": true
+          },
+          {
+            "phase": "get:later",
+            "sameReceiver": true
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "first",
+          "later",
+          "added"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": []
+      }
+    },
+    {
+      "name": "object-getter-error",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "later"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": null
+      },
+      "events": [
+        {
+          "phase": "get:first",
+          "sameReceiver": true
+        },
+        {
+          "phase": "logger:error",
+          "message": "Error parsing JSON",
+          "argumentCount": 1,
+          "argumentKeys": [
+            "error"
+          ],
+          "sameOriginal": true,
+          "error": {
+            "failure": "object-getter-error",
+            "ownUndefined": {
+              "type": "undefined"
+            }
+          }
+        }
+      ],
+      "logs": [
+        {
+          "message": "Error parsing JSON",
+          "arguments": {
+            "identity": "object-1",
+            "type": "array",
+            "ownKeys": [
+              "0",
+              "length"
+            ],
+            "properties": [
+              [
+                "0",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "error"
+                    ],
+                    "properties": [
+                      [
+                        "error",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "object",
+                            "ownKeys": [
+                              "failure",
+                              "ownUndefined"
+                            ],
+                            "properties": [
+                              [
+                                "failure",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "object-getter-error"
+                                }
+                              ],
+                              [
+                                "ownUndefined",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": {
+                                    "type": "undefined"
+                                  }
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ],
+              [
+                "length",
+                {
+                  "enumerable": false,
+                  "configurable": false,
+                  "writable": true,
+                  "value": 1
+                }
+              ]
+            ]
+          },
+          "sameOriginal": true
+        }
+      ],
+      "after": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "later",
+          "mutation"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "mutation",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "retained-before-error"
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": null
+        },
+        "events": [
+          {
+            "phase": "get:first",
+            "sameReceiver": true
+          },
+          {
+            "phase": "logger:error",
+            "message": "Error parsing JSON",
+            "argumentCount": 1,
+            "argumentKeys": [
+              "error"
+            ],
+            "sameOriginal": true,
+            "error": {
+              "failure": "object-getter-error",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "first",
+          "later",
+          "mutation"
+        ],
+        "mutation": "retained-before-error",
+        "functionIds": []
+      }
+    },
+    {
+      "name": "logger-original-error",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "later"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": false,
+        "sameOriginal": true,
+        "error": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "loggerFailure",
+            "original"
+          ],
+          "properties": [
+            [
+              "loggerFailure",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "logger-original-error"
+              }
+            ],
+            [
+              "original",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "object",
+                  "ownKeys": [
+                    "failure",
+                    "ownUndefined"
+                  ],
+                  "properties": [
+                    [
+                      "failure",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "logger-original-error"
+                      }
+                    ],
+                    [
+                      "ownUndefined",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [
+        {
+          "phase": "get:first",
+          "sameReceiver": true
+        },
+        {
+          "phase": "logger:error",
+          "message": "Error parsing JSON",
+          "argumentCount": 1,
+          "argumentKeys": [
+            "error"
+          ],
+          "sameOriginal": true,
+          "error": {
+            "failure": "logger-original-error",
+            "ownUndefined": {
+              "type": "undefined"
+            }
+          }
+        }
+      ],
+      "logs": [
+        {
+          "message": "Error parsing JSON",
+          "arguments": {
+            "identity": "object-1",
+            "type": "array",
+            "ownKeys": [
+              "0",
+              "length"
+            ],
+            "properties": [
+              [
+                "0",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "error"
+                    ],
+                    "properties": [
+                      [
+                        "error",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "object",
+                            "ownKeys": [
+                              "failure",
+                              "ownUndefined"
+                            ],
+                            "properties": [
+                              [
+                                "failure",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": "logger-original-error"
+                                }
+                              ],
+                              [
+                                "ownUndefined",
+                                {
+                                  "enumerable": true,
+                                  "configurable": true,
+                                  "writable": true,
+                                  "value": {
+                                    "type": "undefined"
+                                  }
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ],
+              [
+                "length",
+                {
+                  "enumerable": false,
+                  "configurable": false,
+                  "writable": true,
+                  "value": 1
+                }
+              ]
+            ]
+          },
+          "sameOriginal": true
+        }
+      ],
+      "after": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "first",
+          "later",
+          "mutation"
+        ],
+        "properties": [
+          [
+            "first",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "later",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "mutation",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "retained-before-error"
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": false,
+          "sameOriginal": true,
+          "error": {
+            "loggerFailure": "logger-original-error",
+            "original": {
+              "failure": "logger-original-error",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          }
+        },
+        "events": [
+          {
+            "phase": "get:first",
+            "sameReceiver": true
+          },
+          {
+            "phase": "logger:error",
+            "message": "Error parsing JSON",
+            "argumentCount": 1,
+            "argumentKeys": [
+              "error"
+            ],
+            "sameOriginal": true,
+            "error": {
+              "failure": "logger-original-error",
+              "ownUndefined": {
+                "type": "undefined"
+              }
+            }
+          }
+        ],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "first",
+          "later",
+          "mutation"
+        ],
+        "mutation": "retained-before-error",
+        "functionIds": []
+      }
+    },
+    {
+      "name": "date-root-skips-properties",
+      "before": {
+        "identity": "object-1",
+        "type": "date",
+        "ownKeys": [
+          "iso",
+          "unread",
+          "getTime"
+        ],
+        "properties": [
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "unread",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "getTime",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ],
+        "value": "2030-01-02T03:04:05.000Z"
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "date",
+          "ownKeys": [
+            "iso",
+            "unread",
+            "getTime"
+          ],
+          "properties": [
+            [
+              "iso",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "unread",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "get": {
+                  "identity": "object-2",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "get"
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-1"
+                  }
+                },
+                "set": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "getTime",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "get": {
+                  "identity": "object-3",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "get"
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-2"
+                  }
+                },
+                "set": {
+                  "type": "undefined"
+                }
+              }
+            ]
+          ],
+          "value": "2030-01-02T03:04:05.000Z"
+        }
+      },
+      "events": [],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "date",
+        "ownKeys": [
+          "iso",
+          "unread",
+          "getTime"
+        ],
+        "properties": [
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "unread",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-2",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "getTime",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-2"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ],
+        "value": "2030-01-02T03:04:05.000Z"
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "type": "date",
+            "value": "2030-01-02T03:04:05.000Z"
+          }
+        },
+        "events": [],
+        "identities": {
+          "sameInput": true,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "iso",
+          "unread"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": []
+      }
+    },
+    {
+      "name": "function-root-skips-properties",
+      "before": {
+        "identity": "object-1",
+        "type": "function",
+        "ownKeys": [
+          "length",
+          "name",
+          "prototype",
+          "iso",
+          "unread"
+        ],
+        "properties": [
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": false,
+              "value": 0
+            }
+          ],
+          [
+            "name",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": false,
+              "value": "preservedFunction"
+            }
+          ],
+          [
+            "prototype",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "object",
+                "ownKeys": [
+                  "constructor"
+                ],
+                "properties": [
+                  [
+                    "constructor",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-1"
+                      }
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "unread",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ],
+        "value": {
+          "type": "function",
+          "identity": "function-2"
+        }
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "function",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype",
+            "iso",
+            "unread"
+          ],
+          "properties": [
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": false,
+                "value": 0
+              }
+            ],
+            [
+              "name",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": false,
+                "value": "preservedFunction"
+              }
+            ],
+            [
+              "prototype",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "object",
+                  "ownKeys": [
+                    "constructor"
+                  ],
+                  "properties": [
+                    [
+                      "constructor",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "reference": "object-1"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "iso",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "unread",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "get": {
+                  "identity": "object-3",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "get"
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-1"
+                  }
+                },
+                "set": {
+                  "type": "undefined"
+                }
+              }
+            ]
+          ],
+          "value": {
+            "type": "function",
+            "identity": "function-2"
+          }
+        }
+      },
+      "events": [],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "function",
+        "ownKeys": [
+          "length",
+          "name",
+          "prototype",
+          "iso",
+          "unread"
+        ],
+        "properties": [
+          [
+            "length",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": false,
+              "value": 0
+            }
+          ],
+          [
+            "name",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": false,
+              "value": "preservedFunction"
+            }
+          ],
+          [
+            "prototype",
+            {
+              "enumerable": false,
+              "configurable": false,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "object",
+                "ownKeys": [
+                  "constructor"
+                ],
+                "properties": [
+                  [
+                    "constructor",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-1"
+                      }
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "unread",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "get": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "get"
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              },
+              "set": {
+                "type": "undefined"
+              }
+            }
+          ]
+        ],
+        "value": {
+          "type": "function",
+          "identity": "function-2"
+        }
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "get",
+          "length": 0,
+          "source": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "string": "get() {\n      event(`get:${key}`, { sameReceiver: this === root });\n      return read();\n    }",
+          "ownKeys": [
+            "length",
+            "name"
+          ]
+        },
+        {
+          "identity": "function-2",
+          "name": "preservedFunction",
+          "length": 0,
+          "source": "function preservedFunction() {}",
+          "string": "function preservedFunction() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype",
+            "iso",
+            "unread"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "type": "function",
+            "identity": "function-1"
+          }
+        },
+        "events": [],
+        "identities": {
+          "sameInput": true,
+          "sameCustomResult": false,
+          "sameDateChild": false,
+          "sameFunctionChild": false
+        },
+        "inputKeysAfter": [
+          "iso",
+          "unread"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1"
+        ]
+      }
+    },
+    {
+      "name": "object-native-children",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "date",
+          "fn",
+          "iso",
+          "nested"
+        ],
+        "properties": [
+          [
+            "date",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "date",
+                "ownKeys": [],
+                "properties": [],
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            }
+          ],
+          [
+            "fn",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name",
+                  "prototype"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "preservedFunction"
+                    }
+                  ],
+                  [
+                    "prototype",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "object",
+                        "ownKeys": [
+                          "constructor"
+                        ],
+                        "properties": [
+                          [
+                            "constructor",
+                            {
+                              "enumerable": false,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "reference": "object-3"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              }
+            }
+          ],
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "nested",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-5",
+                "type": "object",
+                "ownKeys": [
+                  "date",
+                  "fn"
+                ],
+                "properties": [
+                  [
+                    "date",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-2"
+                      }
+                    }
+                  ],
+                  [
+                    "fn",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-3"
+                      }
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "outcome": {
+        "returned": true,
+        "result": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "date",
+            "fn",
+            "iso",
+            "nested"
+          ],
+          "properties": [
+            [
+              "date",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "fn",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "function",
+                  "ownKeys": [
+                    "length",
+                    "name",
+                    "prototype"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": 0
+                      }
+                    ],
+                    [
+                      "name",
+                      {
+                        "enumerable": false,
+                        "configurable": true,
+                        "writable": false,
+                        "value": "preservedFunction"
+                      }
+                    ],
+                    [
+                      "prototype",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-4",
+                          "type": "object",
+                          "ownKeys": [
+                            "constructor"
+                          ],
+                          "properties": [
+                            [
+                              "constructor",
+                              {
+                                "enumerable": false,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "reference": "object-3"
+                                }
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ]
+                  ],
+                  "value": {
+                    "type": "function",
+                    "identity": "function-1"
+                  }
+                }
+              }
+            ],
+            [
+              "iso",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "date",
+                  "ownKeys": [],
+                  "properties": [],
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            [
+              "nested",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "object",
+                  "ownKeys": [
+                    "date",
+                    "fn"
+                  ],
+                  "properties": [
+                    [
+                      "date",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "reference": "object-2"
+                        }
+                      }
+                    ],
+                    [
+                      "fn",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "reference": "object-3"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [],
+      "logs": [],
+      "after": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "date",
+          "fn",
+          "iso",
+          "nested"
+        ],
+        "properties": [
+          [
+            "date",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "date",
+                "ownKeys": [],
+                "properties": [],
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            }
+          ],
+          [
+            "fn",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-3",
+                "type": "function",
+                "ownKeys": [
+                  "length",
+                  "name",
+                  "prototype"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": false,
+                      "value": "preservedFunction"
+                    }
+                  ],
+                  [
+                    "prototype",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "object",
+                        "ownKeys": [
+                          "constructor"
+                        ],
+                        "properties": [
+                          [
+                            "constructor",
+                            {
+                              "enumerable": false,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "reference": "object-3"
+                              }
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                ],
+                "value": {
+                  "type": "function",
+                  "identity": "function-1"
+                }
+              }
+            }
+          ],
+          [
+            "iso",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "2030-01-02T03:04:05.000Z"
+            }
+          ],
+          [
+            "nested",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-5",
+                "type": "object",
+                "ownKeys": [
+                  "date",
+                  "fn"
+                ],
+                "properties": [
+                  [
+                    "date",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-2"
+                      }
+                    }
+                  ],
+                  [
+                    "fn",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "reference": "object-3"
+                      }
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "functions": [
+        {
+          "identity": "function-1",
+          "name": "preservedFunction",
+          "length": 0,
+          "source": "function preservedFunction() {}",
+          "string": "function preservedFunction() {}",
+          "ownKeys": [
+            "length",
+            "name",
+            "prototype"
+          ]
+        }
+      ],
+      "runtime": {
+        "outcome": {
+          "returned": true,
+          "result": {
+            "date": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "fn": {
+              "type": "function",
+              "identity": "function-1"
+            },
+            "iso": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "nested": {
+              "date": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "fn": {
+                "type": "function",
+                "identity": "function-1"
+              }
+            }
+          }
+        },
+        "events": [],
+        "identities": {
+          "sameInput": false,
+          "sameCustomResult": false,
+          "sameDateChild": true,
+          "sameFunctionChild": true
+        },
+        "inputKeysAfter": [
+          "date",
+          "fn",
+          "iso",
+          "nested"
+        ],
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": [
+          "function-1"
+        ]
+      }
+    }
+  ]
+}

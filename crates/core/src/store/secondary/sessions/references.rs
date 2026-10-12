@@ -29,6 +29,7 @@ pub(super) fn tokens(value: &FieldValue) -> AuthResult<FieldValue> {
                 .model_property("token")
         }),
         "sessionReferences",
+        None,
     )
 }
 

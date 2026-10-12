@@ -112,6 +112,7 @@ impl FieldValue {
         &self,
         callback: &FieldFunction,
         expression: &str,
+        argument_expression: Option<&str>,
     ) -> AuthResult<Self> {
         match (self, self.method_property("map")?) {
             (_, Some(Self::Function(method))) => method.call_with(self, &[callback.clone().into()]),
@@ -120,9 +121,12 @@ impl FieldValue {
                     callback.call_with(&Self::Undefined, &[value, index.into(), self.clone()])
                 })?
                 .into()),
-            _ => Err(AuthError::type_error(format!(
-                "{expression}.map is not a function"
-            ))),
+            (_, method) => Err(AuthError::type_error(match (method, argument_expression) {
+                (None | Some(Self::Undefined), Some(argument)) => format!(
+                    "{expression}.map is not a function. (In '{expression}.map({argument})', '{expression}.map' is undefined)"
+                ),
+                _ => format!("{expression}.map is not a function"),
+            })),
         }
     }
 

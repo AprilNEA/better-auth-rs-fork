@@ -150,6 +150,7 @@ impl DateReviver {
                         reviver.value(arguments.first().unwrap_or(&FieldValue::Undefined).clone())
                     }),
                     "value",
+                    Some("reviveDates"),
                 )
             }
             FieldValue::Object(object) => {

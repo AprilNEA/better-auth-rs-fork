@@ -6,6 +6,9 @@
 use super::*;
 use crate::{FieldArray, FieldFunction, FieldObject};
 
+#[path = "native_contract.rs"]
+mod native_contract;
+
 #[test]
 fn native_revival_preserves_holes_and_uses_overridden_map_results() -> AuthResult<()> {
     let sparse = FieldArray::with_length(3);
