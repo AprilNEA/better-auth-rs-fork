@@ -340,6 +340,9 @@ impl EmailOtpPlugin {
                 let _ = ctx
                     .database
                     .create_verification_optional(CreateVerification {
+                        field_order: ["value", "identifier", "expiresAt"]
+                            .map(str::to_owned)
+                            .into(),
                         identifier: (identifier.to_owned()).into(),
                         value: SchemaValue::from_field(value),
                         expires_at: SchemaValue::from_field(record.model_property("expiresAt")?),

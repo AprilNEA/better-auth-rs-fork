@@ -267,6 +267,18 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
             .consume_verification_in_transaction(identifier, Some(self.inner.as_ref()))
             .await
     }
+    async fn consume_verification_by_identifier(
+        &self,
+        identifier: &str,
+    ) -> AuthResult<Option<crate::wire::VerificationView>> {
+        match self
+            .consume_verification_including_expired(identifier)
+            .await?
+        {
+            Some(record) if !record.expires_at.is_before(self.runtime.now())? => Ok(Some(record)),
+            _ => Ok(None),
+        }
+    }
     async fn delete_verification_by_identifier(&self, identifier: &str) -> AuthResult<()> {
         self.runtime
             .delete_verification_in_transaction(identifier, Some(self.inner.as_ref()))

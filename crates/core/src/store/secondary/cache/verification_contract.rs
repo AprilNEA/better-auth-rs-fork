@@ -239,7 +239,7 @@ impl LogSink for Logger {
     }
 }
 
-async fn capture(name: &str) -> AuthResult<Json> {
+async fn capture(name: &str, in_transaction: bool) -> AuthResult<Json> {
     let entries = Entries::default();
     let observer = Observer::default();
     let input = values::Input::new(name, entries.clone(), observer.clone())?;
@@ -309,7 +309,18 @@ async fn capture(name: &str) -> AuthResult<Json> {
     )?;
     let result = context
         .with_endpoint_context(|_| async {
-            store.consume_verification_by_identifier("subject").await
+            if in_transaction {
+                crate::store::transaction(&store, |transaction| {
+                    Box::pin(async move {
+                        transaction
+                            .consume_verification_by_identifier("subject")
+                            .await
+                    })
+                })
+                .await
+            } else {
+                store.consume_verification_by_identifier("subject").await
+            }
         })
         .await
         .and_then(|value| {
@@ -354,8 +365,14 @@ async fn verification_native_consumption_matches_complete_upstream_runtime() -> 
     assert_eq!(cases.len(), 27);
     for case in cases {
         let name = case["name"].as_str().unwrap();
-        let actual = capture(name).await?;
-        assert_replay(&actual, &case["runtime"], name);
+        for in_transaction in [false, true] {
+            let actual = capture(name, in_transaction).await?;
+            assert_replay(
+                &actual,
+                &case["runtime"],
+                &format!("{name}/transaction={in_transaction}"),
+            );
+        }
     }
     Ok(())
 }

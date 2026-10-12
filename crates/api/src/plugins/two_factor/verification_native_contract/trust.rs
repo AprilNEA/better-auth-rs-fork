@@ -1,4 +1,5 @@
 use super::*;
+use better_auth_core::FromFieldMap;
 
 pub(super) async fn capture(scenario: &Json) -> AuthResult<Json> {
     let identifier = "trust-device-native";
@@ -41,7 +42,7 @@ pub(super) async fn capture(scenario: &Json) -> AuthResult<Json> {
     context.session_manager().publish_session(
         &request,
         NativeSessionData {
-            session: better_auth_core::SessionView::try_from(session)?,
+            session: better_auth_core::SessionView::from_field_values(session)?,
             user: user.clone(),
         },
     )?;

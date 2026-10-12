@@ -282,6 +282,9 @@ impl PhoneNumberPlugin {
                 .encode_utf16(),
             );
             let input = CreateVerification {
+                field_order: ["value", "identifier", "expiresAt"]
+                    .map(str::to_owned)
+                    .into(),
                 identifier: (identifier.to_owned()).into(),
                 value: SchemaValue::from_field(
                     better_auth_core::Utf16String::from_units(value).into(),

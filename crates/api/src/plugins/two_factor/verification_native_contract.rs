@@ -52,24 +52,22 @@ async fn password(scenario: &Json) -> AuthResult<Json> {
     let before = harness.state(&inner)?;
     harness.activate();
     let harness = &harness;
+    let request_ref = &request;
     let result = context
-        .with_native_context(
-            better_auth_core::NativeRequest::default(),
-            |context| async move {
-                let response = match plugin.on_request(&request, &context).await {
-                    Ok(response) => response.unwrap().into_http_response()?,
-                    Err(error) => {
-                        better_auth_core::api_error::handle_http_error(error, &context).await?
-                    }
-                };
-                FieldValue::from_json(json!({
-                    "status":response.status,
-                    "headers":headers(&response.headers),
-                    "cookies":cookies(&response.headers),
-                    "body":String::from_utf8(response.body.into_bytes()?).unwrap(),
-                }))
-            },
-        )
+        .with_http_context(&request, |context| async move {
+            let response = match plugin.on_request(request_ref, &context).await {
+                Ok(response) => response.unwrap().into_http_response()?,
+                Err(error) => {
+                    better_auth_core::api_error::handle_http_error(error, &context).await?
+                }
+            };
+            FieldValue::from_json(json!({
+                "status":response.status,
+                "headers":headers(&response.headers),
+                "cookies":cookies(&response.headers),
+                "body":String::from_utf8(response.body.into_bytes()?).unwrap(),
+            }))
+        })
         .await;
     harness.finish(before, harness.outcome(result)?, &inner)
 }
