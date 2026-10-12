@@ -12,7 +12,7 @@ use better_auth::{
     integrations::axum::AxumIntegration,
     plugins::{
         ApiKeyPlugin, EmailPasswordPlugin, JwtPlugin, LastLoginMethodConfig, LastLoginMethodPlugin,
-        SessionManagementPlugin, TwoFactorPlugin,
+        PasskeyPlugin, SessionManagementPlugin, TwoFactorPlugin,
     },
     prelude::{
         CreateDeviceCode, CreatePasskey, CreateWalletAddress, UpdateApiKey, UpdateDeviceCode,
@@ -109,6 +109,7 @@ async fn renamed_plugin_tables_preserve_authentication_and_atomic_storage() {
             }))
             .plugin(SessionManagementPlugin::new())
             .plugin(ApiKeyPlugin::builder().build())
+            .plugin(PasskeyPlugin::new())
             .plugin(DisplayFields)
             .plugin(TwoFactorPlugin::new())
             .plugin(JwtPlugin::new())
