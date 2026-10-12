@@ -155,3 +155,21 @@ pub async fn observe(
         json!(ddl),
     ))
 }
+
+/// Compare DDL objects while the complete catalog checks storage semantics.
+pub fn ddl_declarations(ddl: &Value) -> Result<Value, &'static str> {
+    Ok(Value::Array(
+        ddl.as_array()
+            .ok_or("Missing SQLite DDL")?
+            .iter()
+            .map(|row| {
+                json!({
+                    "type": row["type"],
+                    "name": row["name"],
+                    "tbl_name": row["tbl_name"],
+                    "hasSql": !row["sql"].is_null(),
+                })
+            })
+            .collect(),
+    ))
+}

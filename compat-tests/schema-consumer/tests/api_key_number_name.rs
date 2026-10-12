@@ -1,7 +1,6 @@
 #[path = "../../../tests/support/api_key_number_name_contract.rs"]
 mod contract;
-#[path = "../src/tests/sqlite_catalog.rs"]
-mod sqlite_catalog;
+use better_auth_schema_consumer::sqlite_catalog;
 
 use better_auth::{
     AuthSchema,
@@ -12,7 +11,7 @@ use better_auth::{
     },
 };
 use contract::{Scenario, TestResult};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::sync::Arc;
 
 mod required {
@@ -76,12 +75,10 @@ where
         catalog, case.catalog["catalog"],
         "Complete SQLite columns, indexes, and foreign keys"
     );
-    let declarations = |ddl: &Value| -> TestResult<Value> {
-        Ok(Value::Array(ddl.as_array().ok_or("Missing SQLite DDL")?.iter().map(|row| {
-            json!({"type":row["type"], "name":row["name"], "tbl_name":row["tbl_name"], "hasSql":!row["sql"].is_null()})
-        }).collect()))
-    };
-    assert_eq!(declarations(&ddl)?, declarations(&case.catalog["ddl"])?);
+    assert_eq!(
+        sqlite_catalog::ddl_declarations(&ddl)?,
+        sqlite_catalog::ddl_declarations(&case.catalog["ddl"])?
+    );
     let store =
         SeaOrmStore::<S>::new(contract::config(), database.clone()).with_plugin_schema::<P>();
     contract::contract(Arc::new(store), case, scenario, move || {

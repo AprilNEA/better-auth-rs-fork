@@ -83,6 +83,32 @@ for order in forward reversed; do
   "$consumer_cli" generate --plugins passkey --database sqlite --schema-config "compat-tests/schema-consumer/passkey-shared-display-${order}-schema.json" --output "$schema"
   export "BETTER_AUTH_PASSKEY_SHARED_DISPLAY_${order^^}_SCHEMA=$schema"
 done
+python3 - "$schema_dir" <<'PY_SHARED_COLUMNS'
+import json
+from pathlib import Path
+import sys
+
+fixture = json.loads(Path("tests/fixtures/shared-column-1.7.6.json").read_text())
+observations = [observation for observation in fixture if observation["backend"] == "sqlite"]
+if len(observations) != 1 or observations[0]["version"] != "1.7.6":
+    raise SystemExit("The shared-column contract must contain one SQLite observation for 1.7.6")
+for mode in ("native-native-string", "native-native-number", "native-additional"):
+    configuration = {}
+    cases = [case for case in observations[0]["cases"] if case["mode"] == mode]
+    if len(cases) != 10:
+        raise SystemExit("Each shared-column mode must contain ten models")
+    for case in cases:
+        if configuration.keys() & case["configuration"].keys():
+            raise SystemExit("The shared-column contract must configure each model once")
+        configuration.update(case["configuration"])
+    (Path(sys.argv[1]) / f"shared_columns_{mode}.json").write_text(json.dumps(configuration))
+PY_SHARED_COLUMNS
+for mode in native-native-string native-native-number native-additional; do
+  schema="$schema_dir/shared_columns_${mode//-/_}.rs"
+  "$consumer_cli" generate --plugins organization --database sqlite --schema-config "$schema_dir/shared_columns_${mode}.json" --output "$schema"
+  variable="BETTER_AUTH_SHARED_COLUMNS_${mode^^}_SCHEMA"
+  export "${variable//-/_}=$schema"
+done
 for backend in sqlite postgres mysql; do
   schema="$schema_dir/native_api_key_${backend}.rs"
   "$consumer_cli" generate --plugins api-key --database "$backend" --output "$schema"

@@ -646,6 +646,7 @@ run_stage() {
       cargo clippy --locked -p better-auth-core -p better-auth-api --features better-auth-core/redis-cache --lib -- -D warnings || cache_status=1
       cargo clippy --locked -p better-auth-seaorm -p better-auth-cli -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-cli schema_config || cache_status=1
+      cargo test --locked -p better-auth-seaorm-macros --lib || cache_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache --test api_key_delete_expired_tests -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
         request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: passkey wire::api_key_view::tests:: || cache_status=1

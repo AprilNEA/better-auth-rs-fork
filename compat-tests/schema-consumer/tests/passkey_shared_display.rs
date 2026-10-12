@@ -1,7 +1,6 @@
 #[path = "../../../tests/support/passkey_shared_display_contract.rs"]
 mod contract;
-#[path = "../src/tests/sqlite_catalog.rs"]
-mod sqlite_catalog;
+use better_auth_schema_consumer::sqlite_catalog;
 
 use better_auth::{
     AuthSchema,
@@ -67,12 +66,10 @@ where
         catalog, case["catalog"]["catalog"],
         "Complete generated SQLite catalog, including column order, defaults, index metadata, xinfo, and foreign keys"
     );
-    let declarations = |ddl: &Value| -> TestResult<Value> {
-        Ok(Value::Array(ddl.as_array().ok_or("Missing shared Passkey DDL")?.iter().map(|row| {
-            json!({"type":row["type"], "name":row["name"], "tbl_name":row["tbl_name"], "hasSql":!row["sql"].is_null()})
-        }).collect()))
-    };
-    assert_eq!(declarations(&ddl)?, declarations(&case["catalog"]["ddl"])?);
+    assert_eq!(
+        sqlite_catalog::ddl_declarations(&ddl)?,
+        sqlite_catalog::ddl_declarations(&case["catalog"]["ddl"])?
+    );
     eprintln!(
         "{}",
         json!({

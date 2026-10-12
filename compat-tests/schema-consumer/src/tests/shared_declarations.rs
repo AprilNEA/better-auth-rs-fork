@@ -7,6 +7,7 @@ use better_auth::{
         sea_orm::{ConnectionTrait, DbBackend, EntityTrait, Statement},
     },
 };
+use better_auth_schema_consumer::server_catalog_support;
 use serde_json::{Value, json};
 
 mod sqlite {
@@ -21,30 +22,33 @@ mod mysql {
     include!(env!("BETTER_AUTH_SHARED_DECLARATIONS_MYSQL_SCHEMA"));
 }
 
-type TestResult = Result<(), Box<dyn std::error::Error>>;
+type TestResult = server_catalog_support::TestResult;
+
+fn user_config() -> AuthConfig {
+    let mut config = AuthConfig::default();
+    for (name, field_type) in [
+        ("name", UserFieldType::Json),
+        ("createdAt", UserFieldType::Date),
+    ] {
+        let _ = config.user.fields_mut().insert(
+            name.into(),
+            UserFieldConfig {
+                field_type,
+                required: Some(true),
+                ..Default::default()
+            },
+        );
+    }
+    config
+}
 
 #[tokio::test]
 async fn shared_declarations_preserve_sqlite_json_text_and_native_column_names() -> TestResult {
     let database = Database::connect("sqlite::memory:").await?;
     sqlite::create_auth_tables(&database).await?;
-    let mut config = AuthConfig::default();
-    let _ = config.user.fields_mut().insert(
-        "name".into(),
-        UserFieldConfig {
-            field_type: UserFieldType::Json,
-            required: Some(true),
-            ..Default::default()
-        },
-    );
-    let _ = config.user.fields_mut().insert(
-        "createdAt".into(),
-        UserFieldConfig {
-            field_type: UserFieldType::Date,
-            required: Some(true),
-            ..Default::default()
-        },
-    );
-    let store = SeaOrmStore::<sqlite::AppAuthSchema>::new(config, database.clone());
+    let store = SeaOrmStore::<sqlite::AppAuthSchema>::new(user_config(), database.clone())
+        .with_organization_schema::<sqlite::AppOrganizationSchema>()
+        .with_plugin_schema::<sqlite::AppPluginSchema>();
     let date = "2030-01-02T03:04:05.000Z";
     let text = " { \"nested\": [1, true] } ";
     let created = store
@@ -179,3 +183,57 @@ async fn shared_declarations_preserve_sqlite_json_text_and_native_column_names()
     );
     Ok(())
 }
+
+macro_rules! server_json_declaration {
+    ($test:ident, $schema:ident, $database:ident) => {
+        #[tokio::test]
+        #[ignore = "Requires the configured PostgreSQL or MySQL CI service"]
+        async fn $test() -> TestResult {
+            server_catalog_support::$database(|database| async move {
+                $schema::create_auth_tables(&database).await?;
+                let store = SeaOrmStore::<$schema::AppAuthSchema>::new(
+                    user_config(),
+                    database.clone(),
+                )
+                .with_organization_schema::<$schema::AppOrganizationSchema>()
+                .with_plugin_schema::<$schema::AppPluginSchema>();
+                let value = json!({"nested": [1, true], "text": " { untouched } "});
+                let date = "2030-01-02T03:04:05.000Z";
+                let user = store
+                    .create_user_fields_optional(FieldMap::from([
+                        ("name".into(), value.clone().into()),
+                        ("email".into(), "shared-declarations@example.com".into()),
+                        ("emailVerified".into(), true.into()),
+                        ("createdAt".into(), date.into()),
+                        ("updatedAt".into(), date.into()),
+                    ]))
+                    .await?
+                    .ok_or("The replaced User field must be written")?;
+                assert_eq!(user.name.field_value().json()?, Some(value.clone()));
+                let stored = $schema::user::Entity::find_by_id(user.id.typed()?.as_str())
+                    .one(&database)
+                    .await?
+                    .ok_or("The native JSON User row must remain stored")?;
+                assert_eq!(serde_json::to_value(&stored.name)?, value);
+                let loaded = store
+                    .get_user_by_id(user.id.typed()?)
+                    .await?
+                    .ok_or("The native JSON User must remain readable")?;
+                assert_eq!(FieldMap::from(loaded), FieldMap::from(user));
+                Ok(())
+            })
+            .await
+        }
+    };
+}
+
+server_json_declaration!(
+    shared_declarations_preserve_postgres_native_json,
+    postgres,
+    in_postgres_catalog
+);
+server_json_declaration!(
+    shared_declarations_preserve_mysql_native_json,
+    mysql,
+    in_mysql_catalog
+);
