@@ -145,18 +145,21 @@ async function directCase(model, operation) {
   return { scenario: `${model}-${operation}`, model, operation, surface: initial[0], canonical, alias, idFieldName: "lookup", steps };
 }
 
-async function joinedCase(joins) {
+async function joinedCase(joins, unique = false) {
   const memory = storage();
   memory.user.push({ ...user("canonical-user", "Alias owner"), lookup: "user-alias" });
   memory.user.push({ ...user("user-alias", "Decoy owner"), lookup: "unrelated-alias" });
   memory.member.push({ ...row("member", "member", "member"), userId: "user-alias" });
   const events = [];
-  const current = await context(memory, { member: { role: observedField("member", "role", events) } }, joins, {
+  const current = await context(memory, { member: {
+    role: observedField("member", "role", events),
+    ...(unique ? { userId: { ...schema.member.fields.userId, unique: true } } : {}),
+  } }, joins, {
     id: { type: "string", fieldName: "lookup" }, name: observedField("user", "name", events),
   });
   const input = { userId: "user-alias", organizationId: "parent" };
   const step = await observedStep(memory, events, input, () => current.org.findMemberByOrgId(input));
-  return { scenario: `member-user-${joins ? "native" : "fallback"}`, joins, surface: "getOrgAdapter.findMemberByOrgId", steps: [step] };
+  return { scenario: `member-user-${joins ? "native" : "fallback"}${unique ? "-unique" : ""}`, joins, surface: "getOrgAdapter.findMemberByOrgId", steps: [step] };
 }
 
 async function atomicCase(mutate) {
@@ -186,5 +189,38 @@ export async function captureOrganizationQueryIdAliases(onCase = () => {}) {
   }
   for (const joins of [false, true]) await append(await joinedCase(joins));
   for (const mutate of [false, true]) await append(await atomicCase(mutate));
+  return { version: "1.7.6", backend: "memory", cases };
+}
+
+export async function captureOrganizationUniqueIdAliasJoins(onCase = () => {}) {
+  const cases = [];
+  for (const joins of [false, true]) {
+    const captured = await joinedCase(joins, true);
+    cases.push(captured);
+    await onCase(captured);
+  }
+  return { version: "1.7.6", backend: "memory", cases };
+}
+
+export async function captureInvitationClaimSelectorUpdates(onCase = () => {}) {
+  const cases = [];
+  for (const column of ["id", "lookup"]) {
+    const memory = storage();
+    const selected = { ...row("invitation", "canonical-invitation", "pending"), [column]: "invitation-alias" };
+    memory.invitation.push(selected);
+    const events = [];
+    const current = await context(memory, { invitation: {
+      id: { type: "string", fieldName: column },
+      claimLookup: { type: "string", fieldName: column, onUpdate() {
+        events.push(["onUpdate", "invitation.claimLookup", "claimed-alias"]);
+        return "claimed-alias";
+      } },
+    } });
+    const input = { invitationId: "invitation-alias", status: "accepted", fromStatus: "pending" };
+    const step = await observedStep(memory, events, input, () => current.org.updateInvitation(input));
+    const captured = { scenario: `invitation-own-selector-update-${column}`, column, surface: "getOrgAdapter.updateInvitation", steps: [step] };
+    cases.push(captured);
+    await onCase(captured);
+  }
   return { version: "1.7.6", backend: "memory", cases };
 }

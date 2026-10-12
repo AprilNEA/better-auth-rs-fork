@@ -14,8 +14,13 @@ test("Organization queries retain first-ID aliases across direct, joined and ato
     } else if (captured.operation) {
       expect(captured.steps.map(step => step.result.id)).toStrictEqual([captured.canonical, captured.canonical, captured.alias]);
     } else if (captured.scenario.startsWith("member-user-")) {
-      expect(captured.steps[0].result.user.id).toBe("canonical-user");
-      expect(captured.steps[0].result.user.name).toBe("Alias owner");
+      expect(captured.steps[0].result.user).toStrictEqual({
+        id: { type: "undefined" }, name: { type: "undefined" },
+        email: { type: "undefined" }, image: { type: "undefined" },
+      });
+      expect(captured.steps[0].events).toStrictEqual([
+        ["output", "member.role", "member"], ["output", "user.name", "Alias owner"],
+      ]);
       expect(captured.steps[0].after).toStrictEqual(captured.steps[0].before);
     } else {
       const step = captured.steps[0];
@@ -28,4 +33,6 @@ test("Organization queries retain first-ID aliases across direct, joined and ato
       }
     }
   }
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/organization-query-id-alias-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
 });
