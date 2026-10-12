@@ -331,19 +331,40 @@ async fn signed_registration_retains_native_owners_and_rejects_json_changed_iden
                 Some(body.clone()),
                 Some(&cookies),
             );
-            let verified = response(&projected, &verify).await;
+            let verified = route(&projected, &verify).await;
             let success = expected.strict_equals(&200.0.into());
-            assert_eq!(
-                verified.status,
-                if success {
-                    200
-                } else if expected.strict_equals(&500.0.into()) {
-                    500
+            let verified = if success {
+                let verified = verified?;
+                assert_eq!(verified.status, 200, "{sample:?}");
+                verified
+            } else {
+                let missing_user = expected.strict_equals(&500.0.into());
+                let (status, http_status, code, message) = if missing_user {
+                    (
+                        "INTERNAL_SERVER_ERROR",
+                        500,
+                        "USER_NOT_FOUND",
+                        "User not found",
+                    )
                 } else {
-                    401
-                },
-                "{sample:?}"
-            );
+                    (
+                        "UNAUTHORIZED",
+                        401,
+                        "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
+                        "You are not allowed to register this passkey",
+                    )
+                };
+                let verified = assert_verification_error(
+                    verified,
+                    status,
+                    http_status,
+                    FieldMap::from([
+                        ("message".into(), message.into()),
+                        ("code".into(), code.into()),
+                    ]),
+                )?;
+                test_helpers::finalize_response(&projected, &verify, verified)
+            };
             let stored = ctx
                 .database
                 .get_passkey_by_credential_id(&URL_SAFE_NO_PAD.encode(CREDENTIAL_ID))
@@ -399,26 +420,9 @@ async fn signed_registration_retains_native_owners_and_rejects_json_changed_iden
                 }
             } else {
                 assert!(stored.is_none());
-                assert_eq!(
-                    serde_json::from_slice::<Value>(&verified.body.bytes()?)?,
-                    if expected.strict_equals(&500.0.into()) {
-                        json!({"code": "USER_NOT_FOUND", "message": "User not found"})
-                    } else {
-                        json!({
-                            "code": "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
-                            "message": "You are not allowed to register this passkey"
-                        })
-                    }
-                );
+                assert!(!verified.headers.contains_key("Set-Cookie"));
             }
-            let replay = response(&projected, &verify).await;
-            assert_eq!(replay.status, 400);
-            assert_eq!(
-                serde_json::from_slice::<Value>(&replay.body.bytes()?)?,
-                json!({
-                    "code": "CHALLENGE_NOT_FOUND", "message": "Challenge not found"
-                })
-            );
+            assert_challenge_error(route(&projected, &verify).await)?;
             assert_eq!(
                 ctx.database.get_user_sessions("7").await?.len(),
                 if create_session && success { 2 } else { 1 }

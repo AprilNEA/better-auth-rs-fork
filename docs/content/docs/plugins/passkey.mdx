@@ -36,6 +36,16 @@ let auth = BetterAuth::<AppAuthSchema>::new(config)
     .await?;
 ```
 
+### Verification boundaries
+
+The challenge record stores the upstream `type`, `expectedChallenge`, and `userData` fields. Registration also stores `context`. Verification consumes the signed challenge token before parsing the stored JSON or querying the credential. Invalid stored JSON retains the native parse error after consumption. Authentication queries the original `response.id` value before validating the credential response.
+
+The adapter keeps missing, null, numeric, and string credential selectors distinct through `PasskeyStore::get_passkey_by_credential_id_value`. The string convenience method delegates to that path. Custom stores must implement the native selector method using their backend query semantics.
+
+The verifier reconstructs temporary WebAuthn engine state from the consumed challenge and current verification policy. The persisted challenge no longer contains private `rs` or `ast` state. Engine reconstruction uses the public Serde persistence format from `webauthn-rs-core` 0.5.4; signature, origin, RP ID, and counter verification remain active. Existing in-flight private challenge records must expire before clients restart their ceremony.
+
+Better Auth API errors from verification callbacks retain their native identity. Other verification failures pass through the upstream catch boundary. Authentication keeps a completed counter update when an after-update hook or a later session step fails. Registration retains its existing transaction boundary when `createSession` is enabled.
+
 ### Storage modes
 
 Fresh generated models use `PasskeyStorage::Native`: the 11 upstream columns contain the credential state, and createdAt is nullable. The private adapter reconstructs the WebauthnCore credential from the standard COSE public key, credential ID, counter, and transport hints. Registration verifies the full response before storage. Authentication verifies the challenge, origin, RP ID, signature, and counter before session creation. Authentication validates backup flags from the signed assertion independently of stored display fields.

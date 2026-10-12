@@ -31,67 +31,13 @@ impl WebAuthnCredential {
         Self { cred, storage }
     }
 
+    #[cfg(test)]
     pub(super) fn from_record(
         passkey: &impl AuthPasskey,
         storage: PasskeyStorage,
         credential_id: &str,
     ) -> AuthResult<Self> {
-        let cred = match storage {
-            PasskeyStorage::Legacy => {
-                let mut stored: StoredPasskey = serde_json::from_str(passkey.credential().typed()?)
-                    .map_err(|error| {
-                        AuthError::internal(format!("Failed to decode stored passkey: {error}"))
-                    })?;
-                stored.cred.registration_policy = VERIFICATION_POLICY;
-                stored.cred
-            }
-            PasskeyStorage::Native => {
-                let public_key = decode_public_key(passkey.public_key())?;
-                let public_key: serde_cbor_2::Value = serde_cbor_2::from_slice(&public_key)
-                    .map_err(|error| {
-                        AuthError::internal(format!("Invalid passkey public key CBOR: {error}"))
-                    })?;
-                let key = COSEKey::try_from(&public_key).map_err(|error| {
-                    AuthError::internal(format!("Invalid passkey public key: {error}"))
-                })?;
-                Credential {
-                    // The adapter selected this key by the request ID; projected IDs are callback metadata.
-                    cred_id: decode_credential_id(credential_id)?,
-                    cred: key,
-                    // The endpoint applies the upstream relational check to the original runtime value.
-                    // The engine receives only counters that its fixed integer representation can retain.
-                    counter: match passkey.counter().field_value() {
-                        better_auth_core::FieldValue::Number(value)
-                            if value >= 0.0
-                                && value <= f64::from(u32::MAX)
-                                && value.fract() == 0.0 =>
-                        {
-                            value as u32
-                        }
-                        _ => 0,
-                    },
-                    transports: parse_transports_csv(passkey.transports())?
-                        .map(|values| values.into_iter().map(|value| {
-                            // Transports are hints; unknown UTF-16 values do not affect signature verification.
-                            match value.to_utf8() {
-                                Ok(value) => serde_json::from_value(serde_json::Value::String(value)),
-                                Err(_) => Ok(webauthn_rs_core::proto::AuthenticatorTransport::Unknown),
-                            }
-                        }).collect::<Result<Vec<_>, serde_json::Error>>())
-                        .transpose()?,
-                    // Native storage has no historical UV or attestation metadata. Authentication
-                    // uses the same explicit policy as Legacy and verifies the current assertion.
-                    user_verified: false,
-                    backup_eligible: false,
-                    backup_state: false,
-                    registration_policy: VERIFICATION_POLICY,
-                    extensions: RegisteredExtensions::none(),
-                    attestation: ParsedAttestation::default(),
-                    attestation_format: AttestationFormat::None,
-                }
-            }
-        };
-        Ok(Self { cred, storage })
+        PreparedCredential::from_record(passkey, storage)?.into_credential(passkey, credential_id)
     }
 
     pub(super) fn device_type(&self) -> &'static str {
@@ -126,6 +72,100 @@ impl WebAuthnCredential {
                 backed_up: self.cred.backup_state,
                 device_type: self.device_type().to_owned(),
             }),
+        }
+    }
+}
+
+pub(super) enum PreparedCredential {
+    Legacy(WebAuthnCredential),
+    Native {
+        public_key: Vec<u8>,
+        transports: Option<Vec<Utf16String>>,
+    },
+}
+
+impl PreparedCredential {
+    pub(super) fn from_record(
+        passkey: &impl AuthPasskey,
+        storage: PasskeyStorage,
+    ) -> AuthResult<Self> {
+        match storage {
+            PasskeyStorage::Legacy => {
+                let mut stored: StoredPasskey = serde_json::from_str(passkey.credential().typed()?)
+                    .map_err(|error| {
+                        AuthError::internal(format!("Failed to decode stored passkey: {error}"))
+                    })?;
+                stored.cred.registration_policy = VERIFICATION_POLICY;
+                Ok(Self::Legacy(WebAuthnCredential {
+                    cred: stored.cred,
+                    storage,
+                }))
+            }
+            PasskeyStorage::Native => Ok(Self::Native {
+                public_key: decode_public_key(passkey.public_key())?,
+                transports: parse_transports_csv(passkey.transports())?,
+            }),
+        }
+    }
+
+    pub(super) fn into_credential(
+        self,
+        passkey: &impl AuthPasskey,
+        credential_id: &str,
+    ) -> AuthResult<WebAuthnCredential> {
+        match self {
+            Self::Legacy(credential) => Ok(credential),
+            Self::Native {
+                public_key,
+                transports,
+            } => {
+                let public_key: serde_cbor_2::Value = serde_cbor_2::from_slice(&public_key)
+                    .map_err(|error| {
+                        AuthError::internal(format!("Invalid passkey public key CBOR: {error}"))
+                    })?;
+                let key = COSEKey::try_from(&public_key).map_err(|error| {
+                    AuthError::internal(format!("Invalid passkey public key: {error}"))
+                })?;
+                let cred = Credential {
+                    // The adapter selected this key by the request ID; projected IDs are callback metadata.
+                    cred_id: decode_credential_id(credential_id)?,
+                    cred: key,
+                    // The endpoint applies the upstream relational check to the original runtime value.
+                    // The engine receives only counters that its fixed integer representation can retain.
+                    counter: match passkey.counter().field_value() {
+                        better_auth_core::FieldValue::Number(value)
+                            if value >= 0.0
+                                && value <= f64::from(u32::MAX)
+                                && value.fract() == 0.0 =>
+                        {
+                            value as u32
+                        }
+                        _ => 0,
+                    },
+                    transports: transports
+                        .map(|values| values.into_iter().map(|value| {
+                            // Transports are hints; unknown UTF-16 values do not affect signature verification.
+                            match value.to_utf8() {
+                                Ok(value) => serde_json::from_value(serde_json::Value::String(value)),
+                                Err(_) => Ok(webauthn_rs_core::proto::AuthenticatorTransport::Unknown),
+                            }
+                        }).collect::<Result<Vec<_>, serde_json::Error>>())
+                        .transpose()?,
+                    // Native storage has no historical UV or attestation metadata. Authentication
+                    // uses the same explicit policy as Legacy and verifies the current assertion.
+                    user_verified: false,
+                    backup_eligible: false,
+                    backup_state: false,
+                    registration_policy: VERIFICATION_POLICY,
+                    extensions: RegisteredExtensions::none(),
+                    attestation: ParsedAttestation::default(),
+                    attestation_format: AttestationFormat::None,
+                };
+                Ok(WebAuthnCredential {
+                    cred,
+                    storage: PasskeyStorage::Native,
+                })
+            }
         }
     }
 }

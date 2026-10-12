@@ -183,7 +183,7 @@ impl MemoryFixture {
         Ok(())
     }
 
-    async fn authenticate(&self) -> TestResult<(AuthRequest, AuthResponse)> {
+    async fn authenticate(&self) -> TestResult<(AuthRequest, AuthResult<AuthResponse>)> {
         let (pending, cookie) = options(
             route(
                 &self.ctx,
@@ -201,15 +201,7 @@ impl MemoryFixture {
             Some(&cookie),
         );
         let result = self.trace.capture(route(&self.ctx, &request)).await;
-        let response = match result {
-            Ok(response) => response,
-            Err(error) => test_helpers::finalize_response(
-                &self.ctx,
-                &request,
-                error.to_auth_response().expect("fixture response succeeds"),
-            ),
-        };
-        Ok((request, response))
+        Ok((request, result))
     }
 
     async fn assert_counter_persisted(&self) -> TestResult {
@@ -313,7 +305,15 @@ async fn signed_authentication_creates_orphan_session_before_missing_owner_error
                 )
                 .await?;
             let (request, response) = fixture.authenticate().await?;
-            assert_failure(&request, &response, 500, "USER_NOT_FOUND", "User not found")?;
+            let response = assert_verification_error(
+                response,
+                "INTERNAL_SERVER_ERROR",
+                500,
+                FieldMap::from([("message".into(), "User not found".into())]),
+            )?;
+            let response = test_helpers::finalize_response(&fixture.ctx, &request, response);
+            assert!(!response.headers.contains_key("Set-Cookie"));
+            assert!(request.new_session()?.is_none());
             let mut events = counter_events();
             if admin && owner.is_truthy() {
                 events.push("db findOne user");
@@ -443,6 +443,7 @@ async fn signed_authentication_consumes_projected_admin_bans_after_counter_write
             events.push("db update user");
         }
         if allowed {
+            let response = response?;
             events.extend(session_events());
             events.push("db findOne user");
             assert_eq!(response.status, 200, "{name}");
@@ -497,6 +498,11 @@ async fn signed_authentication_consumes_projected_admin_bans_after_counter_write
             assert!(fixture.trace.banned_users.lock().unwrap().is_empty());
         } else {
             events.push("ban:message");
+            let error = response
+                .err()
+                .ok_or("Banned authentication must return an error")?;
+            let response =
+                test_helpers::finalize_response(&fixture.ctx, &request, error.to_auth_response()?);
             assert_failure(&request, &response, 403, "BANNED_USER", "Admission denied")?;
             assert_eq!(
                 *fixture.trace.banned_users.lock().unwrap(),

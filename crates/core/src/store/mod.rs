@@ -2017,6 +2017,14 @@ pub trait PasskeyStore: Send + Sync {
     async fn get_passkey_by_credential_id(
         &self,
         credential_id: &str,
+    ) -> AuthResult<Option<Passkey>> {
+        self.get_passkey_by_credential_id_value(&credential_id.into())
+            .await
+    }
+    /// Query the credential ID without coercion before authentication validates the response.
+    async fn get_passkey_by_credential_id_value(
+        &self,
+        credential_id: &crate::FieldValue,
     ) -> AuthResult<Option<Passkey>>;
     /// Query an ordinary string owner through the native-value path.
     async fn list_passkeys_by_user(&self, user_id: &str) -> AuthResult<Vec<Passkey>> {

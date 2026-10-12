@@ -4,14 +4,13 @@ use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use better_auth_core::{AuthConfig, AuthError, AuthRequest, AuthResult};
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use url::Url;
 use uuid::Uuid;
 use webauthn_rs_core::WebauthnCore;
 use webauthn_rs_core::proto::{
-    AuthenticationState, Base64UrlSafeData, CreationChallengeResponse, CredentialID,
-    PublicKeyCredential, RegisterPublicKeyCredential, RegistrationState, RequestChallengeResponse,
+    CreationChallengeResponse, CredentialID, RegisterPublicKeyCredential, RequestChallengeResponse,
     UserVerificationPolicy,
 };
 
@@ -29,61 +28,24 @@ pub(super) struct RegisteredPasskeyMetadata {
     pub extensions: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct StoredRegistrationState {
+pub(super) struct RegistrationUserState {
     pub user: super::PasskeyRegistrationUser,
-    pub context: Option<String>,
-    pub state: RegistrationChallenge,
+    pub context: better_auth_core::FieldValue,
 }
 
-impl StoredRegistrationState {
-    pub(super) fn parse_json(text: &str) -> AuthResult<Self> {
-        use better_auth_core::{FieldValue, SchemaValue};
-        let value = FieldValue::parse_json(text)?;
-        let fields = value
-            .as_object()
-            .ok_or_else(|| AuthError::internal("Registration challenge must be an object"))?
-            .snapshot_fields()?;
-        let user = fields
-            .get("user")
-            .and_then(FieldValue::as_object)
-            .ok_or_else(|| AuthError::internal("Registration challenge must contain a user"))?
-            .snapshot_fields()?;
-        let field = |name| user.get(name).cloned().unwrap_or_default();
-        let json = |name| -> AuthResult<Value> {
-            Ok(fields
-                .get(name)
-                .unwrap_or(&FieldValue::Undefined)
-                .json()?
-                .unwrap_or(Value::Null))
-        };
+impl RegistrationUserState {
+    pub(super) fn from_native(value: &better_auth_core::FieldValue) -> AuthResult<Self> {
+        use better_auth_core::SchemaValue;
+        let user = value.model_property("userData")?;
         Ok(Self {
             user: super::PasskeyRegistrationUser {
-                id: SchemaValue::from_field(field("id")),
-                name: SchemaValue::from_field(field("name")),
-                display_name: SchemaValue::from_field(field("displayName")),
+                id: SchemaValue::from_field(user.model_property("id")?),
+                name: SchemaValue::from_field(user.model_property("name")?),
+                display_name: SchemaValue::from_field(user.model_property("displayName")?),
             },
-            context: serde_json::from_value(json("context")?)?,
-            state: serde_json::from_value(json("state")?)?,
+            context: value.model_property("context")?,
         })
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct RegistrationChallenge {
-    pub rs: RegistrationState,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct AuthenticationChallenge {
-    pub ast: AuthenticationState,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub(crate) enum StoredAuthenticationState {
-    Passkey { state: AuthenticationChallenge },
-    Discoverable { state: AuthenticationChallenge },
 }
 
 pub(super) fn resolve_origins(config: &PasskeyConfig, req: &AuthRequest) -> Option<Vec<String>> {
@@ -407,17 +369,6 @@ pub(super) fn parse_transports_csv(
         )),
         _ => Err(AuthError::internal("transports.split is not a function")),
     }
-}
-
-pub(super) fn credential_id_from_authentication(
-    authentication: &PublicKeyCredential,
-) -> AuthResult<String> {
-    if !authentication.id.is_empty() {
-        return Ok(authentication.id.clone());
-    }
-
-    let raw_id: &Base64UrlSafeData = &authentication.raw_id;
-    Ok(URL_SAFE_NO_PAD.encode(raw_id.as_ref()))
 }
 
 pub(super) fn client_origin(client_data: &[u8]) -> AuthResult<String> {

@@ -626,11 +626,13 @@ impl<S: AuthSchema> PasskeyStore for SecondaryStore<S> {
     async fn get_passkey_by_id(&self, id: &str) -> AuthResult<Option<Passkey>> {
         self.inner.get_passkey_by_id(id).await
     }
-    async fn get_passkey_by_credential_id(
+    async fn get_passkey_by_credential_id_value(
         &self,
-        credential_id: &str,
+        credential_id: &crate::FieldValue,
     ) -> AuthResult<Option<Passkey>> {
-        self.inner.get_passkey_by_credential_id(credential_id).await
+        self.inner
+            .get_passkey_by_credential_id_value(credential_id)
+            .await
     }
     async fn list_passkeys_by_user_value(
         &self,

@@ -88,9 +88,9 @@ where
             .pop())
     }
 
-    async fn get_passkey_by_credential_id(
+    async fn get_passkey_by_credential_id_value(
         &self,
-        credential_id: &str,
+        credential_id: &better_auth_core::FieldValue,
     ) -> AuthResult<Option<Passkey>> {
         let model = database_operation::<Entity<P::Passkey>, _>(self.config(), "findOne", async {
             self.connection()
@@ -99,7 +99,7 @@ where
                         .filter(self.plugin_equals::<P::Passkey>(
                             EntityRole::Passkey,
                             "credentialID",
-                            credential_id.into(),
+                            credential_id.clone(),
                         )?)
                         .build(self.connection().get_database_backend()),
                 )

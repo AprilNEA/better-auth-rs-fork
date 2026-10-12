@@ -6,51 +6,20 @@ use better_auth_core::{
 use chrono::{Duration, Utc};
 use serde_json::Value;
 use uuid::Uuid;
-use webauthn_rs_core::proto::{COSEAlgorithm, PublicKeyCredential};
+use webauthn_rs_core::proto::COSEAlgorithm;
 
 use crate::plugins::StatusResponse;
 use crate::plugins::helpers::{SessionIssueError, issue_session_for_id_optional};
 
 use super::PasskeyConfig;
-use super::credential::WebAuthnCredential;
 use super::descriptors::credential_descriptors;
 use super::types::{
     DeletePasskeyRequest, PasskeyResponse, UpdatePasskeyRequest, VerifyAuthenticationRequest,
 };
 use super::webauthn::{
-    AuthenticationChallenge, RegistrationChallenge, StoredAuthenticationState,
-    StoredRegistrationState, VERIFICATION_POLICY, authentication_options_json, build_webauthn,
-    challenge_cookie_name, create_challenge_cookie, credential_id_from_authentication,
-    decode_challenge_cookie, generate_ts_user_handle, get_cookie_value, registration_options_json,
-    resolve_origins,
+    VERIFICATION_POLICY, authentication_options_json, build_webauthn, create_challenge_cookie,
+    generate_ts_user_handle, registration_options_json, resolve_origins,
 };
-
-pub(super) fn response_message<T>(status: u16, message: &str) -> PasskeyHandlerResult<T> {
-    Ok(PasskeyHandlerOutcome::Response(
-        better_auth_core::AuthResponse::json(
-            status,
-            &better_auth_core::types::ErrorCodeMessageResponse {
-                code: AuthError::code_from_message(message),
-                message: message.to_string(),
-            },
-        )?,
-    ))
-}
-
-pub(super) type PasskeyHandlerResult<T> = AuthResult<PasskeyHandlerOutcome<T>>;
-
-pub(super) enum PasskeyHandlerOutcome<T> {
-    Success(T),
-    Response(better_auth_core::AuthResponse),
-}
-
-fn passkey_authentication_failure<T>() -> PasskeyHandlerResult<T> {
-    response_message(400, "Authentication failed")
-}
-
-fn passkey_not_found<T>() -> PasskeyHandlerResult<T> {
-    response_message(401, "Passkey not found")
-}
 
 pub(super) async fn generate_register_options_core(
     user: &super::PasskeyRegistrationUser,
@@ -117,7 +86,7 @@ pub(super) async fn generate_register_options_core(
             COSEAlgorithm::RS256,
         ])
         .exclude_credentials(Some(exclude_credentials));
-    let (options, state) = webauthn
+    let (options, _) = webauthn
         .generate_challenge_register(builder)
         .map_err(|error| {
             AuthError::internal(format!("Failed to generate register options: {error}"))
@@ -125,16 +94,16 @@ pub(super) async fn generate_register_options_core(
 
     let token = Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::seconds(config.challenge_ttl_secs);
-    let serialized_state = serde_json::to_string(&StoredRegistrationState {
-        user: user.clone(),
-        context: req.query_string("context")?,
-        state: RegistrationChallenge { rs: state },
-    })?;
+    let serialized_state = super::challenge::registration_value(
+        options.public_key.challenge.as_ref(),
+        user,
+        req.query_string("context")?,
+    )?;
     let _ = ctx
         .database
         .create_verification_optional(CreateVerification {
             identifier: (token.clone()).into(),
-            value: (serialized_state).into(),
+            value: better_auth_core::SchemaValue::from_field(serialized_state),
             expires_at: (expires_at).into(),
             ..Default::default()
         })
@@ -194,8 +163,7 @@ pub(super) async fn generate_authenticate_options_core(
     )
     .await?;
     let descriptors = credential_descriptors(&stored_passkeys, "allowCredential")?;
-    let discoverable = stored_passkeys.is_empty();
-    let (options, state) = webauthn
+    let (options, _) = webauthn
         .new_challenge_authenticate_builder(Vec::new(), Some(VERIFICATION_POLICY))
         .and_then(|builder| {
             webauthn.generate_challenge_authenticate(builder.allow_backup_eligible_upgrade(true))
@@ -203,12 +171,8 @@ pub(super) async fn generate_authenticate_options_core(
         .map_err(|error| {
             AuthError::internal(format!("Failed to generate authenticate options: {error}"))
         })?;
-    let state = AuthenticationChallenge { ast: state };
-    let state = if discoverable {
-        StoredAuthenticationState::Discoverable { state }
-    } else {
-        StoredAuthenticationState::Passkey { state }
-    };
+    let state =
+        super::challenge::authentication_value(options.public_key.challenge.as_ref(), user_id)?;
 
     let token = Uuid::new_v4().to_string();
     let expires_at = Utc::now() + Duration::seconds(config.challenge_ttl_secs);
@@ -216,7 +180,7 @@ pub(super) async fn generate_authenticate_options_core(
         .database
         .create_verification_optional(CreateVerification {
             identifier: (token.clone()).into(),
-            value: (serde_json::to_string(&state)?).into(),
+            value: better_auth_core::SchemaValue::from_field(state),
             expires_at: (expires_at).into(),
             ..Default::default()
         })
@@ -244,72 +208,51 @@ pub(super) async fn verify_authentication_core(
     ip_address: Option<String>,
     user_agent: Option<String>,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> PasskeyHandlerResult<FieldValue> {
+) -> AuthResult<FieldValue> {
     let Some(origin) = resolve_origins(config, req) else {
-        return response_message(400, "origin missing");
+        return Err(AuthError::from_status(
+            "BAD_REQUEST",
+            FieldMap::from([("message".into(), "origin missing".into())]).into(),
+        ));
     };
 
-    let Some(cookie_value) = get_cookie_value(req, &challenge_cookie_name(&ctx.config, config))
-    else {
-        return response_message(400, "Challenge not found");
-    };
-    let token = match decode_challenge_cookie(&ctx.config, &cookie_value) {
-        Ok(token) => token,
-        Err(_) => return response_message(400, "Challenge not found"),
-    };
-
-    let Some(verification) = ctx
-        .database
-        .consume_verification_by_identifier(&token)
-        .await?
-    else {
-        return response_message(400, "Challenge not found");
-    };
-
-    let stored_state: StoredAuthenticationState =
-        match serde_json::from_str(&verification.value.display_string()?) {
-            Ok(state) => state,
-            Err(_) => return response_message(400, "Challenge not found"),
-        };
-    let authentication: PublicKeyCredential = match serde_json::from_value(body.response.clone()) {
-        Ok(authentication) => authentication,
-        Err(_) => return passkey_authentication_failure(),
-    };
-    let credential_id = match credential_id_from_authentication(&authentication) {
-        Ok(credential_id) => credential_id,
-        Err(_) => return passkey_authentication_failure(),
-    };
+    let stored_state =
+        super::challenge::consume(ctx, req, config, super::challenge::Ceremony::Authentication)
+            .await?;
+    let credential_id = body.response.model_property("id")?;
 
     let Some(passkey) = ctx
         .database
-        .get_passkey_by_credential_id(&credential_id)
+        .get_passkey_by_credential_id_value(&credential_id)
         .await?
     else {
-        return passkey_not_found();
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "PASSKEY_NOT_FOUND",
+            "Passkey not found",
+        ));
     };
 
     async {
-        let stored_passkey = WebAuthnCredential::from_record(
-            &passkey,
-            ctx.database.passkey_storage(),
-            &credential_id,
+        let prepared = super::credential::PreparedCredential::from_record(
+            &passkey, ctx.database.passkey_storage(),
         )?;
+        let expected_challenge = stored_state.model_property("expectedChallenge")?;
+        let authentication = super::verification::authentication_response(
+            &body.response, &expected_challenge, &origin,
+        )?;
+        let stored_passkey = prepared.into_credential(&passkey, &authentication.id)?;
         let webauthn = build_webauthn(config, &ctx.config, &origin)?;
-
-        let mut state = match stored_state {
-            StoredAuthenticationState::Passkey { state }
-            | StoredAuthenticationState::Discoverable { state } => state,
-        };
         let Some(flags) = authentication.response.authenticator_data.get(32) else {
-            return passkey_authentication_failure();
+            return Err(AuthError::internal("Authenticator data was shorter than 37 bytes"));
         };
         // Upstream checks backup flags within the signed assertion, independently of stored flags.
         let mut verification_credential = stored_passkey.cred.clone();
         verification_credential.backup_eligible = flags & 0x08 != 0;
-        state
-            .ast
-            .set_allowed_credentials(vec![verification_credential]);
-        let authentication_result = webauthn.authenticate_credential(&authentication, &state.ast);
+        let state = super::challenge::authentication_state(
+            &webauthn, &expected_challenge, verification_credential,
+        )?;
+        let authentication_result = webauthn.authenticate_credential(&authentication, &state);
         if matches!(
             authentication_result,
             Ok(_)
@@ -327,7 +270,11 @@ pub(super) async fn verify_authentication_core(
         let authentication_result = match authentication_result {
             Ok(result) => result,
             Err(webauthn_rs_core::error::WebauthnError::AuthenticationFailure) => {
-                return response_message(401, "Authentication failed");
+                return Err(AuthError::from_code(
+                    "UNAUTHORIZED",
+                    "AUTHENTICATION_FAILED",
+                    "Authentication failed",
+                ));
             }
             Err(webauthn_rs_core::error::WebauthnError::CredentialMayNotBeHardwareBound) => {
                 let error = AuthError::internal(
@@ -341,7 +288,7 @@ pub(super) async fn verify_authentication_core(
         };
 
         if authentication_result.cred_id() != &stored_passkey.cred.cred_id {
-            return passkey_authentication_failure();
+            return Err(AuthError::internal("Authentication credential ID did not match the selected key"));
         }
         let counter = u64::from(authentication_result.counter());
         if let Some(hook) = &config.authentication.after_verification {
@@ -370,11 +317,12 @@ pub(super) async fn verify_authentication_core(
                 ctx,
                 transaction: None,
             };
-            let parsed_body = serde_json::to_value(body)?;
+            let parsed_body = req.input_body()?.unwrap_or(Value::Null);
+            let client_data = parsed_body.get("response").unwrap_or(&Value::Null);
             hook.after_verification(
                 super::PasskeyEndpoint::new(ctx, req, &parsed_body, &users),
                 &verification,
-                &body.response,
+                client_data,
             )
             .await?;
         }
@@ -397,7 +345,11 @@ pub(super) async fn verify_authentication_core(
         .await
         .map_err(SessionIssueError::into_auth_error)?;
         let Some(session) = session else {
-            return response_message(500, "Unable to create session");
+            return Err(AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "UNABLE_TO_CREATE_SESSION",
+                "Unable to create session",
+            ));
         };
         let user = if user_id.is_truthy()? {
             ctx.database.get_user_by_id_field(&user_id).await?
@@ -405,20 +357,23 @@ pub(super) async fn verify_authentication_core(
             None
         };
         let Some(user) = user else {
-            return response_message(500, "User not found");
+            return Err(AuthError::from_status(
+                "INTERNAL_SERVER_ERROR",
+                FieldMap::from([("message".into(), "User not found".into())]).into(),
+            ));
         };
 
         let manager = ctx.session_manager();
         manager
             .set_session_cookie(req, manager.internal_data(&user, &session).await?, None)
             .await?;
-        Ok(PasskeyHandlerOutcome::Success(
+        Ok(
             FieldMap::from(better_auth_core::session::SessionData {
                 session: ctx.session_view(&session).await?,
                 user: ctx.user_view(&user).await?,
             })
             .into(),
-        ))
+        )
     }
     .await
     .map_err(|error| super::registration::verification_error(error, false))

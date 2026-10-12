@@ -12,6 +12,38 @@ use better_auth_core::{CreatePasskey, CreateUser, HttpMethod};
 #[path = "descriptor_tests.rs"]
 mod descriptor_tests;
 
+pub(super) fn assert_verification_error(
+    result: AuthResult<AuthResponse>,
+    status: &str,
+    http_status: u16,
+    expected: FieldMap,
+) -> AuthResult<AuthResponse> {
+    let error = result
+        .err()
+        .ok_or_else(|| AuthError::internal("Passkey verification must throw an APIError"))?;
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, FieldValue::from(status));
+    assert_eq!(error.status_code()?, http_status);
+    let body = error
+        .body_value()?
+        .as_object()
+        .ok_or_else(|| AuthError::internal("Passkey APIError body must be an object"))?
+        .snapshot_fields()?;
+    assert_eq!(
+        body.keys().collect::<Vec<_>>(),
+        expected.keys().collect::<Vec<_>>()
+    );
+    assert_eq!(body, expected);
+    let response = error.to_http_response()?;
+    assert_eq!(response.status, http_status);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&response.body.bytes()?)?,
+        serde_json::Value::Object(expected.json()?)
+    );
+    assert!(!response.headers.contains_key("Set-Cookie"));
+    Ok(response)
+}
+
 #[test]
 fn verification_catch_preserves_only_better_auth_instances() -> AuthResult<()> {
     use better_auth_core::{ApiErrorClass, ApiErrorInit};
@@ -410,11 +442,16 @@ async fn test_verify_registration_without_challenge_cookie_returns_challenge_not
     req.headers
         .insert("origin".to_string(), "http://localhost:3000".to_string());
 
-    let response = plugin.handle_verify_registration(&req, &ctx).await.unwrap();
-    assert_eq!(response.status, 400);
-
-    let body: serde_json::Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
-    assert_eq!(body["message"], "Challenge not found");
+    assert_verification_error(
+        plugin.handle_verify_registration(&req, &ctx).await,
+        "BAD_REQUEST",
+        400,
+        FieldMap::from([
+            ("message".into(), "Challenge not found".into()),
+            ("code".into(), "CHALLENGE_NOT_FOUND".into()),
+        ]),
+    )
+    .unwrap();
 }
 
 #[tokio::test]
@@ -443,14 +480,16 @@ async fn test_verify_authentication_without_challenge_cookie_returns_challenge_n
     req.headers
         .insert("origin".to_string(), "http://localhost:3000".to_string());
 
-    let response = plugin
-        .handle_verify_authentication(&req, &ctx)
-        .await
-        .unwrap();
-    assert_eq!(response.status, 400);
-
-    let body: serde_json::Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
-    assert_eq!(body["message"], "Challenge not found");
+    assert_verification_error(
+        plugin.handle_verify_authentication(&req, &ctx).await,
+        "BAD_REQUEST",
+        400,
+        FieldMap::from([
+            ("message".into(), "Challenge not found".into()),
+            ("code".into(), "CHALLENGE_NOT_FOUND".into()),
+        ]),
+    )
+    .unwrap();
 }
 
 #[tokio::test]

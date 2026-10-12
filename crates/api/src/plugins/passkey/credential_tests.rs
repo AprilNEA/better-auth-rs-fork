@@ -168,7 +168,29 @@ fn standard_columns_and_legacy_envelope_authenticate_registered_key() -> TestRes
             .new_challenge_register_builder(OWNER, "owner", "Owner")?
             .user_verification_policy(VERIFICATION_POLICY)
             .credential_algorithms(vec![COSEAlgorithm::ES256]);
-        let (options, state) = webauthn.generate_challenge_register(builder)?;
+        let (options, _) = webauthn.generate_challenge_register(builder)?;
+        let stored = super::challenge::registration_value(
+            options.public_key.challenge.as_ref(),
+            &super::PasskeyRegistrationUser {
+                id: "owner".into(),
+                name: "Owner".into(),
+                display_name: None.into(),
+            },
+            None,
+        )?;
+        let stored = better_auth_core::utils::json::parse_native_json(&stored)?;
+        assert_eq!(
+            stored
+                .enumerable_fields()?
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["type", "expectedChallenge", "userData", "context"]
+        );
+        let state = super::challenge::registration_state(
+            &webauthn,
+            &stored.model_property("expectedChallenge")?,
+        )?;
         let registration =
             authenticator.register(options.public_key.challenge.as_ref(), transports)?;
         let registered = webauthn.register_credential(&registration, &state, None)?;
@@ -224,13 +246,30 @@ fn standard_columns_and_legacy_envelope_authenticate_registered_key() -> TestRes
                 let builder = webauthn
                     .new_challenge_authenticate_builder(Vec::new(), Some(VERIFICATION_POLICY))?
                     .allow_backup_eligible_upgrade(true);
-                let (options, mut state) = webauthn.generate_challenge_authenticate(builder)?;
+                let (options, _) = webauthn.generate_challenge_authenticate(builder)?;
+                let challenge = super::challenge::authentication_value(
+                    options.public_key.challenge.as_ref(),
+                    Some(&"owner".into()),
+                )?;
+                let challenge = better_auth_core::utils::json::parse_native_json(&challenge)?;
+                assert_eq!(
+                    challenge
+                        .enumerable_fields()?
+                        .keys()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    ["type", "expectedChallenge", "userData"]
+                );
+                let state = super::challenge::authentication_state(
+                    &webauthn,
+                    &challenge.model_property("expectedChallenge")?,
+                    stored.cred.clone(),
+                )?;
                 let authentication = authenticator.authenticate(
                     options.public_key.challenge.as_ref(),
                     counter,
                     OWNER,
                 )?;
-                state.set_allowed_credentials(vec![stored.cred.clone()]);
                 let result = webauthn.authenticate_credential(&authentication, &state)?;
                 assert_eq!(result.cred_id(), &stored.cred.cred_id);
                 assert_eq!(result.counter(), counter);

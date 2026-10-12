@@ -295,7 +295,7 @@ impl SessionIssueError {
     pub fn into_auth_error(self) -> AuthError {
         match self {
             Self::Auth(error) => error,
-            Self::Banned { message } => AuthError::banned_user(message),
+            Self::Banned { message } => AuthError::from_code("FORBIDDEN", "BANNED_USER", message),
         }
     }
 

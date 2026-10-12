@@ -134,10 +134,10 @@ async fn authentication_preserves_projected_credential_ids_without_changing_sign
             let context = fixture.ctx.initialize_request_context().await?;
             let response = plugin
                 .handle_verify_authentication(&request, &context)
-                .await?;
+                .await;
             let mut expected = passkey.clone();
             if allowed {
-                assert_login(response, owner.id.typed()?)?;
+                assert_login(response?, owner.id.typed()?)?;
                 expected.counter = 1.into();
                 assert_eq!(
                     *trace.sessions.events.lock().unwrap(),
@@ -176,11 +176,15 @@ async fn authentication_preserves_projected_credential_ids_without_changing_sign
                     assert_eq!(info.get("credentialID"), Some(&projected));
                 }
             } else {
-                assert_eq!(response.status, 401);
-                assert_eq!(
-                    serde_json::from_slice::<Value>(&response.body.bytes()?)?,
-                    json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
-                );
+                assert_verification_error(
+                    response,
+                    "UNAUTHORIZED",
+                    401,
+                    FieldMap::from([
+                        ("message".into(), "Authentication failed".into()),
+                        ("code".into(), "AUTHENTICATION_FAILED".into()),
+                    ]),
+                )?;
                 assert_eq!(*trace.sessions.events.lock().unwrap(), ["counter:0"]);
                 assert!(trace.sessions.owners.lock().unwrap().is_empty());
                 assert!(trace.verifications.lock().unwrap().is_empty());

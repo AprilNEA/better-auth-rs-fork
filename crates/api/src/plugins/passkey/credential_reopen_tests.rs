@@ -3,11 +3,14 @@
     reason = "Fixture setup and response assertions require successful fallible construction."
 )]
 use super::{Authenticator, CREDENTIAL_ID, ORIGIN, RP_ID, STANDARD, TRANSPORTS, TestResult};
-use crate::plugins::{passkey::PasskeyPlugin, test_helpers};
+use crate::plugins::{
+    passkey::{PasskeyPlugin, tests::assert_verification_error},
+    test_helpers,
+};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateUser, HttpMethod, Passkey,
-    PasskeyStorage,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateUser, FieldMap,
+    HttpMethod, Passkey, PasskeyStorage,
 };
 use better_auth_seaorm::{
     Database, DatabaseConnection, SeaOrmStore,
@@ -206,31 +209,29 @@ fn challenge(options: &Value) -> TestResult<Vec<u8>> {
     )?)
 }
 
-fn assert_error(response: AuthResponse, code: &str) -> TestResult {
-    assert_eq!(response.status, 400);
-    let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
-    assert_eq!(body.get("code").and_then(Value::as_str), Some(code));
+fn assert_challenge_error(result: AuthResult<AuthResponse>) -> TestResult {
+    assert_verification_error(
+        result,
+        "BAD_REQUEST",
+        400,
+        FieldMap::from([
+            ("message".into(), "Challenge not found".into()),
+            ("code".into(), "CHALLENGE_NOT_FOUND".into()),
+        ]),
+    )?;
     Ok(())
 }
 
 fn assert_authentication_error(result: AuthResult<AuthResponse>) -> TestResult {
-    let error = result
-        .err()
-        .ok_or("Authentication verification must throw an APIError")?;
-    test_helpers::assert_coded_api_error(
-        &error,
+    assert_verification_error(
+        result,
         "BAD_REQUEST",
         400,
-        "AUTHENTICATION_FAILED",
-        "Authentication failed",
-    );
-    let response = error.to_http_response()?;
-    assert_eq!(response.status, 400);
-    assert_eq!(
-        serde_json::from_slice::<Value>(&response.body.bytes()?)?,
-        json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
-    );
-    assert!(!response.headers.contains_key("Set-Cookie"));
+        FieldMap::from([
+            ("message".into(), "Authentication failed".into()),
+            ("code".into(), "AUTHENTICATION_FAILED".into()),
+        ]),
+    )?;
     Ok(())
 }
 
@@ -370,7 +371,7 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
 
     let fixture = Fixture::open(&path).await?;
     assert_eq!(fixture.stored().await?, advanced);
-    assert_error(
+    assert_challenge_error(
         fixture
             .route(&request(
                 "/passkey/verify-authentication",
@@ -378,8 +379,7 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
                 Some(signed_body),
                 Some(&cookie),
             ))
-            .await?,
-        "CHALLENGE_NOT_FOUND",
+            .await,
     )?;
     for counter in [1, 2] {
         let (options, cookie) = options(

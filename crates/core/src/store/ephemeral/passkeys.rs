@@ -124,17 +124,19 @@ impl PasskeyStore for EphemeralStore {
         .await
     }
 
-    async fn get_passkey_by_credential_id(
+    async fn get_passkey_by_credential_id_value(
         &self,
-        credential_id: &str,
+        credential_id: &FieldValue,
     ) -> AuthResult<Option<Passkey>> {
         let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
         let column = schema.record_storage_key("credentialID");
         let value =
-            self.plugin_query_value(EntityRole::Passkey, "credentialID", credential_id.into())?;
+            self.plugin_query_value(EntityRole::Passkey, "credentialID", credential_id.clone())?;
         self.find_passkey(|row| {
-            row.get(column)
-                .is_some_and(|actual| actual.strict_equals(&value))
+            crate::query::field_matches_equality(
+                row.get(column).unwrap_or(&FieldValue::Undefined),
+                &value,
+            )
         })
         .await
     }

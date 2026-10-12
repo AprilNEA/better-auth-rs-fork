@@ -100,7 +100,17 @@ async fn selected_banned_user_is_rejected_before_session_hooks() -> AuthResult<(
         ctx.config.session.expires_in(),
     )
     .await;
-    assert!(matches!(result, Err(SessionIssueError::Banned { .. })));
+    let Err(error @ SessionIssueError::Banned { .. }) = result else {
+        panic!("Session admission must reject a banned user");
+    };
+    let message = error.banned_message().unwrap().to_owned();
+    let error = error.into_auth_error();
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, FieldValue::from("FORBIDDEN"));
+    assert_eq!(
+        error.body_value()?.json()?,
+        Some(serde_json::json!({"message": message, "code": "BANNED_USER"}))
+    );
     assert!(owners.0.lock().unwrap().is_empty());
     assert!(
         ctx.database

@@ -2,10 +2,12 @@ use better_auth_core::{AuthContext, AuthError, AuthResult};
 use better_auth_core::{AuthRecordFields, AuthRequest, AuthResponse, FieldMap, FieldValue};
 
 mod callbacks;
+mod challenge;
 mod credential;
 mod descriptors;
 mod options;
 mod registration;
+mod verification;
 pub use callbacks::*;
 pub use options::*;
 
@@ -98,10 +100,9 @@ impl PasskeyPlugin {
         } else {
             None
         };
-        match registration::verify_registration_core(body, req, user, &self.config, ctx).await? {
-            PasskeyHandlerOutcome::Success(result) => Ok(AuthResponse::native(None, result)),
-            PasskeyHandlerOutcome::Response(response) => Ok(response),
-        }
+        let result =
+            registration::verify_registration_core(body, req, user, &self.config, ctx).await?;
+        Ok(AuthResponse::native(None, result))
     }
 
     /// GET /passkey/generate-authenticate-options
@@ -134,12 +135,10 @@ impl PasskeyPlugin {
         let body = VerifyAuthenticationRequest::parse(req)?;
         let ip_address = ctx.config.advanced.ip_address.resolve(req);
         let user_agent = req.headers.get("user-agent").cloned();
-        match verify_authentication_core(&body, req, &self.config, ip_address, user_agent, ctx)
-            .await?
-        {
-            PasskeyHandlerOutcome::Success(response) => Ok(AuthResponse::native(None, response)),
-            PasskeyHandlerOutcome::Response(response) => Ok(response),
-        }
+        let result =
+            verify_authentication_core(&body, req, &self.config, ip_address, user_agent, ctx)
+                .await?;
+        Ok(AuthResponse::native(None, result))
     }
 
     /// GET /passkey/list-user-passkeys

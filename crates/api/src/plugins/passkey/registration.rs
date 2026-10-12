@@ -6,16 +6,11 @@ use better_auth_core::{
 };
 use chrono::Utc;
 use serde_json::{Map, Value};
-use webauthn_rs_core::proto::RegisterPublicKeyCredential;
 
 use super::{
     PasskeyConfig, PasskeyCredential, PasskeyEndpoint, PasskeyExtensions, PasskeyRegistrationInfo,
-    PasskeyRegistrationUser, PasskeyRegistrationVerification,
-    callbacks::Users,
-    credential::WebAuthnCredential,
-    handlers::{PasskeyHandlerOutcome, PasskeyHandlerResult, response_message},
-    types::VerifyRegistrationRequest,
-    webauthn::*,
+    PasskeyRegistrationUser, PasskeyRegistrationVerification, callbacks::Users,
+    credential::WebAuthnCredential, types::VerifyRegistrationRequest, webauthn::*,
 };
 
 pub(super) async fn optional_session<S: AuthSchema>(
@@ -149,26 +144,18 @@ pub(super) async fn verify_registration_core<S: AuthSchema>(
     session_user: Option<NativeSessionData>,
     config: &PasskeyConfig,
     ctx: &AuthContext<S>,
-) -> PasskeyHandlerResult<FieldValue> {
+) -> AuthResult<FieldValue> {
     let Some(origins) = resolve_origins(config, req) else {
-        return response_message(400, "Failed to verify registration");
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "FAILED_TO_VERIFY_REGISTRATION",
+            "Failed to verify registration",
+        ));
     };
-    let Some(cookie) = get_cookie_value(req, &challenge_cookie_name(&ctx.config, config)) else {
-        return response_message(400, "Challenge not found");
-    };
-    let Ok(token) = decode_challenge_cookie(&ctx.config, &cookie) else {
-        return response_message(400, "Challenge not found");
-    };
-    let Some(challenge) = ctx
-        .database
-        .consume_verification_by_identifier(&token)
-        .await?
-    else {
-        return response_message(400, "Challenge not found");
-    };
-    let Ok(state) = StoredRegistrationState::parse_json(&challenge.value.display_string()?) else {
-        return response_message(400, "Challenge not found");
-    };
+    let state =
+        super::challenge::consume(ctx, req, config, super::challenge::Ceremony::Registration)
+            .await?;
+    let user = state.model_property("userData")?;
     // Optional sessions are read after consuming the challenge, as in the upstream handler.
     let session_user = if config.registration.require_session {
         session_user
@@ -180,26 +167,44 @@ pub(super) async fn verify_registration_core<S: AuthSchema>(
         .map(|user| user.user_field("id"))
         .transpose()?
         && id.is_truthy()
-        && !id.strict_equals(&state.user.id.field_value())
+        && !id.strict_equals(&user.model_property("id")?)
     {
         return Err(forbidden_user());
     }
     let result = async {
-        let registration: RegisterPublicKeyCredential =
-            serde_json::from_value(body.response.clone())?;
+        let expected_challenge = state.model_property("expectedChallenge")?;
+        let registration = super::verification::registration_response(
+            &body.response,
+            &expected_challenge,
+            &origins,
+        )?;
         let webauthn = build_webauthn(config, &ctx.config, &origins)?;
+        let verification_state =
+            super::challenge::registration_state(&webauthn, &expected_challenge)?;
         let credential = webauthn
-            .register_credential(&registration, &state.state.rs, None)
+            .register_credential(&registration, &verification_state, None)
             .map_err(|error| {
                 AuthError::internal(format!("WebAuthn registration failed: {error}"))
             })?;
-        let stored = WebAuthnCredential::registered(credential, ctx.database.passkey_storage());
+        let mut stored = WebAuthnCredential::registered(credential, ctx.database.passkey_storage());
         let metadata = extract_registration_metadata(&registration)?;
-        let transports = registration
+        let transports = body
             .response
-            .transports
+            .model_property("response")?
+            .model_property("transports")?;
+        let transports = match transports {
+            FieldValue::Null | FieldValue::Undefined => None,
+            value => Some(value.decode::<Vec<String>>()?),
+        };
+        stored.cred.transports = transports
             .as_ref()
-            .map(|values| values.iter().map(ToString::to_string).collect::<Vec<_>>());
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|value| serde_json::from_value(Value::String(value.clone())))
+                    .collect::<Result<_, _>>()
+            })
+            .transpose()?;
         let credential_id = URL_SAFE_NO_PAD.encode(stored.cred.cred_id.as_ref());
         let verification = PasskeyRegistrationVerification {
             verified: true,
@@ -226,7 +231,7 @@ pub(super) async fn verify_registration_core<S: AuthSchema>(
         };
         let input = CreatePasskey {
             additional_fields: Default::default(),
-            user_id: state.user.id.clone(),
+            user_id: better_auth_core::SchemaValue::Undefined,
             name: body
                 .name
                 .clone()
@@ -288,14 +293,14 @@ pub(super) async fn verify_registration_core<S: AuthSchema>(
     }
     .await
     .map_err(|error| verification_error(error, true))?;
-    Ok(PasskeyHandlerOutcome::Success(result))
+    Ok(result)
 }
 
 struct Registration<S: AuthSchema> {
     ctx: AuthContext<S>,
     config: PasskeyConfig,
     request: AuthRequest,
-    state: StoredRegistrationState,
+    state: FieldValue,
     verification: PasskeyRegistrationVerification,
     input: CreatePasskey,
     session_user: Option<NativeSessionData>,
@@ -312,22 +317,29 @@ impl<S: AuthSchema> Registration<S> {
             better_auth_core::wire::SessionView,
         )>,
     )> {
-        if !self.state.user.name.is_truthy()? {
-            self.state.user.name = self.state.user.id.clone();
+        let mut state = RegistrationUserState::from_native(&self.state)?;
+        if !state.user.name.is_truthy()? {
+            state.user.name = state.user.id.clone();
         }
+        self.input.user_id = state.user.id.clone();
         if let Some(hook) = &self.config.registration.after_verification {
             let users = Users {
                 ctx: &self.ctx,
                 transaction,
             };
-            let body = serde_json::to_value(&self.body)?;
+            let body = self.request.input_body()?.unwrap_or(Value::Null);
+            let client_data = body.get("response").unwrap_or(&Value::Null);
+            let context = match &state.context {
+                FieldValue::Undefined | FieldValue::Null => None,
+                value => Some(value.decode::<String>()?),
+            };
             let result = hook
                 .after_verification(
                     PasskeyEndpoint::new(&self.ctx, &self.request, &body, &users),
                     &self.verification,
-                    &self.state.user,
-                    &self.body.response,
-                    self.state.context.as_deref(),
+                    &state.user,
+                    client_data,
+                    context.as_deref(),
                 )
                 .await?;
             if let Some(user_id) = result.user_id.filter(|id| !id.is_empty()) {
