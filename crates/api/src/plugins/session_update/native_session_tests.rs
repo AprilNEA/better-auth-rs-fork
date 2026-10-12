@@ -252,7 +252,7 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
     ] {
         let input = field.map_or_else(|| json!({}), |field| json!({(field):"forbidden"}));
         let expected = if let Some(field) = field.filter(|field| *field != "unknown") {
-            json!({"code":"FIELD_NOT_ALLOWED", "message":format!("{field} is not allowed to be set")})
+            json!({"message":format!("{field} is not allowed to be set"), "code":"FIELD_NOT_ALLOWED"})
         } else {
             json!({"message":"No fields to update"})
         };
@@ -284,7 +284,14 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
                 result?
             } else {
                 let error = result.unwrap_err();
+                assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+                assert_eq!(error.status_value()?, "BAD_REQUEST".into());
                 assert_eq!(error.status_code().unwrap(), 400);
+                let fields = error.body_value()?.as_object().unwrap().snapshot_fields()?;
+                assert_eq!(
+                    fields.keys().collect::<Vec<_>>(),
+                    expected.as_object().unwrap().keys().collect::<Vec<_>>()
+                );
                 error.to_auth_response()
             };
             assert_eq!(response.is_api_error()?, !http);
@@ -301,6 +308,15 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
                 );
             }
             assert_eq!(body(&response), expected);
+            assert_eq!(
+                response
+                    .clone()
+                    .into_http_response()?
+                    .body
+                    .bytes()?
+                    .as_ref(),
+                serde_json::to_vec(&expected)?
+            );
             assert!(request.new_session()?.is_none());
             assert_eq!(
                 fixture

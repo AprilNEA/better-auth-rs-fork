@@ -113,8 +113,14 @@ impl<'a, S: AuthSchema> EmailOtpApi<'a, S> {
                                 .recover(stored, context.config.encryption_secret())
                                 .await?
                                 .ok_or_else(|| {
-                                    AuthError::bad_request(
-                                        "OTP is hashed, cannot return the plain text OTP",
+                                    AuthError::from_status(
+                                        "BAD_REQUEST",
+                                        better_auth_core::FieldMap::from([(
+                                            "message".into(),
+                                            "OTP is hashed, cannot return the plain text OTP"
+                                                .into(),
+                                        )])
+                                        .into(),
                                     )
                                 })?,
                         )

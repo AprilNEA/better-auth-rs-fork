@@ -109,12 +109,18 @@ pub(crate) async fn unlink_account_core(
 ) -> AuthResult<StatusResponse> {
     let accounts = ctx.database.get_user_accounts_value(user_id).await?;
     if accounts.len() == 1 && !ctx.config.account.account_linking.allow_unlinking_all() {
-        return Err(AuthError::bad_request("You can't unlink your last account"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "FAILED_TO_UNLINK_LAST_ACCOUNT",
+            "You can't unlink your last account",
+        ));
     }
     let account = accounts
         .iter()
         .find(|account| account.id.field_value().strict_equals(&account_id.into()))
-        .ok_or_else(|| AuthError::bad_request("Account not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code("BAD_REQUEST", "ACCOUNT_NOT_FOUND", "Account not found")
+        })?;
     ctx.database
         .delete_account_value(&account.id.field_value())
         .await?;

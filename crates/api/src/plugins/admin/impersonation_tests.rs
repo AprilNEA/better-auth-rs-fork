@@ -314,10 +314,21 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
             .await
             .unwrap_err();
         assert!(error.is_api_error().unwrap());
+        assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+        assert_eq!(error.status_value()?, "INTERNAL_SERVER_ERROR".into());
         assert_eq!(error.status_code().unwrap(), 500);
         assert_eq!(
             error.body_value()?.json()?,
             Some(serde_json::json!({"message":"Failed to find admin session"}))
+        );
+        assert_eq!(
+            error
+                .to_auth_response()
+                .into_http_response()?
+                .body
+                .bytes()?
+                .as_ref(),
+            br#"{"message":"Failed to find admin session"}"#
         );
         assert_eq!(fixture.ctx.database.get_session(&token).await?, current);
         assert_eq!(
@@ -349,10 +360,21 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
         .await
         .unwrap_err();
     assert!(error.is_api_error().unwrap());
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, "INTERNAL_SERVER_ERROR".into());
     assert_eq!(error.status_code().unwrap(), 500);
     assert_eq!(
         error.body_value()?.json()?,
         Some(serde_json::json!({"message":"Failed to find user"}))
+    );
+    assert_eq!(
+        error
+            .to_auth_response()
+            .into_http_response()?
+            .body
+            .bytes()?
+            .as_ref(),
+        br#"{"message":"Failed to find user"}"#
     );
     assert_eq!(
         fixture

@@ -124,7 +124,9 @@ pub(super) async fn begin_attempt<S: better_auth_core::AuthSchema>(
                 "Failed to invalidate two-factor challenge",
             ));
         }
-        return Err(AuthError::bad_request(
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE",
             "Too many attempts. Please request a new code.",
         ));
     }

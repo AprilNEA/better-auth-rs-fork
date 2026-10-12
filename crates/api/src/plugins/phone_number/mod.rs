@@ -15,6 +15,7 @@ use super::helpers::{
 };
 
 mod callbacks;
+mod hooks;
 mod native;
 mod request;
 #[cfg(test)]
@@ -819,6 +820,7 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
                 &["phone_number", "phone_number_verified"],
             )?;
             ctx.set_metadata("phone-number.enabled", json!(true));
+            ctx.register_database_hook(Arc::new(hooks::PhoneNumberHooks));
             ctx.extensions.insert(self.clone());
             Ok(())
         }

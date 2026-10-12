@@ -135,16 +135,26 @@ pub(super) async fn verify_user_password(
     }
     let password = password
         .filter(|password| !password.is_empty())
-        .ok_or_else(|| AuthError::bad_request("Invalid password"))?;
+        .ok_or_else(|| {
+            AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+        })?;
     if password.encode_utf16().count() > ctx.password_policy.max_length {
-        return Err(AuthError::bad_request("Password too long"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "PASSWORD_TOO_LONG",
+            "Password too long",
+        ));
     }
     let Some(stored_hash) = stored_hash.filter(|hash| !hash.is_empty()) else {
         if hash_missing_password {
             _ = better_auth_core::hash_password(ctx.password_policy.hasher.as_ref(), password)
                 .await?;
         }
-        return Err(AuthError::bad_request("Invalid password"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_PASSWORD",
+            "Invalid password",
+        ));
     };
     match better_auth_core::verify_password(
         ctx.password_policy.hasher.as_ref(),
@@ -154,7 +164,11 @@ pub(super) async fn verify_user_password(
     .await
     {
         Ok(()) => Ok(()),
-        Err(AuthError::InvalidCredentials) => Err(AuthError::bad_request("Invalid password")),
+        Err(AuthError::InvalidCredentials) => Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_PASSWORD",
+            "Invalid password",
+        )),
         Err(error) => Err(error),
     }
 }

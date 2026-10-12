@@ -15,10 +15,10 @@ const COMPROMISED: &str =
 const CHECK_FAILED: &str = "Failed to check password. Please try again later.";
 
 fn check_error(message: impl AsRef<str>) -> AuthError {
-    match AuthResponse::json(500, &serde_json::json!({ "message": message.as_ref() })) {
-        Ok(response) => response.into(),
-        Err(error) => error,
-    }
+    AuthError::from_status(
+        "INTERNAL_SERVER_ERROR",
+        better_auth_core::FieldMap::from([("message".into(), message.as_ref().into())]).into(),
+    )
 }
 const DEFAULT_PATHS: &[&str] = &[
     "/sign-up/email",
@@ -212,15 +212,15 @@ impl PasswordHasher for CheckedHasher {
                         .any(|configured| configured == path)
             }) && self.client.is_password_compromised(password).await?
             {
-                return Err(AuthResponse::json(
-                    400,
-                    &serde_json::json!({
-                        "code": "PASSWORD_COMPROMISED",
-                        "message": self.config.custom_password_compromised_message.as_deref()
-                            .filter(|message| !message.is_empty()).unwrap_or(COMPROMISED),
-                    }),
-                )?
-                .into());
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "PASSWORD_COMPROMISED",
+                    self.config
+                        .custom_password_compromised_message
+                        .as_deref()
+                        .filter(|message| !message.is_empty())
+                        .unwrap_or(COMPROMISED),
+                ));
             }
         }
         self.inner.hash(password).await

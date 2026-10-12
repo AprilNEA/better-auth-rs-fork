@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { createAuthEndpoint, createAuthMiddleware } from "better-auth/api";
 import { admin, organization } from "better-auth/plugins";
 import { APIError, kAPIErrorHeaderSymbol, toResponse } from "better-call";
+import { APIError as BetterAuthAPIError } from "@better-auth/core/error";
 
 const errorBody = { code: "FIXTURE_ERROR", message: "fixture rejection" };
 const fields = (headers?: HeadersInit) => Object.fromEntries(new Headers(headers));
@@ -528,16 +529,20 @@ test("update-session rejects invalid updates as native API errors and HTTP 400",
   for (const field of [undefined, "unknown", "activeOrganizationId", "activeTeamId", "impersonatedBy"]) {
     const body = field ? { [field]: "forbidden" } : {};
     const expected = field && field !== "unknown"
-      ? { code: "FIELD_NOT_ALLOWED", message: `${field} is not allowed to be set` }
+      ? { message: `${field} is not allowed to be set`, code: "FIELD_NOT_ALLOWED" }
       : { message: "No fields to update" };
     let caught: APIError | undefined;
     try { await auth.api.updateSession({ body, returnStatus: true, returnHeaders: true }); }
     catch (error) { expect(error).toBeInstanceOf(APIError); caught = error as APIError; }
+    expect(caught).toBeInstanceOf(BetterAuthAPIError);
+    expect(caught?.status).toBe("BAD_REQUEST");
     expect(caught?.statusCode).toBe(400);
     expect(caught?.body).toStrictEqual(expected);
+    expect(Object.keys(caught!.body!)).toStrictEqual(Object.keys(expected));
     const response = await auth.api.updateSession({ body, asResponse: true });
     expect(response.status).toBe(400);
-    expect(await response.json()).toStrictEqual(expected);
+    expect(await response.clone().json()).toStrictEqual(expected);
+    expect(await response.text()).toBe(JSON.stringify(expected));
     expect(session.session).toStrictEqual({ id: "session", userId: "owner", token: "token", createdAt: now, updatedAt: now, expiresAt: new Date("2099-01-01") });
   }
 });

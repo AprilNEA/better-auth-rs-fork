@@ -19,6 +19,9 @@ use std::sync::{Arc, Mutex};
 #[path = "native_endpoint_tests/http_json_router.rs"]
 mod http_json_router;
 
+#[path = "native_endpoint_tests/update_user_session.rs"]
+mod update_user_session;
+
 #[derive(Default)]
 struct State {
     mode: String,

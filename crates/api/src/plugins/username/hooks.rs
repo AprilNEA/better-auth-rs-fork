@@ -110,9 +110,11 @@ impl<S: AuthSchema> DatabaseHooks<S> for UsernameHooks<S> {
                 let session_id = context
                     .request
                     .as_ref()
-                    .map(|request| request.request.server_context("auth.current-user-id"))
+                    .map(|request| request.request.native_session_snapshot())
                     .transpose()?
-                    .flatten();
+                    .flatten()
+                    .map(|session| session.user_field("id"))
+                    .transpose()?;
                 let current_id = session_id
                     .as_ref()
                     .filter(|value| value.is_truthy())

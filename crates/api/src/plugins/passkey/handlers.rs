@@ -464,9 +464,7 @@ pub(super) async fn update_passkey_core(
 }
 
 fn empty_unauthorized() -> AuthError {
-    better_auth_core::AuthResponse::new(401)
-        .with_header("content-type", "application/json")
-        .into()
+    AuthError::from_status("UNAUTHORIZED", FieldValue::Undefined)
 }
 
 async fn require_passkey_owner(
@@ -479,17 +477,14 @@ async fn require_passkey_owner(
         return Err(empty_unauthorized());
     }
     if id.is_empty() {
-        return Err(better_auth_core::AuthResponse::json(
-            400,
-            &serde_json::json!({ "message": "Missing required parameter: id" }),
-        )?
-        .into());
+        return Err(AuthError::from_status(
+            "BAD_REQUEST",
+            FieldMap::from([("message".into(), "Missing required parameter: id".into())]).into(),
+        ));
     }
-    let passkey = ctx
-        .database
-        .get_passkey_by_id(id)
-        .await?
-        .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
+    let passkey = ctx.database.get_passkey_by_id(id).await?.ok_or_else(|| {
+        AuthError::from_code("NOT_FOUND", "PASSKEY_NOT_FOUND", "Passkey not found")
+    })?;
     if !passkey.user_id().field_value().strict_equals(owner) {
         return Err(forbidden);
     }

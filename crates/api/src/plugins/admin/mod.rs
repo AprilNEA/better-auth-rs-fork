@@ -143,7 +143,9 @@ impl AdminPlugin {
         ctx.require_authoritative_native_session(req)
             .await
             .map_err(|error| match error {
-                AuthError::Unauthenticated => AuthResponse::new(401).into(),
+                AuthError::Unauthenticated => {
+                    AuthError::from_status("UNAUTHORIZED", better_auth_core::FieldValue::Undefined)
+                }
                 error => error,
             })
     }
@@ -152,13 +154,18 @@ impl AdminPlugin {
         &self,
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+        class: better_auth_core::ApiErrorClass,
     ) -> AuthResult<Option<NativeSessionData>> {
         let data = ctx
             .native_session(req, better_auth_core::session::SessionRead::Authoritative)
             .await?;
         if data.is_none() && (req.endpoint_headers().is_some() || req.original_request().is_some())
         {
-            return Err(AuthResponse::new(401).into());
+            return Err(AuthError::try_api_error(better_auth_core::ApiErrorInit {
+                status: "UNAUTHORIZED".into(),
+                class,
+                ..Default::default()
+            })?);
         }
         Ok(data)
     }
@@ -168,6 +175,7 @@ impl AdminPlugin {
         session: &NativeSessionData,
         resource: &str,
         action: &str,
+        code: &str,
         message: &str,
     ) -> AuthResult<()> {
         let permissions = HashMap::from([(resource.to_string(), vec![action.to_string()])]);
@@ -179,7 +187,7 @@ impl AdminPlugin {
         )? {
             Ok(())
         } else {
-            Err(AuthError::forbidden(message))
+            Err(AuthError::from_code("FORBIDDEN", code, message))
         }
     }
 
@@ -189,7 +197,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "set-role", MESSAGE_CHANGE_ROLE)?;
+        self.authorize(
+            &session,
+            "user",
+            "set-role",
+            "YOU_ARE_NOT_ALLOWED_TO_CHANGE_USERS_ROLE",
+            MESSAGE_CHANGE_ROLE,
+        )?;
         let body: SetRoleRequest = request::read(req)?;
         let response = set_role_core(&body, &self.config, ctx).await?;
         Ok(AuthResponse::native(None, response.into_field_value()))
@@ -201,7 +215,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "get", MESSAGE_GET_USER)?;
+        self.authorize(
+            &session,
+            "user",
+            "get",
+            "YOU_ARE_NOT_ALLOWED_TO_GET_USER",
+            MESSAGE_GET_USER,
+        )?;
         let query = GetUserQuery {
             id: req
                 .query_string("id")?
@@ -221,9 +241,17 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let body: CreateUserRequest = request::read(req)?;
-        let session = self.optional_session(req, ctx).await?;
+        let session = self
+            .optional_session(req, ctx, better_auth_core::ApiErrorClass::BetterCall)
+            .await?;
         if let Some(session) = &session {
-            self.authorize(session, "user", "create", MESSAGE_CREATE_USERS)?;
+            self.authorize(
+                session,
+                "user",
+                "create",
+                "YOU_ARE_NOT_ALLOWED_TO_CREATE_USERS",
+                MESSAGE_CREATE_USERS,
+            )?;
         }
         let response = create_user_core(&body, Some(req), session, &self.config, ctx).await?;
         Ok(AuthResponse::native(None, response.into_field_value()))
@@ -235,7 +263,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "update", MESSAGE_UPDATE_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "update",
+            "YOU_ARE_NOT_ALLOWED_TO_UPDATE_USERS",
+            MESSAGE_UPDATE_USERS,
+        )?;
         let body: AdminUpdateUserRequest = request::read(req)?;
         let response = update_user_core(&body, &session, &self.config, ctx).await?;
         Ok(AuthResponse::native(
@@ -252,7 +286,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "list", MESSAGE_LIST_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "list",
+            "YOU_ARE_NOT_ALLOWED_TO_LIST_USERS",
+            MESSAGE_LIST_USERS,
+        )?;
         let query: ListUsersQueryParams = crate::plugins::query_input::parse(&req.query)?;
         // The upstream admin endpoint catches list/count/projection failures.
         let response = list_users_core(&query, ctx)
@@ -277,7 +317,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "session", "list", MESSAGE_LIST_USER_SESSIONS)?;
+        self.authorize(
+            &session,
+            "session",
+            "list",
+            "YOU_ARE_NOT_ALLOWED_TO_LIST_USERS_SESSIONS",
+            MESSAGE_LIST_USER_SESSIONS,
+        )?;
         let body: UserIdRequest = request::read(req)?;
         let response = list_user_sessions_core(&body, ctx).await?;
         let sessions: Vec<better_auth_core::FieldValue> = response
@@ -297,7 +343,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "ban", MESSAGE_BAN_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "ban",
+            "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS",
+            MESSAGE_BAN_USERS,
+        )?;
         let body: BanUserRequest = request::read(req)?;
         let response =
             ban_user_core(&body, &session.user_property("id")?, &self.config, ctx).await?;
@@ -310,7 +362,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "ban", MESSAGE_BAN_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "ban",
+            "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS",
+            MESSAGE_BAN_USERS,
+        )?;
         let body: UserIdRequest = request::read(req)?;
         let response = unban_user_core(&body, ctx).await?;
         Ok(AuthResponse::native(None, response.into_field_value()))
@@ -322,7 +380,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "impersonate", MESSAGE_IMPERSONATE_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "impersonate",
+            "YOU_ARE_NOT_ALLOWED_TO_IMPERSONATE_USERS",
+            MESSAGE_IMPERSONATE_USERS,
+        )?;
         let body: UserIdRequest = request::read(req)?;
         let (response, data) = impersonate_user_core(
             &body,
@@ -390,7 +454,9 @@ impl AdminPlugin {
         let session = ctx
             .native_session(req, better_auth_core::session::SessionRead::Cached)
             .await?
-            .ok_or_else(|| AuthError::from(AuthResponse::new(401)))?
+            .ok_or_else(|| {
+                AuthError::from_status("UNAUTHORIZED", better_auth_core::FieldValue::Undefined)
+            })?
             .session;
         let (data, dont_remember) = stop_impersonating_core(&session, req, ctx).await?;
 
@@ -424,7 +490,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "session", "revoke", MESSAGE_REVOKE_USER_SESSIONS)?;
+        self.authorize(
+            &session,
+            "session",
+            "revoke",
+            "YOU_ARE_NOT_ALLOWED_TO_REVOKE_USERS_SESSIONS",
+            MESSAGE_REVOKE_USER_SESSIONS,
+        )?;
         let body: RevokeSessionRequest = request::read(req)?;
         let response = revoke_user_session_core(&body, ctx).await?;
         AuthResponse::json(None, &response)
@@ -436,7 +508,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "session", "revoke", MESSAGE_REVOKE_USER_SESSIONS)?;
+        self.authorize(
+            &session,
+            "session",
+            "revoke",
+            "YOU_ARE_NOT_ALLOWED_TO_REVOKE_USERS_SESSIONS",
+            MESSAGE_REVOKE_USER_SESSIONS,
+        )?;
         let body: UserIdRequest = request::read(req)?;
         let response = revoke_user_sessions_core(&body, ctx).await?;
         AuthResponse::json(None, &response)
@@ -448,7 +526,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "delete", MESSAGE_DELETE_USERS)?;
+        self.authorize(
+            &session,
+            "user",
+            "delete",
+            "YOU_ARE_NOT_ALLOWED_TO_DELETE_USERS",
+            MESSAGE_DELETE_USERS,
+        )?;
         let body: UserIdRequest = request::read(req)?;
         let response = remove_user_core(&body, &session.user_property("id")?, ctx).await?;
         AuthResponse::json(None, &response)
@@ -460,7 +544,13 @@ impl AdminPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let session = self.require_session(req, ctx).await?;
-        self.authorize(&session, "user", "set-password", MESSAGE_SET_USER_PASSWORD)?;
+        self.authorize(
+            &session,
+            "user",
+            "set-password",
+            "YOU_ARE_NOT_ALLOWED_TO_SET_USERS_PASSWORD",
+            MESSAGE_SET_USER_PASSWORD,
+        )?;
         let body: SetUserPasswordRequest = request::read(req)?;
         let response = set_user_password_core(&body, ctx).await?;
         AuthResponse::json(None, &response)
@@ -473,25 +563,56 @@ impl AdminPlugin {
     ) -> AuthResult<AuthResponse> {
         let body: HasPermissionRequest = request::read(req)?;
         let requested = body.requested_permissions().ok_or_else(|| {
-            AuthError::bad_request("invalid permission check. no permission(s) were passed.")
+            AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "invalid permission check. no permission(s) were passed.".into(),
+                )])
+                .into(),
+            )
         })?;
-        let session = self.optional_session(req, ctx).await?;
+        let session = self
+            .optional_session(req, ctx, better_auth_core::ApiErrorClass::BetterAuth)
+            .await?;
         let user_id = body.user_id.as_deref().filter(|value| !value.is_empty());
         let role = body.role.as_deref().filter(|value| !value.is_empty());
         if session.is_none() && user_id.is_none() && role.is_none() {
-            return Err(AuthError::bad_request("user id or role is required"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "user id or role is required".into(),
+                )])
+                .into(),
+            ));
         }
         let (user_id, role) = if let Some(session) = session.filter(|data| data.user.is_truthy()) {
             (session.user_property("id")?, session.user_property("role")?)
         } else if let Some(role) = role {
             (user_id.unwrap_or_default().into(), role.into())
         } else {
-            let user_id = user_id.ok_or_else(|| AuthError::bad_request("user not found"))?;
+            let user_id = user_id.ok_or_else(|| {
+                AuthError::from_status(
+                    "BAD_REQUEST",
+                    better_auth_core::FieldMap::from([("message".into(), "user not found".into())])
+                        .into(),
+                )
+            })?;
             let user = ctx
                 .database
                 .get_user_by_id_value(&user_id.into())
                 .await?
-                .ok_or_else(|| AuthError::bad_request("user not found"))?;
+                .ok_or_else(|| {
+                    AuthError::from_status(
+                        "BAD_REQUEST",
+                        better_auth_core::FieldMap::from([(
+                            "message".into(),
+                            "user not found".into(),
+                        )])
+                        .into(),
+                    )
+                })?;
             (user.id.field_value(), user.role.field_value())
         };
         let response = PermissionResponse {

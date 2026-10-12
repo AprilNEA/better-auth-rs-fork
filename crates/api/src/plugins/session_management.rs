@@ -102,7 +102,9 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for SessionManagementPlugin 
             (HttpMethod::Get, "/get-session") => Ok(Some(self.handle_get_session(req, ctx).await?)),
             (HttpMethod::Post, "/get-session") => {
                 if !ctx.config.session.defer_session_refresh {
-                    return Err(AuthError::method_not_allowed(
+                    return Err(AuthError::from_code(
+                        "METHOD_NOT_ALLOWED",
+                        "METHOD_NOT_ALLOWED_DEFER_SESSION_REQUIRED",
                         "POST method requires deferSessionRefresh to be enabled in session config",
                     ));
                 }
@@ -323,7 +325,13 @@ impl SessionManagementPlugin {
                 "Failed to list Sessions",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
             );
-            AuthError::from(AuthResponse::new(500))
+            match AuthError::try_api_error(better_auth_core::ApiErrorInit {
+                status: "INTERNAL_SERVER_ERROR".into(),
+                class: better_auth_core::ApiErrorClass::BetterCall,
+                ..Default::default()
+            }) {
+                Ok(error) | Err(error) => error,
+            }
         })?;
         if admin_plugin_enabled(ctx) {
             sessions.retain(|session| !session.impersonated_by.field_value().is_truthy());

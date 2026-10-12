@@ -929,7 +929,7 @@ async fn load_two_factor_record(
     ctx.database
         .get_two_factor_by_user_id_value(&SchemaValue::from_field(user_id.clone()))
         .await?
-        .ok_or_else(|| AuthError::bad_request("TOTP not enabled"))
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "TOTP_NOT_ENABLED", "TOTP not enabled"))
 }
 
 impl ResolvedTwoFactorState {

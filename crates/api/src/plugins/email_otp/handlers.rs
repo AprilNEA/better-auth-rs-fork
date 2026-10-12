@@ -41,15 +41,24 @@ impl EmailOtpPlugin {
             ctx,
         );
         if !self.has_sender(ctx) {
-            return Err(AuthError::bad_request(
-                "send email verification is not implemented",
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "send email verification is not implemented".into(),
+                )])
+                .into(),
             ));
         }
         let email = body.get("email").to_lowercase();
         validate_email(&email)?;
         let kind = body.kind();
         if kind == EmailOtpType::ChangeEmail {
-            return Err(AuthError::bad_request("Invalid OTP type"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([("message".into(), "Invalid OTP type".into())])
+                    .into(),
+            ));
         }
         let otp = self.resolve_otp(&endpoint, &email, kind).await?;
         if ctx.database.get_user_by_email(&email).await?.is_none()
@@ -337,7 +346,16 @@ impl EmailOtpPlugin {
             let otp = body
                 .optional("otp")
                 .filter(|otp| !otp.is_empty())
-                .ok_or_else(|| AuthError::bad_request("OTP is required to verify current email"))?;
+                .ok_or_else(|| {
+                    AuthError::from_status(
+                        "BAD_REQUEST",
+                        better_auth_core::FieldMap::from([(
+                            "message".into(),
+                            "OTP is required to verify current email".into(),
+                        )])
+                        .into(),
+                    )
+                })?;
             self.verify_otp(
                 ctx,
                 &EmailOtpType::EmailVerification.identifier(&email),
@@ -385,7 +403,14 @@ impl EmailOtpPlugin {
             .await?
             .ok_or_else(user_not_found)?;
         if ctx.database.get_user_by_email(&new_email).await?.is_some() {
-            return Err(AuthError::bad_request("Email already in use"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "Email already in use".into(),
+                )])
+                .into(),
+            ));
         }
         let _ = self
             .mark_verified(req, ctx, &user, new_email.clone())
@@ -402,14 +427,25 @@ impl EmailOtpPlugin {
 
     fn change_addresses(&self, user: &FieldValue, body: &Body) -> AuthResult<(String, String)> {
         if !self.config.change_email {
-            return Err(AuthError::bad_request("Change email with OTP is disabled"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "Change email with OTP is disabled".into(),
+                )])
+                .into(),
+            ));
         }
         let email = crate::plugins::helpers::user_email_field(&user.model_property("email")?)?
             .to_lowercase();
         let new_email = body.get("newEmail").to_lowercase();
         validate_email(&new_email)?;
         if email == new_email {
-            return Err(AuthError::bad_request("Email is the same"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([("message".into(), "Email is the same".into())])
+                    .into(),
+            ));
         }
         Ok((email, new_email))
     }

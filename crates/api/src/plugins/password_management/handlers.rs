@@ -118,7 +118,11 @@ pub(crate) async fn reset_password_core(
 ) -> AuthResult<StatusResponse> {
     let token = body.token.as_deref().unwrap_or("");
     if token.is_empty() {
-        return Err(AuthError::bad_request("Invalid token"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_TOKEN",
+            "Invalid token",
+        ));
     }
     password_utils::validate_password(
         &body.new_password,
@@ -131,14 +135,14 @@ pub(crate) async fn reset_password_core(
         .database
         .consume_verification_by_identifier(&format!("reset-password:{}", token))
         .await?
-        .ok_or_else(|| AuthError::bad_request("Invalid token"))?;
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "INVALID_TOKEN", "Invalid token"))?;
     let user_id = verification.value.typed()?.clone();
 
     let user = ctx
         .database
         .get_user_by_id(&user_id)
         .await?
-        .ok_or_else(|| AuthError::bad_request("User not found"))?;
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "USER_NOT_FOUND", "User not found"))?;
 
     let password_hash =
         password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.new_password)
@@ -246,7 +250,13 @@ pub(crate) async fn change_password_core(
         .validate_max_length(&body.current_password)?;
     let stored_hash = get_credential_password_hash(ctx, user)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Credential account not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "CREDENTIAL_ACCOUNT_NOT_FOUND",
+                "Credential account not found",
+            )
+        })?;
     let password_hash =
         password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.new_password)
             .await?;
@@ -258,14 +268,22 @@ pub(crate) async fn change_password_core(
         )
         .await
         .map_err(|error| match error {
-            AuthError::InvalidCredentials => AuthError::bad_request("Invalid password"),
+            AuthError::InvalidCredentials => {
+                AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+            }
             other => other,
         })?;
     }
 
     let credential_account = get_credential_account(ctx, user.id().into_owned())
         .await?
-        .ok_or_else(|| AuthError::bad_request("Credential account not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "CREDENTIAL_ACCOUNT_NOT_FOUND",
+                "Credential account not found",
+            )
+        })?;
     let _ = ctx
         .database
         .update_account(
@@ -323,7 +341,9 @@ pub(crate) async fn verify_password_core(
     ctx.password_policy.validate_max_length(&body.password)?;
     let stored_hash = get_credential_password_hash(ctx, user)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Invalid password"))?;
+        .ok_or_else(|| {
+            AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+        })?;
 
     password_utils::verify_password(
         ctx.password_policy.hasher.as_ref(),
@@ -332,7 +352,9 @@ pub(crate) async fn verify_password_core(
     )
     .await
     .map_err(|error| match error {
-        AuthError::InvalidCredentials => AuthError::bad_request("Invalid password"),
+        AuthError::InvalidCredentials => {
+            AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+        }
         other => other,
     })?;
 

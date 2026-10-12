@@ -143,8 +143,8 @@ impl PhoneNumberPlugin {
             })?;
             Ok(Some(callback(otp, request.clone())))
         } else {
-            Err(super::error(
-                501,
+            Err(better_auth_core::AuthError::from_code(
+                "NOT_IMPLEMENTED",
                 "SEND_OTP_NOT_IMPLEMENTED",
                 "sendOTP not implemented",
             ))

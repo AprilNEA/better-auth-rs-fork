@@ -134,7 +134,14 @@ impl EmailOtpPlugin {
                 .sender
                 .as_ref()
                 .ok_or_else(|| {
-                    AuthError::bad_request("send email verification is not implemented")
+                    AuthError::from_status(
+                        "BAD_REQUEST",
+                        better_auth_core::FieldMap::from([(
+                            "message".into(),
+                            "send email verification is not implemented".into(),
+                        )])
+                        .into(),
+                    )
                 })?
                 .clone();
             Some(Box::pin(async move { sender.send(&message).await }))

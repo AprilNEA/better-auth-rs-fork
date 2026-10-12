@@ -99,10 +99,14 @@ impl SiwePlugin {
         }
         let nonce = (self.get_nonce)().await?;
         if !valid_nonce(&nonce) {
-            return Err(AuthResponse::json(
-                500,
-                &json!({"message":"SIWE getNonce must return an ERC-4361 nonce: 8-250 alphanumeric characters.","status":500,"code":"SIWE_INVALID_NONCE"}),
-            )?.into());
+            return Err(AuthError::from_status(
+                "INTERNAL_SERVER_ERROR",
+                FieldMap::from([
+                    ("message".into(), "SIWE getNonce must return an ERC-4361 nonce: 8-250 alphanumeric characters.".into()),
+                    ("status".into(), 500.0.into()),
+                    ("code".into(), "SIWE_INVALID_NONCE".into()),
+                ]).into(),
+            ));
         }
         let _ = ctx
             .database
@@ -369,11 +373,14 @@ impl SiwePlugin {
         .await
         .map_err(SessionIssueError::into_auth_error)?;
         let Some(data) = data else {
-            return Err(AuthResponse::json(
-                500,
-                &json!({"message":"Internal Server Error","status":500}),
-            )?
-            .into());
+            return Err(AuthError::from_status(
+                "INTERNAL_SERVER_ERROR",
+                FieldMap::from([
+                    ("message".into(), "Internal Server Error".into()),
+                    ("status".into(), 500.0.into()),
+                ])
+                .into(),
+            ));
         };
         let token = data
             .session
@@ -433,14 +440,14 @@ fn mismatch() -> AuthResult<AuthResponse> {
     )
 }
 fn unauthorized(message: &str, code: Option<&str>) -> AuthResult<AuthResponse> {
-    let mut body = serde_json::Map::from_iter([
-        (String::from("message"), json!(message)),
-        (String::from("status"), json!(401)),
+    let mut body = FieldMap::from([
+        ("message".into(), message.into()),
+        ("status".into(), 401.0.into()),
     ]);
     if let Some(code) = code {
-        let _ = body.insert("code".into(), json!(code));
+        let _ = body.insert("code".into(), code.into());
     }
-    Err(AuthResponse::json(401, &body)?.into())
+    Err(AuthError::from_status("UNAUTHORIZED", body.into()))
 }
 
 /// Convert a valid Ethereum address to its EIP-55 checksum representation.

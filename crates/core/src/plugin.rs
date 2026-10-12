@@ -714,15 +714,9 @@ impl<S: AuthSchema> AuthContext<S> {
         req: &AuthRequest,
         read: crate::session::SessionRead,
     ) -> AuthResult<crate::session::NativeSessionData> {
-        let data = self
-            .native_session(req, read)
+        self.native_session(req, read)
             .await?
-            .ok_or(AuthError::Unauthenticated)?;
-        let id = data.user_field("id")?;
-        if !id.is_undefined() {
-            req.set_server_context("auth.current-user-id", id)?;
-        }
-        Ok(data)
+            .ok_or(AuthError::Unauthenticated)
     }
 
     async fn require_session_with_read(
@@ -733,9 +727,6 @@ impl<S: AuthSchema> AuthContext<S> {
         let resolved = self.session_manager().resolve(req, read).await?;
         req.set_session_snapshot(resolved.data.clone().map(Into::into))?;
         let data = resolved.data.ok_or(AuthError::Unauthenticated)?;
-        if !data.user.id.is_undefined() {
-            req.set_server_context("auth.current-user-id", data.user.id.field_value())?;
-        }
         Ok((data.user, data.session))
     }
 }

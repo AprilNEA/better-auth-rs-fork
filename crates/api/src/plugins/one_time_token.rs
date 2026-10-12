@@ -245,7 +245,12 @@ impl OneTimeTokenPlugin {
 }
 
 fn message_error(message: &str) -> AuthResult<AuthResponse> {
-    Err(AuthResponse::json(400, &serde_json::json!({ "message": message }))?.into())
+    Err(AuthError::try_api_error(better_auth_core::ApiErrorInit {
+        status: "BAD_REQUEST".into(),
+        body: FieldMap::from([("message".into(), message.into())]).into(),
+        class: better_auth_core::ApiErrorClass::BetterCall,
+        ..Default::default()
+    })?)
 }
 
 pub(crate) fn session_required(error: AuthError) -> AuthError {

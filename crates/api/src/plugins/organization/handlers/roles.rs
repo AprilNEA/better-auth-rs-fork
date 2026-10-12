@@ -409,7 +409,14 @@ async fn validate_permissions(
         FieldMap::from([
             ("message".into(), message.into()),
             ("code".into(), code.into()),
-            ("missingPermissions".into(), missing.into()),
+            (
+                "missingPermissions".into(),
+                missing
+                    .into_iter()
+                    .map(FieldValue::from)
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
         ])
         .into(),
     ))

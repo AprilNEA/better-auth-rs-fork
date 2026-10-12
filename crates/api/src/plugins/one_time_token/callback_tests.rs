@@ -387,7 +387,7 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     );
     let request = request(&ctx, &data, "/one-time-token/generate")?;
     let error = plugin.on_request(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error().unwrap());
+    super::tests::assert_message_error(&error, "Client requests are disabled");
     let response = error.to_auth_response();
     assert_eq!(
         response.api_error_status()?,
@@ -414,7 +414,7 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     let error = with_request_hook_context_value(scope, plugin.on_request(&explicit, &ctx))
         .await
         .unwrap_err();
-    assert!(error.is_api_error().unwrap());
+    super::tests::assert_message_error(&error, "Client requests are disabled");
     let response = error.to_auth_response();
     assert_eq!(
         response.api_error_status()?,

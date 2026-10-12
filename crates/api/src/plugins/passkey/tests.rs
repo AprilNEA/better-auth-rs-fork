@@ -458,12 +458,22 @@ async fn test_delete_passkey_non_owner_is_forbidden() {
     );
 
     let err = plugin.handle_delete_passkey(&req, &ctx).await.unwrap_err();
+    assert!(err.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(err.status_value().unwrap(), "UNAUTHORIZED".into());
     assert_eq!(err.status_code().unwrap(), 401);
+    assert!(err.body_value().unwrap().is_undefined());
     assert!(
         better_auth_core::ResponseBody::Native(err.body_value().unwrap())
             .bytes()
             .unwrap()
             .is_empty()
+    );
+    assert_eq!(
+        ctx.database
+            .get_passkey_by_id(passkey.id.typed().unwrap())
+            .await
+            .unwrap(),
+        Some(passkey)
     );
 }
 

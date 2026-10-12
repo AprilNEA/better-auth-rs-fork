@@ -58,18 +58,29 @@ impl OneTapPlugin {
                 .unwrap_or_default()
         });
         let Some(first_audience) = audience.first() else {
-            return Err(AuthError::bad_request(
-                "Google client ID is required for One Tap. Set it on the oneTap plugin (clientId) or on socialProviders.google.",
-            ));
+            return Err(AuthError::from_status("BAD_REQUEST", better_auth_core::FieldMap::from([("message".into(), "Google client ID is required for One Tap. Set it on the oneTap plugin (clientId) or on socialProviders.google.".into())]).into()));
         };
         let payload =
             super::oauth::google::verify(token, &audience, None, &self.config.google_jwks_url)
                 .await
-                .ok_or_else(|| AuthError::bad_request("invalid id token"))?
+                .ok_or_else(|| {
+                    AuthError::from_status(
+                        "BAD_REQUEST",
+                        better_auth_core::FieldMap::from([(
+                            "message".into(),
+                            "invalid id token".into(),
+                        )])
+                        .into(),
+                    )
+                })?
                 .into_value();
         let claim = |name| payload.get(name).unwrap_or(&Value::Null);
         if !json_body::is_truthy(claim("sub")) {
-            return Err(AuthError::bad_request("invalid id token"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([("message".into(), "invalid id token".into())])
+                    .into(),
+            ));
         }
         let hosted_domain = provider
             .and_then(|provider| {
@@ -81,14 +92,31 @@ impl OneTapPlugin {
             })
             .filter(|value| !value.is_empty());
         if !super::oauth::google::hosted_domain_allowed(hosted_domain, &payload) {
-            return Err(AuthError::bad_request("invalid id token"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([("message".into(), "invalid id token".into())])
+                    .into(),
+            ));
         }
         let email = claim("email")
             .as_str()
             .filter(|value| !value.is_empty())
-            .ok_or_else(|| AuthError::bad_request("Email not available in token"))?;
+            .ok_or_else(|| {
+                AuthError::from_status(
+                    "BAD_REQUEST",
+                    better_auth_core::FieldMap::from([(
+                        "message".into(),
+                        "Email not available in token".into(),
+                    )])
+                    .into(),
+                )
+            })?;
         let Some(subject) = claim("sub").as_str().filter(|value| !value.is_empty()) else {
-            return Err(AuthError::bad_request("invalid id token"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([("message".into(), "invalid id token".into())])
+                    .into(),
+            ));
         };
         let user = OAuthUserInfo {
             additional_fields: Default::default(),

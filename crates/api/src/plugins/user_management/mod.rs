@@ -291,7 +291,11 @@ impl UserManagementPlugin {
             .require_authoritative_native_session(req)
             .await
             .map_err(|error| match error {
-                AuthError::Unauthenticated => AuthError::not_found("Failed to get user info"),
+                AuthError::Unauthenticated => AuthError::from_code(
+                    "NOT_FOUND",
+                    "FAILED_TO_GET_USER_INFO",
+                    "Failed to get user info",
+                ),
                 error => error,
             })?;
         let query: TokenQuery = serde_json::from_value(serde_json::json!({

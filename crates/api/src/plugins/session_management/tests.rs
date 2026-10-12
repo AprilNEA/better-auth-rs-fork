@@ -662,7 +662,13 @@ async fn test_plugin_on_request_routing() {
         Some(b"{}".to_vec()),
     );
     let err = plugin.on_request(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code().unwrap(), 405);
+    test_helpers::assert_coded_api_error(
+        &err,
+        "METHOD_NOT_ALLOWED",
+        405,
+        "METHOD_NOT_ALLOWED_DEFER_SESSION_REQUIRED",
+        "POST method requires deferSessionRefresh to be enabled in session config",
+    );
 
     // Test invalid route
     let req = test_helpers::create_auth_request_no_query(

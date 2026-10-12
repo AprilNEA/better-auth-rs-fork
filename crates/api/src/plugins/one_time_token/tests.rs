@@ -2,6 +2,29 @@ use super::*;
 use crate::plugins::test_helpers::{create_test_context_with_user, finalize_response};
 use better_auth_core::{AuthPlugin, CreateUser, HttpMethod};
 
+pub(super) fn assert_message_error(error: &AuthError, message: &str) {
+    assert!(error.is_api_error().unwrap());
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterCall));
+    assert!(!error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(
+        error.status_value().unwrap(),
+        FieldValue::from("BAD_REQUEST")
+    );
+    assert_eq!(error.status_code().unwrap(), 400);
+    let fields = error
+        .body_value()
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .snapshot_fields()
+        .unwrap();
+    assert_eq!(
+        fields.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["message"]
+    );
+    assert_eq!(fields, FieldMap::from([("message".into(), message.into())]));
+}
+
 fn verify_request(token: &str) -> AuthRequest {
     let mut req = AuthRequest::new(HttpMethod::Post, "/one-time-token/verify");
     let _ = req
@@ -24,7 +47,7 @@ async fn expired_session_writes_cookie_and_new_session_before_rejecting_transfer
     let token = plugin.generate(&ctx, session.clone(), user).await.unwrap();
     let request = verify_request(&token);
     let error = plugin.handle_verify(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error().unwrap());
+    assert_message_error(&error, "Session expired");
     let response = error.to_auth_response();
     let response = finalize_response(&ctx, &request, response);
     assert_eq!(response.status, 400);
@@ -36,6 +59,48 @@ async fn expired_session_writes_cookie_and_new_session_before_rejecting_transfer
     assert_eq!(
         request.new_session().unwrap().unwrap().session.token,
         session.token
+    );
+    assert!(
+        ctx.database
+            .get_verification_including_expired(&format!("one-time-token:{token}"))
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn missing_session_rejects_after_consuming_transfer_without_issuing_cookie() {
+    let (ctx, user, session) = create_test_context_with_user(
+        CreateUser::new()
+            .with_email("missing-session@example.test")
+            .with_name("Missing"),
+        Duration::hours(1),
+    )
+    .await;
+    let plugin = OneTimeTokenPlugin::new();
+    let token = plugin.generate(&ctx, session.clone(), user).await.unwrap();
+    ctx.database
+        .delete_session(session.token.typed().unwrap())
+        .await
+        .unwrap();
+    let request = verify_request(&token);
+    let error = plugin.handle_verify(&request, &ctx).await.unwrap_err();
+    assert_message_error(&error, "Session not found");
+    let response = finalize_response(&ctx, &request, error.to_auth_response());
+    assert_eq!(response.status, 400);
+    assert_eq!(
+        response.body.bytes().unwrap().as_ref(),
+        br#"{"message":"Session not found"}"#
+    );
+    assert!(!response.headers.contains_key("set-cookie"));
+    assert!(request.new_session().unwrap().is_none());
+    assert!(
+        ctx.database
+            .get_verification_including_expired(&format!("one-time-token:{token}"))
+            .await
+            .unwrap()
+            .is_none()
     );
 }
 
@@ -122,14 +187,9 @@ async fn concurrent_redemption_issues_one_cookie_and_expired_proofs_cannot_authe
         usize::from(first.is_err()) + usize::from(second.is_err()),
         1
     );
-    assert!(
-        first
-            .as_ref()
-            .err()
-            .or(second.as_ref().err())
-            .unwrap()
-            .is_api_error()
-            .unwrap()
+    assert_message_error(
+        first.as_ref().err().or(second.as_ref().err()).unwrap(),
+        "Invalid token",
     );
     let responses = [
         finalize_response(
@@ -168,7 +228,7 @@ async fn concurrent_redemption_issues_one_cookie_and_expired_proofs_cannot_authe
     let token = expired.generate(&ctx, session, user).await.unwrap();
     let request = verify_request(&token);
     let error = expired.handle_verify(&request, &ctx).await.unwrap_err();
-    assert!(error.is_api_error().unwrap());
+    assert_message_error(&error, "Invalid token");
     let response = error.to_auth_response();
     let response = finalize_response(&ctx, &request, response);
     assert_eq!(response.status, 400);
@@ -227,7 +287,7 @@ async fn custom_hashing_does_not_extend_token_lifetime() {
     for attempt in ["verification", "replay"] {
         let request = verify_request(&token);
         let error = plugin.handle_verify(&request, &ctx).await.unwrap_err();
-        assert!(error.is_api_error().unwrap());
+        assert_message_error(&error, "Invalid token");
         let response = error.to_auth_response();
         let response = finalize_response(&ctx, &request, response);
         assert_eq!(response.status, 400, "{attempt}");

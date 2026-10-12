@@ -4,7 +4,6 @@ use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
     AuthResult, AuthSchema, AuthStore, EmailProvider, HttpMethod, OkResponse, OpenApiRegistry,
     OpenApiSpec, SessionManager, UpdateUser, core_paths,
-    entity::AuthUser,
     hooks::{RequestHookContext, set_request_hook_route, with_request_hook_context_value},
     middleware::{
         self, BodyLimitConfig, BodyLimitMiddleware, CorsConfig, CorsMiddleware, CsrfConfig,
@@ -793,16 +792,15 @@ impl<S: AuthSchema> BetterAuth<S> {
         context: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
         let mut body = better_auth_core::endpoint_input::record_input(req)?;
-        let (current_user, session) =
-            context
-                .require_session(req)
-                .await
-                .map_err(|error| match error {
-                    AuthError::Unauthenticated => {
-                        AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
-                    }
-                    error => error,
-                })?;
+        let session = context
+            .require_native_session(req)
+            .await
+            .map_err(|error| match error {
+                AuthError::Unauthenticated => {
+                    AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+                }
+                error => error,
+            })?;
 
         if body
             .remove("email")
@@ -817,17 +815,20 @@ impl<S: AuthSchema> BetterAuth<S> {
             ));
         }
 
-        let clear_phone_number = context.get_metadata("phone-number.enabled")
-            == Some(&serde_json::Value::Bool(true))
-            && body.get("phoneNumber") == Some(&serde_json::Value::Null);
-        let name = better_auth_core::SchemaValue::from_json(body.remove("name"))?;
-        let image = better_auth_core::SchemaValue::from_json(body.remove("image"))?;
+        let name = body
+            .remove("name")
+            .map(better_auth_core::FieldValue::from_json)
+            .transpose()?
+            .unwrap_or_default();
+        let image = body
+            .remove("image")
+            .map(better_auth_core::FieldValue::from_json)
+            .transpose()?
+            .unwrap_or_default();
         let additional_fields = context.parse_user_input(&body, false)?;
 
-        let has_changes = clear_phone_number
-            || !name.is_undefined()
-            || !image.is_undefined()
-            || !additional_fields.is_empty();
+        let has_changes =
+            !name.is_undefined() || !image.is_undefined() || !additional_fields.is_empty();
         if !has_changes {
             return Err(AuthError::from_status(
                 "BAD_REQUEST",
@@ -839,56 +840,40 @@ impl<S: AuthSchema> BetterAuth<S> {
             ));
         }
 
-        let mut update_user = UpdateUser {
-            additional_fields: Default::default(),
-            email: None,
-            name,
-            image,
-            email_verified: None,
-            username: None,
-            display_username: None,
-            role: None,
-            banned: None,
-            ban_reason: None,
-            ban_expires: None,
-            two_factor_enabled: None,
-            is_anonymous: None,
-            phone_number: clear_phone_number.then_some(None),
-            phone_number_verified: clear_phone_number.then_some(false),
-            metadata: None,
+        let mut update_fields = better_auth_core::FieldMap::from([
+            ("name".into(), name.clone()),
+            ("image".into(), image.clone()),
+        ]);
+        update_fields.extend(additional_fields.clone());
+        let update_user = UpdateUser {
+            additional_fields: update_fields,
+            ..Default::default()
         };
-
-        update_user.assign_user_fields(additional_fields)?;
-        let mut fallback = current_user.clone();
-        if !update_user.name.is_undefined() {
-            fallback.name = update_user.name.clone();
-        }
-        if !update_user.image.is_undefined() {
-            fallback.image = update_user.image.clone();
-        }
-        if let Some(fields) = &mut fallback.visible_fields {
-            if !update_user.name.is_undefined() {
-                let _ = fields.insert("name".into());
-            }
-            if !update_user.image.is_undefined() {
-                let _ = fields.insert("image".into());
-            }
-        }
-        fallback
-            .additional_fields
-            .extend(update_user.additional_fields.clone());
-        let user = self
+        let user = match self
             .store
-            .update_user_optional(current_user.id().typed()?, update_user)
+            .update_user_by_id_value(&session.user_property("id")?, update_user)
             .await?
-            .unwrap_or(fallback);
+        {
+            Some(user) => better_auth_core::FieldMap::from(user).into(),
+            None => {
+                let mut fields = session.user.enumerable_fields()?;
+                if !name.is_undefined() {
+                    let _ = fields.insert("name".into(), name);
+                }
+                if !image.is_undefined() {
+                    let _ = fields.insert("image".into(), image);
+                }
+                fields.extend(additional_fields);
+                fields.into()
+            }
+        };
         context
             .session_manager()
-            .set_session_cookie(
+            .set_native_session_cookie(
                 req,
-                better_auth_core::session::SessionData {
-                    user: context.internal_user_view(&user).await?,
-                    session,
+                better_auth_core::session::NativeSessionData {
+                    user,
+                    session: session.session,
                 },
                 None,
             )

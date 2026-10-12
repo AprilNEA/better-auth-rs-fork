@@ -55,7 +55,11 @@ pub(super) async fn send_verification_email_core(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<StatusResponse> {
     if !super::delivery::available(Some(config), ctx) {
-        return Err(AuthError::bad_request("Verification email isn't enabled"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "VERIFICATION_EMAIL_NOT_ENABLED",
+            "Verification email isn't enabled",
+        ));
     }
     let mut endpoint_body = FieldMap::from([("email".into(), body.email.clone().into())]);
     if let Some(callback_url) = &body.callback_url {
@@ -68,10 +72,18 @@ pub(super) async fn send_verification_email_core(
         if crate::plugins::helpers::user_email_field(&email)?.to_lowercase()
             != body.email.to_lowercase()
         {
-            return Err(AuthError::bad_request("Email mismatch"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "EMAIL_MISMATCH",
+                "Email mismatch",
+            ));
         }
         if data.user_property("emailVerified")?.is_truthy() {
-            return Err(AuthError::bad_request("Email is already verified"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "EMAIL_ALREADY_VERIFIED",
+                "Email is already verified",
+            ));
         }
         send_for_user(data.user.clone(), &email, body, config, &endpoint).await?;
     } else {

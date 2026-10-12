@@ -238,7 +238,11 @@ pub(super) async fn verify_totp_core(
             .field_value()
             .strict_equals(&false.into())
     {
-        return Err(AuthError::bad_request("TOTP not enabled"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOTP_NOT_ENABLED",
+            "TOTP not enabled",
+        ));
     }
     assert_not_locked(&state, &two_factor, &config.account_lockout, ctx).await?;
     let attempt = begin_attempt(&state, req, ctx).await?;
@@ -339,7 +343,13 @@ pub(super) async fn send_otp_core<S: better_auth_core::AuthSchema>(
     let sender = match (callback, config.send_otp.as_ref()) {
         (Some(callback), _) => Sender::Callback(callback),
         (None, Some(sender)) => Sender::Legacy(sender),
-        (None, None) => return Err(AuthError::bad_request("otp isn't configured")),
+        (None, None) => {
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "OTP_NOT_CONFIGURED",
+                "otp isn't configured",
+            ));
+        }
     };
     let state = resolve_two_factor_state(req, ctx).await?;
     let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
@@ -421,7 +431,11 @@ pub(super) async fn verify_otp_core(
         .consume_verification_by_identifier(&identifier)
         .await?
     else {
-        return Err(AuthError::bad_request("OTP has expired"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "OTP_HAS_EXPIRED",
+            "OTP has expired",
+        ));
     };
 
     let (stored_otp, attempts) = split_otp_record(&verification.value.field_value())?;
@@ -432,7 +446,9 @@ pub(super) async fn verify_otp_core(
             config.otp_allowed_attempts as f64
         }
     {
-        return Err(AuthError::bad_request(
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOO_MANY_ATTEMPTS_REQUEST_NEW_CODE",
             "Too many attempts. Please request a new code.",
         ));
     }
@@ -506,7 +522,11 @@ pub(super) async fn generate_backup_codes_core(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<BackupCodesResponse> {
     if !data.user_property("twoFactorEnabled")?.is_truthy() {
-        return Err(AuthError::bad_request("Two factor isn't enabled"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TWO_FACTOR_NOT_ENABLED",
+            "Two factor isn't enabled",
+        ));
     }
 
     verify_user_password(
@@ -561,7 +581,13 @@ pub(super) async fn verify_backup_code_core(
         .database
         .get_two_factor_by_user_id_value(&SchemaValue::from_field(state.user_id()?))
         .await?
-        .ok_or_else(|| AuthError::bad_request("Backup codes aren't enabled"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "BACKUP_CODES_NOT_ENABLED",
+                "Backup codes aren't enabled",
+            )
+        })?;
     assert_not_locked(&state, &two_factor, &config.account_lockout, ctx).await?;
     let attempt = begin_attempt(&state, req, ctx).await?;
     let decoded = match config
@@ -606,8 +632,13 @@ pub(super) async fn verify_backup_code_core(
         )
         .await?
     {
-        return Err(AuthError::conflict(
-            "Failed to verify backup code. Please try again.",
+        return Err(AuthError::from_status(
+            "CONFLICT",
+            better_auth_core::FieldMap::from([(
+                "message".into(),
+                "Failed to verify backup code. Please try again.".into(),
+            )])
+            .into(),
         ));
     }
     reset_failures(&state, &two_factor, &config.account_lockout, ctx).await?;
@@ -657,7 +688,13 @@ pub(super) async fn view_backup_codes_core<S: better_auth_core::AuthSchema>(
         .database
         .get_two_factor_by_user_id(user_id)
         .await?
-        .ok_or_else(|| AuthError::bad_request("Backup codes aren't enabled"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "BACKUP_CODES_NOT_ENABLED",
+                "Backup codes aren't enabled",
+            )
+        })?;
     let backup_codes = config
         .storage
         .decode(
@@ -666,7 +703,11 @@ pub(super) async fn view_backup_codes_core<S: better_auth_core::AuthSchema>(
         )
         .await?;
     if !backup_codes.is_truthy() {
-        return Err(AuthError::bad_request("Invalid backup code"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_BACKUP_CODE",
+            "Invalid backup code",
+        ));
     };
     Ok(backup_codes)
 }

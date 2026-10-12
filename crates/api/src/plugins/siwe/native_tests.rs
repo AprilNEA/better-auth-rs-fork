@@ -267,11 +267,18 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                 calls.lock().unwrap().push(input.chain_id);
                 Box::pin(async move {
                     match mode {
-                        "api-error" => Err(AuthResponse::json(
-                            403,
-                            &json!({"code":"VERIFIER_REJECTED", "message":"verifier rejected"}),
-                        )?
-                        .into()),
+                        "api-error" => {
+                            Err(AuthError::try_api_error(better_auth_core::ApiErrorInit {
+                                status: "FORBIDDEN".into(),
+                                body: FieldMap::from([
+                                    ("code".into(), "VERIFIER_REJECTED".into()),
+                                    ("message".into(), "verifier rejected".into()),
+                                ])
+                                .into(),
+                                class: better_auth_core::ApiErrorClass::BetterCall,
+                                ..Default::default()
+                            })?)
+                        }
                         "runtime-error" => Err(AuthError::internal("verifier failed")),
                         _ => Ok(false),
                     }
@@ -339,7 +346,31 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                     .await
                     .unwrap_err();
                 assert!(error.is_api_error().unwrap(), "{mode}");
+                assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterCall));
+                assert_eq!(
+                    error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth),
+                    mode != "api-error"
+                );
+                assert_eq!(
+                    error.status_value()?,
+                    match mode {
+                        "invalid-nonce" => "INTERNAL_SERVER_ERROR",
+                        "api-error" => "FORBIDDEN",
+                        _ => "UNAUTHORIZED",
+                    }
+                    .into()
+                );
                 assert_eq!(error.status_code().unwrap(), status, "{mode}");
+                assert_eq!(
+                    error
+                        .body_value()?
+                        .as_object()
+                        .unwrap()
+                        .snapshot_fields()?
+                        .keys()
+                        .collect::<Vec<_>>(),
+                    expected.as_object().unwrap().keys().collect::<Vec<_>>()
+                );
                 error.to_auth_response()
             };
             let body = if http {
@@ -352,6 +383,16 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                 );
                 response.api_error_body()?.json()?
             };
+            assert_eq!(
+                response
+                    .clone()
+                    .into_http_response()?
+                    .body
+                    .bytes()?
+                    .as_ref(),
+                serde_json::to_vec(&expected)?.as_slice(),
+                "{mode} HTTP={http}"
+            );
             assert_eq!(body, Some(expected), "{mode} HTTP={http}");
             assert_eq!(
                 response.headers.get("content-type").map(String::as_str),

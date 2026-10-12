@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { siwe } from "better-auth/plugins";
 import { APIError, kAPIErrorHeaderSymbol } from "better-call";
+import { APIError as BetterAuthAPIError } from "@better-auth/core/error";
 
 const nonce = "native123";
 const address = "0x0000000000000000000000000000000000000001";
@@ -61,11 +62,15 @@ for (const [mode, status, expected] of cases) {
         expect(result).toBeInstanceOf(Response);
         if (!(result instanceof Response)) throw new Error("Expected an HTTP Response");
         expect(result.status).toBe(status);
-        expect(await result.json()).toStrictEqual(expected);
+        expect(await result.clone().json()).toStrictEqual(expected);
+        expect(await result.text()).toBe(JSON.stringify(expected));
         expect(Object.fromEntries(result.headers)).toStrictEqual({ "content-type": "application/json" });
       } else {
+        expect(thrown instanceof BetterAuthAPIError).toBe(mode !== "api-error");
+        expect(thrown!.status).toBe(mode === "invalid-nonce" ? "INTERNAL_SERVER_ERROR" : mode === "api-error" ? "FORBIDDEN" : "UNAUTHORIZED");
         expect(thrown!.statusCode).toBe(status);
         expect(thrown!.body).toStrictEqual(expected);
+        expect(Object.keys(thrown!.body!)).toStrictEqual(Object.keys(expected));
         expect(Object.fromEntries(new Headers(thrown![kAPIErrorHeaderSymbol]))).toStrictEqual({});
       }
       expect(calls).toStrictEqual(mode === "invalid-nonce" || mode === "missing-nonce" ? [] : [1]);

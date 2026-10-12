@@ -25,11 +25,10 @@ const MESSAGE_FAILED_TO_FIND_USER: &str = "Failed to find user";
 const MESSAGE_FAILED_TO_FIND_ADMIN_SESSION: &str = "Failed to find admin session";
 
 fn impersonation_error(message: &str) -> AuthError {
-    better_auth_core::AuthResponse::native(
-        500,
+    AuthError::from_status(
+        "INTERNAL_SERVER_ERROR",
         better_auth_core::FieldMap::from([("message".into(), message.into())]).into(),
     )
-    .into()
 }
 
 fn joined_role(role: &RoleInput) -> String {
@@ -40,7 +39,11 @@ fn validate_role_input(role: &RoleInput, config: &AdminConfig) -> AuthResult<()>
     if let Some(roles) = &config.roles
         && role.roles().iter().any(|role| !roles.contains_key(role))
     {
-        return Err(AuthError::bad_request(MESSAGE_NON_EXISTENT_ROLE));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "YOU_ARE_NOT_ALLOWED_TO_SET_NON_EXISTENT_VALUE",
+            MESSAGE_NON_EXISTENT_ROLE,
+        ));
     }
     Ok(())
 }
@@ -49,6 +52,7 @@ fn require_user_permission(
     session: &NativeSessionData,
     config: &AdminConfig,
     action: &str,
+    code: &str,
     message: &str,
 ) -> AuthResult<()> {
     let permission = std::collections::HashMap::from([("user".into(), vec![action.into()])]);
@@ -60,7 +64,7 @@ fn require_user_permission(
     )? {
         Ok(())
     } else {
-        Err(AuthError::forbidden(message))
+        Err(AuthError::from_code("FORBIDDEN", code, message))
     }
 }
 
@@ -92,7 +96,9 @@ pub(crate) async fn set_role_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     let update = UpdateUser {
         role: Some(joined_role(&body.role)),
@@ -113,7 +119,9 @@ pub(crate) async fn get_user_core(
         .database
         .get_user_by_id(&query.id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
     ctx.user_view(&user).await
 }
 
@@ -129,14 +137,26 @@ pub(crate) async fn create_user_core(
     if (body.role.is_some() || data_role.is_some())
         && let Some(session) = &session
     {
-        require_user_permission(session, config, "set-role", MESSAGE_CHANGE_ROLE)?;
+        require_user_permission(
+            session,
+            config,
+            "set-role",
+            "YOU_ARE_NOT_ALLOWED_TO_CHANGE_USERS_ROLE",
+            MESSAGE_CHANGE_ROLE,
+        )?;
     }
     let role = match &body.role {
         Some(role) => Some(role.clone()),
         None => data_role
             .map(serde_json::from_value::<RoleInput>)
             .transpose()
-            .map_err(|_| AuthError::bad_request(MESSAGE_INVALID_ROLE_TYPE))?,
+            .map_err(|_| {
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "INVALID_ROLE_TYPE",
+                    MESSAGE_INVALID_ROLE_TYPE,
+                )
+            })?,
     };
     if let Some(role) = &role {
         validate_role_input(role, config)?;
@@ -144,11 +164,21 @@ pub(crate) async fn create_user_core(
     if has_ban_data(&data)
         && let Some(session) = &session
     {
-        require_user_permission(session, config, "ban", "You are not allowed to ban users")?;
+        require_user_permission(
+            session,
+            config,
+            "ban",
+            "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS",
+            "You are not allowed to ban users",
+        )?;
     }
     let email = body.email.to_lowercase();
     if !crate::plugins::json_body::valid_email(&email)? {
-        return Err(AuthError::bad_request("Invalid email"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_EMAIL",
+            "Invalid email",
+        ));
     }
     if let Some(password) = body
         .password
@@ -156,10 +186,16 @@ pub(crate) async fn create_user_core(
         .filter(|password| !password.is_empty())
         && password.encode_utf16().count() > ctx.password_policy.max_length
     {
-        return Err(AuthError::bad_request("Password too long"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "PASSWORD_TOO_LONG",
+            "Password too long",
+        ));
     }
     if ctx.database.get_user_by_email(&email).await?.is_some() {
-        return Err(AuthError::bad_request(
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
             "User already exists. Use another email.",
         ));
     }
@@ -250,11 +286,17 @@ pub(crate) async fn update_user_core(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<Option<AdminUserView>> {
     if body.data.is_empty() {
-        return Err(AuthError::bad_request(MESSAGE_NO_DATA_TO_UPDATE));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "NO_DATA_TO_UPDATE",
+            MESSAGE_NO_DATA_TO_UPDATE,
+        ));
     }
 
     if body.data.contains_key("password") {
-        return Err(AuthError::bad_request(
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "PASSWORD_CANNOT_BE_UPDATED_VIA_UPDATE_USER",
             "Password cannot be updated through update-user. Use the set-user-password endpoint instead",
         ));
     }
@@ -272,11 +314,20 @@ pub(crate) async fn update_user_core(
             config,
             &permissions,
         )? {
-            return Err(AuthError::forbidden(MESSAGE_CHANGE_ROLE));
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "YOU_ARE_NOT_ALLOWED_TO_CHANGE_USERS_ROLE",
+                MESSAGE_CHANGE_ROLE,
+            ));
         }
 
-        let role = serde_json::from_value::<RoleInput>(value.clone())
-            .map_err(|_| AuthError::bad_request(MESSAGE_INVALID_ROLE_TYPE))?;
+        let role = serde_json::from_value::<RoleInput>(value.clone()).map_err(|_| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "INVALID_ROLE_TYPE",
+                MESSAGE_INVALID_ROLE_TYPE,
+            )
+        })?;
         validate_role_input(&role, config)?;
         update.role = Some(joined_role(&role));
     }
@@ -286,6 +337,7 @@ pub(crate) async fn update_user_core(
             acting_session,
             config,
             "ban",
+            "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS",
             "You are not allowed to ban users",
         )?;
         if body.data.get("banned") == Some(&serde_json::Value::Bool(true))
@@ -293,7 +345,11 @@ pub(crate) async fn update_user_core(
                 .user_property("id")?
                 .strict_equals(&body.user_id.clone().into())
         {
-            return Err(AuthError::bad_request("You cannot ban yourself"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "YOU_CANNOT_BAN_YOURSELF",
+                "You cannot ban yourself",
+            ));
         }
     }
     if body.data.contains_key("email") || body.data.contains_key("emailVerified") {
@@ -301,6 +357,7 @@ pub(crate) async fn update_user_core(
             acting_session,
             config,
             "set-email",
+            "YOU_ARE_NOT_ALLOWED_TO_SET_USERS_EMAIL",
             "You are not allowed to update users email",
         )?;
         if let Some(value) = body.data.get("email") {
@@ -308,12 +365,18 @@ pub(crate) async fn update_user_core(
                 .display_string()?
                 .to_lowercase();
             if !crate::plugins::json_body::valid_email(&email)? {
-                return Err(AuthError::bad_request("Invalid email"));
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "INVALID_EMAIL",
+                    "Invalid email",
+                ));
             }
             if let Some(existing) = ctx.database.get_user_by_email(&email).await?
                 && existing.id().into_owned() != body.user_id.as_str()
             {
-                return Err(AuthError::bad_request(
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL",
                     "User already exists. Use another email.",
                 ));
             }
@@ -324,7 +387,9 @@ pub(crate) async fn update_user_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
     update.name = better_auth_core::SchemaValue::from_json(body.data.get("name").cloned())?;
     update.image = better_auth_core::SchemaValue::from_json(body.data.get("image").cloned())?;
     if let Some(value) = body
@@ -447,10 +512,16 @@ pub(crate) async fn ban_user_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     if admin_user_id.strict_equals(&body.user_id.clone().into()) {
-        return Err(AuthError::bad_request("You cannot ban yourself"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "YOU_CANNOT_BAN_YOURSELF",
+            "You cannot ban yourself",
+        ));
     }
 
     let seconds = body
@@ -507,7 +578,9 @@ pub(crate) async fn unban_user_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     let update = UpdateUser {
         banned: Some(false),
@@ -537,7 +610,9 @@ pub(crate) async fn impersonate_user_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     if !config.allow_impersonating_admins
         && target_is_admin(
@@ -550,6 +625,7 @@ pub(crate) async fn impersonate_user_core(
             acting_session,
             config,
             "impersonate-admins",
+            "YOU_CANNOT_IMPERSONATE_ADMINS",
             MESSAGE_CANNOT_IMPERSONATE_ADMINS,
         )?;
     }
@@ -573,7 +649,9 @@ pub(crate) async fn impersonate_user_core(
                 )
                 .await?;
         } else {
-            return Err(AuthError::banned_user(
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "BANNED_USER",
                 config
                     .banned_user_message
                     .resolve(&ctx.internal_user_view(&target).await?)
@@ -631,7 +709,14 @@ pub(crate) async fn stop_impersonating_core(
 ) -> AuthResult<(NativeSessionData, bool)> {
     let admin_id = session.impersonated_by().field_value();
     if !admin_id.is_truthy() {
-        return Err(AuthError::bad_request(MESSAGE_NOT_IMPERSONATING));
+        return Err(AuthError::from_status(
+            "BAD_REQUEST",
+            better_auth_core::FieldMap::from([(
+                "message".into(),
+                MESSAGE_NOT_IMPERSONATING.into(),
+            )])
+            .into(),
+        ));
     }
 
     let admin_user = ctx
@@ -706,14 +791,20 @@ pub(crate) async fn remove_user_core(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<SuccessResponse> {
     if admin_user_id.strict_equals(&body.user_id.clone().into()) {
-        return Err(AuthError::bad_request("You cannot remove yourself"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "YOU_CANNOT_REMOVE_YOURSELF",
+            "You cannot remove yourself",
+        ));
     }
 
     let _target = ctx
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     ctx.database.delete_user_sessions(&body.user_id).await?;
 
@@ -743,7 +834,9 @@ pub(crate) async fn set_user_password_core(
         .database
         .get_user_by_id(&body.user_id)
         .await?
-        .ok_or_else(|| AuthError::not_found(MESSAGE_USER_NOT_FOUND))?;
+        .ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "USER_NOT_FOUND", MESSAGE_USER_NOT_FOUND)
+        })?;
 
     let password_hash =
         better_auth_core::hash_password(ctx.password_policy.hasher.as_ref(), &body.new_password)

@@ -1,0 +1,629 @@
+[
+  {
+    "name": "deny-set-role",
+    "path": "/admin/set-role",
+    "operation": "setUserRole",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "role": "user"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to change users role",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_CHANGE_USERS_ROLE"
+    }
+  },
+  {
+    "name": "deny-get-user",
+    "path": "/admin/get-user",
+    "operation": "getUser",
+    "actor": "target",
+    "method": "GET",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "query": {
+      "id": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to get user",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_GET_USER"
+    }
+  },
+  {
+    "name": "deny-create-user",
+    "path": "/admin/create-user",
+    "operation": "createUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "email": "new@admin-errors.test",
+      "name": "New"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to create users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_CREATE_USERS"
+    }
+  },
+  {
+    "name": "deny-update-user",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {
+        "name": "Changed"
+      }
+    },
+    "expectedBody": {
+      "message": "You are not allowed to update users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_UPDATE_USERS"
+    }
+  },
+  {
+    "name": "deny-list-users",
+    "path": "/admin/list-users",
+    "operation": "listUsers",
+    "actor": "target",
+    "method": "GET",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "query": {},
+    "expectedBody": {
+      "message": "You are not allowed to list users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_LIST_USERS"
+    }
+  },
+  {
+    "name": "deny-list-user-sessions",
+    "path": "/admin/list-user-sessions",
+    "operation": "adminListUserSessions",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to list users sessions",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_LIST_USERS_SESSIONS"
+    }
+  },
+  {
+    "name": "deny-ban-user",
+    "path": "/admin/ban-user",
+    "operation": "banUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to ban users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS"
+    }
+  },
+  {
+    "name": "deny-unban-user",
+    "path": "/admin/unban-user",
+    "operation": "unbanUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to ban users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_BAN_USERS"
+    }
+  },
+  {
+    "name": "deny-impersonate-user",
+    "path": "/admin/impersonate-user",
+    "operation": "impersonateUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to impersonate users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_IMPERSONATE_USERS"
+    }
+  },
+  {
+    "name": "deny-revoke-user-session",
+    "path": "/admin/revoke-user-session",
+    "operation": "revokeUserSession",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "sessionToken": "missing"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to revoke users sessions",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_REVOKE_USERS_SESSIONS"
+    }
+  },
+  {
+    "name": "deny-revoke-user-sessions",
+    "path": "/admin/revoke-user-sessions",
+    "operation": "revokeUserSessions",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to revoke users sessions",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_REVOKE_USERS_SESSIONS"
+    }
+  },
+  {
+    "name": "deny-remove-user",
+    "path": "/admin/remove-user",
+    "operation": "removeUser",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to delete users",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_DELETE_USERS"
+    }
+  },
+  {
+    "name": "deny-set-user-password",
+    "path": "/admin/set-user-password",
+    "operation": "setUserPassword",
+    "actor": "target",
+    "method": "POST",
+    "status": "FORBIDDEN",
+    "httpStatus": 403,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "newPassword": "password123"
+    },
+    "expectedBody": {
+      "message": "You are not allowed to set users password",
+      "code": "YOU_ARE_NOT_ALLOWED_TO_SET_USERS_PASSWORD"
+    }
+  },
+  {
+    "name": "missing-session",
+    "path": "/admin/get-user",
+    "operation": "getUser",
+    "actor": "anonymous",
+    "method": "GET",
+    "status": "UNAUTHORIZED",
+    "httpStatus": 401,
+    "brand": "BetterAuth",
+    "query": {
+      "id": "target"
+    }
+  },
+  {
+    "name": "create-request-unauthorized",
+    "path": "/admin/create-user",
+    "operation": "createUser",
+    "actor": "anonymous",
+    "method": "POST",
+    "status": "UNAUTHORIZED",
+    "httpStatus": 401,
+    "brand": "BetterCall",
+    "body": {
+      "email": "new@admin-errors.test",
+      "name": "New"
+    }
+  },
+  {
+    "name": "permission-request-unauthorized",
+    "path": "/admin/has-permission",
+    "operation": "userHasPermission",
+    "actor": "anonymous",
+    "method": "POST",
+    "status": "UNAUTHORIZED",
+    "httpStatus": 401,
+    "brand": "BetterAuth",
+    "body": {
+      "permissions": {
+        "user": [
+          "get"
+        ]
+      }
+    }
+  },
+  {
+    "name": "stop-request-unauthorized",
+    "path": "/admin/stop-impersonating",
+    "operation": "stopImpersonating",
+    "actor": "anonymous",
+    "method": "POST",
+    "status": "UNAUTHORIZED",
+    "httpStatus": 401,
+    "brand": "BetterAuth"
+  },
+  {
+    "name": "missing-set-role",
+    "path": "/admin/set-role",
+    "operation": "setUserRole",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing",
+      "role": "user"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-update-user",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing",
+      "data": {
+        "name": "Changed"
+      }
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-ban-user",
+    "path": "/admin/ban-user",
+    "operation": "banUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-unban-user",
+    "path": "/admin/unban-user",
+    "operation": "unbanUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-impersonate-user",
+    "path": "/admin/impersonate-user",
+    "operation": "impersonateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-remove-user",
+    "path": "/admin/remove-user",
+    "operation": "removeUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "missing-set-user-password",
+    "path": "/admin/set-user-password",
+    "operation": "setUserPassword",
+    "actor": "actor",
+    "method": "POST",
+    "status": "NOT_FOUND",
+    "httpStatus": 404,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing",
+      "newPassword": "password123"
+    },
+    "expectedBody": {
+      "message": "User not found",
+      "code": "USER_NOT_FOUND"
+    }
+  },
+  {
+    "name": "empty-update",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {}
+    },
+    "expectedBody": {
+      "message": "No data to update",
+      "code": "NO_DATA_TO_UPDATE"
+    }
+  },
+  {
+    "name": "update-password",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {
+        "password": "hidden"
+      }
+    },
+    "expectedBody": {
+      "message": "Password cannot be updated through update-user. Use the set-user-password endpoint instead",
+      "code": "PASSWORD_CANNOT_BE_UPDATED_VIA_UPDATE_USER"
+    }
+  },
+  {
+    "name": "ban-self",
+    "path": "/admin/ban-user",
+    "operation": "banUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "actor"
+    },
+    "expectedBody": {
+      "message": "You cannot ban yourself",
+      "code": "YOU_CANNOT_BAN_YOURSELF"
+    }
+  },
+  {
+    "name": "remove-self",
+    "path": "/admin/remove-user",
+    "operation": "removeUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "actor"
+    },
+    "expectedBody": {
+      "message": "You cannot remove yourself",
+      "code": "YOU_CANNOT_REMOVE_YOURSELF"
+    }
+  },
+  {
+    "name": "update-ban-self",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "actor",
+      "data": {
+        "banned": true
+      }
+    },
+    "expectedBody": {
+      "message": "You cannot ban yourself",
+      "code": "YOU_CANNOT_BAN_YOURSELF"
+    }
+  },
+  {
+    "name": "duplicate-create",
+    "path": "/admin/create-user",
+    "operation": "createUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "email": "target@admin-errors.test",
+      "name": "New"
+    },
+    "expectedBody": {
+      "message": "User already exists. Use another email.",
+      "code": "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+    }
+  },
+  {
+    "name": "duplicate-update",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {
+        "email": "actor@admin-errors.test"
+      }
+    },
+    "expectedBody": {
+      "message": "User already exists. Use another email.",
+      "code": "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"
+    }
+  },
+  {
+    "name": "invalid-update-email",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {
+        "email": "invalid"
+      }
+    },
+    "expectedBody": {
+      "message": "Invalid email",
+      "code": "INVALID_EMAIL"
+    }
+  },
+  {
+    "name": "invalid-update-role",
+    "path": "/admin/update-user",
+    "operation": "adminUpdateUser",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "target",
+      "data": {
+        "role": 42
+      }
+    },
+    "expectedBody": {
+      "message": "Invalid role type",
+      "code": "INVALID_ROLE_TYPE"
+    }
+  },
+  {
+    "name": "stop-not-impersonating",
+    "path": "/admin/stop-impersonating",
+    "operation": "stopImpersonating",
+    "actor": "actor",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "expectedBody": {
+      "message": "You are not impersonating anyone"
+    }
+  },
+  {
+    "name": "permission-missing-subject",
+    "path": "/admin/has-permission",
+    "operation": "userHasPermission",
+    "actor": "server",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "permissions": {
+        "user": [
+          "get"
+        ]
+      }
+    },
+    "expectedBody": {
+      "message": "user id or role is required"
+    }
+  },
+  {
+    "name": "permission-missing-user",
+    "path": "/admin/has-permission",
+    "operation": "userHasPermission",
+    "actor": "server",
+    "method": "POST",
+    "status": "BAD_REQUEST",
+    "httpStatus": 400,
+    "brand": "BetterAuth",
+    "body": {
+      "userId": "missing",
+      "permissions": {
+        "user": [
+          "get"
+        ]
+      }
+    },
+    "expectedBody": {
+      "message": "user not found"
+    }
+  }
+]

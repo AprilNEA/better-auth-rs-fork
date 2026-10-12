@@ -65,7 +65,11 @@ pub(super) fn require_sender<S: AuthSchema>(
             .get::<Arc<PasswordManagementCallbacks<S>>>()
             .is_none()
     {
-        return Err(AuthError::bad_request("Reset password isn't enabled"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "RESET_PASSWORD_DISABLED",
+            "Reset password isn't enabled",
+        ));
     }
     Ok(())
 }
@@ -82,10 +86,13 @@ pub(super) fn delivery<S: AuthSchema>(
     {
         return (callbacks.sender)(&email, endpoint);
     }
-    let sender = config
-        .send_reset_password
-        .clone()
-        .ok_or_else(|| AuthError::bad_request("Reset password isn't enabled"))?;
+    let sender = config.send_reset_password.clone().ok_or_else(|| {
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "RESET_PASSWORD_DISABLED",
+            "Reset password isn't enabled",
+        )
+    })?;
     let user = serde_json::to_value(email.user)?;
     let request = endpoint.request.cloned();
     Ok(Some(Box::pin(async move {

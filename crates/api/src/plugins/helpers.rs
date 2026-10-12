@@ -69,9 +69,7 @@ pub fn expires_in_to_at(expires_in_secs: Option<i64>) -> AuthResult<Option<Strin
 
 /// Fetch an API key by ID and verify that it belongs to the given user.
 ///
-/// Returns `AuthError::not_found` if the key does not exist or belongs to
-/// another user.  This pattern was duplicated in `handle_get`, `handle_update`,
-/// and `handle_delete`.
+/// Return the native `KEY_NOT_FOUND` error when the key is absent or has a different owner.
 pub async fn get_owned_api_key(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     config: &crate::plugins::api_key::ApiKeyConfig,
@@ -83,17 +81,25 @@ pub async fn get_owned_api_key(
 
     let api_key = crate::plugins::api_key::storage::get_by_id(config, ctx, key_id)
         .await?
-        .ok_or_else(|| AuthError::not_found("API Key not found"))?;
+        .ok_or_else(|| AuthError::from_code("NOT_FOUND", "KEY_NOT_FOUND", "API Key not found"))?;
 
     // A key only exists as far as the configuration that addressed it.
     if !config_id_matches(&api_key.config_id, &config.config_id) {
-        return Err(AuthError::not_found("API Key not found"));
+        return Err(AuthError::from_code(
+            "NOT_FOUND",
+            "KEY_NOT_FOUND",
+            "API Key not found",
+        ));
     }
 
     match config.references {
         ApiKeyReferences::User => {
             if !api_key.reference_id.field_value().strict_equals(user_id) {
-                return Err(AuthError::not_found("API Key not found"));
+                return Err(AuthError::from_code(
+                    "NOT_FOUND",
+                    "KEY_NOT_FOUND",
+                    "API Key not found",
+                ));
             }
         }
         ApiKeyReferences::Organization => {

@@ -32,7 +32,11 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         .user_property("email")?
         .strict_equals(&new_email.clone().into())
     {
-        return Err(AuthError::bad_request("Email is the same"));
+        return Err(AuthError::from_status(
+            "BAD_REQUEST",
+            better_auth_core::FieldMap::from([("message".into(), "Email is the same".into())])
+                .into(),
+        ));
     }
     let verification = ctx
         .extensions
@@ -46,11 +50,14 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         .strict_equals(&true.into())
         && config.change_email.update_without_verification;
     if !update_now && !can_send {
-        return Err(better_auth_core::AuthResponse::json(
-            400,
-            &serde_json::json!({"message":"Verification email isn't enabled"}),
-        )?
-        .into());
+        return Err(AuthError::from_status(
+            "BAD_REQUEST",
+            better_auth_core::FieldMap::from([(
+                "message".into(),
+                "Verification email isn't enabled".into(),
+            )])
+            .into(),
+        ));
     }
     let expires_in = verification.map_or_else(
         || EmailVerificationConfig::default().verification_token_expiry(),
@@ -207,16 +214,26 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
         )
         .await?
         .filter(|account| account.password.field_value().is_truthy())
-        .ok_or_else(|| AuthError::bad_request("Credential account not found"))?;
-        let stored_hash = account
-            .password
-            .typed()?
-            .as_deref()
-            .ok_or_else(|| AuthError::bad_request("Credential account not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "CREDENTIAL_ACCOUNT_NOT_FOUND",
+                "Credential account not found",
+            )
+        })?;
+        let stored_hash = account.password.typed()?.as_deref().ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "CREDENTIAL_ACCOUNT_NOT_FOUND",
+                "Credential account not found",
+            )
+        })?;
         password_utils::verify_password(ctx.password_policy.hasher.as_ref(), password, stored_hash)
             .await
             .map_err(|error| match error {
-                AuthError::InvalidCredentials => AuthError::bad_request("Invalid password"),
+                AuthError::InvalidCredentials => {
+                    AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+                }
                 error => error,
             })?;
     }
@@ -340,13 +357,17 @@ pub(crate) async fn delete_user_callback_core(
         .database
         .consume_verification_by_identifier(&format!("delete-account-{token}"))
         .await?
-        .ok_or_else(|| AuthError::not_found("Invalid token"))?;
+        .ok_or_else(|| AuthError::from_code("NOT_FOUND", "INVALID_TOKEN", "Invalid token"))?;
     if !verification
         .value
         .field_value()
         .strict_equals(&data.user_property("id")?)
     {
-        return Err(AuthError::not_found("Invalid token"));
+        return Err(AuthError::from_code(
+            "NOT_FOUND",
+            "INVALID_TOKEN",
+            "Invalid token",
+        ));
     }
     perform_user_deletion(data, req, config, ctx, true).await?;
     Ok(SuccessMessageResponse {
