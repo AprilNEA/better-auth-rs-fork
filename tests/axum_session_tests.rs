@@ -232,7 +232,10 @@ async fn optional_cached_extractor_propagates_callback_unauthorized() {
         .await
         .unwrap();
     let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(body["code"], "CACHE_VERSION_REJECTED");
+    assert_eq!(
+        body.get("code").and_then(serde_json::Value::as_str),
+        Some("CACHE_VERSION_REJECTED")
+    );
 }
 
 #[tokio::test]

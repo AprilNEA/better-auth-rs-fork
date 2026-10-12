@@ -275,7 +275,9 @@ async fn http_json_router_preserves_catch_headers_and_response_hook_order() -> A
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(true);
             }
@@ -404,7 +406,9 @@ async fn structural_api_error_reaches_router_callback_without_losing_owned_heade
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }

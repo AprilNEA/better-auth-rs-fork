@@ -131,7 +131,9 @@ async fn last_login_veto_precedes_expiration_validation_and_preserves_error_poli
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(false);
             logger_options.level = Some(LogLevel::Error);

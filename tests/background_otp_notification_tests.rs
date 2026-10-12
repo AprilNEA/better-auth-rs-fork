@@ -221,7 +221,9 @@ async fn run(
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.level = Some(LogLevel::Error);
         logger_options.log = Some(state.clone());

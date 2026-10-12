@@ -75,7 +75,9 @@ async fn ordinary_device_issuance_matches_pinned_code_and_uri_contract()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

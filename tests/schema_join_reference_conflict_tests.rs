@@ -198,7 +198,9 @@ async fn runtime_join_resolution_uses_secondary_storage_schema_presence()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

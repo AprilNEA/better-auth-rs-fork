@@ -133,7 +133,9 @@ async fn run_case(name: &str) -> AuthResult<Json> {
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.log = Some(sink.clone());
     }

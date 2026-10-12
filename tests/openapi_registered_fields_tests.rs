@@ -235,7 +235,9 @@ async fn registered_fields_supply_openapi_components_without_running_callbacks()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

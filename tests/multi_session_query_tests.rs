@@ -159,7 +159,9 @@ async fn multi_session_query_order_limits_expiration_and_cache_match_upstream() 
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

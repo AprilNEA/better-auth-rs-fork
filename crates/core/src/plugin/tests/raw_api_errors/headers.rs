@@ -47,7 +47,9 @@ async fn headers_identity_controls_rereads_and_prevents_duplicate_context_cookie
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
             logger_options.level = Some(LogLevel::Warn);

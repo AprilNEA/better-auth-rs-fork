@@ -265,17 +265,14 @@ impl Harness {
         })
     }
 
-    pub(crate) fn config(&self) -> AuthConfig {
+    pub(crate) fn config(&self) -> AuthResult<AuthConfig> {
         let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
         config.verification.store_in_database = false;
         {
             let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-                #[allow(
-                    clippy::panic,
-                    clippy::panic_in_result_fn,
-                    reason = "The fixture modifies its existing authored logger options."
-                )]
-                panic!("fixture requires authored logger options");
+                return Err(AuthError::config(
+                    "Fixture requires authored logger options",
+                ));
             };
             logger_options.level = Some(LogLevel::Debug);
             logger_options.log = Some(Arc::new(Logger(self.state.clone())));
@@ -298,14 +295,14 @@ impl Harness {
                 );
                 Ok(Some(id))
             })));
-        config
+        Ok(config)
     }
 
     pub(crate) async fn context(
         &self,
         plugins: &[&dyn AuthPlugin<StatelessSchema>],
     ) -> AuthResult<(AuthContext<StatelessSchema>, Arc<EphemeralStore>)> {
-        let config = Arc::new(self.config());
+        let config = Arc::new(self.config()?);
         let inner = Arc::new(EphemeralStore::from_storage(
             config.clone(),
             vec![

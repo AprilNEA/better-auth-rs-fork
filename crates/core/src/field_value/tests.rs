@@ -175,7 +175,9 @@ async fn live_object_read_errors_propagate_without_implicit_snapshots() {
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.log = Some(log.clone());
     }

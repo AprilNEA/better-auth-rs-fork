@@ -74,7 +74,7 @@ impl AuthPlugin<S> for Failure {
 
 impl ApiErrorHandler<S> for Failure {
     fn on_error(&self, error: &AuthError, _: &AuthContext<S>) -> AuthResult<Option<ApiErrorTask>> {
-        self.callbacks.fetch_add(1, Ordering::SeqCst);
+        let _ = self.callbacks.fetch_add(1, Ordering::SeqCst);
         if self.phase == "error-body" {
             assert!(
                 error
@@ -105,7 +105,7 @@ async fn axum_preserves_source_rejections_and_does_not_retry_failed_http_convers
         let replacement: FieldValue = FieldMap::from([(
             "toJSON".into(),
             FieldFunction::contextual(move |_, _| {
-                observed.fetch_add(1, Ordering::SeqCst);
+                let _ = observed.fetch_add(1, Ordering::SeqCst);
                 Ok("replacement must not become a new response".into())
             })
             .into(),
@@ -118,7 +118,7 @@ async fn axum_preserves_source_rejections_and_does_not_retry_failed_http_convers
             body: FieldMap::from([(
                 "toJSON".into(),
                 FieldFunction::contextual(move |_, _| {
-                    observed.fetch_add(1, Ordering::SeqCst);
+                    let _ = observed.fetch_add(1, Ordering::SeqCst);
                     Err(AuthError::from_thrown(cause.clone()))
                 })
                 .into(),

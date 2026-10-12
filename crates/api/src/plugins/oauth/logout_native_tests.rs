@@ -197,12 +197,9 @@ async fn run_case(name: &str) -> AuthResult<Json> {
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
     {
         let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-            #[allow(
-                clippy::panic,
-                clippy::panic_in_result_fn,
-                reason = "The fixture modifies its existing authored logger options."
-            )]
-            panic!("fixture requires authored logger options");
+            return Err(AuthError::config(
+                "Fixture requires authored logger options",
+            ));
         };
         logger_options.level = Some(LogLevel::Error);
         logger_options.log = Some(Arc::new(Sink {

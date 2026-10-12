@@ -7,7 +7,7 @@ use tracing::{
 
 pub(super) struct Instance {
     pub(super) name: &'static str,
-    pub(super) observations: Arc<Observations>,
+    pub(super) observations: std::sync::Weak<Observations>,
 }
 
 fn native(value: LogArgument<'_>) -> FieldValue {
@@ -26,9 +26,12 @@ impl LogSink for Instance {
         message: LogArgument<'_>,
         arguments: &[LogArgument<'_>],
     ) -> better_auth_core::AuthResult<()> {
-        lock(&self.observations.events)?.push(Event::Log {
+        let observations = self.observations.upgrade().ok_or_else(|| {
+            AuthError::internal("Logger observation owner must outlive its callbacks")
+        })?;
+        lock(&observations.events)?.push(Event::Log {
             sink: self.name,
-            scope: self.observations.owner(),
+            scope: observations.owner(),
             level,
             message: native(message),
             arguments: arguments.iter().copied().map(native).collect(),

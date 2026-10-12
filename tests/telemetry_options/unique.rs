@@ -76,7 +76,9 @@ async fn unique_field_metadata_matches_real_initialization_without_callbacks() -
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

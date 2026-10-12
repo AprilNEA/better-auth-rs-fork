@@ -173,7 +173,9 @@ async fn contract<S: AuthSchema>(
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.level = Some(better_auth_core::observability::LogLevel::Debug);
         logger_options.log = Some(Arc::new(recorder.clone()));

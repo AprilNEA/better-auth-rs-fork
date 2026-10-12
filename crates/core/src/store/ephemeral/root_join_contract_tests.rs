@@ -73,7 +73,9 @@ async fn native_join_reads_missing_child_only_after_a_matching_base_row() -> Aut
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(true);
             }
@@ -90,7 +92,9 @@ async fn native_join_reads_missing_child_only_after_a_matching_base_row() -> Aut
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(disabled);
                 logger_options.log = Some(logs.clone());

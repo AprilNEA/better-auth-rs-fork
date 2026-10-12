@@ -55,7 +55,9 @@ async fn omitted_and_explicit_http_error_defaults_keep_the_same_runtime_policy()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

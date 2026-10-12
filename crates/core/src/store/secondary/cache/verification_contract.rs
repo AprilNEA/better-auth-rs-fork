@@ -288,7 +288,9 @@ async fn capture(name: &str, in_transaction: bool) -> AuthResult<Json> {
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.level = Some(LogLevel::Debug);
         logger_options.log = Some(Arc::new(Logger {

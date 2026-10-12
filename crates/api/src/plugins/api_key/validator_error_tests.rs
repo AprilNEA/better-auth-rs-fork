@@ -221,12 +221,9 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
             {
                 let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
                 else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    panic!("fixture requires authored logger options");
+                    return Err(AuthError::config(
+                        "Fixture requires authored logger options",
+                    ));
                 };
                 logger_options.log = Some(trace.clone());
             }

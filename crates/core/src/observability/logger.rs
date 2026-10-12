@@ -238,6 +238,11 @@ impl Logger {
         &self.0.policy.level
     }
 
+    /// Compare bound instance identity; clones share an instance, separate bindings do not.
+    pub fn same_instance(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+
     /// Apply the instance's frozen enabled flag and level threshold.
     pub fn enabled(&self, level: LogLevel) -> bool {
         self.0.policy.enabled && self.publishes(level)

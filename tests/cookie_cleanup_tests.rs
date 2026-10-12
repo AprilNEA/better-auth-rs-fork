@@ -112,7 +112,9 @@ async fn aggregate_cleanup_preserves_ordered_complete_headers() -> AuthResult<()
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(true);
             }

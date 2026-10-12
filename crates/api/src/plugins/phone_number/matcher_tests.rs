@@ -266,12 +266,9 @@ async fn native_phone_matcher_retains_input_presence_and_getter_order() -> AuthR
         let mut config = test_helpers::create_test_config();
         {
             let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-                #[allow(
-                    clippy::panic,
-                    clippy::panic_in_result_fn,
-                    reason = "The fixture modifies its existing authored logger options."
-                )]
-                panic!("fixture requires authored logger options");
+                return Err(AuthError::config(
+                    "Fixture requires authored logger options",
+                ));
             };
             logger_options.level = Some(LogLevel::Debug);
             logger_options.log = Some(trace.clone());
@@ -400,12 +397,9 @@ async fn api_key_wraps_only_the_matcher_getter_for_native_and_typed_calls() -> A
             {
                 let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
                 else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    panic!("fixture requires authored logger options");
+                    return Err(AuthError::config(
+                        "Fixture requires authored logger options",
+                    ));
                 };
                 logger_options.level = Some(LogLevel::Debug);
                 logger_options.log = Some(trace.clone());

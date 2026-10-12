@@ -95,7 +95,20 @@ pub(super) fn native_shape(value: &FieldValue) -> AuthResult<Json> {
         FieldValue::Object(_) => "object",
         _ => return NativeObservation::default().observe(value),
     };
-    let keys = value.own_property_keys()?;
+    let keys = match value {
+        FieldValue::Array(array) => {
+            let mut keys = array
+                .own_indices()?
+                .into_iter()
+                .map(|index| index.to_string())
+                .collect::<Vec<_>>();
+            // Reflect.ownKeys includes length between indexed and named array properties.
+            keys.push("length".into());
+            keys.extend(array.named_property_keys()?);
+            keys
+        }
+        _ => value.own_property_keys()?,
+    };
     let properties = keys.iter().map(|name| {
         let descriptor = value.own_property_descriptor(name)?.ok_or_else(|| AuthError::internal("Observed property vanished"))?;
         Ok(json!([name, {"enumerable":descriptor.enumerable,"value":native_shape(&value.model_property(name)?)?}]))

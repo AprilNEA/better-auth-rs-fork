@@ -54,7 +54,7 @@ impl Observation {
         let mut config = AuthConfig::default();
         let owner: FieldObject = FieldMap::from([("level".into(), "error".into())]).into();
         let expected: FieldValue = owner.clone().into();
-        owner.set(
+        let _ = owner.set(
             "log",
             FieldFunction::contextual({
                 let state = self.clone();
@@ -186,7 +186,7 @@ struct FailingCache {
 impl SecondaryStorage for FailingCache {
     async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
         assert_eq!(key, "api-key:hash");
-        self.reads.fetch_add(1, Ordering::SeqCst);
+        let _ = self.reads.fetch_add(1, Ordering::SeqCst);
         Err(AuthError::from_thrown(self.state.producer.clone()))
     }
     async fn set_native(&self, _: &FieldValue, _: &FieldValue, _: Option<f64>) -> AuthResult<()> {

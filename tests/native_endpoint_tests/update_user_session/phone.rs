@@ -138,7 +138,9 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(true);
             }

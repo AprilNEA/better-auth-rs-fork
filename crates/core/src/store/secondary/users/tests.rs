@@ -100,7 +100,9 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.log = Some(Arc::new(Logs(logger)));
         }
@@ -152,7 +154,9 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.log = Some(Arc::new(Logs(caller_logger)));
         }

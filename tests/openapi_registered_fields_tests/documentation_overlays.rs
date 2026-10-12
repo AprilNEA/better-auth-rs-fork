@@ -154,7 +154,9 @@ async fn documentation_overlays_preserve_runtime_policies_and_final_declaration_
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }
@@ -379,7 +381,9 @@ async fn user_component_and_request_documentation_keep_their_distinct_runtime_po
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }
@@ -495,7 +499,9 @@ async fn username_and_last_login_components_follow_registered_options() -> AuthR
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }

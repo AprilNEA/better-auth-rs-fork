@@ -79,7 +79,9 @@ async fn endpoint_keys_match_upstream_paths_operations_and_duplicate_ids()
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }

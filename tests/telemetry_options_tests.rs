@@ -192,7 +192,9 @@ async fn configured_options_keep_omission_after_storage_normalization() -> AuthR
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(custom);
                 logger_options.level = Some(if custom {
@@ -233,7 +235,9 @@ async fn configured_options_keep_omission_after_storage_normalization() -> AuthR
                             clippy::panic_in_result_fn,
                             reason = "The fixture modifies its existing authored logger options."
                         )]
-                        panic!("fixture requires authored logger options");
+                        {
+                            panic!("fixture requires authored logger options");
+                        }
                     };
                     logger_options.log = Some(Arc::new(Callbacks));
                 }

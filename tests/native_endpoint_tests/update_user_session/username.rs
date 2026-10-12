@@ -103,7 +103,9 @@ async fn username_hook_reads_current_identity_only_when_validation_consumes_it()
                         clippy::panic_in_result_fn,
                         reason = "The fixture modifies its existing authored logger options."
                     )]
-                    panic!("fixture requires authored logger options");
+                    {
+                        panic!("fixture requires authored logger options");
+                    }
                 };
                 logger_options.disabled = Some(true);
             }

@@ -343,7 +343,9 @@ async fn trusted_and_owner_native_teams_match_pinned_memory_and_sqlite() -> Auth
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.disabled = Some(true);
         }

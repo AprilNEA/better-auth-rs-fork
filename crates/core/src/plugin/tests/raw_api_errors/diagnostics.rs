@@ -98,7 +98,9 @@ async fn matcher_failures_preserve_log_identity_and_skip_handler_error_recovery(
                     clippy::panic_in_result_fn,
                     reason = "The fixture modifies its existing authored logger options."
                 )]
-                panic!("fixture requires authored logger options");
+                {
+                    panic!("fixture requires authored logger options");
+                }
             };
             logger_options.level = Some(LogLevel::Debug);
             logger_options.disabled = Some(false);

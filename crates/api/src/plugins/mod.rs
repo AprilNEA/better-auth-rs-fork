@@ -173,7 +173,7 @@ pub(crate) mod test_helpers {
         for plugin in plugins {
             plugin.schema(&mut model_fields)?;
         }
-        let mut init = AuthInitContext::new(config, database.clone());
+        let mut init = AuthInitContext::new(config, database.clone())?;
         init.initialize_request_context().await?;
         for plugin in plugins {
             plugin.on_init(&mut init).await?;
@@ -195,7 +195,7 @@ pub(crate) mod test_helpers {
             .extensions
             .insert(ApplicationUserFields(config.user.clone()));
         parts.extensions.insert(AdapterUserFields(adapter_fields));
-        let mut context = AuthContext::new(Arc::new(endpoint), database);
+        let mut context = AuthContext::new(Arc::new(endpoint), database)?;
         parts.apply_request_runtime(&mut context);
         context.extensions = parts.extensions;
         context.email_verification_policy = parts.email_verification_policy;

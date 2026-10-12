@@ -29,7 +29,9 @@ pub(super) async fn check<S: AuthSchema>(
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }
@@ -203,7 +205,9 @@ pub(super) async fn batch_output_reset<S: AuthSchema>(
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }

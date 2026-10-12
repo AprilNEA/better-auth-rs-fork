@@ -93,20 +93,14 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
             ])
             .into();
             let failure = fails.then_some(&cause);
-            let mut b_config = config(ORIGIN_B);
-            {
-                let better_auth_core::LoggerSource::Config(logger_options) = &mut b_config.logger
-                else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    panic!("fixture requires authored logger options");
-                };
-                logger_options.level = Some(LogLevel::Error);
-                logger_options.log = Some(observations.sink("B")?);
-            }
+            let b_config = config(
+                ORIGIN_B,
+                LoggerConfig {
+                    level: Some(LogLevel::Error),
+                    log: Some(observations.sink("B")),
+                    ..Default::default()
+                },
+            );
             let (b_builder, b_store) = builder(b_config, &["apikey"])?;
             let b = b_builder
                 .plugin(ApiKeyPlugin::with_config(ApiKeyConfig {
@@ -118,6 +112,7 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
                 }))
                 .build()
                 .await?;
+            observations.bind("B", b.context().logger())?;
             let user = b
                 .store()
                 .create_user(
@@ -128,22 +123,17 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
                 .await?;
             let user_id = user.id.typed()?.clone();
             let stored_before = snapshot(&b_store)?;
-            let mut a_config = config(ORIGIN_A);
-            {
-                let better_auth_core::LoggerSource::Config(logger_options) = &mut a_config.logger
-                else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    panic!("fixture requires authored logger options");
-                };
-                logger_options.level = Some(LogLevel::Error);
-                logger_options.log = Some(observations.sink("A")?);
-            }
+            let a_config = config(
+                ORIGIN_A,
+                LoggerConfig {
+                    level: Some(LogLevel::Error),
+                    log: Some(observations.sink("A")),
+                    ..Default::default()
+                },
+            );
             let (a_builder, a_store) = builder(a_config, &[])?;
             let a = a_builder.build().await?;
+            observations.bind("A", a.context().logger())?;
             lock(&observations.events)?.clear();
             async {
                 if nested {

@@ -125,7 +125,9 @@ async fn native_revival_catches_original_callback_errors_and_logs_the_error_prop
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.log = Some(Arc::new(Sink(logs.clone())));
     }

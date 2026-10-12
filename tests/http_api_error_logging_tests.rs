@@ -1,13 +1,13 @@
 //! Paired with contracts/http-api-error-logging.test.ts; facade tests preserve the Rust helper boundary.
 
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use async_trait::async_trait;
 use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
 use better_auth_core::{
     AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute, FieldMap,
     FieldValue, HttpMethod,
-    observability::{LogArgument, LogLevel, LogSink, logger},
+    observability::{LogArgument, LogLevel, LogSink, Logger, LoggerConfig, logger},
     store::{EphemeralStore, StatelessSchema as S, schema::EntityRole},
 };
 use serde_json::{Value, json};
@@ -29,22 +29,13 @@ fn lock<T>(value: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
         .map_err(|_| AuthError::internal("Logger contract observation lock poisoned"))
 }
 
-fn config(origin: &str) -> AuthConfig {
+fn config(origin: &str, mut logger: LoggerConfig) -> AuthConfig {
     let mut config =
         AuthConfig::new("http-api-error-logging-secret-at-least-thirty-two-characters")
             .base_url(origin);
     config.telemetry.enabled = false;
-    {
-        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-            #[allow(
-                clippy::panic,
-                clippy::panic_in_result_fn,
-                reason = "The fixture modifies its existing authored logger options."
-            )]
-            panic!("fixture requires authored logger options");
-        };
-        logger_options.disable_colors = Some(true);
-    }
+    logger.disable_colors = Some(true);
+    config.logger = logger.into();
     config
 }
 
@@ -138,25 +129,36 @@ enum Event {
     Response(Value),
 }
 
-#[derive(Default)]
 struct Observations {
     events: Mutex<Vec<Event>>,
-    a: OnceLock<Weak<dyn LogSink>>,
-    b: OnceLock<Weak<dyn LogSink>>,
+    a: OnceLock<Logger>,
+    b: OnceLock<Logger>,
+    unscoped: Logger,
     inner_response: Mutex<Option<Value>>,
+}
+
+impl Default for Observations {
+    fn default() -> Self {
+        Self {
+            events: Mutex::default(),
+            a: OnceLock::new(),
+            b: OnceLock::new(),
+            unscoped: logger::current(),
+            inner_response: Mutex::default(),
+        }
+    }
 }
 
 impl Observations {
     fn owner(&self) -> &'static str {
         let current = logger::current();
-        let Some(current) = current.log else {
+        if current.same_instance(&self.unscoped) {
             return "none";
-        };
-        for (name, sink) in [("A", &self.a), ("B", &self.b)] {
-            if sink
+        }
+        for (name, instance) in [("A", &self.a), ("B", &self.b)] {
+            if instance
                 .get()
-                .and_then(Weak::upgrade)
-                .is_some_and(|sink| Arc::ptr_eq(&current, &sink))
+                .is_some_and(|instance| current.same_instance(instance))
             {
                 return name;
             }
@@ -169,14 +171,16 @@ impl Observations {
         Ok(())
     }
 
-    fn sink(self: &Arc<Self>, name: &'static str) -> AuthResult<Arc<dyn LogSink>> {
-        let sink: Arc<dyn LogSink> = Arc::new(capture::Instance {
+    fn sink(self: &Arc<Self>, name: &'static str) -> Arc<dyn LogSink> {
+        Arc::new(capture::Instance {
             name,
-            observations: self.clone(),
-        });
+            observations: Arc::downgrade(self),
+        })
+    }
+
+    fn bind(&self, name: &'static str, logger: &Logger) -> AuthResult<()> {
         let slot = if name == "A" { &self.a } else { &self.b };
-        slot.set(Arc::downgrade(&sink))
-            .map_err(|_| AuthError::internal("Logger contract sink already bound"))?;
-        Ok(sink)
+        slot.set(logger.clone())
+            .map_err(|_| AuthError::internal("Logger contract instance already bound"))
     }
 }

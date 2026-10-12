@@ -105,7 +105,9 @@ fn configuration(owner: &'static str, events: &Events, cause: &FieldValue) -> Ar
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disable_colors = Some(true);
         logger_options.log = Some(Arc::new(Logs {

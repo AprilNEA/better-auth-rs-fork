@@ -145,7 +145,9 @@ pub(crate) fn config(serial: bool) -> AuthConfig {
                 clippy::panic_in_result_fn,
                 reason = "The fixture modifies its existing authored logger options."
             )]
-            panic!("fixture requires authored logger options");
+            {
+                panic!("fixture requires authored logger options");
+            }
         };
         logger_options.disabled = Some(true);
     }

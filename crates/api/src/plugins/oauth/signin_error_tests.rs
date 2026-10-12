@@ -102,7 +102,7 @@ fn oauth_database_catches_preserve_structural_api_errors_before_the_fallback() {
     let mut calls = 0;
     let result = super::api_error_or(AuthError::from_thrown(raw.clone()), |_| {
         calls += 1;
-        OAuthSignInError::Generic("fallback".into())
+        Ok(OAuthSignInError::Generic("fallback".into()))
     });
     assert_eq!(calls, 0);
     assert!(
@@ -110,7 +110,7 @@ fn oauth_database_catches_preserve_structural_api_errors_before_the_fallback() {
     );
     let result = super::api_error_or(AuthError::internal("database failed"), |error| {
         calls += 1;
-        OAuthSignInError::Auth(error)
+        Ok(OAuthSignInError::Auth(error))
     });
     assert_eq!(calls, 1);
     assert!(
