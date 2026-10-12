@@ -211,7 +211,7 @@ impl JwtPlugin {
     ) -> AuthResult<ResolvedSigningKey> {
         if options.property("jwt", "sign")?.is_truthy() {
             return Err(AuthError::type_error(
-                "Cannot destructure property 'alg' of null",
+                "Cannot destructure property 'alg' from null or undefined value",
             ));
         }
         let mut selected = if let Some(id) = &selection.key_id {

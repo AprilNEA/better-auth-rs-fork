@@ -2,7 +2,7 @@ use super::overrides::{NativeOptions, nullish};
 use super::*;
 
 impl JwtPlugin {
-    async fn create_key<S: AuthSchema>(
+    pub(super) async fn create_key<S: AuthSchema>(
         &self,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<FieldValue> {

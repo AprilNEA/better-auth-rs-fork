@@ -220,8 +220,7 @@ async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollba
 }
 
 #[tokio::test]
-async fn native_sign_endpoint_preserves_child_identity_undefined_and_custom_result()
--> AuthResult<()> {
+async fn native_sign_endpoint_preserves_child_identity_undefined_and_custom_result() {
     use better_auth::plugins::JwtAlgorithm;
     use better_auth_core::{FieldMap, FieldValue};
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -274,16 +273,21 @@ async fn native_sign_endpoint_preserves_child_identity_undefined_and_custom_resu
     )
     .plugin(plugin)
     .build()
-    .await?;
-    let token = auth.jwt()?.sign_value(payload.clone()).await?;
+    .await
+    .unwrap();
+    let token = auth
+        .jwt()
+        .unwrap()
+        .sign_value(payload.clone())
+        .await
+        .unwrap();
     assert!(token.strict_equals(&returned));
     assert_eq!(
-        payload.enumerable_fields()?,
+        payload.enumerable_fields().unwrap(),
         FieldMap::from([
             ("child".into(), child),
             ("absent".into(), FieldValue::Undefined),
         ])
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    Ok(())
 }

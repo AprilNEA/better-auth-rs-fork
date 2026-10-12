@@ -113,8 +113,10 @@ async fn changing_sign_truthiness_rejects_the_null_resolved_key_before_storage()
         assert!(!error.is_api_error()?);
         let native = error.into_thrown_value()?;
         assert_eq!(native.model_property("name")?, "TypeError".into());
-        // Freeze the exact diagnostic after jwt-native-resolved-key-null.test.ts runs in CI.
-        assert!(native.model_property("message")?.is_string());
+        assert_eq!(
+            native.model_property("message")?,
+            "Cannot destructure property 'alg' from null or undefined value".into(),
+        );
         assert_eq!(signer.reads.load(Ordering::SeqCst), 2);
         assert_eq!(
             *events

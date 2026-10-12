@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { signJWT } from "better-auth/plugins/jwt";
 
 expect(JSON.parse(readFileSync(new URL("../node_modules/better-auth/package.json", import.meta.url), "utf8")).version).toBe("1.7.6");
@@ -41,8 +42,7 @@ for (const mode of ["function", "object"]) {
     const error = failure as TypeError;
     expect(Object.getPrototypeOf(error)).toBe(TypeError.prototype);
     expect(error.name).toBe("TypeError");
-    expect(typeof error.message).toBe("string");
-    expect(error.message.length).toBeGreaterThan(0);
+    expect(error.message).toBe("Cannot destructure property 'alg' from null or undefined value");
     expect(typeof error.stack).toBe("string");
     expect(events).toStrictEqual(["sign.get:1", "sign.get:2"]);
     const properties = Reflect.ownKeys(error).map(key => {
@@ -53,7 +53,18 @@ for (const mode of ["function", "object"]) {
         value: key === "stack" ? { type: typeof descriptor.value, firstLine: error.stack?.split("\n", 1)[0] } : descriptor.value,
       };
     });
-    // Freeze the engine diagnostic after the CI source observation; stack locations are not portable.
-    console.info(`JWT_RESOLVED_KEY_NULL_OBSERVATION=${JSON.stringify({ mode, name: error.name, message: error.message, constructor: error.constructor.name, properties, events })}`);
+    const values = [
+      ["message", "Cannot destructure property 'alg' from null or undefined value"],
+      ["originalLine", 78], ["originalColumn", 81], ["line", 103], ["column", 63],
+      ["sourceURL", fileURLToPath(new URL("../node_modules/better-auth/dist/plugins/jwt/sign.mjs", import.meta.url))],
+      ["stack", { type: "string", firstLine: "TypeError: Cannot destructure property 'alg' from null or undefined value" }],
+    ];
+    expect({ constructor: error.constructor.name, properties }).toStrictEqual({
+      constructor: "TypeError",
+      properties: values.map(([key, value]) => ({
+        key, enumerable: false, configurable: true, writable: true,
+        getter: "undefined", setter: "undefined", value,
+      })),
+    });
   });
 }
