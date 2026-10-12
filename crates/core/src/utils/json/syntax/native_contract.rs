@@ -49,6 +49,10 @@ fn input(value: Json) -> AuthResult<FieldValue> {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The source diagnostic contract must fail when any observed error value differs."
+)]
 fn source_parser_diagnostics_match_complete_runtime_observations() -> AuthResult<()> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/fixtures/json-parse-native-1.7.6.json");

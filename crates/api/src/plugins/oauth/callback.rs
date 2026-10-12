@@ -124,11 +124,7 @@ pub(super) async fn handle_callback(
     };
     let payload = match ctx.config.account.store_state_strategy() {
         better_auth_core::OAuthStateStrategy::Database => {
-            let verification = match ctx
-                .database
-                .get_verification_by_identifier(&state_param)
-                .await?
-            {
+            let verification = match ctx.database.find_verification_value(&state_param).await? {
                 Some(verification) => verification,
                 None => {
                     return Ok(redirect_response(&append_query_params(
@@ -138,7 +134,10 @@ pub(super) async fn handle_callback(
                 }
             };
 
-            let payload = match OAuthStatePayload::parse(&verification.value.display_string()?) {
+            let value = verification.model_property("value")?;
+            let payload = match OAuthStatePayload::parse(
+                &better_auth_core::SchemaValue::<String>::from_field(value).display_string()?,
+            ) {
                 Ok(payload) => payload,
                 Err(_) => {
                     return Ok(redirect_response(&append_query_params(

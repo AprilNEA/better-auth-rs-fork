@@ -71,40 +71,39 @@ pub(super) async fn reset_failures(
 pub(super) struct ChallengeAttempt {
     identifier: String,
     failures: usize,
-    expires_at: better_auth_core::SchemaValue<better_auth_core::FieldDate>,
+    verification: better_auth_core::FieldValue,
 }
 
 pub(super) async fn begin_attempt<S: better_auth_core::AuthSchema>(
     state: &ResolvedTwoFactorState,
     req: &AuthRequest,
     ctx: &AuthContext<S>,
+    limit: usize,
 ) -> AuthResult<Option<ChallengeAttempt>> {
     let ResolvedTwoFactorState::Pending(pending) = state else {
         return Ok(None);
     };
     let identifier = format!("2fa-attempts-{}", pending.key);
-    let consumed = match ctx
+    let consumed = ctx
         .database
         .consume_verification_by_identifier(&identifier)
         .await
-    {
-        Ok(consumed) => consumed,
-        Err(error) => {
-            better_auth_core::observability::logger::current().warn(
-                "Failed to consume two-factor attempt counter",
-                &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-            None
-        }
-    }
-    .ok_or_else(|| AuthError::authentication_failed("Invalid two factor cookie"))?;
+        .ok()
+        .flatten()
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "UNAUTHORIZED",
+                "INVALID_TWO_FACTOR_COOKIE",
+                "Invalid two factor cookie",
+            )
+        })?;
     let parsed = better_auth_core::query::field_number(&consumed.value.field_value())?;
     let attempts = if parsed.is_finite() && parsed.fract() == 0.0 && parsed >= 0.0 {
         parsed
     } else {
-        CHALLENGE_ATTEMPT_LIMIT as f64
+        limit as f64
     };
-    if attempts >= CHALLENGE_ATTEMPT_LIMIT as f64 {
+    if attempts >= limit as f64 {
         let invalidation = ctx
             .database
             .consume_verification_by_identifier(&pending.key)
@@ -113,11 +112,7 @@ pub(super) async fn begin_attempt<S: better_auth_core::AuthSchema>(
             "Set-Cookie",
             clear_cookie_header(req, &ctx.config, TWO_FACTOR_COOKIE_SUFFIX)?,
         )?;
-        if let Err(error) = invalidation {
-            better_auth_core::observability::logger::current().error(
-                "Failed to invalidate two-factor challenge",
-                &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+        if invalidation.is_err() {
             return Err(AuthError::from_code(
                 "INTERNAL_SERVER_ERROR",
                 "FAILED_TO_INVALIDATE_TWO_FACTOR_CHALLENGE",
@@ -133,7 +128,7 @@ pub(super) async fn begin_attempt<S: better_auth_core::AuthSchema>(
     Ok(Some(ChallengeAttempt {
         identifier,
         failures: attempts as usize,
-        expires_at: pending.expires_at.clone(),
+        verification: pending.verification.clone(),
     }))
 }
 
@@ -141,25 +136,29 @@ pub(super) async fn finish_attempt(
     attempt: Option<ChallengeAttempt>,
     failed: bool,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) {
+) -> AuthResult<FieldValue> {
     if let Some(attempt) = attempt {
         let verification = CreateVerification {
+            field_order: ["value", "identifier", "expiresAt"]
+                .map(str::to_owned)
+                .into(),
             identifier: (attempt.identifier).into(),
             value: ((attempt.failures + usize::from(failed)).to_string()).into(),
-            expires_at: attempt.expires_at,
+            expires_at: better_auth_core::SchemaValue::from_field(
+                attempt.verification.model_property("expiresAt")?,
+            ),
             ..Default::default()
         };
-        // Upstream keeps the credential failure if rearming fails. The missing
-        // counter invalidates the challenge on the next request.
-        if let Err(error) = ctx
+        // The upstream Promise catch ignores storage errors after reading the challenge expiry.
+        return match ctx
             .database
             .create_verification_optional(verification)
             .await
         {
-            better_auth_core::observability::logger::current().warn(
-                "Failed to rearm two-factor challenge",
-                &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-        }
+            Ok(Some(record)) => record.fields().map(Into::into),
+            Ok(None) => Ok(FieldValue::Null),
+            Err(_) => Ok(FieldValue::Undefined),
+        };
     }
+    Ok(FieldValue::Undefined)
 }

@@ -2,7 +2,7 @@ use super::{EmailOtpConfig, EmailOtpPlugin, EmailOtpType};
 use crate::plugins::endpoint_context::EndpointContext;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthRoute, AuthSchema,
-    HttpMethod, NativeRequest,
+    FieldDate, FieldMap, FieldValue, HttpMethod, NativeRequest, SchemaValue,
 };
 
 /// Trusted server operations using the registered Email OTP plugin configuration.
@@ -78,6 +78,18 @@ impl<'a, S: AuthSchema> EmailOtpApi<'a, S> {
 
     /// Read a live plaintext or decrypted code without consuming it or changing attempts.
     pub async fn get(&self, email: &str, kind: EmailOtpType) -> AuthResult<Option<String>> {
+        let otp = self.get_value(email, kind).await?;
+        if otp.is_null() || otp.is_undefined() {
+            Ok(None)
+        } else {
+            Ok(Some(
+                SchemaValue::<String>::from_field(otp).typed()?.clone(),
+            ))
+        }
+    }
+
+    /// Retain the upstream OTP result when an adapter replaces the stored value's type.
+    pub async fn get_value(&self, email: &str, kind: EmailOtpType) -> AuthResult<FieldValue> {
         let route = AuthRoute::server_only(HttpMethod::Get, "getEmailVerificationOTP")
             .query_validator(validate_query);
         let response = self
@@ -93,49 +105,50 @@ impl<'a, S: AuthSchema> EmailOtpApi<'a, S> {
                     let identifier = query.kind.identifier(&query.email.to_lowercase());
                     let record = match self.transaction {
                         Some(transaction) => {
-                            transaction
-                                .get_verification_including_expired(&identifier)
-                                .await?
+                            transaction.find_verification_value(&identifier).await?
                         }
                         None => {
                             context
                                 .database
-                                .get_verification_including_expired(&identifier)
+                                .find_verification_value(&identifier)
                                 .await?
                         }
                     };
                     let otp = if let Some(record) = record
-                        && !record.expires_at.is_before(chrono::Utc::now())?
-                    {
-                        let (stored, _) = super::otp::split(record.value.typed()?);
-                        Some(
-                            self.plugin
-                                .recover(stored, context.config.encryption_secret())
-                                .await?
-                                .ok_or_else(|| {
-                                    AuthError::from_status(
-                                        "BAD_REQUEST",
-                                        better_auth_core::FieldMap::from([(
-                                            "message".into(),
-                                            "OTP is hashed, cannot return the plain text OTP"
-                                                .into(),
-                                        )])
-                                        .into(),
-                                    )
-                                })?,
+                        && record.is_truthy()
+                        && !SchemaValue::<FieldDate>::from_field(
+                            record.model_property("expiresAt")?,
                         )
+                        .is_before(context.now())?
+                    {
+                        if matches!(
+                            &self.plugin.config.storage,
+                            super::EmailOtpStorage::Hashed | super::EmailOtpStorage::CustomHash(_)
+                        ) {
+                            return Err(AuthError::from_status(
+                                "BAD_REQUEST",
+                                FieldMap::from([(
+                                    "message".into(),
+                                    "OTP is hashed, cannot return the plain text OTP".into(),
+                                )])
+                                .into(),
+                            ));
+                        }
+                        let (stored, _) = super::otp::split(&record.model_property("value")?)?;
+                        self.plugin
+                            .recover(&stored, context.config.encryption_secret())
+                            .await?
                     } else {
-                        None
+                        FieldValue::Null
                     };
-                    AuthResponse::json(None, &serde_json::json!({"otp":otp}))
+                    Ok(AuthResponse::json_value(
+                        None,
+                        FieldMap::from([("otp".into(), otp)]).into(),
+                    ))
                 },
             )
             .await?;
-        #[derive(serde::Deserialize)]
-        struct Result {
-            otp: Option<String>,
-        }
-        Ok(serde_json::from_slice::<Result>(&response.body.bytes()?)?.otp)
+        response.body.field_value()?.model_property("otp")
     }
 }
 

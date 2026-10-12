@@ -245,7 +245,7 @@ pub(super) async fn verify_totp_core(
         ));
     }
     assert_not_locked(&state, &two_factor, &config.account_lockout, ctx).await?;
-    let attempt = begin_attempt(&state, req, ctx).await?;
+    let attempt = begin_attempt(&state, req, ctx, CHALLENGE_ATTEMPT_LIMIT).await?;
     let valid = (|| {
         let secret = crate::plugins::symmetric::decrypt_field(
             ctx.config.encryption_secret(),
@@ -258,12 +258,12 @@ pub(super) async fn verify_totp_core(
     let valid = match valid {
         Ok(valid) => valid,
         Err(error) => {
-            finish_attempt(attempt, false, ctx).await;
+            let _ = finish_attempt(attempt, false, ctx).await?;
             return Err(error);
         }
     };
     if !valid {
-        finish_attempt(attempt, true, ctx).await;
+        let _ = finish_attempt(attempt, true, ctx).await?;
         record_failure(&state, &two_factor, &config.account_lockout, ctx).await?;
         return Err(AuthError::authentication_failed("Invalid code"));
     }
@@ -589,7 +589,7 @@ pub(super) async fn verify_backup_code_core(
             )
         })?;
     assert_not_locked(&state, &two_factor, &config.account_lockout, ctx).await?;
-    let attempt = begin_attempt(&state, req, ctx).await?;
+    let attempt = begin_attempt(&state, req, ctx, CHALLENGE_ATTEMPT_LIMIT).await?;
     let decoded = match config
         .backup_code_options
         .storage
@@ -601,19 +601,19 @@ pub(super) async fn verify_backup_code_core(
     {
         Ok(codes) => options::remaining_backup_codes(&codes, &body.code),
         Err(error) => {
-            finish_attempt(attempt, false, ctx).await;
+            let _ = finish_attempt(attempt, false, ctx).await?;
             return Err(error);
         }
     };
     let decoded = match decoded {
         Ok(codes) => codes,
         Err(error) => {
-            finish_attempt(attempt, false, ctx).await;
+            let _ = finish_attempt(attempt, false, ctx).await?;
             return Err(error);
         }
     };
     let Some(backup_codes) = decoded else {
-        finish_attempt(attempt, true, ctx).await;
+        let _ = finish_attempt(attempt, true, ctx).await?;
         record_failure(&state, &two_factor, &config.account_lockout, ctx).await?;
         return Err(AuthError::authentication_failed("Invalid backup code"));
     };

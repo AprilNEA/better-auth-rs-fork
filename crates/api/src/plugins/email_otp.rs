@@ -15,6 +15,8 @@ pub use native::EmailOtpApi;
 #[cfg(test)]
 mod native_tests;
 mod request;
+#[cfg(test)]
+mod verification_native_contract;
 
 /// Purpose of an email OTP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,8 +51,8 @@ impl EmailOtpType {
 pub struct EmailOtpMessage {
     /// Normalized recipient email.
     pub email: String,
-    /// Plain OTP sent to the mailbox owner.
-    pub otp: String,
+    /// Plain OTP sent to the mailbox owner. Adapter replacements retain their native values.
+    pub otp: better_auth_core::SchemaValue<String>,
     /// Verification purpose.
     #[serde(rename = "type")]
     pub kind: EmailOtpType,

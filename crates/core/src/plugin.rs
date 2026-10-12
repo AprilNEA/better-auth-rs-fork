@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -264,6 +265,7 @@ pub struct AuthInitContext<S: AuthSchema> {
 /// Context passed to plugin methods. Clones retain the same mutable runtime URL.
 /// HTTP handlers and endpoint dispatches create separate runtime contexts.
 pub struct AuthContext<S: AuthSchema> {
+    clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
     pub(crate) request_runtime: crate::request_runtime::RequestRuntime,
     pub extensions: crate::RuntimeExtensions,
     pub email_verification_policy: crate::email::EmailVerificationRuntimePolicy,
@@ -278,6 +280,7 @@ pub struct AuthContext<S: AuthSchema> {
 impl<S: AuthSchema> Clone for AuthContext<S> {
     fn clone(&self) -> Self {
         Self {
+            clock: self.clock.clone(),
             request_runtime: self.request_runtime.clone(),
             extensions: self.extensions.clone(),
             email_verification_policy: self.email_verification_policy.clone(),
@@ -542,6 +545,19 @@ impl<S: AuthSchema> AuthInitContext<S> {
 }
 
 impl<S: AuthSchema> AuthContext<S> {
+    /// Read this context's wall clock. The default clock is `Utc::now`.
+    pub fn now(&self) -> DateTime<Utc> {
+        (self.clock)()
+    }
+
+    /// Set the wall clock used by context-aware plugin operations.
+    /// Clones and request dispatches retain the same clock.
+    /// Stores, storage backends, and other runtime components retain their own clocks.
+    pub fn with_clock(mut self, clock: impl Fn() -> DateTime<Utc> + Send + Sync + 'static) -> Self {
+        self.clock = Arc::new(clock);
+        self
+    }
+
     /// Instance logger with renderer options resolved before plugin initialization.
     pub fn logger(&self) -> &crate::observability::LoggerConfig {
         self.config.logger()
@@ -555,6 +571,7 @@ impl<S: AuthSchema> AuthContext<S> {
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {
+            clock: Arc::new(Utc::now),
             request_runtime: Default::default(),
             extensions: crate::RuntimeExtensions::default(),
             email_verification_policy: crate::email::EmailVerificationRuntimePolicy::default(),
@@ -579,6 +596,7 @@ impl<S: AuthSchema> AuthContext<S> {
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
         Self {
+            clock: Arc::new(Utc::now),
             request_runtime: Default::default(),
             extensions: crate::RuntimeExtensions::default(),
             email_verification_policy: crate::email::EmailVerificationRuntimePolicy::default(),
@@ -854,6 +872,59 @@ mod tests {
         let ctx = AuthContext::new(config.clone(), db);
         assert!(ctx.email_provider.is_none());
         assert!(ctx.metadata.is_empty());
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "The clock regression asserts callback retention across context constructors, clones, and native dispatch."
+    )]
+    async fn auth_context_clock_survives_clone_and_native_dispatch() -> AuthResult<()> {
+        use std::sync::atomic::{AtomicI64, Ordering};
+
+        const NOW: i64 = 2_000_000_000_000;
+        let mut config = AuthConfig::new("test-secret-min-32-chars-1234567");
+        config.base_url = "http://clock.test".into();
+        let config = Arc::new(config);
+        let database = test_database().await;
+        for context in [
+            AuthContext::new(config.clone(), database.clone()),
+            AuthContext::with_metadata(config.clone(), database.clone(), MetadataMap::new()),
+        ] {
+            let time = Arc::new(AtomicI64::new(NOW));
+            let clock = time.clone();
+            let mut context = context.with_clock(move || {
+                DateTime::UNIX_EPOCH + chrono::Duration::milliseconds(clock.load(Ordering::Relaxed))
+            });
+            let route = AuthRoute::get("/clock", "clockProbe");
+            context
+                .extensions
+                .insert(Arc::new(crate::endpoint_dispatch::EndpointDispatcher::<
+                    crate::store::StatelessSchema,
+                >::new(
+                    Arc::new(Vec::new()),
+                    Default::default(),
+                    [route.clone()],
+                )));
+            let cloned = context.clone();
+            assert_eq!(cloned.now().timestamp_millis(), NOW);
+            time.store(NOW + 1, Ordering::Relaxed);
+            let response = cloned
+                .dispatch_native(
+                    crate::NativeRequest::default(),
+                    route,
+                    None,
+                    None,
+                    |_, dispatched| async move {
+                        let cloned = dispatched.as_ref().clone();
+                        AuthResponse::json(None, &cloned.now().timestamp_millis())
+                    },
+                )
+                .await?;
+            assert_eq!(response.body.json()?, serde_json::json!(NOW + 1));
+            assert_eq!(context.now().timestamp_millis(), NOW + 1);
+        }
+        Ok(())
     }
 
     // Rust-specific surface: plugin infrastructure helpers and request-dispatch helpers in `crates/core::plugin` are Rust library APIs with no direct TS analogue.

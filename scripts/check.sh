@@ -595,7 +595,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/verification-auth-consumer-native-capture.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --features better-auth-core/redis-cache --lib -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        request_runtime::concurrent:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: || cache_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \

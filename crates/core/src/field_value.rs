@@ -26,6 +26,7 @@ mod json;
 pub(crate) use json::{project_input_json, stringify_http};
 mod primitive;
 mod property;
+mod string_methods;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
 

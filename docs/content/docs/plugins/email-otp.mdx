@@ -15,7 +15,7 @@ struct Mailer;
 #[async_trait]
 impl SendEmailOtp for Mailer {
     async fn send(&self, message: &EmailOtpMessage) -> AuthResult<()> {
-        send_mail(&message.email, &message.otp).await
+        send_mail(&message.email, message.otp.typed()?).await
     }
 }
 
@@ -46,6 +46,8 @@ Use `.storage(EmailOtpStorage::Hashed)` to persist SHA-256 digests or `.storage(
 
 Use `EmailOtpStorage::CustomHash` for an asynchronous application hash. Use `CustomEncryption` with an `EmailOtpCodec` for reversible protection; `encode` and `decode` return strings and propagate failures. `generate_otp` accepts an application generator, with `None` selecting the default generator.
 
+Stored OTP reads retain native values through splitting, attempt checks, recovery, and resend callbacks. `EmailOtpMessage.otp` uses `SchemaValue<String>`; use `typed()?` when a mail provider requires a Rust string, or `field_value()` to retain an adapter replacement. Plaintext comparison follows upstream UTF-8 encoding for strings and byte-array conversion for arrays and array-like objects. `CustomEncryption::decode` retains its explicit Rust string input boundary. Symbol iterator overrides are outside the current native value representation.
+
 Enable `.send_verification_on_sign_up(true)` to send a verification code after email registration. Enable `.override_default_email_verification(true)` to supply OTP delivery when no explicit verification-email sender is configured. An explicit sender takes precedence, matching upstream plugin-option merging. Email verification hooks and automatic sign-in use the existing `EmailVerificationPlugin` configuration. Password reset uses the existing password hasher, reset callback, length limits, and session-revocation policy.
 
 Use `.disable_sign_up(true)` to restrict sign-in to existing users. Unknown-user verification and password-reset requests return success without sending a code. When OTP sign-in proves an existing unverified email, the store reserves a cleanup lock, deletes account links sequentially, deletes sessions, and updates the User before issuing the owner's session. A later callback or write failure preserves completed deletions because cleanup has no enclosing transaction. Already verified users retain their existing access. Database-backed verification storage provides the reservation; secondary-only storage proceeds without it. Secondary session-deletion failures follow the existing logged-error policy and can leave cached sessions present.
@@ -73,7 +75,7 @@ let plugin = EmailOtpPlugin::new().callbacks::<AppSchema>(
                 Some(transaction) => transaction.get_user_by_email(&message.email).await?,
                 None => endpoint.auth.database.get_user_by_email(&message.email).await?,
             };
-            send_mail(&message.email, &message.otp, user).await
+            send_mail(&message.email, message.otp.typed()?, user).await
         })))
     }),
 );
@@ -88,6 +90,8 @@ The default-email override keeps the original request and active transaction but
 `auth.email_otp()?.create(email, kind).await?` implements upstream `createVerificationOTP`. Creation lowercases the input, always generates a new code, stores its protected value with zero failed attempts, and returns the plaintext code. Creation accepts any string and does not require an existing user or a sender. The generator receives the complete typed endpoint context with no HTTP request.
 
 `auth.email_otp()?.get(email, kind).await?` implements upstream `getVerificationOTP` as `Option<String>`. Missing or expired records return `None`. A live hash returns a 400 error without calling the application hash function. Plaintext and encrypted records return the recovered code without consuming the record or resetting its failed attempts. These operations are available only through the Rust server API; no HTTP routes expose the codes.
+
+Use `auth.email_otp()?.get_value(email, kind).await?` to retain the native OTP result, including values returned by adapter field replacements. `get()` uses the same endpoint and converts the result to `Option<String>` at the caller boundary.
 
 Inside an application callback, use `endpoint.email_otp()?` or `EmailOtpApi::from_endpoint(endpoint)?`. Both operations use the callback's active database transaction. A native read sees codes created earlier in that transaction, and a rejected admission rolls back database OTP writes. The configured verification identifier policy applies to these operations. `auth.email_otp()` remains available for independent server calls. Both native endpoints run shared endpoint hooks, validation and instrumentation. Before patches can change the stored or queried address; callbacks receive validated input and after hooks retain raw patched input. `.with_request(NativeRequest { request, headers })` preserves an explicit native Request and header presence.
 

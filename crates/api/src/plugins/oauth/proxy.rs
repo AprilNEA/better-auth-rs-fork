@@ -500,9 +500,10 @@ impl OAuthProxyPlugin {
         let payload = match ctx.config.account.store_state_strategy() {
             OAuthStateStrategy::Database => ctx
                 .database
-                .get_verification_by_identifier(&original_state)
+                .find_verification_value(&original_state)
                 .await?
-                .map(|verification| verification.value.field_value())
+                .map(|verification| verification.model_property("value"))
+                .transpose()?
                 .unwrap_or_default(),
             OAuthStateStrategy::Cookie => {
                 let name = state::state_cookie_name(&ctx.config);

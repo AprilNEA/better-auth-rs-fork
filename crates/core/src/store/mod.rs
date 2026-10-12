@@ -29,6 +29,7 @@ pub use capabilities::StoreCapabilities;
 pub use ephemeral::{EphemeralStore, StatelessSchema};
 pub mod secondary;
 
+use crate::FieldValue;
 use crate::error::{AuthError, AuthResult};
 use crate::schema::AuthSchema;
 use crate::types::{

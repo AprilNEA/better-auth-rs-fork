@@ -63,10 +63,17 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
         user,
         key: "failure-challenge".into(),
         dont_remember: false,
-        expires_at: (Utc::now() + Duration::minutes(5)).into(),
+        verification: better_auth_core::FieldMap::from([(
+            "expiresAt".into(),
+            (Utc::now() + Duration::minutes(5)).into(),
+        )])
+        .into(),
     }));
     let req = AuthRequest::new(HttpMethod::Post, "/two-factor/verify-totp");
-    let failure = begin_attempt(&state, &req, &ctx).await.err().unwrap();
+    let failure = begin_attempt(&state, &req, &ctx, CHALLENGE_ATTEMPT_LIMIT)
+        .await
+        .err()
+        .unwrap();
     crate::plugins::test_helpers::assert_coded_api_error(
         &failure,
         "INTERNAL_SERVER_ERROR",
@@ -82,7 +89,10 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
                 && cookie.contains("Max-Age=0"))
     );
     connection.close().await.unwrap();
-    let failure = begin_attempt(&state, &req, &ctx).await.err().unwrap();
+    let failure = begin_attempt(&state, &req, &ctx, CHALLENGE_ATTEMPT_LIMIT)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(failure.status_code().unwrap(), 401);
     assert_eq!(failure.to_string(), "Invalid two factor cookie");
 }

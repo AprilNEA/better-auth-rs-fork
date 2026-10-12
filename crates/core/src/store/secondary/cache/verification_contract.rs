@@ -1,6 +1,7 @@
 #![expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
+    clippy::panic_in_result_fn,
     reason = "Pinned native contracts must fail immediately when the fixture shape or setup changes."
 )]
 

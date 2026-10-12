@@ -46,7 +46,7 @@ pub(crate) async fn request_password_reset_core(
             let _ = Uuid::new_v4().simple().to_string();
             let _ = ctx
                 .database
-                .get_verification_by_identifier("dummy-verification-token")
+                .find_verification_value("dummy-verification-token")
                 .await?;
             better_auth_core::observability::logger::current().error(
                 "Reset Password: User not found",
@@ -209,11 +209,16 @@ pub(crate) async fn reset_password_token_core(
 
     let verification = ctx
         .database
-        .get_verification_by_identifier(&format!("reset-password:{}", token))
+        .find_verification_value(&format!("reset-password:{}", token))
         .await?;
 
     let expired = match &verification {
-        Some(verification) => verification.expires_at.is_before(Utc::now())?,
+        Some(verification) => {
+            better_auth_core::SchemaValue::<better_auth_core::FieldDate>::from_field(
+                verification.model_property("expiresAt")?,
+            )
+            .is_before(ctx.now())?
+        }
         None => true,
     };
     if expired {

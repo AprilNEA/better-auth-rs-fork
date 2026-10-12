@@ -44,6 +44,7 @@ pub(crate) struct StatusResponse {
 #[cfg(test)]
 pub(crate) mod test_helpers {
     pub(crate) mod native_session;
+    pub(crate) mod verification_consumer_native;
 
     use std::collections::HashMap;
     use std::sync::Arc;

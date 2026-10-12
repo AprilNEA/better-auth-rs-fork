@@ -201,7 +201,7 @@ impl FieldValue {
         }
     }
 
-    fn method_property(&self, name: &str) -> AuthResult<Option<Self>> {
+    pub(super) fn method_property(&self, name: &str) -> AuthResult<Option<Self>> {
         if self.is_null() || self.is_undefined() {
             return self.model_property(name).map(Some);
         }

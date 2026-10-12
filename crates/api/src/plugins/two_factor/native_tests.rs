@@ -573,7 +573,11 @@ async fn finalization_preserves_selected_native_owner_token_and_cookie() -> Test
             user,
             key: "native-factor-challenge".into(),
             dont_remember: false,
-            expires_at: (Utc::now() + Duration::minutes(5)).into(),
+            verification: better_auth_core::FieldMap::from([(
+                "expiresAt".into(),
+                (Utc::now() + Duration::minutes(5)).into(),
+            )])
+            .into(),
         },
         &fixture.request,
         false,
@@ -639,7 +643,11 @@ async fn trust_device_failure_preserves_session_and_challenge_cookie_effects() -
             user: fixture.user.clone(),
             key: "native-factor-challenge".into(),
             dont_remember: false,
-            expires_at: (Utc::now() + Duration::minutes(5)).into(),
+            verification: better_auth_core::FieldMap::from([(
+                "expiresAt".into(),
+                (Utc::now() + Duration::minutes(5)).into(),
+            )])
+            .into(),
         },
         &fixture.request,
         true,

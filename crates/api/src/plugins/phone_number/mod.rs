@@ -4,9 +4,10 @@ use better_auth_core::utils::password::{hash_password, verify_password};
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthSession,
-    AuthUser, CreateAccount, CreateUser, CreateVerification, RequestMeta, UpdateUser,
+    AuthUser, CreateAccount, CreateUser, CreateVerification, FieldDate, FieldValue, RequestMeta,
+    SchemaValue, UpdateUser,
 };
-use chrono::{Duration, Utc};
+use chrono::Duration;
 use rand::Rng;
 use serde_json::{Value, json};
 
@@ -202,7 +203,7 @@ impl PhoneNumberPlugin {
                 })
                 .into(),
                 expires_at: better_auth_core::utils::date::from_milliseconds(
-                    Utc::now().timestamp_millis() as f64 + self.expires_in * 1000.0,
+                    ctx.now().timestamp_millis() as f64 + self.expires_in * 1000.0,
                 )
                 .ok_or_else(|| AuthError::config("Phone OTP expiry is out of range"))?
                 .into(),
@@ -219,19 +220,14 @@ impl PhoneNumberPlugin {
     ) -> AuthResult<()> {
         let ctx = endpoint.auth;
         let existing = match endpoint.transaction {
-            Some(transaction) => {
-                transaction
-                    .get_verification_including_expired(identifier)
-                    .await?
-            }
-            None => {
-                ctx.database
-                    .get_verification_including_expired(identifier)
-                    .await?
-            }
+            Some(transaction) => transaction.find_verification_value(identifier).await?,
+            None => ctx.database.find_verification_value(identifier).await?,
         }
+        .filter(FieldValue::is_truthy)
         .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "OTP_NOT_FOUND", "OTP not found"))?;
-        if existing.expires_at.is_before(Utc::now())? {
+        if SchemaValue::<FieldDate>::from_field(existing.model_property("expiresAt")?)
+            .is_before(ctx.now())?
+        {
             native::delete_verification(endpoint, identifier).await?;
             return Err(AuthError::from_code(
                 "BAD_REQUEST",
@@ -239,7 +235,10 @@ impl PhoneNumberPlugin {
                 "OTP expired",
             ));
         }
-        if attempts(existing.value.typed()?) >= self.allowed_attempts {
+        let parts = existing
+            .model_property("value")?
+            .split_method(&":".into(), "existing.value")?;
+        if attempts(&parts.model_property("1")?)? >= self.allowed_attempts as f64 {
             native::delete_verification(endpoint, identifier).await?;
             return Err(AuthError::from_code(
                 "FORBIDDEN",
@@ -260,25 +259,34 @@ impl PhoneNumberPlugin {
             }
         }
         .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "INVALID_OTP", "Invalid OTP"))?;
-        let count = attempts(consumed.value.typed()?);
-        if count >= self.allowed_attempts {
+        let consumed = FieldValue::from(consumed.fields()?);
+        let [expected, raw_attempts] = consumed
+            .model_property("value")?
+            .split_method(&":".into(), "consumed.value")?
+            .destructure("consumed.value.split(\":\")")?;
+        let count = attempts(&raw_attempts)?;
+        if count >= self.allowed_attempts as f64 {
             return Err(AuthError::from_code(
                 "FORBIDDEN",
                 "TOO_MANY_ATTEMPTS",
                 "Too many attempts",
             ));
         }
-        let expected = consumed
-            .value
-            .typed()?
-            .split(':')
-            .next()
-            .unwrap_or_default();
-        if expected != code {
+        if !expected.strict_equals(&code.into()) {
+            let mut value = expected.display_utf16()?.as_utf16().to_vec();
+            value.extend(
+                format!(
+                    ":{}",
+                    better_auth_core::schema_value::number_string(count + 1.0)
+                )
+                .encode_utf16(),
+            );
             let input = CreateVerification {
                 identifier: (identifier.to_owned()).into(),
-                value: (format!("{expected}:{}", count + 1)).into(),
-                expires_at: consumed.expires_at.clone(),
+                value: SchemaValue::from_field(
+                    better_auth_core::Utf16String::from_units(value).into(),
+                ),
+                expires_at: SchemaValue::from_field(consumed.model_property("expiresAt")?),
                 ..Default::default()
             };
             let _ = match endpoint.transaction {
@@ -780,13 +788,20 @@ fn check_password_length(
     }
     Ok(())
 }
-fn attempts(value: &str) -> u64 {
-    value
-        .split(':')
-        .nth(1)
-        .and_then(|value| value.parse().ok())
-        .filter(|count| *count <= 9_007_199_254_740_991)
-        .unwrap_or(0)
+fn attempts(value: &FieldValue) -> AuthResult<f64> {
+    let count =
+        better_auth_core::query::field_number(if value.is_null() || value.is_undefined() {
+            &FieldValue::Null
+        } else {
+            value
+        })?;
+    Ok(
+        if count > 0.0 && count <= 9_007_199_254_740_991.0 && count.fract() == 0.0 {
+            count
+        } else {
+            0.0
+        },
+    )
 }
 fn invalid_credentials() -> AuthError {
     AuthError::from_code(

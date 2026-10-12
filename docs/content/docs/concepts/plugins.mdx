@@ -197,7 +197,10 @@ pub struct AuthContext<S: AuthSchema> {
 | `email_provider()` | Returns the email provider or an error if none configured |
 | `set_metadata(key, value)` | Store plugin-specific metadata |
 | `get_metadata(key)` | Retrieve plugin-specific metadata |
+| `now()` | Read the context's wall clock as `chrono::DateTime<Utc>` |
+| `with_clock(clock)` | Set an instance clock callback retained by clones and request dispatches |
 
+`AuthContext::now` defaults to `Utc::now`. Direct context callers can use `.with_clock(clock)` for deterministic endpoint expiration checks and verification creation. Email OTP and Phone verification use this clock, as do password reset token callbacks and Two-Factor trusted-device expiration checks. Other components and underlying stores retain their own clocks; this method does not replace a process-wide clock or change backend expiration.
 
 ### Raw and validated endpoint queries
 

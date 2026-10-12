@@ -52,6 +52,8 @@ mod native_tests;
 mod security_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verification_native_contract;
 
 const TWO_FACTOR_COOKIE_SUFFIX: &str = "two_factor";
 const TRUST_DEVICE_COOKIE_SUFFIX: &str = "trust_device";
@@ -277,7 +279,7 @@ struct PendingTwoFactorState {
     user: UserView,
     key: String,
     dont_remember: bool,
-    expires_at: SchemaValue<better_auth_core::FieldDate>,
+    verification: better_auth_core::FieldValue,
 }
 
 enum ResolvedTwoFactorState {
@@ -343,7 +345,7 @@ pub(crate) async fn inspect_trusted_device(
 
     let Some(verification) = ctx
         .database
-        .get_verification_by_identifier(trust_identifier)
+        .find_verification_value(trust_identifier)
         .await?
     else {
         return Ok(TrustedDeviceCheck {
@@ -357,10 +359,12 @@ pub(crate) async fn inspect_trusted_device(
     };
 
     if !verification
-        .value
-        .field_value()
+        .model_property("value")?
         .strict_equals(&user.id().field_value())
-        || verification.expires_at.is_before_or_equal(Utc::now())?
+        || !SchemaValue::<better_auth_core::FieldDate>::from_field(
+            verification.model_property("expiresAt")?,
+        )
+        .is_after(ctx.now())?
     {
         return Ok(TrustedDeviceCheck {
             trusted: false,
@@ -731,27 +735,35 @@ async fn resolve_two_factor_state<S: better_auth_core::AuthSchema>(
         Err(error) => return Err(error),
     }
 
-    let identifier = read_signed_cookie(req, TWO_FACTOR_COOKIE_SUFFIX, ctx)?
-        .ok_or_else(|| AuthError::authentication_failed("Invalid two factor cookie"))?;
+    let identifier = read_signed_cookie(req, TWO_FACTOR_COOKIE_SUFFIX, ctx)?.ok_or_else(|| {
+        AuthError::from_code(
+            "UNAUTHORIZED",
+            "INVALID_TWO_FACTOR_COOKIE",
+            "Invalid two factor cookie",
+        )
+    })?;
     let verification = ctx
         .database
-        .get_verification_by_identifier(&identifier)
+        .find_verification_value(&identifier)
         .await?
-        .ok_or_else(|| AuthError::authentication_failed("Invalid two factor cookie"))?;
-    if verification.expires_at.is_before_or_equal(Utc::now())? {
-        ctx.database
-            .delete_verification_by_identifier(&identifier)
-            .await?;
-        return Err(AuthError::authentication_failed(
-            "Invalid two factor cookie",
-        ));
-    }
-
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "UNAUTHORIZED",
+                "INVALID_TWO_FACTOR_COOKIE",
+                "Invalid two factor cookie",
+            )
+        })?;
     let user = ctx
         .database
-        .get_user_by_id_value(&verification.value.field_value())
+        .get_user_by_id_value(&verification.model_property("value")?)
         .await?
-        .ok_or_else(|| AuthError::authentication_failed("Invalid two factor cookie"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "UNAUTHORIZED",
+                "INVALID_TWO_FACTOR_COOKIE",
+                "Invalid two factor cookie",
+            )
+        })?;
     let dont_remember = read_signed_cookie(req, DONT_REMEMBER_COOKIE_SUFFIX, ctx)?
         .is_some_and(|value| !value.is_empty());
 
@@ -760,7 +772,7 @@ async fn resolve_two_factor_state<S: better_auth_core::AuthSchema>(
             user: ctx.internal_user_view(&user).await?,
             key: identifier,
             dont_remember,
-            expires_at: verification.expires_at,
+            verification,
         },
     )))
 }
