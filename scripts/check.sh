@@ -251,6 +251,7 @@ run_stage() {
       local profile_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/oauth-native-profile.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-native-session.test.ts \
         ./compat-tests/reference-server/contracts/generic-profile-results.test.ts \
         ./compat-tests/reference-server/contracts/social-http-providers.test.ts \
         ./compat-tests/reference-server/contracts/social-native-defaults.test.mjs \

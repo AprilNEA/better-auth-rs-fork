@@ -84,20 +84,6 @@ pub(super) fn profile_email_verified(value: &SchemaValue<Option<bool>>) -> AuthR
     }
 }
 
-pub(super) fn profile_email(value: &SchemaValue<Option<String>>) -> AuthResult<Option<&str>> {
-    match value {
-        SchemaValue::Undefined
-        | SchemaValue::Typed(None)
-        | SchemaValue::Dynamic(FieldValue::Null) => Ok(None),
-        SchemaValue::Typed(Some(value)) | SchemaValue::Dynamic(FieldValue::String(value)) => {
-            Ok(Some(value))
-        }
-        SchemaValue::Dynamic(_) => Err(AuthError::internal(
-            "OAuth profile email must be a string, null, or undefined",
-        )),
-    }
-}
-
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OAuthCallbackUserPayload {

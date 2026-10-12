@@ -195,6 +195,7 @@ async fn discord_authorization_omits_standalone_hints_and_gates_configured_permi
 struct ProfileServer {
     url: String,
     task: tokio::task::JoinHandle<()>,
+    requests: Arc<Mutex<Vec<String>>>,
 }
 impl Drop for ProfileServer {
     fn drop(&mut self) {
@@ -205,6 +206,8 @@ impl ProfileServer {
     async fn start() -> Result<Self, Box<dyn std::error::Error>> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}", listener.local_addr()?);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded = requests.clone();
         let task = tokio::spawn(async move {
             loop {
                 let (mut stream, _) = listener
@@ -218,6 +221,10 @@ impl ProfileServer {
                     .expect("read local profile request");
                 let request = String::from_utf8_lossy(&bytes[..count]);
                 let path = request.split_whitespace().nth(1).expect("request path");
+                recorded
+                    .lock()
+                    .expect("profile request log must be available")
+                    .push(path.to_owned());
                 let body = match path {
                     "/google" => json!({"sub":"google-subject","email":"owner@example.test","name":"Owner","picture":"https://images.test/owner.png","email_verified":true}),
                     "/github" => json!({"id":123,"email":"owner@example.test","name":"Owner","login":"owner","avatar_url":"https://images.test/owner.png"}),
@@ -235,7 +242,11 @@ impl ProfileServer {
                     .expect("write local profile response");
             }
         });
-        Ok(Self { url, task })
+        Ok(Self {
+            url,
+            task,
+            requests,
+        })
     }
 }
 
@@ -381,29 +392,124 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
 struct FailingCallbacks(Arc<Mutex<Vec<&'static str>>>);
 
 #[tokio::test]
-async fn google_stored_account_profile_keeps_access_token_userinfo()
+async fn google_stored_account_profile_decodes_id_token_and_rejects_missing_token()
 -> Result<(), Box<dyn std::error::Error>> {
+    use crate::plugins::test_helpers;
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use better_auth_core::{CreateAccount, CreateUser};
+
+    // google-github-native.test.mjs exercises upstream getUserInfo with decoded claims and absent idToken.
+    // Upstream account.mjs forwards stored tokens and rejects a null provider response with FAILED_TO_GET_USER_INFO.
     let server = ProfileServer::start().await?;
+    let calls = Arc::new(Mutex::new(Vec::new()));
     let mut provider = provider("google")?;
     provider.user_info_url = Some(format!("{}/google", server.url));
+    provider.set_google_jwks_url(format!("{}/google", server.url));
+    provider.map_profile_to_user = Some(Arc::new(Mapper {
+        partial: true,
+        calls: calls.clone(),
+    }));
     let config = resolve("google", provider).await?;
-    let profile_request = OAuthUserInfoRequest {
-        access_token: (Some("normal-account-info-token".into())).into(),
-        ..Default::default()
-    };
-    let provider = config.providers.get("google").ok_or("missing provider")?;
-    let tokens = OAuthTokenSet::from_fields(profile_request.fields());
-    let response =
-        handlers::fetch_user_info_from_provider(provider, &tokens, profile_request, None).await?;
-    let user = profile_test::user(&response);
-    assert_eq!(user.get("name"), Some(&json!("Owner")));
-    assert_eq!(user.get("email"), Some(&json!("owner@example.test")));
-    assert_eq!(
-        profile_test::subject(provider, &tokens, &response)
-            .await
-            .json()?,
-        Some(json!("google-subject"))
+    let (ctx, user, session) = test_helpers::create_test_context_with_user(
+        CreateUser::new()
+            .with_email("stored-owner@example.test")
+            .with_name("Stored Owner"),
+        chrono::Duration::hours(1),
+    )
+    .await;
+    let user_id = user.id.display_string()?;
+    let claims = json!({
+        "sub":"google-subject", "email":"owner@example.test", "name":"Owner",
+        "picture":"https://images.test/owner.png", "email_verified":true,
+    });
+    let token = format!(
+        "{}.{}.signature",
+        URL_SAFE_NO_PAD.encode(r#"{"alg":"none"}"#),
+        URL_SAFE_NO_PAD.encode(claims.to_string()),
     );
+    for (id, id_token) in [
+        ("google-with-id-token", Some(token)),
+        ("google-without-id-token", None),
+    ] {
+        let account = ctx
+            .database
+            .create_account(CreateAccount {
+                id: id.into(),
+                user_id: user.id.clone(),
+                account_id: id.into(),
+                provider_id: "google".into(),
+                access_token: Some("normal-account-info-token".into()).into(),
+                id_token: id_token.clone().into(),
+                ..Default::default()
+            })
+            .await?;
+        let before = serde_json::to_value(ctx.database.get_user_accounts(&user_id).await?)?;
+        calls.lock().map_err(|_| "callback log poisoned")?.clear();
+        let request = test_helpers::create_auth_request(
+            HttpMethod::Get,
+            "/account-info",
+            Some(session.token.typed()?),
+            None,
+            [("accountId".into(), account.id.display_string()?)].into(),
+        );
+        let result = account::handle_account_info(&config, &request, &ctx).await;
+        if id_token.is_some() {
+            let response = result?;
+            assert_eq!(response.status, 200);
+            let value = response.body.field_value()?;
+            assert_eq!(
+                value.json()?,
+                Some(json!({
+                    "user": {
+                        "name":"Owner", "email":"owner@example.test",
+                        "image":"https://images.test/owner.png", "emailVerified":true,
+                        "locale":"zh-TW",
+                    },
+                    "data":claims,
+                    "account": {
+                        "id":account.id, "providerId":"google", "accountId":id,
+                    },
+                }))
+            );
+            assert_eq!(
+                profile_test::subject(
+                    config.providers.get("google").ok_or("missing provider")?,
+                    &OAuthTokenSet::default(),
+                    &social_profile::ProviderProfile::from(value),
+                )
+                .await
+                .json()?,
+                Some(json!("google-subject"))
+            );
+            assert_eq!(*calls.lock().map_err(|_| "callback log poisoned")?, ["map"]);
+        } else {
+            let error = result.expect_err("A stored account without idToken has no Google profile");
+            assert_eq!(error.status_value()?, FieldValue::from("UNAUTHORIZED"));
+            let response = error.to_auth_response().into_http_response()?;
+            assert_eq!(response.status, 401);
+            assert_eq!(
+                serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+                json!({"message":"Failed to get user info", "code":"FAILED_TO_GET_USER_INFO"})
+            );
+            assert!(
+                calls
+                    .lock()
+                    .map_err(|_| "callback log poisoned")?
+                    .is_empty()
+            );
+        }
+        assert_eq!(
+            serde_json::to_value(ctx.database.get_user_accounts(&user_id).await?)?,
+            before,
+        );
+        assert!(
+            server
+                .requests
+                .lock()
+                .map_err(|_| "request log poisoned")?
+                .is_empty()
+        );
+    }
     Ok(())
 }
 
