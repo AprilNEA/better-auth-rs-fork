@@ -9,7 +9,7 @@ use better_auth::seaorm::sea_orm::entity::prelude::DateTimeUtc;
 use better_auth::{
     __private_core::{
         ApiKey, AuthError, AuthResult, AuthSchema, AuthStore, CreateApiKey, FieldDate, FieldMap,
-        FieldValue, UpdateApiKey, store::ApiKeyUsageWrite, user_fields::UserConfig,
+        FieldValue, FromFieldMap, UpdateApiKey, store::ApiKeyUsageWrite, user_fields::UserConfig,
         wire::ApiKeyView,
     },
     BetterAuth,
@@ -56,6 +56,8 @@ const TIMES: [&str; 6] = [
     "2031-02-03T04:05:04.000Z",
     "2031-02-03T04:05:05.000Z",
 ];
+const CREATED_AT: &str = "2030-01-02T03:04:05.123Z";
+const UPDATED_AT: &str = "2030-01-02T04:04:05.123Z";
 
 #[derive(Clone, Copy)]
 pub(crate) enum Scenario {
@@ -79,7 +81,6 @@ pub(super) struct Fixture<S: AuthSchema> {
     store: Arc<dyn AuthStore<S>>,
     reader: Arc<dyn AuthStore<S>>,
     identity: OnceLock<(String, FieldDate)>,
-    ordinary_update: OnceLock<FieldDate>,
     update_phase: AtomicU8,
     events: Trace,
     failure: Arc<AtomicU8>,
@@ -213,7 +214,6 @@ impl<S: AuthSchema> Fixture<S> {
             store: auth.store().clone(),
             reader: reader.store().clone(),
             identity: OnceLock::new(),
-            ordinary_update: OnceLock::new(),
             update_phase: AtomicU8::new(0),
             events,
             failure,
@@ -238,6 +238,12 @@ impl<S: AuthSchema> Fixture<S> {
             .to_datetime()?
             .expect("stored creation timestamp");
         let updated = updated_at.to_datetime()?.expect("stored update timestamp");
+        assert_eq!(
+            created,
+            CREATED_AT
+                .parse::<DateTimeUtc>()
+                .expect("fixed creation timestamp")
+        );
         let identity = self
             .identity
             .get_or_init(|| (id.clone(), created_at.clone()));
@@ -249,10 +255,11 @@ impl<S: AuthSchema> Fixture<S> {
                 "<created-at>"
             }
             1 => {
-                assert!(updated >= created);
                 assert_eq!(
-                    &row.updated_at,
-                    self.ordinary_update.get_or_init(|| updated_at.clone())
+                    updated,
+                    UPDATED_AT
+                        .parse::<DateTimeUtc>()
+                        .expect("fixed update timestamp")
                 );
                 "<ordinary-updated-at>"
             }
@@ -304,7 +311,35 @@ impl<S: AuthSchema> Fixture<S> {
             if self.mapped_name {
                 input.name = Some(" Desk ".into()).into();
             }
-            return self.store.create_api_key(input).await.map(|row| vec![row]);
+            let mut fields = input.into_adapter_fields()?;
+            fields.extend([
+                (
+                    "createdAt".into(),
+                    FieldValue::Date(
+                        CREATED_AT
+                            .parse::<DateTimeUtc>()
+                            .expect("fixed creation timestamp")
+                            .into(),
+                    ),
+                ),
+                (
+                    "updatedAt".into(),
+                    FieldValue::Date(
+                        CREATED_AT
+                            .parse::<DateTimeUtc>()
+                            .expect("fixed creation timestamp")
+                            .into(),
+                    ),
+                ),
+                ("lastRefillAt".into(), FieldValue::Null),
+                ("lastRequest".into(), FieldValue::Null),
+            ]);
+            let row = self
+                .store
+                .create_api_key_record(fields)
+                .await?
+                .ok_or_else(|| AuthError::internal("API Key creation returned no record"))?;
+            return Ok(vec![ApiKey::from_field_values(row)?]);
         }
         let seed =
             seeded.ok_or_else(|| AuthError::internal("API Key operation requires a seed"))?;
@@ -348,9 +383,20 @@ impl<S: AuthSchema> Fixture<S> {
                                     )
                                     .into(),
                                 ),
-                                additional_fields: [("label".into(), " Revised ".into())]
-                                    .into_iter()
-                                    .collect(),
+                                additional_fields: [
+                                    ("label".into(), " Revised ".into()),
+                                    (
+                                        "updatedAt".into(),
+                                        FieldValue::Date(
+                                            UPDATED_AT
+                                                .parse::<DateTimeUtc>()
+                                                .expect("fixed update timestamp")
+                                                .into(),
+                                        ),
+                                    ),
+                                ]
+                                .into_iter()
+                                .collect(),
                                 ..Default::default()
                             },
                         )
@@ -430,11 +476,7 @@ impl<S: AuthSchema> Fixture<S> {
         let seed = if operation == "create" {
             None
         } else {
-            let mut input = input();
-            if self.mapped_name {
-                input.name = Some(" Desk ".into()).into();
-            }
-            Some(self.store.create_api_key(input).await?)
+            self.execute("create", None).await?.pop()
         };
         if operation == "increment-window" {
             let _ = self.execute("start-window", seed.as_ref()).await?;

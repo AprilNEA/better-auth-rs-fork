@@ -55,8 +55,8 @@ async fn storage(
             "session".into(),
             sessions
                 .into_iter()
-                .map(|row| row.field_values().map(FieldValue::from))
-                .collect::<AuthResult<Vec<_>>>()?
+                .map(|row| FieldValue::from(FieldMap::from(row)))
+                .collect::<Vec<_>>()
                 .into(),
         ),
         (

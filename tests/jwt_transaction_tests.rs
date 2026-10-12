@@ -25,7 +25,7 @@ fn config() -> AuthConfig {
     config
 }
 
-async fn assert_signing_transaction<S: AuthSchema>(auth: BetterAuth<S>) {
+async fn assert_signing_transaction<S: AuthSchema>(auth: BetterAuth<S>) -> AuthResult<()> {
     for rollback in [true, false] {
         let request = AuthRequest::new(HttpMethod::Post, "/sign-up/email");
         let request_in_tx = request.clone();
@@ -82,7 +82,11 @@ async fn assert_signing_transaction<S: AuthSchema>(auth: BetterAuth<S>) {
             }),
         )
         .await
-        .expect("signing must use the active connection without database re-entry");
+        .map_err(|error| {
+            AuthError::internal(format!(
+                "Signing must use the active connection without database re-entry: {error}"
+            ))
+        })?;
         assert_eq!(result.is_err(), rollback);
         assert_eq!(
             auth.store().list_jwks().await.unwrap().len(),
@@ -103,10 +107,12 @@ async fn assert_signing_transaction<S: AuthSchema>(auth: BetterAuth<S>) {
                 .any(|cookie| cookie.starts_with("better-auth.session_data="))
         );
     }
+    Ok(())
 }
 
 #[tokio::test]
-async fn sqlite_cookie_and_native_keys_share_the_session_transaction_and_rollback() {
+async fn sqlite_cookie_and_native_keys_share_the_session_transaction_and_rollback() -> AuthResult<()>
+{
     let config = config();
     let database = Database::connect("sqlite::memory:").await.unwrap();
     migrator::run_migrations(&database).await.unwrap();
@@ -117,17 +123,18 @@ async fn sqlite_cookie_and_native_keys_share_the_session_transaction_and_rollbac
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await;
+    assert_signing_transaction(auth).await
 }
 
 #[tokio::test]
-async fn ephemeral_cookie_and_native_keys_share_the_session_transaction_and_rollback() {
+async fn ephemeral_cookie_and_native_keys_share_the_session_transaction_and_rollback()
+-> AuthResult<()> {
     let auth = BetterAuth::stateless(config())
         .plugin(JwtPlugin::new().session_cookie_cache(true))
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await;
+    assert_signing_transaction(auth).await
 }
 
 fn transaction_callbacks<S: AuthSchema>(
@@ -138,9 +145,9 @@ fn transaction_callbacks<S: AuthSchema>(
         .get_jwks(move |endpoint| {
             let events = read_events.clone();
             Box::pin(async move {
-                let tx = endpoint
-                    .transaction
-                    .expect("JWT reads must retain the active transaction");
+                let tx = endpoint.transaction.ok_or_else(|| {
+                    AuthError::internal("JWT reads must retain the active transaction")
+                })?;
                 assert!(
                     tx.get_user_by_email("transaction@example.com")
                         .await?
@@ -154,9 +161,9 @@ fn transaction_callbacks<S: AuthSchema>(
         .create_jwk(move |key, endpoint| {
             let events = events.clone();
             Box::pin(async move {
-                let tx = endpoint
-                    .transaction
-                    .expect("JWT writes must retain the active transaction");
+                let tx = endpoint.transaction.ok_or_else(|| {
+                    AuthError::internal("JWT writes must retain the active transaction")
+                })?;
                 assert!(
                     tx.get_user_by_email("transaction@example.com")
                         .await?
@@ -170,7 +177,8 @@ fn transaction_callbacks<S: AuthSchema>(
 }
 
 #[tokio::test]
-async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback() {
+async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback() -> AuthResult<()>
+{
     let config = config();
     let database = Database::connect("sqlite::memory:").await.unwrap();
     migrator::run_migrations(&database).await.unwrap();
@@ -186,15 +194,17 @@ async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback(
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await;
+    assert_signing_transaction(auth).await?;
     assert_eq!(
         *events.lock().unwrap(),
         ["get", "get", "create", "get", "get", "get", "create", "get"]
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollback() {
+async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollback()
+-> AuthResult<()> {
     let events = Arc::new(std::sync::Mutex::new(Vec::new()));
     let auth = BetterAuth::stateless(config())
         .plugin(
@@ -205,9 +215,10 @@ async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollba
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await;
+    assert_signing_transaction(auth).await?;
     assert_eq!(
         *events.lock().unwrap(),
         ["get", "get", "create", "get", "get", "get", "create", "get"]
     );
+    Ok(())
 }
