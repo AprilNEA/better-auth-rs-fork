@@ -96,6 +96,7 @@ struct CloneEntry {
     _source: FieldValue,
     value: FieldValue,
     original_record: Option<NativeRecord>,
+    original_fields: Option<FieldMap>,
     original_elements: Option<Vec<FieldValue>>,
 }
 
@@ -266,6 +267,25 @@ impl StructuredCloneContext {
             .ok_or_else(|| AuthError::internal("Structured clone lost its original native row"))?;
         Ok((copied, original.clone()))
     }
+
+    /// Return the values captured by the clone traversal without evaluating source getters again.
+    pub(crate) fn clone_object_fields(
+        &mut self,
+        object: &FieldObject,
+    ) -> AuthResult<(FieldObject, FieldMap)> {
+        let copied = self.clone_value(&FieldValue::Object(object.clone()))?;
+        let original = self
+            .copies
+            .get(&Identity::Object(object.identity()))
+            .and_then(|copy| copy.original_fields.clone())
+            .ok_or_else(|| {
+                AuthError::internal("Structured clone lost its original object fields")
+            })?;
+        let FieldValue::Object(copied) = copied else {
+            return Err(AuthError::internal("Structured clone lost its object type"));
+        };
+        Ok((copied, original))
+    }
 }
 
 enum Edge {
@@ -293,7 +313,7 @@ enum Node {
     },
     Object {
         seed: ObjectCloneSeed,
-        fields: Vec<(String, Edge)>,
+        fields: Vec<(String, FieldValue, Edge)>,
         state: Vec<Edge>,
     },
 }
@@ -370,7 +390,8 @@ impl<'a> Graph<'a> {
                 let mut fields = Vec::new();
                 for name in object.enumerable_keys()? {
                     if let Some(value) = object.get(&name)? {
-                        fields.push((name, self.visit(&value)?));
+                        let edge = self.visit(&value)?;
+                        fields.push((name, value, edge));
                     }
                 }
                 let state = std::mem::take(&mut seed.state)
@@ -411,12 +432,22 @@ impl<'a> Graph<'a> {
             .nodes
             .iter()
             .map(|node| match node {
-                Node::Object { seed, .. } => (seed.original_record.clone(), None),
+                Node::Object { seed, fields, .. } => (
+                    seed.original_record.clone(),
+                    Some(
+                        fields
+                            .iter()
+                            .map(|(name, value, _)| (name.clone(), value.clone()))
+                            .collect(),
+                    ),
+                    None,
+                ),
                 Node::Array { entries, .. } => (
+                    None,
                     None,
                     Some(entries.iter().map(|(_, value, _)| value.clone()).collect()),
                 ),
-                _ => (None, None),
+                _ => (None, None, None),
             })
             .collect::<Vec<_>>();
         let mut publish = Vec::new();
@@ -429,7 +460,7 @@ impl<'a> Graph<'a> {
                 } => {
                     let fields = fields
                         .into_iter()
-                        .map(|(name, edge)| (name, edge.resolve(&values)))
+                        .map(|(name, _, edge)| (name, edge.resolve(&values)))
                         .collect();
                     let state = state.iter().map(|edge| edge.resolve(&values)).collect();
                     publish.push((seed.prepare)(fields, state)?);
@@ -460,13 +491,17 @@ impl<'a> Graph<'a> {
             .zip(values.iter().cloned())
             .zip(originals)
             .map(
-                |(((identity, source), value), (original_record, original_elements))| {
+                |(
+                    ((identity, source), value),
+                    (original_record, original_fields, original_elements),
+                )| {
                     (
                         identity,
                         CloneEntry {
                             _source: source,
                             value,
                             original_record,
+                            original_fields,
                             original_elements,
                         },
                     )

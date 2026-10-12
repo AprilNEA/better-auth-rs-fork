@@ -1,14 +1,12 @@
 //! Captured arrays retain their identity when an operation replaces an active table.
 
 use super::operation::MemoryGate;
-use super::rows::{ObjectRow, RowCell, RowRef, TransactionId, TransactionRow, row_json};
-use crate::{
-    AuthError, AuthRecordFields, AuthResult, FieldArray, FieldValue, StructuredCloneContext,
-};
+use super::rows::{ObjectRow, RowCell, RowRef, TransactionId};
+use crate::{AuthError, AuthResult, FieldArray, FieldValue, StructuredCloneContext};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-type RowArray<T> = Vec<Option<Arc<Mutex<RowCell<T>>>>>;
+type RowArray<T> = Vec<Option<RowRef<T>>>;
 
 pub(super) struct TableRef<T> {
     rows: Arc<Mutex<RowArray<T>>>,
@@ -69,9 +67,7 @@ impl<T> TableRef<T> {
 
     pub(super) fn from_refs(gate: MemoryGate, rows: Vec<RowRef<T>>) -> Self {
         Self {
-            rows: Arc::new(Mutex::new(
-                rows.into_iter().map(|row| Some(row.0)).collect(),
-            )),
+            rows: Arc::new(Mutex::new(rows.into_iter().map(Some).collect())),
             gate,
             properties: crate::FieldMap::new().into(),
         }
@@ -90,21 +86,12 @@ impl<T> TableRef<T> {
 
     pub(super) fn row_at(&self, index: usize) -> AuthResult<Option<RowRef<T>>> {
         let _operation = self.gate.lock();
-        Ok(self
-            .lock()?
-            .get(index)
-            .and_then(Option::as_ref)
-            .map(|row| RowRef(row.clone(), self.gate.clone())))
+        Ok(self.lock()?.get(index).and_then(Option::as_ref).cloned())
     }
 
     pub(super) fn snapshot_refs(&self) -> AuthResult<Vec<RowRef<T>>> {
         let _operation = self.gate.lock();
-        Ok(self
-            .lock()?
-            .iter()
-            .flatten()
-            .map(|row| RowRef(row.clone(), self.gate.clone()))
-            .collect())
+        Ok(self.lock()?.iter().flatten().cloned().collect())
     }
 
     pub(super) fn shallow_copy(&self) -> AuthResult<Self> {
@@ -122,9 +109,16 @@ impl<T> TableRef<T> {
 
     fn push_cell(&self, value: RowCell<T>) -> AuthResult<RowRef<T>> {
         let _operation = self.gate.lock();
-        let row = Arc::new(Mutex::new(value));
+        let row = RowRef::from_cell(value, self.gate.clone());
         self.lock()?.push(Some(row.clone()));
-        Ok(RowRef(row, self.gate.clone()))
+        Ok(row)
+    }
+
+    pub(super) fn push_object(&self, object: crate::FieldObject) -> AuthResult<RowRef<T>> {
+        let _operation = self.gate.lock();
+        let row = RowRef::from_object(object, self.gate.clone());
+        self.lock()?.push(Some(row.clone()));
+        Ok(row)
     }
 
     pub(super) fn contains_ref(&self, source: &RowRef<T>) -> AuthResult<bool> {
@@ -133,7 +127,7 @@ impl<T> TableRef<T> {
             .lock()?
             .iter()
             .flatten()
-            .any(|row| Arc::ptr_eq(row, &source.0)))
+            .any(|row| row.same_row(source)))
     }
 
     pub(super) fn select_refs(
@@ -171,7 +165,7 @@ impl TableRef<crate::FieldMap> {
     }
 }
 
-impl<T: Clone> TableRef<T> {
+impl<T: ObjectRow> TableRef<T> {
     pub(super) fn snapshot(&self) -> AuthResult<Vec<T>> {
         let _operation = self.gate.lock();
         self.snapshot_refs()?.iter().map(RowRef::snapshot).collect()
@@ -195,14 +189,9 @@ impl<T: ObjectRow> TableRef<T> {
             .cloned()
             .ok_or_else(|| AuthError::internal("Structured clone lost its native table type"))?;
         for value in original {
-            let source = value
-                .as_object()
-                .and_then(crate::FieldObject::source::<RowRef<T>>)
-                .ok_or_else(|| {
-                    AuthError::internal("Structured clone lost its original table row")
-                })?;
+            let source = RowRef::from_value(value, self.gate.clone())?;
             let (row, before) = source.structured_clone(context)?;
-            cloned_row(source.clone(), row, before);
+            cloned_row(source, row, before);
         }
         Ok(target)
     }
@@ -255,16 +244,11 @@ impl<T: ObjectRow> crate::field_value::FieldArraySource for TableRef<T> {
                     .fold(length, usize::max);
                 let mut rows = vec![None; length];
                 for (index, value) in entries {
-                    let source = value
-                        .as_object()
-                        .and_then(crate::FieldObject::source::<RowRef<T>>)
-                        .ok_or_else(|| {
-                            AuthError::internal("Structured clone lost its native table row")
-                        })?;
+                    let source = RowRef::from_value(value, target.gate.clone())?;
                     let slot = rows.get_mut(index).ok_or_else(|| {
                         AuthError::internal("Structured clone lost its array index")
                     })?;
-                    *slot = Some(source.0.clone());
+                    *slot = Some(source);
                 }
                 Ok(crate::field_value::prepare_clone(target.rows, rows))
             }),
@@ -272,7 +256,7 @@ impl<T: ObjectRow> crate::field_value::FieldArraySource for TableRef<T> {
     }
 }
 
-impl<T: Clone + AuthRecordFields + TransactionRow> TableRef<T> {
+impl<T: ObjectRow> TableRef<T> {
     pub(super) fn reconcile(&self, base: &Self, working: &Self) -> AuthResult<Self> {
         self.reconcile_with_plan(base, working)
             .map(|(table, _)| table)
@@ -293,7 +277,7 @@ impl<T: Clone + AuthRecordFields + TransactionRow> TableRef<T> {
             let mut position = 0;
             while position < table.len()? {
                 if let Some(row) = table.row_at(position)? {
-                    let id = TransactionId(row.snapshot()?.transaction_id());
+                    let id = TransactionId(row.field("id")?.unwrap_or_default());
                     let _ = indexed.insert(id, row);
                 }
                 position += 1;
@@ -311,7 +295,7 @@ impl<T: Clone + AuthRecordFields + TransactionRow> TableRef<T> {
         let mut position = 0;
         while position < self.len()? {
             if let Some(live) = self.row_at(position)? {
-                let id = TransactionId(live.snapshot()?.transaction_id());
+                let id = TransactionId(live.field("id")?.unwrap_or_default());
                 let original = base_by_id.get(&id);
                 let changed = working_by_id.get(&id);
                 if original.is_some() && changed.is_none() {
@@ -325,8 +309,8 @@ impl<T: Clone + AuthRecordFields + TransactionRow> TableRef<T> {
                         changed.clone()
                     }
                     (Some(original), Some(changed)) => {
-                        let before = row_json(&original.snapshot()?)?;
-                        let after = row_json(&changed.snapshot()?)?;
+                        let before = original.field_value().stringify()?;
+                        let after = changed.field_value().stringify()?;
                         if before != after {
                             plan.changed.push((live, Some(changed.clone())));
                             changed.clone()
@@ -344,7 +328,7 @@ impl<T: Clone + AuthRecordFields + TransactionRow> TableRef<T> {
         let mut position = 0;
         while position < working.len()? {
             if let Some(row) = working.row_at(position)? {
-                let id = TransactionId(row.snapshot()?.transaction_id());
+                let id = TransactionId(row.field("id")?.unwrap_or_default());
                 if !base_by_id.contains_key(&id) && !placed.contains(&id) {
                     plan.appended.push(row.clone());
                     merged.push(row);

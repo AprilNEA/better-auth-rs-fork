@@ -1,0 +1,21 @@
+{
+  "upstreamVersion": "1.7.6",
+  "sourceFixture": "native-sort-consumers-1.7.6.json.gz",
+  "sourceDecodedSha256": "83f31ad131f2f078ae073adb321dde3e3b778d662202ad8bc004ac87bcaf6769",
+  "sourceProvenance": "native-sort-consumers-1.7.6.provenance.json",
+  "runtimeFixture": "native-sort-getter-runtime-1.7.6.json",
+  "runtimeSha256": "fd16faad0ec7d941b505843dfd3729482da5ddeb0b095b54de9a8f0f65abbde1",
+  "cases": 46,
+  "extraction": "Static extraction from the successful frozen source observation. No scenario was executed or sampled again.",
+  "mapping": [
+    "Preserve every Memory case, complete outcome, event, count, stored object graph, returned object graph, key order, enumerability, accessor identity, Date value, and child alias.",
+    "Treat function nodes as the source function identity leaf. The same identity remains shared between accessor and data descriptors.",
+    "Renumber ordinary graph identities in traversal order after function reflection nodes are removed. Preserve every ordinary object reference.",
+    "Compare every runtime graph key in order with the shared observation replay assertion."
+  ],
+  "sourceReflectionOnly": [
+    "JavaScript writable and configurable property flags.",
+    "JavaScript function own reflection properties, source text, and String(function)."
+  ],
+  "reflectionPreservation": "The source fixture remains byte-for-byte unchanged. The standalone source runner still compares the entire frozen descriptor document, including all sourceReflectionOnly fields."
+}

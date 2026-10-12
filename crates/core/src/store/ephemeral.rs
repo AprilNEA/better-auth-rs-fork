@@ -61,6 +61,8 @@ mod native_joins;
 mod native_relation_property_tests;
 #[cfg(test)]
 mod native_sort_tests;
+#[cfg(test)]
+mod native_storage_tests;
 mod operation;
 #[cfg(test)]
 mod operation_contract_tests;
@@ -202,12 +204,30 @@ impl EphemeralStore {
         config: Arc<AuthConfig>,
         tables: impl IntoIterator<Item = (String, Vec<FieldMap>)>,
     ) -> AuthResult<Self> {
+        Self::from_storage_objects(
+            config,
+            tables.into_iter().map(|(name, rows)| {
+                (
+                    name,
+                    rows.into_iter().map(crate::FieldObject::from).collect(),
+                )
+            }),
+        )
+    }
+
+    /// Initialize physical tables with native record handles without reading their properties.
+    /// Reads and writes retain accessors, receiver identity, and aliases between rows.
+    /// Table arrays are new allocations; this constructor retains the supplied record objects.
+    pub fn from_storage_objects(
+        config: Arc<AuthConfig>,
+        tables: impl IntoIterator<Item = (String, Vec<crate::FieldObject>)>,
+    ) -> AuthResult<Self> {
         let store = Self::empty(config);
         store.operation(|operation| {
             for (name, rows) in tables {
                 let table = table::TableRef::new(store.operations.clone());
                 for row in rows {
-                    let _ = table.push(row)?;
+                    let _ = table.push_object(row)?;
                 }
                 operation.replace_physical_table(name, Some(table))?;
             }

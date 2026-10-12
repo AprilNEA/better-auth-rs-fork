@@ -18,6 +18,14 @@ use super::{AuthError, AuthResult, FieldDate, FieldFunction, FieldMap, FieldValu
 use serde_json::{Map, Value as Json, json};
 use std::sync::{Arc, Mutex, OnceLock, Weak};
 
+#[path = "native_sort_contract/getters.rs"]
+mod getters;
+#[allow(
+    unused_imports,
+    reason = "The core Memory consumer replays the accessor lane."
+)]
+pub(crate) use getters::cases as getter_cases;
+
 pub(crate) fn fixture() -> &'static Json {
     static FIXTURE: OnceLock<Json> = OnceLock::new();
     FIXTURE.get_or_init(|| {
@@ -65,6 +73,7 @@ struct State {
     time_methods: Vec<TimeMethod>,
     methods: Option<[FieldValue; 3]>,
     original: FieldValue,
+    getter: Option<FieldFunction>,
 }
 
 impl State {
@@ -88,7 +97,7 @@ impl State {
                 format!("{id}:replacement"),
             )?;
             self.cells[index].set_model_property("value", replacement.clone())?;
-            if self.consumer != "jwk" {
+            if self.consumer != "jwk" && self.getter.is_none() {
                 self.rows[index].set_model_property("name", replacement)?;
             }
             self.observer.record(
@@ -151,6 +160,29 @@ impl State {
             arguments.is_empty(),
             "Source sorting methods receive no arguments"
         );
+        if name == "readSortField" {
+            let index = self
+                .rows
+                .iter()
+                .position(|row| row.strict_equals(receiver))
+                .unwrap();
+            let id = self.cells[index].model_property("id")?;
+            let field = if self.consumer == "jwk" {
+                "createdAt"
+            } else {
+                "name"
+            };
+            let observed = self.observer.observe(&id)?;
+            self.event(
+                "read",
+                [("id".into(), observed), ("field".into(), field.into())],
+            )?;
+            return self.cells[index].model_property(if self.consumer == "jwk" {
+                "time"
+            } else {
+                "value"
+            });
+        }
         if name == "getTime" {
             let method = self
                 .time_methods
@@ -232,6 +264,18 @@ pub(crate) struct Harness(Arc<Mutex<State>>);
 
 impl Harness {
     pub(crate) fn new(case: &Json) -> AuthResult<Self> {
+        Self::build(case, false)
+    }
+
+    #[allow(
+        dead_code,
+        reason = "The core Memory consumer replays the accessor lane."
+    )]
+    pub(crate) fn new_getters(case: &Json) -> AuthResult<Self> {
+        Self::build(case, true)
+    }
+
+    fn build(case: &Json, accessors: bool) -> AuthResult<Self> {
         let consumer = case["consumer"].as_str().unwrap();
         let scenario = fixture()["scenarios"]
             .as_array()
@@ -257,6 +301,7 @@ impl Harness {
             time_methods: Vec::new(),
             methods: None,
             original,
+            getter: None,
         }));
         let methods = ["valueOf", "toString", "getTime"].map(|name| {
             let state: Weak<Mutex<State>> = Arc::downgrade(&state);
@@ -272,6 +317,16 @@ impl Harness {
         });
         let mut current = state.lock().unwrap();
         current.methods = Some(methods);
+        if accessors {
+            let weak = Arc::downgrade(&state);
+            current.getter = Some(FieldFunction::contextual(move |receiver, arguments| {
+                weak.upgrade()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .method("readSortField", receiver, arguments)
+            }));
+        }
         for (index, spec) in scenario["values"].as_array().unwrap().iter().enumerate() {
             let id = format!("row-{index}");
             let value = current.make_value(spec, id.clone())?;
@@ -320,7 +375,11 @@ impl Harness {
                 row.insert("name".into(), value);
             }
             current.cells.push(cell.into());
-            current.rows.push(row.into());
+            let row = match &current.getter {
+                Some(getter) if spec["kind"] != "missing" => getters::row(row, getter.clone()),
+                _ => row.into(),
+            };
+            current.rows.push(row);
         }
         drop(current);
         Ok(Self(state))
@@ -339,7 +398,12 @@ impl Harness {
     }
 
     pub(crate) fn before(&self) -> AuthResult<Json> {
-        self.0.lock().unwrap().snapshot()
+        let mut state = self.0.lock().unwrap();
+        if state.getter.is_some() {
+            getters::snapshot(&mut state, None)
+        } else {
+            state.snapshot()
+        }
     }
 
     #[allow(
@@ -348,13 +412,24 @@ impl Harness {
     )]
     pub(crate) fn output(&self, value: FieldValue) -> AuthResult<FieldValue> {
         let mut state = self.0.lock().unwrap();
-        let observed = state.observer.observe(&value)?;
+        let observed = if state.getter.is_some()
+            && matches!(
+                value,
+                FieldValue::Array(_) | FieldValue::Object(_) | FieldValue::Date(_)
+            ) {
+            "native-object".into()
+        } else {
+            state.observer.observe(&value)?
+        };
         state.event("output", [("value".into(), observed)])?;
         Ok(value)
     }
 
     pub(crate) fn finish(&self, before: Json, result: AuthResult<FieldValue>) -> AuthResult<Json> {
         let mut state = self.0.lock().unwrap();
+        if state.getter.is_some() {
+            return getters::finish(&mut state, before, result);
+        }
         let returned = result.as_ref().ok().cloned();
         let original = state.original.clone();
         let mut outcome = state.observer.outcome(result, &original)?;

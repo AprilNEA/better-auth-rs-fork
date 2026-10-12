@@ -43,6 +43,7 @@ pub(crate) struct StatusResponse {
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
+    use better_auth_core as __private_core;
     #[path = "../../../../../tests/support/secondary_native_observation.rs"]
     pub(crate) mod native_observation;
     use native_observation as native_test_observation;

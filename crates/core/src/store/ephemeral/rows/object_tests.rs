@@ -361,8 +361,13 @@ async fn invitation_graph_copies_release_rows_and_preserve_aliases_and_failure_o
             .collect::<AuthResult<_>>()?;
         let failure = "Invitation graph source failed".to_owned();
         let original_error = failure.as_ptr() as usize;
+        let RowStorage::Record(source) = &required(sources.first())?.storage else {
+            return Err(AuthError::internal(
+                "Expected an adapter-owned row for the lock probe",
+            ));
+        };
         let graph = Arc::new(InvitationGraphSource {
-            row: Arc::downgrade(&required(sources.first())?.0),
+            row: Arc::downgrade(source),
             reads: AtomicUsize::new(0),
             failure_at,
             failure: Mutex::new(fail_copy.then_some(AuthError::Internal(failure))),
