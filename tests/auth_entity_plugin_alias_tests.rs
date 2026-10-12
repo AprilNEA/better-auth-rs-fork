@@ -16,6 +16,9 @@ use better_auth::{
 };
 use serde_json::json;
 
+#[path = "auth_entity_plugin_alias_tests/adapter_columns.rs"]
+mod adapter_columns;
+
 mod mapped {
     use super::*;
 

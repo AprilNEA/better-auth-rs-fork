@@ -28,6 +28,8 @@ run_stage() {
       local cleanup_status=0
       cargo clippy --locked -p better-auth-seaorm --tests -- -D warnings || cleanup_status=1
       cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --include-ignored --test-threads=1 || cleanup_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test auth_entity_plugin_alias_tests -- -D warnings || cleanup_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --test auth_entity_plugin_alias_tests || cleanup_status=1
       return "$cleanup_status"
       ;;
     rustls) cargo check -p better-auth --locked --no-default-features --features rustls,axum,seaorm2,redis-cache ;;

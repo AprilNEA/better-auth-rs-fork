@@ -56,9 +56,7 @@ pub(super) fn generate(
         } else {
             serialized.clone()
         };
-        let mut aliases = vec![name.clone(), serialized.clone(), public_name.clone()];
-        aliases.sort();
-        aliases.dedup();
+        let aliases = field_aliases::field_aliases(&name, &serialized, &field.attrs)?;
         columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
         serialized_columns.push(quote!(Column::#column => #serialized,));
         if is_core {

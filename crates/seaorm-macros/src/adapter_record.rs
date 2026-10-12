@@ -48,9 +48,7 @@ pub(super) fn generate(
             "{}",
             serde_rename_rule::RenameRule::PascalCase.apply_to_field(&rust_name)
         );
-        let mut aliases = vec![rust_name.clone(), logical.clone(), serialized];
-        aliases.sort();
-        aliases.dedup();
+        let aliases = field_aliases::field_aliases(&rust_name, &serialized, &field.attrs)?;
         columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
         let decoded = if rust_name == "id" || identity::is_reference(role, field)? {
             identity::decode(field, core, seaorm)
