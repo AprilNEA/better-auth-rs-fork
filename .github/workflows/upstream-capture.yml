@@ -12,12 +12,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - contract: account-user-auth-link
-            regressions:
-              - account-user-auth-boundary
-              - account-user-auth-email
-              - account-user-auth-secondary
-              - account-user-auth-order
+          - contract: logger-background-ownership
+            regressions: []
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
