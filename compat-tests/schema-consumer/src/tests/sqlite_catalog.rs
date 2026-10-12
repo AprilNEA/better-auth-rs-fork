@@ -18,7 +18,7 @@ async fn rows(
         .await
 }
 
-pub(super) async fn observe(
+pub async fn observe(
     database: &DatabaseConnection,
     table_name: &str,
     missing_table: &str,

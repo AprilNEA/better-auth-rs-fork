@@ -1,35 +1,25 @@
-#[cfg(test)]
-#[path = "../../../tests/support/ordinary_field_policies.rs"]
-mod ordinary_field_policies;
+/// Shared plugin storage assertions for generated catalog tests.
+#[path = "tests/plugin_catalog_rows.rs"]
+pub mod plugin_catalog_rows;
+/// Shared server index assertions for generated catalog tests.
+#[path = "tests/server_catalog_indexes.rs"]
+pub mod server_catalog_indexes;
+/// Shared server setup and assertions for generated catalog tests.
+#[path = "tests/server_catalog_support.rs"]
+pub mod server_catalog_support;
+/// Shared SQLite storage assertions for generated catalog tests.
+#[path = "tests/sqlite_catalog.rs"]
+pub mod sqlite_catalog;
 
 #[cfg(test)]
 mod tests {
-    mod account_verification;
-    mod device_additional_fields;
     mod device_intervals;
-    mod dynamic_fields;
-    mod field_attributes;
-    mod ids;
-    mod jwk_additional_fields;
-    mod model_declarations;
-    mod organization;
-    mod passkey_additional_fields;
-    mod plugins;
-    mod rate_limit_declarations;
-    mod rate_limits;
+    mod http_request;
     mod reference_fields;
-    mod sqlite_json;
-    mod two_factor_additional_fields;
-    mod wallet_additional_fields;
 
     use std::sync::Arc;
 
-    use axum::{
-        Json, Router,
-        body::Body,
-        http::{Request, StatusCode},
-        routing::get,
-    };
+    use axum::{Json, Router, http::StatusCode, routing::get};
     use better_auth::integrations::axum::{AxumIntegration, CurrentSession};
     use better_auth::plugins::{
         ApiKeyPlugin, EmailPasswordPlugin, SessionManagementPlugin, TwoFactorPlugin,
@@ -37,8 +27,8 @@ mod tests {
     use better_auth::seaorm::sea_orm::ConnectionTrait;
     use better_auth::seaorm::{Database, SeaOrmStore};
     use better_auth::{AuthConfig, BetterAuth};
+    use http_request::request;
     use serde_json::{Value, json};
-    use tower::ServiceExt;
 
     mod generated {
         include!(env!("BETTER_AUTH_GENERATED_SCHEMA"));
@@ -46,36 +36,6 @@ mod tests {
 
     async fn protected(session: CurrentSession<generated::AppAuthSchema>) -> Json<Value> {
         Json(json!({"userId": session.user.id}))
-    }
-
-    async fn request(
-        router: &Router,
-        path: &str,
-        body: Option<Value>,
-        token: Option<&str>,
-    ) -> (StatusCode, Value) {
-        let mut request = Request::builder().uri(path);
-        if let Some(token) = token {
-            request = request.header("authorization", format!("Bearer {token}"));
-        }
-        let request = if let Some(body) = body {
-            request
-                .method("POST")
-                .header("content-type", "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap()
-        } else {
-            request.body(Body::empty()).unwrap()
-        };
-        let response = router.clone().oneshot(request).await.unwrap();
-        let status = response.status();
-        let bytes = axum::body::to_bytes(response.into_body(), 1024 * 1024)
-            .await
-            .unwrap();
-        let body = serde_json::from_slice(&bytes).unwrap_or_else(|error| {
-            panic!("{path} returned {status} with invalid JSON: {error}; body={bytes:?}")
-        });
-        (status, body)
     }
 
     #[tokio::test]

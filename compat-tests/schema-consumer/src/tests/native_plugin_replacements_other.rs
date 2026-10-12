@@ -1,0 +1,32 @@
+include!("native_plugin_replacements.rs");
+
+target!(
+    polling_number,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_DEVICE_POLLING_NUMBER_SCHEMA",
+    "device-polling-number",
+    DeviceCode
+);
+target!(
+    verified_boolean,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_TWO_FACTOR_VERIFIED_BOOLEAN_SCHEMA",
+    "two-factor-verified-boolean",
+    TwoFactor
+);
+target!(
+    jwk_algorithm_array,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_JWK_ALGORITHM_ARRAY_SCHEMA",
+    "jwk-algorithm-array",
+    Jwk
+);
+target!(
+    wallet_owner_number,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_WALLET_OWNER_NUMBER_SCHEMA",
+    "wallet-owner-number",
+    WalletAddress
+);
+target!(
+    wallet_chain_number,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_WALLET_CHAIN_NUMBER_SCHEMA",
+    "wallet-chain-number",
+    WalletAddress
+);

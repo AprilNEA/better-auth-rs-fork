@@ -1,0 +1,32 @@
+include!("native_plugin_replacements.rs");
+
+target!(
+    remaining_number,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_API_KEY_REMAINING_NUMBER_SCHEMA",
+    "api-key-remaining-number",
+    ApiKey
+);
+target!(
+    remaining_string,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_API_KEY_REMAINING_STRING_SCHEMA",
+    "api-key-remaining-string",
+    ApiKey
+);
+target!(
+    enabled_boolean,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_API_KEY_ENABLED_BOOLEAN_SCHEMA",
+    "api-key-enabled-boolean",
+    ApiKey
+);
+target!(
+    enabled_number,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_API_KEY_ENABLED_NUMBER_SCHEMA",
+    "api-key-enabled-number",
+    ApiKey
+);
+target!(
+    expiry_date,
+    "BETTER_AUTH_NATIVE_REPLACEMENT_API_KEY_EXPIRY_DATE_SCHEMA",
+    "api-key-expiry-date",
+    ApiKey
+);

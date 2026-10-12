@@ -274,7 +274,7 @@ run_stage() {
         --test plugin_model_fields_tests -- organization:: organization_order:: || organization_status=1
       cargo test --locked -p better-auth-seaorm-macros || organization_status=1
       cargo test --locked -p better-auth-cli --test generate || organization_status=1
-      ./scripts/consumer-check.sh --lib --test session_native_values --test user_session_fields --test generated_plugin_catalog || organization_status=1
+      ./scripts/consumer-check.sh --lib --test 'generated_core_*' --test session_native_values --test user_session_fields --test 'generated_plugin_*' || organization_status=1
       return "$organization_status"
       ;;
     oauth-profile)
@@ -414,7 +414,7 @@ run_stage() {
       cargo test --locked -p better-auth-api --lib plugins::api_key::
       cargo test --locked --features axum,seaorm2,redis-cache --test plugin_display_json_tests --test server_api_tests
       cargo test --locked --features axum,seaorm2,redis-cache --test plugin_model_fields_tests passkey_update_ids
-      ./scripts/consumer-check.sh --test generated_plugin_catalog plugin_display_json -- --include-ignored
+      ./scripts/consumer-check.sh --test generated_plugin_display_json plugin_display_json -- --include-ignored
       ;;
     plugin-fields)
       cargo fmt --all -- --check
@@ -466,7 +466,7 @@ run_stage() {
         --test plugin_output_capabilities_tests --test sql_user_extra_output_tests \
         --test api_key_metadata_tests --test api_key_metadata_timing_tests --test jwt_transaction_tests || plugin_status=1
       cargo test --locked --features axum,seaorm2,redis-cache --test plugin_model_fields_tests -- api_key:: api_key_cache:: passkey aaguid:: native_registration:: device_ownership:: device_redemption:: presence:: presence_cache:: core::native_replacements_initialize_while_unsupported_model_roles_fail || plugin_status=1
-      ./scripts/consumer-check.sh --test generated_plugin_catalog -- --include-ignored api_key_additional_fields native_plugin_replacements device plugin_display_json || plugin_status=1
+      ./scripts/consumer-check.sh --test generated_plugin_api_key --test generated_plugin_device --test generated_plugin_display_json --test 'generated_plugin_native_*' -- --include-ignored api_key_additional_fields native_plugin_replacements device plugin_display_json || plugin_status=1
       return "$plugin_status"
       ;;
     native-create)
@@ -520,7 +520,7 @@ run_stage() {
         cargo test --locked --features axum,seaorm2,redis-cache --test verification_transaction_delete_tests -- --ignored || create_status=1
         cargo test --locked --features axum,seaorm2,redis-cache --test query_binding_order_tests -- --ignored || create_status=1
         cargo test --locked -p better-auth-cli --test generate || create_status=1
-        ./scripts/consumer-check.sh --lib --test session_native_values --test user_session_fields || create_status=1
+        ./scripts/consumer-check.sh --lib --test 'generated_core_*' --test session_native_values --test user_session_fields || create_status=1
         if cargo build --locked --manifest-path compat-tests/rust-server/Cargo.toml; then
           COMPAT_TEST_PROFILE=passkey-first,passkey-options,email-otp,email-otp-options,magic-link,signup-verification,admin-options,crypto-database,crypto-cookie,identity-context \
             cargo test --locked --test client_compat_tests -- --ignored --nocapture --exact --test-threads=1 \
@@ -1156,7 +1156,7 @@ run_stage() {
         device_ownership:: device_ownership_sets:: device_consumption:: device_redemption::
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test sql_user_extra_output_tests --test plugin_output_capabilities_tests
-      ./scripts/consumer-check.sh --test generated_plugin_catalog device_grant -- --include-ignored
+      ./scripts/consumer-check.sh --test generated_plugin_device device_grant -- --include-ignored
       ;;
     rate-limit-declarations)
       cargo fmt --all -- --check
@@ -1180,7 +1180,7 @@ run_stage() {
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test rate_limit_database_tests --test rate_limit_options_tests --test rate_cleanup_background_tests \
         --test openapi_rate_limit_model_tests --test telemetry_options_tests || rate_limit_status=1
-      ./scripts/consumer-check.sh --lib --test generated_server_catalog -- \
+      ./scripts/consumer-check.sh --lib --test generated_core_declarations --test generated_server_keys -- \
         rate_limit --include-ignored || rate_limit_status=1
       return "$rate_limit_status"
       ;;

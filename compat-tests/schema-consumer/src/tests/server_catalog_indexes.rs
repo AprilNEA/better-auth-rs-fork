@@ -5,7 +5,7 @@ use better_auth::seaorm::{
 };
 use serde_json::{Value, json};
 
-pub(super) async fn observe(
+pub async fn observe(
     database: &DatabaseConnection,
     backend: DbBackend,
     table_name: &str,

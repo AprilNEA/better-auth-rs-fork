@@ -11,7 +11,7 @@ use better_auth::{
 };
 use serde_json::{Map, Value, json};
 
-pub(super) async fn stored<M: SeaOrmPluginModel>(
+pub async fn stored<M: SeaOrmPluginModel>(
     database: &DatabaseConnection,
 ) -> TestResult<Vec<Map<String, Value>>> {
     let backend = database.get_database_backend();

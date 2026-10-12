@@ -5,9 +5,9 @@ use better_auth::seaorm::{
 use serde_json::{Value, json};
 use std::future::Future;
 
-pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-pub(super) async fn observe<const N: usize>(
+pub async fn observe<const N: usize>(
     database: &DatabaseConnection,
     backend: DbBackend,
     table_names: [String; N],
@@ -72,7 +72,7 @@ pub(super) async fn observe<const N: usize>(
     Ok(json!(columns))
 }
 
-pub(super) async fn in_postgres_catalog<F, Fut>(check: F) -> TestResult
+pub async fn in_postgres_catalog<F, Fut>(check: F) -> TestResult
 where
     F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,
     Fut: Future<Output = TestResult> + Send + 'static,
@@ -105,7 +105,7 @@ where
     result
 }
 
-pub(super) async fn in_mysql_catalog<F, Fut>(check: F) -> TestResult
+pub async fn in_mysql_catalog<F, Fut>(check: F) -> TestResult
 where
     F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,
     Fut: Future<Output = TestResult> + Send + 'static,
