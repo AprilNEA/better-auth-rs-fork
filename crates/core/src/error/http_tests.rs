@@ -178,7 +178,7 @@ async fn disabled_callback_and_throw_keep_independent_outer_error_policy() -> Au
             None,
             &replacement(),
         );
-        let harness = Harness::new(
+        let mut harness = Harness::new(
             cause.clone(),
             &events,
             policy == "disabled",

@@ -1116,7 +1116,7 @@ async fn test_unlink_last_account_blocked_by_default() {
     let config = Arc::new(test_config()); // allow_unlinking_all = false by default
     let db = create_test_database().await;
 
-    let (_, session_token, account_id) = setup_user_with_account(
+    let (user_id, session_token, account_id) = setup_user_with_account(
         &db,
         &config,
         "unlink@example.com",
@@ -1139,27 +1139,29 @@ async fn test_unlink_last_account_blocked_by_default() {
     req.headers
         .insert("cookie".to_string(), session_cookie(&session_token));
 
+    let accounts_before =
+        serde_json::to_value(db.get_user_accounts(&user_id).await.unwrap()).unwrap();
     let result = plugin.on_request(&req, &ctx).await;
 
-    // Should fail — cannot unlink the last account when allow_unlinking_all is false
-    match result {
-        Err(e) => {
-            let msg = format!("{:?}", e);
-            assert!(
-                msg.contains("Cannot unlink") || msg.contains("last account"),
-                "Expected 'cannot unlink last account' error, got: {}",
-                msg
-            );
-        }
-        Ok(Some(resp)) => {
-            // It might return an error response instead of Err
-            assert_ne!(
-                resp.status, 200,
-                "Should not succeed unlinking the last account"
-            );
-        }
-        Ok(None) => panic!("Expected a response"),
-    }
+    let error = result.expect_err("The native endpoint must reject unlinking the final account");
+    assert!(error.is_api_error().unwrap());
+    assert!(
+        error
+            .status_value()
+            .unwrap()
+            .strict_equals(&"BAD_REQUEST".into())
+    );
+    assert_eq!(
+        error.body_value().unwrap().json().unwrap(),
+        Some(json!({
+            "code": "FAILED_TO_UNLINK_LAST_ACCOUNT",
+            "message": "You can't unlink your last account",
+        }))
+    );
+    assert_eq!(
+        serde_json::to_value(db.get_user_accounts(&user_id).await.unwrap()).unwrap(),
+        accounts_before,
+    );
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/account.test.ts :: describe("account") and packages/better-auth/src/oauth2/link-account.test.ts; adapted to the Rust account and OAuth route behavior.

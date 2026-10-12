@@ -275,6 +275,13 @@ mod tests {
             fn routes(&self) -> Vec<crate::AuthRoute> {
                 Vec::new()
             }
+            async fn on_request(
+                &self,
+                _: &crate::AuthRequest,
+                _: &crate::AuthContext<crate::store::StatelessSchema>,
+            ) -> crate::AuthResult<Option<crate::AuthResponse>> {
+                Ok(None)
+            }
             async fn on_init(
                 &self,
                 context: &mut crate::AuthInitContext<crate::store::StatelessSchema>,

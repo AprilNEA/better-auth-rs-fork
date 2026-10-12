@@ -96,7 +96,8 @@ fn response_snapshot(response: &AuthResponse) -> AuthResult<Value> {
     headers.sort_by(|left, right| left.0.cmp(right.0));
     Ok(json!({
         "status": response.status,
-        "statusText": response.status_text.to_string(),
+        "statusText": String::from_utf16(response.status_text.as_utf16())
+            .map_err(|error| AuthError::internal(error.to_string()))?,
         "headers": headers,
         "cookies": response.headers.get_all("set-cookie").collect::<Vec<_>>(),
         "body": String::from_utf8(response.body.bytes()?.to_vec())

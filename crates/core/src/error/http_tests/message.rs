@@ -8,7 +8,7 @@ async fn message_methods_receive_native_receiver_and_truthy_return_values() -> A
         let events = Events::default();
         let payload: FieldValue =
             FieldMap::from([("message".into(), "native logger message".into())]).into();
-        let receiver = FieldObject::default();
+        let receiver = FieldObject::from(FieldMap::new());
         let includes = if callable {
             FieldFunction::contextual({
                 let events = events.clone();
