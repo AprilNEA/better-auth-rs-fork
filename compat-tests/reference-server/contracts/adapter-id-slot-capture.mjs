@@ -305,6 +305,58 @@ export async function captureAdapterIdSlots() {
   return { version, backend: "memory", cases };
 }
 
+export async function captureAdapterQueryIdAliases() {
+  const cases = [];
+  for (const model of ["jwks", "walletAddress"]) {
+    for (const serial of [false, true]) {
+      for (const operation of ["findOne", "update", "delete"]) {
+        const memory = { user: [], account: [], session: [], verification: [], jwks: [], walletAddress: [] };
+        const events = [];
+        const generateId = serial ? "serial" : ({ model }) => `${model}-query-id`;
+        const writer = await betterAuth(options(memory, model, { label: { type: "string" } }, generateId)).$context;
+        const setup = [];
+        let owner;
+        if (model === "walletAddress") {
+          const input = { model: "user", forceAllowId: true, data: { id: serial ? "001" : "ordinary-owner", ...userData("owner") } };
+          const before = observeValue(memory);
+          owner = await writer.adapter.create(input);
+          setup.push({ input: observeValue(input), before, result: observeValue(owner), after: observeValue(memory) });
+        }
+        const input = { model, data: data(model, "selected", owner?.id) };
+        const before = observeValue(memory);
+        const seeded = await writer.adapter.create(input);
+        setup.push({ input: observeValue(input), before, result: observeValue(seeded), after: observeValue(memory) });
+        const reader = await betterAuth(options(memory, model, {
+          id: { type: "string", fieldName: "old_id" },
+          label: { type: "string", transform: {
+            input(value) { events.push(["input", "label", observeValue(value)]); return value; },
+            output(value) { events.push(["output", "label", observeValue(value)]); return value; },
+          } },
+        }, generateId)).$context;
+        const steps = [];
+        for (const attempt of [1, 2]) {
+          const input = { model, where: [{ field: "id", value: seeded.id }], ...(operation === "update" ? { update: { label: "updated" } } : {}) };
+          const before = observeValue(memory);
+          const result = await reader.adapter[operation](input);
+          const after = observeValue(memory);
+          if (attempt === 1) {
+            assert.equal(result, operation === "delete" ? undefined : null);
+            assert.deepEqual(after, before);
+          } else if (operation === "delete") {
+            assert.equal(result, undefined);
+            assert.deepEqual(memory[model], []);
+          } else {
+            assert.deepEqual(result, { ...seeded, ...(operation === "update" ? { label: "updated" } : {}) });
+          }
+          steps.push({ attempt, input: observeValue(input), before, result: observeValue(result), events: events.splice(0), after });
+        }
+        cases.push({ model, serial, operation, idFieldName: "old_id", setup, steps });
+      }
+    }
+  }
+  return { version, backend: "memory", cases };
+}
+
 if (import.meta.main) {
   assert.ok(process.argv[2], "Pass a fixture output path");
   writeFileSync(process.argv[2], `${JSON.stringify(await captureAdapterIdSlots(), null, 2)}\n`);

@@ -48,14 +48,14 @@ export const nativeReplacementFailures = [
   { operation: "read", phase: "output" },
 ];
 
-function nativePlugin(model) {
+export function nativePlugin(model) {
   return {
     apikey: apiKey, passkey, deviceCode: deviceAuthorization,
     twoFactor, jwks: jwt, walletAddress: walletPlugin,
   }[model]();
 }
 
-function nativeInput(model) {
+export function nativeInput(model) {
   return {
     apikey: {
       name: "Desk", start: null, prefix: null, key: "ordinary-native-replacement-key", referenceId: ownerId,
