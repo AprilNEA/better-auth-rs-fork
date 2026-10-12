@@ -527,6 +527,7 @@ async fn schema_default_and_explicit_empty_roots_keep_create_and_error_timing() 
                 } else {
                     EphemeralStore::from_schema(config, &models)
                 };
+                models.bind_execution_gate(store.operations.clone())?;
                 store.model_fields = models;
                 record(&trace, "init")?;
                 let context = crate::AuthContext::<super::super::StatelessSchema>::new(

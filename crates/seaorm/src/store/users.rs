@@ -194,38 +194,39 @@ where
         let input = prepared.into_fields();
         let supplied = input.get("id").cloned();
         let backend = db.get_database_backend();
-        self.model_fields.begin_id_input(
-            EntityRole::User,
-            AdapterIdInput {
-                force_allow_id: supplied.is_some(),
-                supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-            },
-        )?;
         let schema = self.user_field_schema();
-        let fields = schema
-            .storage_fields_with_bound_id(
-                input,
-                true,
-                || match self.model_fields.id_input_policy(EntityRole::User)? {
-                    Some(policy) => self
-                        .config()
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_create_id_input("user", supplied.clone(), policy),
-                    None => Ok(supplied.clone()),
+        let fields = self
+            .model_fields
+            .with_id_input(
+                EntityRole::User,
+                AdapterIdInput {
+                    force_allow_id: supplied.is_some(),
+                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
                 },
-                |name, field, value| {
-                    crate::reference_id::input_binding(
-                        name,
-                        field,
-                        value,
-                        self.config().advanced.database.generate_id(),
-                        S::User::field_column,
-                        S::User::native_json_field,
-                        backend,
-                    )
-                },
+                schema.storage_fields_with_bound_id(
+                    input,
+                    true,
+                    || match self.model_fields.id_input_policy(EntityRole::User)? {
+                        Some(policy) => self
+                            .config()
+                            .advanced
+                            .database
+                            .generate_id()
+                            .adapter_create_id_input("user", supplied.clone(), policy),
+                        None => Ok(supplied.clone()),
+                    },
+                    |name, field, value| {
+                        crate::reference_id::input_binding(
+                            name,
+                            field,
+                            value,
+                            self.config().advanced.database.generate_id(),
+                            S::User::field_column,
+                            S::User::native_json_field,
+                            backend,
+                        )
+                    },
+                ),
             )
             .await?;
         let active =
@@ -357,38 +358,39 @@ where
             value,
             backend,
         )?;
-        self.model_fields.begin_id_input(
-            EntityRole::User,
-            AdapterIdInput {
-                force_allow_id: false,
-                supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-            },
-        )?;
         let supplied = input.get("id").cloned();
+        let schema = self.user_field_schema();
         let fields = self
-            .user_field_schema()
-            .storage_fields_with_bound_id(
-                input,
-                false,
-                || match self.model_fields.id_input_policy(EntityRole::User)? {
-                    Some(input_policy) => supplied
-                        .clone()
-                        .map(|value| policy.adapter_id_input(value, input_policy))
-                        .transpose()
-                        .map(Option::flatten),
-                    None => Ok(supplied.clone()),
+            .model_fields
+            .with_id_input(
+                EntityRole::User,
+                AdapterIdInput {
+                    force_allow_id: false,
+                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
                 },
-                |name, field, value| {
-                    crate::reference_id::input_binding(
-                        name,
-                        field,
-                        value,
-                        policy,
-                        S::User::field_column,
-                        S::User::native_json_field,
-                        backend,
-                    )
-                },
+                schema.storage_fields_with_bound_id(
+                    input,
+                    false,
+                    || match self.model_fields.id_input_policy(EntityRole::User)? {
+                        Some(input_policy) => supplied
+                            .clone()
+                            .map(|value| policy.adapter_id_input(value, input_policy))
+                            .transpose()
+                            .map(Option::flatten),
+                        None => Ok(supplied.clone()),
+                    },
+                    |name, field, value| {
+                        crate::reference_id::input_binding(
+                            name,
+                            field,
+                            value,
+                            policy,
+                            S::User::field_column,
+                            S::User::native_json_field,
+                            backend,
+                        )
+                    },
+                ),
             )
             .await?;
         let active =

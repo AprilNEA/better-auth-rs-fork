@@ -293,7 +293,9 @@ fn reader(
         [("label".into(), label), ("id".into(), id)]
     };
     let mut store = writer.as_ref().clone();
-    store.model_fields = Default::default();
+    let runtime = crate::plugin_runtime::ModelFields::default();
+    runtime.bind_execution_gate(store.operations.clone())?;
+    store.model_fields = runtime;
     store.model_fields.register(
         model.role(),
         UserConfig {

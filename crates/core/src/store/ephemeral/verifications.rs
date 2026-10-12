@@ -40,49 +40,54 @@ impl EphemeralStore {
         create: bool,
     ) -> AuthResult<FieldMap> {
         let supplied = input.get("id").cloned();
-        self.model_fields.begin_id_input(
-            EntityRole::Verification,
-            AdapterIdInput {
-                force_allow_id: create && supplied.is_some(),
-                supports_native_uuid: false,
-            },
-        )?;
-        self.config
-            .verification
-            .field_schema()
-            .storage_fields_with_bound_id(
-                input,
-                create,
-                || {
-                    let Some(policy) = self
-                        .model_fields
-                        .id_input_policy(EntityRole::Verification)?
-                    else {
-                        return Ok(supplied.clone());
-                    };
-                    if create {
-                        self.memory_create_id_input(
+        let schema = self.config.verification.field_schema();
+        self.model_fields
+            .with_id_input(
+                EntityRole::Verification,
+                AdapterIdInput {
+                    force_allow_id: create && supplied.is_some(),
+                    supports_native_uuid: false,
+                },
+                schema.storage_fields_with_bound_id(
+                    input,
+                    create,
+                    || {
+                        let Some(policy) = self
+                            .model_fields
+                            .id_input_policy(EntityRole::Verification)?
+                        else {
+                            return Ok(supplied.clone());
+                        };
+                        if create {
+                            self.memory_create_id_input(
+                                EntityRole::Verification,
+                                supplied.clone(),
+                                policy,
+                            )
+                        } else {
+                            supplied
+                                .clone()
+                                .map(|value| {
+                                    self.config
+                                        .advanced
+                                        .database
+                                        .generate_id()
+                                        .adapter_id_input(value, policy)
+                                })
+                                .transpose()
+                                .map(Option::flatten)
+                        }
+                    },
+                    |name, field, value| {
+                        self.memory_record_input(
                             EntityRole::Verification,
-                            supplied.clone(),
-                            policy,
+                            name,
+                            field,
+                            value,
+                            create,
                         )
-                    } else {
-                        supplied
-                            .clone()
-                            .map(|value| {
-                                self.config
-                                    .advanced
-                                    .database
-                                    .generate_id()
-                                    .adapter_id_input(value, policy)
-                            })
-                            .transpose()
-                            .map(Option::flatten)
-                    }
-                },
-                |name, field, value| {
-                    self.memory_record_input(EntityRole::Verification, name, field, value, create)
-                },
+                    },
+                ),
             )
             .await
     }

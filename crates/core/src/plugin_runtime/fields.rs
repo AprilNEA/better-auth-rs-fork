@@ -2,6 +2,8 @@
 mod availability_tests;
 mod declarations;
 mod device;
+#[cfg(test)]
+mod id_scope_tests;
 mod input;
 mod models;
 #[cfg(test)]
@@ -15,7 +17,9 @@ use crate::user_fields::{AdapterRecord, UserConfig, UserFieldType};
 use crate::{AuthConfig, AuthError, AuthResult, FieldMap, FieldValue as Value};
 use indexmap::{IndexMap, IndexSet};
 use models::ModelDeclaration;
-use std::sync::{Arc, LazyLock, Mutex};
+use parking_lot::ReentrantMutex;
+use std::future::{Future, poll_fn};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock};
 
 /// Plugin field policies consumed by the selected adapter during auth initialization.
 #[derive(Clone, Default)]
@@ -30,6 +34,7 @@ pub struct ModelFields {
     organization: Option<crate::organization_fields::OrganizationFields>,
     organization_teams_enabled: Option<bool>,
     id_history: Arc<Mutex<IdHistory>>,
+    execution: Arc<OnceLock<Arc<ReentrantMutex<()>>>>,
 }
 
 #[derive(Default)]
@@ -39,6 +44,40 @@ struct IdHistory {
 }
 
 impl ModelFields {
+    pub(crate) fn execution_gate(&self) -> &Arc<ReentrantMutex<()>> {
+        self.execution.get_or_init(Arc::default)
+    }
+
+    pub(crate) fn bind_execution_gate(&self, gate: Arc<ReentrantMutex<()>>) -> AuthResult<()> {
+        let bound = self.execution.get_or_init(|| gate.clone());
+        if !Arc::ptr_eq(bound, &gate) {
+            return Err(AuthError::config(
+                "Adapter field runtime is already bound to another Memory synchronization domain",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Run each synchronous input segment without another thread replacing its ID policy.
+    /// Pending callbacks release the gate; resumed callbacks observe the current shared policy.
+    #[doc(hidden)]
+    pub async fn with_id_input<T>(
+        &self,
+        role: EntityRole,
+        policy: AdapterIdInput,
+        convert: impl Future<Output = AuthResult<T>>,
+    ) -> AuthResult<T> {
+        let mut convert = std::pin::pin!(async {
+            self.begin_id_input(role, policy)?;
+            convert.await
+        });
+        poll_fn(|context| {
+            let _execution = self.execution_gate().lock();
+            convert.as_mut().poll(context)
+        })
+        .await
+    }
+
     /// Start an adapter runtime with the same policies and no operation history.
     #[doc(hidden)]
     pub fn fresh_runtime(&self) -> Self {
@@ -51,6 +90,7 @@ impl ModelFields {
     /// Retain the upstream primary-key replacement across calls on this adapter runtime.
     #[doc(hidden)]
     pub fn canonicalize_id(&self, role: EntityRole) -> AuthResult<()> {
+        let _execution = self.execution_gate().lock();
         let _ = self
             .id_history
             .lock()
@@ -63,6 +103,7 @@ impl ModelFields {
     /// Install the ID input policy before create or update field conversion.
     #[doc(hidden)]
     pub fn begin_id_input(&self, role: EntityRole, policy: AdapterIdInput) -> AuthResult<()> {
+        let _execution = self.execution_gate().lock();
         let mut history = self
             .id_history
             .lock()
@@ -81,6 +122,7 @@ impl ModelFields {
     /// Replace the ID input policy when a nonempty output conversion starts.
     #[doc(hidden)]
     pub fn begin_id_output(&self, role: EntityRole) -> AuthResult<()> {
+        let _execution = self.execution_gate().lock();
         begin_id_output(&self.id_history, role)
     }
 
@@ -89,7 +131,11 @@ impl ModelFields {
         role: EntityRole,
     ) -> Box<dyn FnOnce() -> AuthResult<()> + Send + Sync> {
         let history = self.id_history.clone();
-        Box::new(move || begin_id_output(&history, role))
+        let execution = self.execution_gate().clone();
+        Box::new(move || {
+            let _execution = execution.lock();
+            begin_id_output(&history, role)
+        })
     }
 
     /// Read the current ID policy after preceding field callbacks have completed.

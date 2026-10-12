@@ -118,9 +118,7 @@ async fn memory_plugin_id_slot_reads_primary_key_at_its_position() -> AuthResult
                     ..Default::default()
                 },
             );
-            let mut reader = EphemeralStore::new(writer.config.clone());
-            reader.state = writer.state.clone();
-            reader.operations = writer.operations.clone();
+            let mut reader = fresh_reader(&writer, writer.config.clone())?;
             reader.model_fields.register(model.role(), fields);
             let output = required(model.read(&reader, "1".into()).await?)?;
             let _ = expected.insert(

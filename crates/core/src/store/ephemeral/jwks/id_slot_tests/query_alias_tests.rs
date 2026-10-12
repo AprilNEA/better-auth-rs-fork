@@ -4,7 +4,11 @@ fn query_reader(writer: &EphemeralStore, model: Model, events: &Events) -> Ephem
     let input_events = events.clone();
     let output_events = events.clone();
     let mut reader = writer.clone();
-    reader.model_fields = Default::default();
+    let fields = crate::plugin_runtime::ModelFields::default();
+    fields
+        .bind_execution_gate(reader.operations.clone())
+        .expect("Fresh fields must bind to the reader's Memory gate");
+    reader.model_fields = fields;
     reader.model_fields.register(
         model.role(),
         UserConfig {

@@ -96,27 +96,31 @@ impl EphemeralStore {
         mut input: FieldMap,
     ) -> AuthResult<FieldMap> {
         let schema = crate::store::session_create_schema(&self.session_config, &input);
-        self.model_fields
-            .begin_id_input(EntityRole::Session, crate::id::AdapterIdInput::default())?;
         let mut supplied_id = input.remove("id");
-        let fields = schema
-            .update_adapter_storage_fields(
-                input,
-                || {
-                    let Some(value) = supplied_id.take() else {
-                        return Ok(None);
-                    };
-                    let Some(policy) = self.model_fields.id_input_policy(EntityRole::Session)?
-                    else {
-                        return Ok(Some(value));
-                    };
-                    self.config
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_id_input(value, policy)
-                },
-                |_, field, value| self.memory_plugin_field_input(field, value),
+        let fields = self
+            .model_fields
+            .with_id_input(
+                EntityRole::Session,
+                crate::id::AdapterIdInput::default(),
+                schema.update_adapter_storage_fields(
+                    input,
+                    || {
+                        let Some(value) = supplied_id.take() else {
+                            return Ok(None);
+                        };
+                        let Some(policy) =
+                            self.model_fields.id_input_policy(EntityRole::Session)?
+                        else {
+                            return Ok(Some(value));
+                        };
+                        self.config
+                            .advanced
+                            .database
+                            .generate_id()
+                            .adapter_id_input(value, policy)
+                    },
+                    |_, field, value| self.memory_plugin_field_input(field, value),
+                ),
             )
             .await?;
         Ok(fields)

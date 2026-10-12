@@ -123,27 +123,30 @@ impl EphemeralStore {
     }
 
     async fn prepare_user_update_fields(&self, fields: FieldMap) -> AuthResult<FieldMap> {
+        let schema = self.user_schema();
         self.model_fields
-            .begin_id_input(EntityRole::User, AdapterIdInput::default())?;
-        self.user_schema()
-            .storage_fields_with_bound_id(
-                fields.clone(),
-                false,
-                || match (
-                    self.model_fields.id_input_policy(EntityRole::User)?,
-                    fields.get("id"),
-                ) {
-                    (Some(policy), Some(value)) => self
-                        .config
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_id_input(value.clone(), policy),
-                    (_, value) => Ok(value.cloned()),
-                },
-                |name, field, value| {
-                    self.memory_record_input(EntityRole::User, name, field, value, false)
-                },
+            .with_id_input(
+                EntityRole::User,
+                AdapterIdInput::default(),
+                schema.storage_fields_with_bound_id(
+                    fields.clone(),
+                    false,
+                    || match (
+                        self.model_fields.id_input_policy(EntityRole::User)?,
+                        fields.get("id"),
+                    ) {
+                        (Some(policy), Some(value)) => self
+                            .config
+                            .advanced
+                            .database
+                            .generate_id()
+                            .adapter_id_input(value.clone(), policy),
+                        (_, value) => Ok(value.cloned()),
+                    },
+                    |name, field, value| {
+                        self.memory_record_input(EntityRole::User, name, field, value, false)
+                    },
+                ),
             )
             .await
     }
@@ -229,28 +232,30 @@ impl UserStore<StatelessSchema> for EphemeralStore {
             }
         }
         let input = prepared.into_fields();
-        self.model_fields.begin_id_input(
-            EntityRole::User,
-            AdapterIdInput {
-                force_allow_id: true,
-                supports_native_uuid: false,
-            },
-        )?;
+        let schema = self.user_schema();
         let mut fields = self
-            .user_schema()
-            .storage_fields_with_bound_id(
-                input.clone(),
-                true,
-                || {
-                    let supplied = input.get("id").cloned();
-                    let Some(policy) = self.model_fields.id_input_policy(EntityRole::User)? else {
-                        return Ok(supplied);
-                    };
-                    self.memory_create_id_input(EntityRole::User, supplied, policy)
+            .model_fields
+            .with_id_input(
+                EntityRole::User,
+                AdapterIdInput {
+                    force_allow_id: true,
+                    supports_native_uuid: false,
                 },
-                |name, field, value| {
-                    self.memory_record_input(EntityRole::User, name, field, value, true)
-                },
+                schema.storage_fields_with_bound_id(
+                    input.clone(),
+                    true,
+                    || {
+                        let supplied = input.get("id").cloned();
+                        let Some(policy) = self.model_fields.id_input_policy(EntityRole::User)?
+                        else {
+                            return Ok(supplied);
+                        };
+                        self.memory_create_id_input(EntityRole::User, supplied, policy)
+                    },
+                    |name, field, value| {
+                        self.memory_record_input(EntityRole::User, name, field, value, true)
+                    },
+                ),
             )
             .await?;
         let user = self

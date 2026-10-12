@@ -16,6 +16,7 @@ impl RuntimeStore<StatelessSchema> for EphemeralStore {
         mut hooks: Vec<Arc<dyn DatabaseHooks<StatelessSchema>>>,
         model_fields: crate::plugin_runtime::ModelFields,
     ) -> AuthResult<Arc<dyn AuthStore<StatelessSchema>>> {
+        model_fields.bind_execution_gate(self.operations.clone())?;
         hooks.extend(self.hooks.iter().cloned());
         let organization_fields = model_fields.organization_fields(self.organization_fields()?);
         Ok(Arc::new(Self {

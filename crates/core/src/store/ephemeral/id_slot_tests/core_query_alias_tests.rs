@@ -85,10 +85,7 @@ pub(super) fn configured_reader(
         ),
     ]
     .into();
-    let mut reader = EphemeralStore::new(Arc::new(config));
-    reader.state = writer.state.clone();
-    reader.operations = writer.operations.clone();
-    Ok(reader)
+    fresh_reader(writer, Arc::new(config))
 }
 
 #[expect(

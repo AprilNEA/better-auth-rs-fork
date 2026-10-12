@@ -285,9 +285,7 @@ async fn memory_session_id_slot_live_writer_preserves_read_and_stored_records() 
                 ..Default::default()
             },
         );
-        let mut reader = EphemeralStore::new(Arc::new(config));
-        reader.state = writer.state.clone();
-        reader.operations = writer.operations.clone();
+        let reader = fresh_reader(&writer, Arc::new(config))?;
         let before = memory(&writer, slot)?;
         assert_eq!(before, expected["before"]);
         let selected = required(reader.get_session("slot-selected").await?)?;

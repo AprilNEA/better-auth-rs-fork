@@ -33,39 +33,41 @@ where
     ) -> AuthResult<FieldMap> {
         let supplied = input.get("id").cloned();
         let policy = self.config().advanced.database.generate_id();
-        self.model_fields.begin_id_input(
-            EntityRole::Account,
-            AdapterIdInput {
-                force_allow_id: create && supplied.is_some(),
-                supports_native_uuid: backend == DbBackend::Postgres,
-            },
-        )?;
-        fields
-            .storage_fields_with_bound_id(
-                input,
-                create,
-                || match self.model_fields.id_input_policy(EntityRole::Account)? {
-                    Some(input_policy) if create => {
-                        policy.adapter_create_id_input("account", supplied.clone(), input_policy)
-                    }
-                    Some(input_policy) => supplied
-                        .clone()
-                        .map(|value| policy.adapter_id_input(value, input_policy))
-                        .transpose()
-                        .map(Option::flatten),
-                    None => Ok(supplied.clone()),
+        self.model_fields
+            .with_id_input(
+                EntityRole::Account,
+                AdapterIdInput {
+                    force_allow_id: create && supplied.is_some(),
+                    supports_native_uuid: backend == DbBackend::Postgres,
                 },
-                |name, field, value| {
-                    crate::reference_id::input_binding(
-                        name,
-                        field,
-                        value,
-                        policy,
-                        S::Account::field_column,
-                        S::Account::native_json_field,
-                        backend,
-                    )
-                },
+                fields.storage_fields_with_bound_id(
+                    input,
+                    create,
+                    || match self.model_fields.id_input_policy(EntityRole::Account)? {
+                        Some(input_policy) if create => policy.adapter_create_id_input(
+                            "account",
+                            supplied.clone(),
+                            input_policy,
+                        ),
+                        Some(input_policy) => supplied
+                            .clone()
+                            .map(|value| policy.adapter_id_input(value, input_policy))
+                            .transpose()
+                            .map(Option::flatten),
+                        None => Ok(supplied.clone()),
+                    },
+                    |name, field, value| {
+                        crate::reference_id::input_binding(
+                            name,
+                            field,
+                            value,
+                            policy,
+                            S::Account::field_column,
+                            S::Account::native_json_field,
+                            backend,
+                        )
+                    },
+                ),
             )
             .await
     }

@@ -280,45 +280,47 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
         None
     };
     let supplied = core.get("id").or_else(|| input.get("id")).cloned();
-    runtime.begin_id_input(
-        role,
-        AdapterIdInput {
-            force_allow_id: model.is_some() && supplied.is_some(),
-            supports_native_uuid: backend == DbBackend::Postgres,
-        },
-    )?;
-    let fields = config
-        .organization_storage_fields_with_bound_id(
-            core,
-            input,
-            model.is_some(),
-            || match runtime.id_input_policy(role)? {
-                Some(current) => match model {
-                    Some(model) => policy.adapter_create_id_input(model, supplied.clone(), current),
-                    None => supplied
-                        .clone()
-                        .map(|value| policy.adapter_id_input(value, current))
-                        .transpose()
-                        .map(Option::flatten),
+    let fields = runtime
+        .with_id_input(
+            role,
+            AdapterIdInput {
+                force_allow_id: model.is_some() && supplied.is_some(),
+                supports_native_uuid: backend == DbBackend::Postgres,
+            },
+            config.organization_storage_fields_with_bound_id(
+                core,
+                input,
+                model.is_some(),
+                || match runtime.id_input_policy(role)? {
+                    Some(current) => match model {
+                        Some(model) => {
+                            policy.adapter_create_id_input(model, supplied.clone(), current)
+                        }
+                        None => supplied
+                            .clone()
+                            .map(|value| policy.adapter_id_input(value, current))
+                            .transpose()
+                            .map(Option::flatten),
+                    },
+                    None => Ok(supplied.clone()),
                 },
-                None => Ok(supplied.clone()),
-            },
-            |storage_name, field, value| {
-                let column = M::column(storage_name)?;
-                let native_json = matches!(
-                    column.def().get_column_type(),
-                    sea_orm::ColumnType::Json | sea_orm::ColumnType::JsonBinary
-                );
-                crate::reference_id::input_binding(
-                    storage_name,
-                    field,
-                    value,
-                    policy,
-                    M::column,
-                    |_| native_json,
-                    backend,
-                )
-            },
+                |storage_name, field, value| {
+                    let column = M::column(storage_name)?;
+                    let native_json = matches!(
+                        column.def().get_column_type(),
+                        sea_orm::ColumnType::Json | sea_orm::ColumnType::JsonBinary
+                    );
+                    crate::reference_id::input_binding(
+                        storage_name,
+                        field,
+                        value,
+                        policy,
+                        M::column,
+                        |_| native_json,
+                        backend,
+                    )
+                },
+            ),
         )
         .await?;
     let mut active = super::record_write::RecordWrite::<Entity<M>>::default();

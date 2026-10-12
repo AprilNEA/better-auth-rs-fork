@@ -1,4 +1,6 @@
 use super::*;
+use crate::id::AdapterIdInput;
+use crate::plugin_runtime::ModelFields;
 use crate::store::{AccountOwner, RuntimeStore, schema::EntityRole};
 use crate::user_fields::{
     FieldTransforms, UserFieldConfig, UserFieldReference, UserFieldTransform,
@@ -210,5 +212,130 @@ async fn schema_history_memory_verification_cleanup_keeps_the_adapter_runtime() 
             .snapshot()
             .unwrap()
             .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn memory_initialization_bindings_preserve_plugin_crud_history() {
+    for explicit in [false, true] {
+        let config = config();
+        let fields = ModelFields::default();
+        let (initial_config, _, initial_fields) = fields.clone().resolve(&config);
+        let initial_config = Arc::new(initial_config);
+        let root = if explicit {
+            EphemeralStore::new(initial_config.clone())
+        } else {
+            EphemeralStore::from_schema(initial_config.clone(), &initial_fields)
+        };
+        let initial = root
+            .with_runtime(initial_config, Vec::new(), initial_fields)
+            .unwrap();
+        assert!(Arc::ptr_eq(&root.operations, fields.execution_gate()));
+        assert!(
+            initial
+                .get_account_owner("provider", "missing")
+                .await
+                .is_err()
+        );
+        assert!(initial.get_user_by_id("missing").await.unwrap().is_none());
+        assert!(fields.id_input_active(EntityRole::User).unwrap());
+
+        let (final_config, _, final_fields) = fields.resolve(&config);
+        let initialized = initial
+            .with_runtime(Arc::new(final_config), Vec::new(), final_fields)
+            .unwrap();
+        assert!(
+            initialized
+                .get_account_owner("provider", "missing")
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[tokio::test]
+async fn memory_runtime_rejects_another_gate_without_resetting_history() {
+    let config = Arc::new(config());
+    let root = EphemeralStore::new(config.clone());
+    let other = EphemeralStore::new(config.clone());
+    let fields = ModelFields::default();
+    let initial = root
+        .with_runtime(config.clone(), Vec::new(), fields.clone())
+        .unwrap();
+    assert!(initial.get_user_by_id("missing").await.unwrap().is_none());
+    assert!(matches!(
+        other.with_runtime(config.clone(), Vec::new(), fields.clone()),
+        Err(AuthError::Config(_))
+    ));
+    assert!(Arc::ptr_eq(&root.operations, fields.execution_gate()));
+    assert!(fields.id_input_active(EntityRole::User).unwrap());
+    let retained = initial.with_runtime(config, Vec::new(), fields).unwrap();
+    assert!(
+        retained
+            .get_account_owner("provider", "missing")
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn memory_transactions_keep_the_gate_and_isolate_only_explicit_history() {
+    let parent = EphemeralStore::new(Arc::new(config()));
+    parent
+        .model_fields
+        .begin_id_input(
+            EntityRole::User,
+            AdapterIdInput {
+                force_allow_id: true,
+                supports_native_uuid: true,
+            },
+        )
+        .unwrap();
+    let (_, internal, _) = parent.begin_transaction().unwrap();
+    let (_, explicit, _) = parent.begin_adapter_transaction().unwrap();
+    for transaction in [&internal, &explicit] {
+        assert!(Arc::ptr_eq(&parent.operations, &transaction.operations));
+        assert!(Arc::ptr_eq(
+            &parent.operations,
+            transaction.model_fields.execution_gate()
+        ));
+    }
+    assert_eq!(owner_schema(&parent), JsonValue::Null);
+    assert_eq!(owner_schema(&internal), JsonValue::Null);
+    assert!(owner_schema(&explicit).get("error").is_some());
+    let policy = internal
+        .model_fields
+        .id_input_policy(EntityRole::User)
+        .unwrap()
+        .unwrap();
+    assert!(policy.force_allow_id && policy.supports_native_uuid);
+    assert!(
+        !explicit
+            .model_fields
+            .id_input_active(EntityRole::User)
+            .unwrap()
+    );
+
+    internal
+        .model_fields
+        .begin_id_output(EntityRole::User)
+        .unwrap();
+    explicit
+        .model_fields
+        .begin_id_input(EntityRole::User, AdapterIdInput::default())
+        .unwrap();
+    assert!(
+        !parent
+            .model_fields
+            .id_input_active(EntityRole::User)
+            .unwrap()
+    );
+    assert!(
+        explicit
+            .model_fields
+            .id_input_active(EntityRole::User)
+            .unwrap()
     );
 }

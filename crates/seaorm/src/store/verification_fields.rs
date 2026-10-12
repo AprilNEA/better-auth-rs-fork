@@ -199,40 +199,41 @@ where
         let backend = db.get_database_backend();
         let input = input.fields()?;
         let supplied = input.get("id").cloned();
-        self.model_fields.begin_id_input(
-            EntityRole::Verification,
-            AdapterIdInput {
-                force_allow_id: supplied.is_some(),
-                supports_native_uuid: backend == DbBackend::Postgres,
-            },
-        )?;
-        let input = fields
-            .storage_fields_with_bound_id(
-                input,
-                true,
-                || match self
-                    .model_fields
-                    .id_input_policy(EntityRole::Verification)?
-                {
-                    Some(policy) => self
-                        .config()
-                        .advanced
-                        .database
-                        .generate_id()
-                        .adapter_create_id_input("verification", supplied.clone(), policy),
-                    None => Ok(supplied.clone()),
+        let input = self
+            .model_fields
+            .with_id_input(
+                EntityRole::Verification,
+                AdapterIdInput {
+                    force_allow_id: supplied.is_some(),
+                    supports_native_uuid: backend == DbBackend::Postgres,
                 },
-                |name, field, value| {
-                    crate::reference_id::input_binding(
-                        name,
-                        field,
-                        value,
-                        self.config().advanced.database.generate_id(),
-                        S::Verification::field_column,
-                        S::Verification::native_json_field,
-                        backend,
-                    )
-                },
+                fields.storage_fields_with_bound_id(
+                    input,
+                    true,
+                    || match self
+                        .model_fields
+                        .id_input_policy(EntityRole::Verification)?
+                    {
+                        Some(policy) => self
+                            .config()
+                            .advanced
+                            .database
+                            .generate_id()
+                            .adapter_create_id_input("verification", supplied.clone(), policy),
+                        None => Ok(supplied.clone()),
+                    },
+                    |name, field, value| {
+                        crate::reference_id::input_binding(
+                            name,
+                            field,
+                            value,
+                            self.config().advanced.database.generate_id(),
+                            S::Verification::field_column,
+                            S::Verification::native_json_field,
+                            backend,
+                        )
+                    },
+                ),
             )
             .await?;
         super::record_write::RecordWrite::from_initialized_fields(

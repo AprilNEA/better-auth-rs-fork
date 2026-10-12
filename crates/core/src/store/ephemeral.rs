@@ -172,9 +172,10 @@ impl EphemeralStore {
 
     /// Construct an explicit empty Memory root. Native nonserial creation adds physical tables lazily.
     pub fn empty(config: Arc<AuthConfig>) -> Self {
-        let operations = MemoryGate::default();
+        let model_fields = crate::plugin_runtime::ModelFields::default();
+        let operations = model_fields.execution_gate().clone();
         Self {
-            model_fields: Default::default(),
+            model_fields,
             session_config: config.session.clone(),
             config,
             state: Arc::new(Mutex::new(State::default())),
@@ -218,6 +219,7 @@ impl EphemeralStore {
         fields: &crate::plugin_runtime::ModelFields,
     ) -> Self {
         let mut store = Self::empty(config);
+        store.operations = fields.execution_gate().clone();
         store.state = Arc::new(Mutex::new(State::with_models(
             store.operations.clone(),
             fields.logical_model_names(),

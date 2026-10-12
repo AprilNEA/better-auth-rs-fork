@@ -25,6 +25,14 @@ fn required<T>(value: Option<T>) -> AuthResult<T> {
     value.ok_or_else(|| AuthError::internal("Missing ID slot test value"))
 }
 
+fn fresh_reader(writer: &EphemeralStore, config: Arc<AuthConfig>) -> AuthResult<EphemeralStore> {
+    let fields = crate::plugin_runtime::ModelFields::default();
+    fields.bind_execution_gate(writer.operations.clone())?;
+    let mut reader = EphemeralStore::from_schema(config, &fields);
+    reader.state = writer.state.clone();
+    Ok(reader)
+}
+
 fn date(text: &str) -> AuthResult<crate::FieldDate> {
     text.parse::<DateTime<Utc>>()
         .map(Into::into)
@@ -303,9 +311,7 @@ async fn memory_user_id_slot_reads_primary_key_at_its_position() -> AuthResult<(
                 ..Default::default()
             },
         );
-        let mut reader = EphemeralStore::new(Arc::new(config));
-        reader.state = writer.state.clone();
-        reader.operations = writer.operations.clone();
+        let reader = fresh_reader(&writer, Arc::new(config))?;
         let output = required(reader.get_user_by_id("1").await?)?;
         let mut expected = UserView::from_field_values(before.clone())?;
         expected.id = if slot == "before-label" { "1" } else { "101" }.into();

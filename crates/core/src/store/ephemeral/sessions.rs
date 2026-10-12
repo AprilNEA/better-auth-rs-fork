@@ -115,28 +115,30 @@ impl EphemeralStore {
     async fn write_session_create_fields(&self, mut fields: FieldMap) -> AuthResult<SessionView> {
         let schema = crate::store::session_create_schema(&self.session_config, &fields);
         let mut supplied_id = fields.remove("id");
-        self.model_fields.begin_id_input(
-            EntityRole::Session,
-            crate::id::AdapterIdInput {
-                force_allow_id: supplied_id.is_some(),
-                supports_native_uuid: false,
-            },
-        )?;
-        let mut storage = schema
-            .storage_fields_with_bound_id(
-                fields,
-                true,
-                || {
-                    let supplied = supplied_id.take();
-                    let Some(policy) = self.model_fields.id_input_policy(EntityRole::Session)?
-                    else {
-                        return Ok(supplied.filter(|value| !value.is_undefined()));
-                    };
-                    self.memory_create_id_input(EntityRole::Session, supplied, policy)
+        let mut storage = self
+            .model_fields
+            .with_id_input(
+                EntityRole::Session,
+                crate::id::AdapterIdInput {
+                    force_allow_id: supplied_id.is_some(),
+                    supports_native_uuid: false,
                 },
-                |name, field, value| {
-                    self.memory_record_input(EntityRole::Session, name, field, value, true)
-                },
+                schema.storage_fields_with_bound_id(
+                    fields,
+                    true,
+                    || {
+                        let supplied = supplied_id.take();
+                        let Some(policy) =
+                            self.model_fields.id_input_policy(EntityRole::Session)?
+                        else {
+                            return Ok(supplied.filter(|value| !value.is_undefined()));
+                        };
+                        self.memory_create_id_input(EntityRole::Session, supplied, policy)
+                    },
+                    |name, field, value| {
+                        self.memory_record_input(EntityRole::Session, name, field, value, true)
+                    },
+                ),
             )
             .await?;
         let source = self

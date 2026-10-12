@@ -23,6 +23,24 @@ run_stage() {
       cargo test --workspace --locked --features axum,seaorm2,redis-cache --no-fail-fast
       cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --ignored --test-threads=1
       ;;
+    id-input)
+      cargo fmt --all -- --check
+      local id_status=0
+      cargo clippy --locked -p better-auth-core -p better-auth-seaorm --lib -- -D warnings || id_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        plugin_runtime::fields::id_scope_tests:: id_slot_tests:: \
+        store::ephemeral::history_tests:: store::ephemeral::operation_contract_tests:: \
+        store::ephemeral::graph_clone_contract_tests:: || id_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- \
+        store::user_verification_tests:: store::history_tests:: || id_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test session_id_policy_tests --test user_id_generation_order_tests \
+        --test plugin_id_slot_tests --test id_generation_tests -- -D warnings || id_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test session_id_policy_tests --test user_id_generation_order_tests \
+        --test plugin_id_slot_tests --test id_generation_tests || id_status=1
+      return "$id_status"
+      ;;
     sql-cleanup)
       cargo fmt --all -- --check
       local cleanup_status=0

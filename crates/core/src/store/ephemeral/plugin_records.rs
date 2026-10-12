@@ -49,34 +49,34 @@ impl EphemeralStore {
         create: bool,
     ) -> AuthResult<FieldMap> {
         let mut supplied = input.shift_remove("id");
-        self.model_fields.begin_id_input(
-            role,
-            crate::id::AdapterIdInput {
-                force_allow_id: create && supplied.is_some(),
-                supports_native_uuid: false,
-            },
-        )?;
         let schema = self.model_fields.plugin_fields(role);
-        schema
-            .storage_fields_with_bound_id(
-                input,
-                create,
-                || {
-                    let Some(policy) = self.model_fields.id_input_policy(role)? else {
-                        return Ok(supplied.take());
-                    };
-                    let generation = self.config.advanced.database.generate_id();
-                    if create {
-                        self.memory_create_id_input(role, supplied.take(), policy)
-                    } else {
-                        supplied
-                            .take()
-                            .map(|value| generation.adapter_id_input(value, policy))
-                            .transpose()
-                            .map(Option::flatten)
-                    }
+        self.model_fields
+            .with_id_input(
+                role,
+                crate::id::AdapterIdInput {
+                    force_allow_id: create && supplied.is_some(),
+                    supports_native_uuid: false,
                 },
-                |name, field, value| self.memory_record_input(role, name, field, value, create),
+                schema.storage_fields_with_bound_id(
+                    input,
+                    create,
+                    || {
+                        let Some(policy) = self.model_fields.id_input_policy(role)? else {
+                            return Ok(supplied.take());
+                        };
+                        let generation = self.config.advanced.database.generate_id();
+                        if create {
+                            self.memory_create_id_input(role, supplied.take(), policy)
+                        } else {
+                            supplied
+                                .take()
+                                .map(|value| generation.adapter_id_input(value, policy))
+                                .transpose()
+                                .map(Option::flatten)
+                        }
+                    },
+                    |name, field, value| self.memory_record_input(role, name, field, value, create),
+                ),
             )
             .await
     }

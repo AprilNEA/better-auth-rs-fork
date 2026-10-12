@@ -94,6 +94,9 @@ fn configured_writer(model: &str, serial: bool) -> EphemeralStore {
     }
     let (config, _, fields) = fields.resolve(&config);
     let mut writer = EphemeralStore::new(Arc::new(config));
+    fields
+        .bind_execution_gate(writer.operations.clone())
+        .expect("Fresh fields must bind to the writer's Memory gate");
     writer.model_fields = fields;
     writer
 }
@@ -128,7 +131,9 @@ fn configured_reader(
         })),
     });
     let mut reader = writer.clone();
-    reader.model_fields = ModelFields::default();
+    let fields = ModelFields::default();
+    fields.bind_execution_gate(reader.operations.clone())?;
+    reader.model_fields = fields;
     if model == "twoFactor" {
         reader
             .model_fields

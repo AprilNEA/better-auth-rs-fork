@@ -13,6 +13,8 @@ Dispatch the `Upstream fixture capture` workflow explicitly after selecting its 
 
 Use `devenv shell -- ./scripts/check.sh credential-timing` for One Time Token hashing deadlines and Device polling guards. The stage runs the targeted Rust regressions and strict upstream replays. The upstream captures use a fixed clock; Rust checks actual hashing intervals and token consumption without injecting a production clock.
 
+Use the `id-input` CI stage for shared adapter ID conversion changes. The stage checks synchronous conversion, callback reentry, pending callbacks, native ID contracts, and concurrent Session creation after verification cleanup. Database writes and transaction boundaries remain outside the conversion gate.
+
 Use `devenv shell -- ./scripts/check.sh memory-sorting` for Memory API Key ordering and stable Member ordering. Member pairing checks equal timestamps in both directions and the resulting page positions. Numeric API Key pairing checks signed-zero and same-sign infinity ties in both directions. NaN observations remain outside Rust acceptance. Locale and arbitrary mixed-value ordering retain the boundaries in the alignment inventory.
 
 Full CI continues independent check stages after a check fails, provided compatibility dependency installation succeeded. Any failed stage still fails the workflow. Cancellation stops the remaining stages.

@@ -471,47 +471,48 @@ where
             &identifier.into(),
             backend,
         )?;
-        self.model_fields.begin_id_input(
-            EntityRole::Verification,
-            AdapterIdInput {
-                force_allow_id: false,
-                supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-            },
-        )?;
         let input = prepared.into_fields();
         let supplied = input.get("id").cloned();
-        let input = fields
-            .storage_fields_with_bound_id(
-                input,
-                false,
-                || match self
-                    .model_fields
-                    .id_input_policy(EntityRole::Verification)?
-                {
-                    Some(policy) => supplied
-                        .clone()
-                        .map(|value| {
-                            self.config()
-                                .advanced
-                                .database
-                                .generate_id()
-                                .adapter_id_input(value, policy)
-                        })
-                        .transpose()
-                        .map(Option::flatten),
-                    None => Ok(supplied.clone()),
+        let input = self
+            .model_fields
+            .with_id_input(
+                EntityRole::Verification,
+                AdapterIdInput {
+                    force_allow_id: false,
+                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
                 },
-                |name, field, value| {
-                    crate::reference_id::input_binding(
-                        name,
-                        field,
-                        value,
-                        self.config().advanced.database.generate_id(),
-                        S::Verification::field_column,
-                        S::Verification::native_json_field,
-                        backend,
-                    )
-                },
+                fields.storage_fields_with_bound_id(
+                    input,
+                    false,
+                    || match self
+                        .model_fields
+                        .id_input_policy(EntityRole::Verification)?
+                    {
+                        Some(policy) => supplied
+                            .clone()
+                            .map(|value| {
+                                self.config()
+                                    .advanced
+                                    .database
+                                    .generate_id()
+                                    .adapter_id_input(value, policy)
+                            })
+                            .transpose()
+                            .map(Option::flatten),
+                        None => Ok(supplied.clone()),
+                    },
+                    |name, field, value| {
+                        crate::reference_id::input_binding(
+                            name,
+                            field,
+                            value,
+                            self.config().advanced.database.generate_id(),
+                            S::Verification::field_column,
+                            S::Verification::native_json_field,
+                            backend,
+                        )
+                    },
+                ),
             )
             .await?;
         let active = super::record_write::RecordWrite::<

@@ -98,29 +98,33 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
             force_allow_id: create && input.contains_key("id"),
             supports_native_uuid: backend == DbBackend::Postgres,
         };
-        self.model_fields.begin_id_input(role, id_policy)?;
         let mut supplied_id = input.get("id").cloned();
-        let stored = fields
-            .storage_fields_with_bound_id(
-                input,
-                create,
-                || {
-                    let supplied = supplied_id.take();
-                    let Some(current) = self.model_fields.id_input_policy(role)? else {
-                        return Ok(supplied.filter(|value| !value.is_undefined()));
-                    };
-                    if create {
-                        policy.adapter_create_id_input(model, supplied, current)
-                    } else {
-                        supplied
-                            .map(|value| policy.adapter_id_input(value, current))
-                            .transpose()
-                            .map(Option::flatten)
-                    }
-                },
-                |name, field, value| {
-                    additional_field_input::<M>(name, field, value, policy, backend)
-                },
+        let stored = self
+            .model_fields
+            .with_id_input(
+                role,
+                id_policy,
+                fields.storage_fields_with_bound_id(
+                    input,
+                    create,
+                    || {
+                        let supplied = supplied_id.take();
+                        let Some(current) = self.model_fields.id_input_policy(role)? else {
+                            return Ok(supplied.filter(|value| !value.is_undefined()));
+                        };
+                        if create {
+                            policy.adapter_create_id_input(model, supplied, current)
+                        } else {
+                            supplied
+                                .map(|value| policy.adapter_id_input(value, current))
+                                .transpose()
+                                .map(Option::flatten)
+                        }
+                    },
+                    |name, field, value| {
+                        additional_field_input::<M>(name, field, value, policy, backend)
+                    },
+                ),
             )
             .await?;
         Write::<M>::from_fields(stored, M::column)
