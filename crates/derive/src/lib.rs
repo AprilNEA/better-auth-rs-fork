@@ -2,6 +2,7 @@
 
 mod auth_schema;
 mod plugin_config;
+mod test_store_forward;
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, parse_macro_input};
@@ -29,4 +30,16 @@ pub fn database_hooks(source: TokenStream, item: TokenStream) -> TokenStream {
         Some(parse_macro_input!(source as syn::LitStr))
     };
     database_hooks::expand(source, parse_macro_input!(item as syn::ItemImpl)).into()
+}
+
+/// Forward unmodified Store methods in workspace contract-test facades.
+/// Read the explicit trait source path relative to the calling crate at expansion time.
+#[doc(hidden)]
+#[proc_macro_attribute]
+pub fn __test_store_forward(source: TokenStream, item: TokenStream) -> TokenStream {
+    test_store_forward::expand(
+        parse_macro_input!(source as syn::LitStr),
+        parse_macro_input!(item as syn::ItemImpl),
+    )
+    .into()
 }

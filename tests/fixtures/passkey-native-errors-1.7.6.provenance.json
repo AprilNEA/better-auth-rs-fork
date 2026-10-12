@@ -100,10 +100,14 @@
   "sourceReplay": "Both recorded processes preserve identical provenance, boundaries, case names, scenarios, complete inputs, and complete runtime observations, including object key order. Replay uses the captured key and response bytes without importing the signer.",
   "rawRecordsByteEqual": true,
   "replayBoundary": "Compare complete inputs and runtime observations without normalization. Preserve raw descriptors, function metadata, original error identities and stacks as source evidence. Host stack text and raw descriptor internals remain outside the runtime comparison.",
+  "rustReplayBoundary": "Replay all 33 frozen inputs through the native Rust endpoint dispatcher and real signature verification. Compare complete stored records, verification consumption, typed callback field values and bytes, error semantics and string-key order, original error identity, captured headers and cookies, and logs. Verify Rust HTTP materialization against the captured native status and body; this capture does not execute upstream HTTP transport. The test Store facade forwards unchanged methods and injects errors at the declared consumer calls. Fixed Session token and dates enter through supported creation overrides. Rust acceptance requires separate CI; the source capture result does not establish Rust parity.",
   "unpairedBoundaries": [
     "Browser transport and default registration session middleware.",
     "SQL transactions and backend persistence behavior.",
     "Private challenge payloads owned by the Rust WebAuthn engine.",
-    "Host stack text and raw JavaScript descriptor internals."
+    "Host stack text and raw JavaScript descriptor internals. Rust semantic observations exclude Bun error metadata keys originalLine, originalColumn, line, column, sourceURL, and stack; the frozen source observations retain every key.",
+    "The JavaScript Symbol(better-call:api-error-headers) own key. Rust compares captured header values and cookies separately and does not expose this symbol as a string key.",
+    "Typed Rust Passkey callback serialization order, optional own-undefined properties, and JavaScript Uint8Array brands and object identity. The paired callback observation reads every Rust field and compares every byte.",
+    "Internal adapter recorder call traces across the JavaScript internalAdapter and Rust AuthStore architectures. The Rust facade preserves actual consumer calls and does not synthesize adapter events."
   ]
 }

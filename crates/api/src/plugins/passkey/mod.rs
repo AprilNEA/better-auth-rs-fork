@@ -18,6 +18,8 @@ pub(super) mod webauthn;
 #[cfg(test)]
 mod credential_tests;
 #[cfg(test)]
+mod native_error_contract;
+#[cfg(test)]
 mod tests;
 
 use handlers::*;

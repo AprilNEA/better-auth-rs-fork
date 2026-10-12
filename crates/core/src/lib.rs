@@ -87,6 +87,8 @@ pub mod wire;
 // Re-export commonly used items
 #[doc(hidden)]
 pub use async_trait as __private_async_trait;
+#[doc(hidden)]
+pub use better_auth_macros::__test_store_forward;
 pub use better_auth_macros::{AuthSchema, PluginConfig, database_hooks};
 pub use config::{
     AccountConfig, AccountLinkingConfig, AdvancedConfig, AdvancedDatabaseConfig, Argon2Config,
