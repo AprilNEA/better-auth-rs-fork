@@ -232,9 +232,7 @@ impl<S: AuthSchema> SessionManager<S> {
         transaction: Option<&dyn crate::store::AuthTransaction<S>>,
     ) -> AuthResult<()> {
         let dont_remember = dont_remember.unwrap_or_else(|| self.dont_remember(req));
-        let token = crate::FieldMap::from(data.session.clone())
-            .shift_remove("token")
-            .unwrap_or_default();
+        let token = data.session_property("token")?;
         for cookie in native_session_cookie_headers(token, dont_remember, &self.config) {
             req.append_response_header("Set-Cookie", cookie?)?;
         }
@@ -244,11 +242,7 @@ impl<S: AuthSchema> SessionManager<S> {
     }
 
     fn public_data(&self, mut snapshot: SessionSnapshot) -> AuthResult<SessionSnapshot> {
-        snapshot
-            .data
-            .session
-            .filter_returned_fields(&self.config.session)?;
-        snapshot.data.user = snapshot.data.public_user(&self.config.user)?;
+        snapshot.data = snapshot.data.public_data(&self.config)?;
         Ok(snapshot)
     }
 
@@ -365,7 +359,10 @@ impl<S: AuthSchema> SessionManager<S> {
         if self.config.session.disable_session_refresh() {
             return Ok(false);
         }
-        let expiry = session.expires_at().field_value();
+        self.refresh_due(session.expires_at().field_value())
+    }
+
+    fn refresh_due(&self, expiry: crate::FieldValue) -> AuthResult<bool> {
         if expiry.is_null() || expiry.is_undefined() {
             return Err(AuthError::internal(
                 "Cannot read properties of null or undefined (reading 'valueOf')",
@@ -516,32 +513,31 @@ impl<S: AuthSchema> SessionManager<S> {
                 cookie_cache::decode(value, &self.config, cache)
             };
             if let Some((mut payload, expires)) = decoded
-                && payload.data.session.token == token
+                && payload
+                    .data
+                    .session_property("token")?
+                    .strict_equals(&token.clone().into())
                 && (if payload.version.is_empty() {
                     "1"
                 } else {
                     &payload.version
-                }) == cache.version.resolve(&payload.data.clone().into()).await?
+                }) == cache.version.resolve(&payload.data).await?
                 && expires >= Utc::now().timestamp_millis()
-                && payload
-                    .data
-                    .session
-                    .expires_at
-                    .clone()
-                    .converted_date()?
-                    .is_after_or_equal(Utc::now())?
+                && crate::query::field_date(&payload.data.session_property("expiresAt")?)?
+                    .milliseconds()
+                    >= Utc::now().timestamp_millis() as f64
             {
                 if !self.capabilities.server_sessions()
                     && let Some(update_age) = cache.refresh_age()
                     && expires - Utc::now().timestamp_millis() < update_age.num_milliseconds()
                 {
-                    self.write_cache(req, &payload.data, false).await?;
+                    self.write_native_cache(req, &payload.data, false).await?;
                     let max_age = (!self.dont_remember(req))
                         .then_some(self.config.session.expires_in().as_seconds_f64());
                     req.append_response_header(
                         "Set-Cookie",
                         crate::utils::cookie_utils::create_session_cookie_with_native_value(
-                            &payload.data.session.token.field_value(),
+                            &payload.data.session_property("token")?,
                             max_age,
                             &self.config,
                         )?,
@@ -552,11 +548,7 @@ impl<S: AuthSchema> SessionManager<S> {
                 if raw_snapshot {
                     req.set_session_snapshot(Some(payload.data.clone().into()))?;
                 }
-                payload
-                    .data
-                    .session
-                    .filter_returned_fields(&self.config.session)?;
-                payload.data.user.filter_cached_fields(&self.config.user)?;
+                payload.data = payload.data.public_data(&self.config)?;
                 if !raw_snapshot {
                     req.set_session_snapshot(Some(payload.data.clone().into()))?;
                 }
@@ -601,13 +593,14 @@ impl<S: AuthSchema> SessionManager<S> {
         };
         let mut snapshot = self.public_data(data)?;
         req.set_session_snapshot(Some(snapshot.clone()))?;
-        if snapshot.data.session.expires_at().is_before(Utc::now())?
-            || !snapshot.data.session.active()
+        if crate::query::field_number(&snapshot.data.session_property("expiresAt")?)?
+            < Utc::now().timestamp_millis() as f64
+            || !snapshot.data.active()
         {
             self.clear_cookies(req)?;
             if !self.config.session.defer_session_refresh || is_post {
                 self.database
-                    .delete_session_by_token_value(&snapshot.data.session.token.field_value())
+                    .delete_session_by_token_value(&snapshot.data.session_property("token")?)
                     .await?;
             }
             return Ok(none());
@@ -619,7 +612,8 @@ impl<S: AuthSchema> SessionManager<S> {
                 needs_refresh: None,
             });
         }
-        let needs_refresh = self.needs_refresh(&snapshot.data.session)?;
+        let needs_refresh = !self.config.session.disable_session_refresh()
+            && self.refresh_due(snapshot.data.session_property("expiresAt")?)?;
         if self.config.session.defer_session_refresh && !is_post {
             self.write_cache_with_response(req, &snapshot.data, false, None, None)
                 .await?;
@@ -632,7 +626,7 @@ impl<S: AuthSchema> SessionManager<S> {
             let updated = match self
                 .database
                 .update_session_fields_by_token_value(
-                    &snapshot.data.session.token.field_value(),
+                    &snapshot.data.session_property("token")?,
                     crate::FieldMap::from([
                         (
                             "expiresAt".into(),
@@ -654,7 +648,9 @@ impl<S: AuthSchema> SessionManager<S> {
                 Ok(Some(updated)) => updated,
                 Err(error) => return Err(error),
             };
-            snapshot.data.session = self.internal_session_view(&updated).await?;
+            snapshot.data = snapshot
+                .data
+                .with_session(self.internal_session_view(&updated).await?)?;
             self.set_native_session_cookie(req, snapshot.data.clone(), Some(false))
                 .await?;
         } else {

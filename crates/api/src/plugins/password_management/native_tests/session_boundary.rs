@@ -179,14 +179,14 @@ async fn native_session_owner_reaches_revocation_and_preserves_committed_failure
         super::authoritative_session::inject_session(
             &mut context,
             &plugin,
-            NativeSessionData {
-                session: selected,
-                user: FieldMap::from([
+            NativeSessionData::new(
+                selected,
+                FieldMap::from([
                     ("id".into(), 7.into()),
                     ("name".into(), "Native owner".into()),
                 ])
                 .into(),
-            },
+            ),
         );
         let error = test_helpers::native_session::dispatch_plugin(&request, &context, &plugin)
             .await

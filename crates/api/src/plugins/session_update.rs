@@ -13,7 +13,7 @@ pub(super) async fn handle(
     ctx: &AuthContext<impl AuthSchema>,
 ) -> AuthResult<AuthResponse> {
     let body = better_auth_core::endpoint_input::record_input(req)?;
-    let mut data = ctx
+    let data = ctx
         .require_native_session(req)
         .await
         .map_err(|error| match error {
@@ -51,7 +51,7 @@ pub(super) async fn handle(
     }
     let updated = ctx
         .database
-        .update_session_fields_by_token_value(&data.session.token.field_value(), fields.clone())
+        .update_session_fields_by_token_value(&data.session_property("token")?, fields.clone())
         .await?;
     if updated.is_none() && ctx.store_capabilities().server_sessions() {
         ctx.session_manager().clear_cookies(req)?;
@@ -62,10 +62,10 @@ pub(super) async fn handle(
         ));
     }
     let manager = ctx.session_manager();
-    data.session = match updated {
+    let session = match updated {
         Some(updated) => manager.internal_session_view(&updated).await?,
         None => {
-            let mut merged = FieldMap::from(data.session.clone());
+            let mut merged = data.session_value()?.enumerable_fields()?;
             merged.extend(fields);
             let _ = merged.insert(
                 "updatedAt".into(),
@@ -74,13 +74,17 @@ pub(super) async fn handle(
             better_auth_core::wire::SessionView::from_field_values(merged)?
         }
     };
+    let issued = data.with_session(session)?;
     manager
-        .set_native_session_cookie(req, data.clone(), None)
+        .set_native_session_cookie(req, issued.clone(), None)
         .await?;
-    data.session.filter_returned_fields(&ctx.config.session)?;
     Ok(AuthResponse::native(
         None,
-        FieldMap::from([("session".into(), FieldMap::from(data.session).into())]).into(),
+        FieldMap::from([(
+            "session".into(),
+            issued.public_session(&ctx.config.session)?,
+        )])
+        .into(),
     ))
 }
 

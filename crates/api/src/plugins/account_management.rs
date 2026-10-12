@@ -155,7 +155,7 @@ impl AccountManagementPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let data = ctx.require_native_session(req).await?;
-        if !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)? {
+        if !crate::plugins::helpers::session_is_fresh(&data, &ctx.config)? {
             return Err(AuthError::from_code(
                 "FORBIDDEN",
                 "SESSION_NOT_FRESH",

@@ -41,7 +41,8 @@ impl TeamMemberLimitPolicy for Capacity {
         &self,
         data: OrganizationTeamMemberLimit<'_>,
     ) -> AuthResult<usize> {
-        let user = required(data.session.user.as_object(), "Expected the actor user")?;
+        let user_value = data.session.user_value()?;
+        let user = required(user_value.as_object(), "Expected the actor user")?;
         self.events.push(
             "limit",
             "callback",

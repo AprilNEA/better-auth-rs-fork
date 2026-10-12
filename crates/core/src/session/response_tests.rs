@@ -97,7 +97,10 @@ async fn rotation_preserves_order_and_the_browser_uses_the_last_token_and_cache(
     )
     .unwrap()
     .0;
-    assert_eq!(payload.data.session.token, next.token);
+    assert_eq!(
+        payload.data.session_property("token").unwrap(),
+        next.token.field_value()
+    );
     assert_eq!(
         verify_cookie_value(
             response.headers.get("set-auth-token").unwrap(),

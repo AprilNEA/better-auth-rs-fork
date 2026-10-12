@@ -345,7 +345,10 @@ async fn change_email_normalizes_storage_and_tokens_but_preserves_session_owners
             let mut expected = original.enumerable_fields()?;
             let _ = expected.insert("email".into(), "NEW@NATIVE-EMAIL.TEST".into());
             let _ = expected.insert("emailVerified".into(), is_verified.into());
-            assert_eq!(req.new_session()?.unwrap().user, FieldValue::from(expected));
+            assert_eq!(
+                req.new_session()?.unwrap().user_value()?,
+                FieldValue::from(expected)
+            );
             if is_verified {
                 assert_eq!(*verified, [stored]);
                 assert!(delivered.is_empty());
@@ -773,10 +776,7 @@ async fn caught_session_failure_discards_nested_cookie_headers_but_keeps_outer_h
     ctx.session_manager()
         .set_native_session_cookie(
             &issuance,
-            NativeSessionData {
-                user: FieldMap::from(user).into(),
-                session: expired_cache,
-            },
+            NativeSessionData::new(expired_cache, FieldMap::from(user).into()),
             None,
         )
         .await?;

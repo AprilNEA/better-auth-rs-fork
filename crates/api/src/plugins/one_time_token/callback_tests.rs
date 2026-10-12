@@ -46,9 +46,16 @@ fn callbacks(observations: Observations, fail: bool) -> OneTimeTokenCallbacks<St
         Box::pin(async move {
             tokio::task::yield_now().await;
             observations.lock().unwrap().push(Observation {
-                data: FieldMap::from(data.clone()),
-                session: endpoint.session.clone().map(FieldMap::from),
-                new_session: endpoint.new_session()?.map(FieldMap::from),
+                data: data.field_value().enumerable_fields()?,
+                session: endpoint
+                    .session
+                    .as_ref()
+                    .map(|data| data.field_value().enumerable_fields())
+                    .transpose()?,
+                new_session: endpoint
+                    .new_session()?
+                    .map(|data| data.field_value().enumerable_fields())
+                    .transpose()?,
                 body: endpoint.body.clone(),
                 query: endpoint.query()?,
                 headers: endpoint.headers().cloned(),
@@ -143,7 +150,7 @@ fn request(
                 .auth_cookie("session_token", Default::default())
                 .name,
             better_auth_core::utils::cookie_utils::sign_cookie_value(
-                data.session.token.typed()?,
+                data.session_view()?.token.typed()?,
                 ctx.config.signing_secret()
             )
         ),
@@ -168,7 +175,11 @@ async fn generator_retains_http_and_native_input_and_typed_precedence() -> AuthR
             .unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(response.body.json()?, Some(json!({"token":"typed-token"})));
-        let selected = FieldMap::from(request.native_session_snapshot()?.unwrap());
+        let selected = request
+            .native_session_snapshot()?
+            .unwrap()
+            .field_value()
+            .enumerable_fields()?;
         {
             let observations = observations.lock().unwrap();
             assert_eq!(observations.len(), 1);
@@ -195,7 +206,7 @@ async fn generator_retains_http_and_native_input_and_typed_precedence() -> AuthR
             .get_verification_including_expired("one-time-token:stored:typed-token")
             .await?
             .unwrap();
-        assert_eq!(proof.value, data.session.token);
+        assert_eq!(proof.value.field_value(), data.session_property("token")?);
         assert_eq!(legacy_calls.load(Ordering::SeqCst), 0);
         assert_eq!(hash_calls.load(Ordering::SeqCst), 1);
 
@@ -208,7 +219,7 @@ async fn generator_retains_http_and_native_input_and_typed_precedence() -> AuthR
         let observations = observations.lock().unwrap();
         assert_eq!(observations.len(), 2);
         let observation = observations.last().unwrap();
-        assert_eq!(observation.data, FieldMap::from(data));
+        assert_eq!(observation.data, data.field_value().enumerable_fields()?);
         assert_eq!(observation.session.as_ref(), Some(&observation.data));
         assert!(observation.new_session.is_none());
         assert!(observation.body.is_undefined());
@@ -234,17 +245,20 @@ async fn after_hook_keeps_current_and_new_sessions_distinct_and_overwrites_callb
     let (ctx, current) = context(&plugin).await?;
     let request = request(&ctx, &current, "/native-session-replacement")?;
     let selected = ctx.require_native_session(&request).await?;
-    let mut new = current.clone();
-    new.session.token = better_auth_core::SchemaValue::from_field(19.0.into());
-    new.user = vec![FieldValue::from(FieldMap::from([
-        ("id".into(), 7.0.into()),
-        ("hidden".into(), "retained".into()),
-    ]))]
-    .into();
+    let mut session = current.session_view()?;
+    session.token = better_auth_core::SchemaValue::from_field(19.0.into());
+    let new = NativeSessionData::new(
+        session,
+        vec![FieldValue::from(FieldMap::from([
+            ("id".into(), 7.0.into()),
+            ("hidden".into(), "retained".into()),
+        ]))]
+        .into(),
+    );
     ctx.session_manager()
         .publish_session(&request, new.clone())?;
     ctx.database
-        .delete_session(current.session.token.typed()?)
+        .delete_session(current.session_view()?.token.typed()?)
         .await?;
     let mut response = AuthResponse::json(202, &json!({"accepted":true}))?;
     let _ = response
@@ -278,9 +292,15 @@ async fn after_hook_keeps_current_and_new_sessions_distinct_and_overwrites_callb
     let observations = observations.lock().unwrap();
     assert_eq!(observations.len(), 1);
     let observation = observations.first().unwrap();
-    assert_eq!(observation.data, FieldMap::from(new.clone()));
-    assert_eq!(observation.new_session, Some(FieldMap::from(new)));
-    assert_eq!(observation.session, Some(FieldMap::from(selected)));
+    assert_eq!(observation.data, new.field_value().enumerable_fields()?);
+    assert_eq!(
+        observation.new_session,
+        Some(new.field_value().enumerable_fields()?)
+    );
+    assert_eq!(
+        observation.session,
+        Some(selected.field_value().enumerable_fields()?)
+    );
     assert_eq!(observation.body, request.input_field_value()?);
     assert_eq!(observation.query, request.query);
     assert_eq!(observation.headers.as_ref(), Some(&request.headers));
@@ -375,8 +395,12 @@ async fn generation_error_keeps_callback_effects_without_hashing_persisting_or_f
     );
     assert!(request.take_response_headers()?.is_empty());
     assert_eq!(
-        FieldMap::from(request.new_session()?.unwrap()),
-        FieldMap::from(data)
+        request
+            .new_session()?
+            .unwrap()
+            .field_value()
+            .enumerable_fields()?,
+        data.field_value().enumerable_fields()?
     );
     Ok(())
 }
@@ -474,5 +498,173 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     );
     assert_eq!(observations.lock().unwrap().len(), 1);
     assert_eq!(hash_calls.load(Ordering::SeqCst), 1);
+    Ok(())
+}
+
+struct TokenRead {
+    events: Arc<Mutex<Vec<&'static str>>>,
+    event: &'static str,
+    token: &'static str,
+    failure: Option<FieldValue>,
+}
+
+impl better_auth_core::field_value::FieldObjectSource for TokenRead {
+    fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        assert_eq!(name, "token");
+        self.events.lock().unwrap().push(self.event);
+        match &self.failure {
+            Some(error) => Err(AuthError::from_thrown(error.clone())),
+            None => Ok(Some(self.token.into())),
+        }
+    }
+
+    fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal("The token source must only be read"))
+    }
+
+    fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::internal("The token source must only be read"))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        Err(AuthError::internal(
+            "Token consumption must not snapshot the Session",
+        ))
+    }
+}
+
+#[tokio::test]
+async fn generation_reads_the_current_token_after_callbacks_and_preserves_failed_mutations()
+-> AuthResult<()> {
+    for typed in [false, true] {
+        for phase in [
+            "generator-only",
+            "hash-replacement",
+            "generator-error",
+            "hash-error",
+            "token-error",
+        ] {
+            let events = Arc::new(Mutex::new(Vec::new()));
+            let failure: FieldValue = FieldMap::from([("phase".into(), phase.into())]).into();
+            let source = |event: &'static str, token: &'static str, fails: bool| {
+                FieldValue::from(better_auth_core::FieldObject::from_source(Arc::new(
+                    TokenRead {
+                        events: events.clone(),
+                        event,
+                        token,
+                        failure: fails.then(|| failure.clone()),
+                    },
+                )))
+            };
+            let initial = source("initial-token", "before", false);
+            let generated = source("generated-token", "after-generator", false);
+            let hashed = source("hashed-token", "after-hash", phase == "token-error");
+            let root: FieldValue = FieldMap::from([("session".into(), initial)]).into();
+            let generator_root = root.clone();
+            let generator_session = generated.clone();
+            let generator_events = events.clone();
+            let generator_failure = failure.clone();
+            let generator: OneTimeTokenGenerator = Arc::new(move |data| {
+                let root = generator_root.clone();
+                let session = generator_session.clone();
+                let events = generator_events.clone();
+                let failure = generator_failure.clone();
+                Box::pin(async move {
+                    assert!(data.field_value().strict_equals(&root));
+                    events.lock().unwrap().push("generate");
+                    root.set_model_property("session", session)?;
+                    if phase == "generator-error" {
+                        return Err(AuthError::from_thrown(failure));
+                    }
+                    Ok("transfer-token".into())
+                })
+            });
+            let hash_root = root.clone();
+            let hash_session = hashed.clone();
+            let hash_events = events.clone();
+            let hash_failure = failure.clone();
+            let plugin = OneTimeTokenPlugin::new()
+                .store_token(TokenStorage::Custom(Arc::new(move |token| {
+                    let root = hash_root.clone();
+                    let session = hash_session.clone();
+                    let events = hash_events.clone();
+                    let failure = hash_failure.clone();
+                    Box::pin(async move {
+                        assert_eq!(token, "transfer-token");
+                        events.lock().unwrap().push("hash");
+                        if phase != "generator-only" {
+                            root.set_model_property("session", session)?;
+                        }
+                        if phase == "hash-error" {
+                            return Err(AuthError::from_thrown(failure));
+                        }
+                        Ok("stored-token".into())
+                    })
+                })))
+                .generate_token(generator.clone());
+            let (ctx, _) = if typed {
+                context(
+                    &OneTimeTokenPlugin::new().callbacks(
+                        OneTimeTokenCallbacks::<StatelessSchema>::generate(move |data, _| {
+                            generator(data.clone())
+                        }),
+                    ),
+                )
+                .await?
+            } else {
+                context(&plugin).await?
+            };
+            let result = plugin
+                .generate_native(&ctx, NativeSessionData::from_native(root.clone(), true))
+                .await;
+            let stored = ctx
+                .database
+                .get_verification_including_expired("one-time-token:stored-token")
+                .await?;
+            match phase {
+                "generator-error" | "hash-error" | "token-error" => {
+                    assert!(
+                        result
+                            .unwrap_err()
+                            .raw_value()
+                            .unwrap()
+                            .strict_equals(&failure)
+                    );
+                    assert!(stored.is_none());
+                }
+                _ => {
+                    assert_eq!(result?, "transfer-token");
+                    assert_eq!(
+                        stored.unwrap().value.field_value(),
+                        FieldValue::from(if phase == "generator-only" {
+                            "after-generator"
+                        } else {
+                            "after-hash"
+                        })
+                    );
+                }
+            }
+            let expected_events: &[&str] = match phase {
+                "generator-error" => &["generate"],
+                "hash-error" => &["generate", "hash"],
+                "generator-only" => &["generate", "hash", "generated-token"],
+                _ => &["generate", "hash", "hashed-token"],
+            };
+            assert_eq!(
+                *events.lock().unwrap(),
+                expected_events,
+                "{phase}, typed={typed}"
+            );
+            let expected_session = if phase == "generator-error" || phase == "generator-only" {
+                &generated
+            } else {
+                &hashed
+            };
+            assert!(
+                root.model_property("session")?
+                    .strict_equals(expected_session)
+            );
+        }
+    }
     Ok(())
 }

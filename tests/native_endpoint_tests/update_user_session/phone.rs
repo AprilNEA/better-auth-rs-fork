@@ -115,13 +115,10 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                 "7".into()
             };
             let _ = snapshot.insert("id".into(), id.clone());
-            let injected = NativeSessionData {
-                session: SessionView::from_field_values(session(
-                    "injected-token",
-                    "snapshot-user",
-                ))?,
-                user: snapshot.clone().into(),
-            };
+            let injected = NativeSessionData::new(
+                SessionView::from_field_values(session("injected-token", "snapshot-user"))?,
+                snapshot.clone().into(),
+            );
             let hooks = SessionHooks {
                 case,
                 data: injected.clone(),
@@ -318,8 +315,8 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                         let _ = snapshot.insert("phoneNumber".into(), phone);
                         snapshot
                     };
-                    ordered(&data.user.enumerable_fields()?, &expected);
-                    assert_eq!(data.session, injected.session);
+                    ordered(&data.user_value()?.enumerable_fields()?, &expected);
+                    assert_eq!(data.session_value()?, injected.session_value()?);
                 }
             } else {
                 assert_eq!(returned, wrote.then_some(stored));

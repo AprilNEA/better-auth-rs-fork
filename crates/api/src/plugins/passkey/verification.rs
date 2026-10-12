@@ -138,10 +138,9 @@ fn parse_client(
         return Err(message(&[
             format!("Unexpected {} response origin \"", ceremony.name()).into(),
             origin,
-            if origins.len() == 1 {
-                format!("\", expected \"{}\"", origins[0]).into()
-            } else {
-                format!("\", expected one of: {}", origins.join(", ")).into()
+            match origins {
+                [origin] => format!("\", expected \"{origin}\"").into(),
+                _ => format!("\", expected one of: {}", origins.join(", ")).into(),
             },
         ])?);
     }

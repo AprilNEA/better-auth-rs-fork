@@ -1,5 +1,44 @@
-use better_auth_core::{AuthError, AuthRequest, AuthResult, FieldValue};
+use better_auth_core::{AuthError, AuthRequest, AuthResult, FieldMap, FieldValue};
 use serde_json::Value;
+
+#[cfg(test)]
+#[path = "json_body/native_record_tests.rs"]
+mod native_record_tests;
+
+pub(crate) fn native_object(value: &FieldValue) -> bool {
+    matches!(value, FieldValue::Object(_) | FieldValue::Date(_))
+}
+
+pub(crate) fn native_record(value: &FieldValue) -> AuthResult<Option<FieldMap>> {
+    if !native_object(value) {
+        return Ok(None);
+    }
+    let constructor = value.model_property("constructor")?;
+    // shortcut: FieldDate does not synthesize Date.prototype.constructor.
+    // Remove this branch when FieldDate models that inherited constructor.
+    // Explicit undefined must still follow Zod's modified-constructor path.
+    if let FieldValue::Date(date) = value
+        && constructor.is_undefined()
+        && !date.properties().has_property("constructor")?
+    {
+        return Ok(None);
+    }
+    if matches!(constructor, FieldValue::Function(_)) {
+        let prototype = constructor.model_property("prototype")?;
+        let properties = match &prototype {
+            FieldValue::Object(object) => object,
+            FieldValue::Date(date) => date.properties(),
+            _ => return Ok(None),
+        };
+        if properties
+            .own_property_descriptor("isPrototypeOf")?
+            .is_none()
+        {
+            return Ok(None);
+        }
+    }
+    value.enumerable_fields_except(&["__proto__"]).map(Some)
+}
 
 pub(crate) fn is_truthy(value: &Value) -> bool {
     match value {

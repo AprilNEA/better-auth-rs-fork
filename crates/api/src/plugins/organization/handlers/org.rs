@@ -10,7 +10,7 @@ use crate::plugins::organization::types::{
     OrganizationResponse, SetActiveOrganizationRequest, UpdateOrganizationRequest,
 };
 use crate::plugins::organization::{OrganizationConfig, hooks::*};
-use better_auth_core::entity::{AuthMember, AuthOrganization, AuthSession};
+use better_auth_core::entity::{AuthMember, AuthOrganization};
 use better_auth_core::error::{AuthError, AuthResult};
 use better_auth_core::plugin::AuthContext;
 use better_auth_core::session::NativeSessionData;
@@ -39,8 +39,12 @@ pub(crate) async fn create_organization_core(
     CreateOrganizationResponse<CreatedOrganizationResponse, BasicMemberResponse>,
     Option<better_auth_core::FieldValue>,
 )> {
-    let user = if let Some(session) = session.filter(|session| session.user.is_truthy()) {
-        session.user.clone()
+    let user = if let Some(user) = session
+        .map(NativeSessionData::user_value)
+        .transpose()?
+        .filter(FieldValue::is_truthy)
+    {
+        user
     } else {
         let id = body.user_id.as_deref().filter(|id| !id.is_empty());
         let user = match id {
@@ -231,7 +235,7 @@ pub(crate) async fn update_organization_core(
     let slug = nonempty(&body.data.slug, "slug")?;
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        &session.session,
+        session,
         AuthError::from_code(
             "BAD_REQUEST",
             "ORGANIZATION_NOT_FOUND",
@@ -299,13 +303,15 @@ pub(crate) async fn update_organization_core(
         ..Default::default()
     };
 
-    let actor = OrganizationActor {
-        member: &member,
-        user: &session.user,
-    };
     if let Some(hooks) = &config.hooks {
         hooks
-            .before_update_organization(&mut update_data, actor)
+            .before_update_organization(
+                &mut update_data,
+                OrganizationActor {
+                    member: &member,
+                    user: &session.user_value()?,
+                },
+            )
             .await?;
     }
     let updated = super::super::native_json::metadata(
@@ -317,7 +323,15 @@ pub(crate) async fn update_organization_core(
 
     let updated = crate::plugins::organization::fields::organization(&updated, ctx)?;
     if let Some(hooks) = &config.hooks {
-        hooks.after_update_organization(&updated, actor).await?;
+        hooks
+            .after_update_organization(
+                &updated,
+                OrganizationActor {
+                    member: &member,
+                    user: &session.user_value()?,
+                },
+            )
+            .await?;
     }
     Ok(updated)
 }
@@ -371,15 +385,13 @@ pub(crate) async fn delete_organization_core(
     }
 
     if session
-        .session
-        .active_organization_id()
-        .field_value()
+        .session_property("activeOrganizationId")?
         .strict_equals(&body.organization_id.as_str().into())
     {
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
@@ -393,13 +405,15 @@ pub(crate) async fn delete_organization_core(
         })?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
-    let event = OrganizationUser {
-        organization: &organization_view,
-        user: &session.user,
-    };
     if let Some(hooks) = &config.hooks {
         hooks
-            .before_delete_organization(event, OrganizationEndpoint::new(ctx, request))
+            .before_delete_organization(
+                OrganizationUser {
+                    organization: &organization_view,
+                    user: &session.user_value()?,
+                },
+                OrganizationEndpoint::new(ctx, request),
+            )
             .await?;
     }
     ctx.database
@@ -408,7 +422,13 @@ pub(crate) async fn delete_organization_core(
 
     if let Some(hooks) = &config.hooks {
         hooks
-            .after_delete_organization(event, OrganizationEndpoint::new(ctx, request))
+            .after_delete_organization(
+                OrganizationUser {
+                    organization: &organization_view,
+                    user: &session.user_value()?,
+                },
+                OrganizationEndpoint::new(ctx, request),
+            )
             .await?;
     }
     Ok(organization_view)
@@ -440,7 +460,7 @@ pub(crate) async fn get_full_organization_core(
 ) -> AuthResult<Option<FieldValue>> {
     use better_auth_core::store::{OrganizationDetailsQuery, OrganizationKey};
 
-    let active_id = session.session.active_organization_id.field_value();
+    let active_id;
     let selector = if let Some(slug) = query
         .organization_slug
         .as_deref()
@@ -451,10 +471,12 @@ pub(crate) async fn get_full_organization_core(
         let id = query.organization_id.as_deref().filter(|id| !id.is_empty());
         if let Some(id) = id {
             OrganizationKey::Id(id)
-        } else if active_id.is_truthy() {
-            OrganizationKey::IdValue(&active_id)
         } else {
-            return Ok(None);
+            active_id = session.session_property("activeOrganizationId")?;
+            if !active_id.is_truthy() {
+                return Ok(None);
+            }
+            OrganizationKey::IdValue(&active_id)
         }
     };
     let details = ctx
@@ -488,7 +510,7 @@ pub(crate) async fn get_full_organization_core(
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
@@ -532,9 +554,7 @@ pub(crate) async fn set_active_organization_core(
 ) -> AuthResult<Option<OrganizationResponse>> {
     if matches!(body.organization_id, NullableStringField::Null) {
         if !session
-            .session
-            .active_organization_id
-            .field_value()
+            .session_property("activeOrganizationId")?
             .is_truthy()
         {
             return Ok(None);
@@ -543,20 +563,13 @@ pub(crate) async fn set_active_organization_core(
         let updated = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
         let manager = ctx.session_manager();
         manager
-            .set_native_session_cookie(
-                req,
-                NativeSessionData {
-                    session: updated,
-                    user: session.user.clone(),
-                },
-                None,
-            )
+            .set_native_session_cookie(req, session.with_session(updated)?, None)
             .await?;
         return Ok(None);
     }
@@ -584,7 +597,7 @@ pub(crate) async fn set_active_organization_core(
         let organization = super::super::fields::organization(&organization, ctx)?;
         organization.id().field_value()
     } else {
-        let active_id = session.session.active_organization_id.field_value();
+        let active_id = session.session_property("activeOrganizationId")?;
         if !active_id.is_truthy() {
             return Ok(None);
         }
@@ -606,7 +619,7 @@ pub(crate) async fn set_active_organization_core(
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
@@ -633,20 +646,13 @@ pub(crate) async fn set_active_organization_core(
     let updated = ctx
         .database
         .update_session_active_organization_by_token_value(
-            &session.session.token.field_value(),
+            &session.session_property("token")?,
             Some(&organization.id.field_value()),
         )
         .await?;
     let manager = ctx.session_manager();
     manager
-        .set_native_session_cookie(
-            req,
-            NativeSessionData {
-                session: updated,
-                user: session.user.clone(),
-            },
-            None,
-        )
+        .set_native_session_cookie(req, session.with_session(updated)?, None)
         .await?;
 
     Ok(Some(organization))
@@ -700,15 +706,13 @@ pub(crate) async fn leave_organization_core(
         .await?;
 
     if session
-        .session
-        .active_organization_id()
-        .field_value()
+        .session_property("activeOrganizationId")?
         .strict_equals(&body.organization_id.as_str().into())
     {
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
@@ -743,7 +747,7 @@ pub async fn handle_create_organization(
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 Some(&response.organization.id.field_value()),
             )
             .await?;
@@ -751,7 +755,7 @@ pub async fn handle_create_organization(
             let _ = ctx
                 .database
                 .update_session_active_team_by_token_value(
-                    &session.session.token.field_value(),
+                    &session.session_property("token")?,
                     Some(&team_id),
                 )
                 .await?;
@@ -839,7 +843,8 @@ pub async fn handle_get_organization(
     } else {
         let id = nonempty("organizationId")?
             .map(better_auth_core::FieldValue::from)
-            .unwrap_or_else(|| session.session.active_organization_id.field_value());
+            .map(Ok)
+            .unwrap_or_else(|| session.session_property("activeOrganizationId"))?;
         if !id.is_truthy() {
             return AuthResponse::json(None, &serde_json::Value::Null);
         }
@@ -866,7 +871,7 @@ pub async fn handle_get_organization(
         _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;

@@ -140,10 +140,11 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for SessionManagementPlugin 
 // ---------------------------------------------------------------------------
 
 fn session_user_id(data: &NativeSessionData) -> AuthResult<FieldValue> {
-    let nullish = match &data.user {
+    let user = data.user_value()?;
+    let nullish = match &user {
         FieldValue::Null => "null",
         FieldValue::Undefined => "undefined",
-        _ => return data.user_property("id"),
+        _ => return user.model_property("id"),
     };
     Err(AuthError::TypeError(format!(
         "{nullish} is not an object (evaluating 'ctx.context.session.user.id')"
@@ -226,7 +227,7 @@ pub(crate) async fn revoke_other_sessions_core(
     data: &NativeSessionData,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<StatusResponse> {
-    if !data.user.is_truthy() {
+    if !data.user_value()?.is_truthy() {
         return Err(AuthError::Unauthenticated);
     }
     let mut tokens = Vec::new();
@@ -245,7 +246,7 @@ pub(crate) async fn revoke_other_sessions_core(
             && !session
                 .token
                 .field_value()
-                .strict_equals(&data.session.token.field_value())
+                .strict_equals(&data.session_property("token")?)
         {
             tokens.push(session.token.field_value());
         }
@@ -290,11 +291,14 @@ impl SessionManagementPlugin {
             .await?;
         let mut response = match resolved.data {
             Some(data) => {
-                let mut fields = FieldMap::from(data);
-                if let Some(needs_refresh) = resolved.needs_refresh {
+                let value = if let Some(needs_refresh) = resolved.needs_refresh {
+                    let mut fields = data.field_value().enumerable_fields()?;
                     let _ = fields.insert("needsRefresh".into(), needs_refresh.into());
-                }
-                AuthResponse::native(None, fields.into())
+                    fields.into()
+                } else {
+                    data.field_value()
+                };
+                AuthResponse::native(None, value)
             }
             None => AuthResponse::native(None, FieldValue::Null),
         };
@@ -312,7 +316,7 @@ impl SessionManagementPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let data = ctx.require_native_session(req).await?;
-        if !super::helpers::session_is_fresh(&data.session, &ctx.config)? {
+        if !super::helpers::session_is_fresh(&data, &ctx.config)? {
             return Err(AuthError::from_code(
                 "FORBIDDEN",
                 "SESSION_NOT_FRESH",

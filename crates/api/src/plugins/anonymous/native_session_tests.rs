@@ -79,8 +79,8 @@ async fn anonymous_signin_uses_the_injected_native_session_before_database_state
     let snapshot = request
         .native_session_snapshot()?
         .ok_or_else(|| AuthError::internal("Anonymous sign-in discarded its native session"))?;
-    assert!(snapshot.user.strict_equals(&native));
-    assert_eq!(snapshot.session, session);
+    assert!(snapshot.user_value()?.strict_equals(&native));
+    assert_eq!(snapshot.session_view()?, session);
     assert!(request.new_session()?.is_none());
     let users = store.storage_rows(EntityRole::User)?;
     assert_eq!(users.len(), 1);
@@ -174,10 +174,7 @@ async fn anonymous_link_uses_native_truthiness_and_normalizes_the_callback_ident
         let new_native: FieldValue = new_fields.into();
         ctx.session_manager().publish_session(
             &req,
-            NativeSessionData {
-                session: sessions[1].clone(),
-                user: new_native.clone(),
-            },
+            NativeSessionData::new(sessions[1].clone(), new_native.clone()),
         )?;
         let response = AuthResponse::json(200, &serde_json::json!({"success": true}))?.with_header(
             "set-cookie",
@@ -282,7 +279,11 @@ async fn anonymous_delete_reads_the_public_object_from_a_many_user_relationship(
         );
         let observed = ctx.require_authoritative_native_session(&req).await?;
         assert!(observed.user_field("id")?.is_undefined());
-        let selected_fields = observed.user.as_object().unwrap().snapshot_fields()?["0"]
+        let selected_fields = observed
+            .user_value()?
+            .as_object()
+            .unwrap()
+            .snapshot_fields()?["0"]
             .as_object()
             .unwrap()
             .snapshot_fields()?;

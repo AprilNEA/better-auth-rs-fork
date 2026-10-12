@@ -16,7 +16,8 @@ impl OrganizationPolicy for Callbacks {
         _: OrganizationEndpoint<'_>,
     ) -> AuthResult<Option<usize>> {
         let actor = required(data.session, "Expected the current session")?;
-        let user = required(actor.user.as_object(), "Expected the actor user")?;
+        let user_value = actor.user_value()?;
+        let user = required(user_value.as_object(), "Expected the actor user")?;
         self.0.push(
             "maximumTeams",
             "callback",

@@ -41,7 +41,7 @@ impl OrganizationPlugin {
 }
 pub(super) fn delivery<S: AuthSchema>(
     config: &OrganizationConfig,
-    message: InvitationEmail,
+    message: impl FnOnce() -> AuthResult<InvitationEmail>,
     endpoint: &EndpointContext<'_, S>,
 ) -> AuthResult<Option<BackgroundFuture>> {
     if let Some(callbacks) = endpoint
@@ -49,11 +49,12 @@ pub(super) fn delivery<S: AuthSchema>(
         .extensions
         .get::<Arc<OrganizationCallbacks<S>>>()
     {
-        return (callbacks.sender)(&message, endpoint);
+        return (callbacks.sender)(&message()?, endpoint);
     }
     let Some(sender) = config.send_invitation_email.clone() else {
         return Ok(None);
     };
+    let message = message()?;
     Ok(Some(BackgroundFuture::new(async move {
         sender.send(&message).await
     })))

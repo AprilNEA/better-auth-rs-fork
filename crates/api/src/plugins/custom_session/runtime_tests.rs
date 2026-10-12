@@ -105,8 +105,7 @@ impl CustomSessionCallback<S> for Callback {
     ) -> AuthResult<Value> {
         let first = input
             .data
-            .user
-            .model_property("id")?
+            .user_property("id")?
             .strict_equals(&"first".into());
         self.state
             .observe(request, context, if first { BEFORE } else { FIRST })?;

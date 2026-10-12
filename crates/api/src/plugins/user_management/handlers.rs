@@ -49,6 +49,10 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         .user_property("emailVerified")?
         .strict_equals(&true.into())
         && config.change_email.update_without_verification;
+    let confirmation = can_send
+        && data.user_property("emailVerified")?.is_truthy()
+        && (callbacks.is_some_and(|callbacks| callbacks.confirmation.is_some())
+            || config.change_email.send_change_email_confirmation.is_some());
     if !update_now && !can_send {
         return Err(AuthError::from_status(
             "BAD_REQUEST",
@@ -73,12 +77,6 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         )?;
         return Ok(StatusResponse { status: true });
     }
-    let confirmation = !update_now
-        && data.user_property("emailVerified")?.is_truthy()
-        && can_send
-        && (callbacks.is_some_and(|callbacks| callbacks.confirmation.is_some())
-            || config.change_email.send_change_email_confirmation.is_some());
-    let mut recipient = data.user.clone();
     if update_now {
         let _ = ctx
             .database
@@ -90,18 +88,11 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
                 },
             )
             .await?;
-        let mut fields = recipient.enumerable_fields()?;
+        let session_value = data.session_value()?;
+        let mut fields = data.user_value()?.enumerable_fields()?;
         let _ = fields.insert("email".into(), new_email.clone().into());
-        recipient = fields.into();
         ctx.session_manager()
-            .set_native_session_cookie(
-                req,
-                NativeSessionData {
-                    user: recipient.clone(),
-                    session: data.session.clone(),
-                },
-                None,
-            )
+            .set_native_session_cookie(req, data.with_values(session_value, fields.into()), None)
             .await?;
         if !can_send {
             return Ok(StatusResponse { status: true });
@@ -116,9 +107,6 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
             Some("change-email-confirmation"),
         )
     } else {
-        let mut fields = recipient.enumerable_fields()?;
-        let _ = fields.insert("email".into(), new_email.clone().into());
-        recipient = fields.into();
         (
             crate::plugins::helpers::user_email_field(&data.user_property("email")?)?,
             Some(new_email.as_str()),
@@ -149,9 +137,9 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         ctx,
     );
     endpoint.session = Some(data.clone());
-    let task = if confirmation {
+    let task = if !update_now && confirmation {
         let message = super::ChangeEmailConfirmation {
-            user: data.user.clone(),
+            user: data.user_value()?,
             new_email,
             url,
             token,
@@ -175,10 +163,12 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
             ));
         }
     } else {
+        let mut recipient = data.user_value()?.enumerable_fields()?;
+        let _ = recipient.insert("email".into(), new_email.into());
         crate::plugins::email_verification::delivery::delivery(
             verification,
             crate::plugins::email_verification::VerificationEmail {
-                user: recipient,
+                user: recipient.into(),
                 url,
                 token,
             },
@@ -287,7 +277,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
         );
         endpoint.session = Some(data.clone());
         let message = crate::plugins::email_verification::VerificationEmail {
-            user: data.user.clone(),
+            user: data.user_value()?,
             url,
             token,
         };
@@ -324,7 +314,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
     }
 
     if body.password.as_deref().is_none_or(str::is_empty)
-        && !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)?
+        && !crate::plugins::helpers::session_is_fresh(data, &ctx.config)?
     {
         return Err(AuthError::from_code(
             "BAD_REQUEST",
@@ -378,7 +368,7 @@ async fn perform_user_deletion(
     confirmed: bool,
 ) -> AuthResult<()> {
     if let Some(hook) = &config.delete_user.before_delete {
-        hook.before_delete(&data.user, Some(req)).await?;
+        hook.before_delete(&data.user_value()?, Some(req)).await?;
     }
     let id = data.user_property("id")?;
     ctx.database.delete_user_value(&id).await?;
@@ -389,7 +379,7 @@ async fn perform_user_deletion(
     // Queue revocation before the application hook so error responses also clear credentials.
     ctx.session_manager().clear_cookies(req)?;
     if let Some(hook) = &config.delete_user.after_delete {
-        hook.after_delete(&data.user, Some(req)).await?;
+        hook.after_delete(&data.user_value()?, Some(req)).await?;
     }
     Ok(())
 }

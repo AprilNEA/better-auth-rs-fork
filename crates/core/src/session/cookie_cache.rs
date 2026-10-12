@@ -9,17 +9,15 @@ use crate::config::{AuthConfig, CookieCacheConfig, CookieCacheStrategy};
 use crate::utils::cookie_utils::{
     clear_existing_cookies, create_chunked_cookies, expire_cookie, related_cookie_name,
 };
-use crate::{
-    AuthError, AuthRequest, AuthResult, CookieAttributes, FieldMap, FieldValue, FromFieldMap,
-};
+use crate::{AuthError, AuthRequest, AuthResult, CookieAttributes, FieldMap, FieldValue};
 
 pub(super) use crate::utils::cookie_utils::get_chunked_cookie as read;
 
-use super::{NativeSessionData, SessionData};
+use super::NativeSessionData;
 
 #[derive(Debug)]
 pub(super) struct CachedSession {
-    pub data: SessionData,
+    pub data: NativeSessionData,
     pub version: String,
 }
 
@@ -62,14 +60,15 @@ pub(super) async fn payload(
     cache: &CookieCacheConfig,
     dont_remember: bool,
 ) -> AuthResult<(FieldMap, f64)> {
-    let mut session = data.session.clone();
-    if config.session.additional_fields.is_some() {
-        session.filter_returned_fields(&config.session)?;
-    }
+    let session = if config.session.additional_fields.is_some() {
+        data.public_session(&config.session)?
+    } else {
+        data.session_value()?
+    };
     let user = data.public_user(&config.user)?;
     let version = cache.version.resolve(data).await?;
     let mut payload = FieldMap::new();
-    let _ = payload.insert("session".into(), FieldMap::from(session).into());
+    let _ = payload.insert("session".into(), session);
     let _ = payload.insert("user".into(), user);
     let _ = payload.insert("updatedAt".into(), Utc::now().timestamp_millis().into());
     let _ = payload.insert("version".into(), version.into());
@@ -239,10 +238,14 @@ fn parse_payload(payload: Value) -> Option<CachedSession> {
         "userAgent".into(),
     ]);
     Some(CachedSession {
-        data: SessionData {
-            user: crate::UserView::from_field_values(user).ok()?,
-            session: crate::SessionView::from_field_values(session).ok()?,
-        },
+        data: NativeSessionData::from_native(
+            FieldMap::from([
+                ("session".into(), session.into()),
+                ("user".into(), user.into()),
+            ])
+            .into(),
+            true,
+        ),
         version,
     })
 }
@@ -250,8 +253,7 @@ fn parse_payload(payload: Value) -> Option<CachedSession> {
 pub(super) fn parse_jwt(payload: serde_json::Map<String, Value>) -> Option<(CachedSession, i64)> {
     let expires = crate::utils::date::from_milliseconds(payload.get("exp")?.as_f64()? * 1000.0)?
         .timestamp_millis();
-    let mut parsed: CachedSession = parse_payload(Value::Object(payload))?;
-    parsed.data.session.active = true;
+    let parsed = parse_payload(Value::Object(payload))?;
     Some((parsed, expires))
 }
 
@@ -306,9 +308,7 @@ pub(super) fn decode(
             (payload, expires)
         }
     };
-    let mut payload = parse_payload(payload)?;
-    // `active` is internal state and is intentionally absent from wire payloads.
-    payload.data.session.active = true;
+    let payload = parse_payload(payload)?;
     Some((payload, expires_at))
 }
 

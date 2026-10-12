@@ -31,7 +31,7 @@ pub(crate) fn user_email_field(email: &better_auth_core::FieldValue) -> AuthResu
 }
 
 pub(crate) fn session_is_fresh(
-    session: &impl better_auth_core::AuthSession,
+    session: &better_auth_core::session::NativeSessionData,
     config: &better_auth_core::AuthConfig,
 ) -> AuthResult<bool> {
     let fresh_age = config
@@ -41,7 +41,8 @@ pub(crate) fn session_is_fresh(
     if fresh_age.is_zero() {
         return Ok(true);
     }
-    let created_at = session.created_at().converted_date()?.date_milliseconds()?;
+    let created_at = better_auth_core::query::field_date(&session.session_property("createdAt")?)?
+        .milliseconds();
     let stale =
         Utc::now().timestamp_millis() as f64 - created_at >= fresh_age.num_milliseconds() as f64;
     Ok(!stale)
@@ -378,7 +379,7 @@ pub(crate) async fn issue_selected_user_session_optional<S: better_auth_core::Au
 ) -> Result<Option<better_auth_core::session::NativeSessionData>, SessionIssueError> {
     let user_id = better_auth_core::SchemaValue::<String>::from_field(user.model_property("id")?);
     let session = issue_session_for_id_optional(ctx, user_id, meta, expires_in).await?;
-    Ok(session.map(|session| better_auth_core::session::NativeSessionData { user, session }))
+    Ok(session.map(|session| better_auth_core::session::NativeSessionData::new(session, user)))
 }
 
 /// Apply session admission without replacing the supplied owner with a projected User ID.

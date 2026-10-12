@@ -13,10 +13,7 @@ fn public_user_projection_preserves_falsy_values_and_enumerates_native_values() 
         f64::NAN.into(),
         "".into(),
     ] {
-        let data = NativeSessionData {
-            session: SessionView::default(),
-            user: user.clone(),
-        };
+        let data = NativeSessionData::new(SessionView::default(), user.clone());
         assert!(data.public_user(&config)?.same_value_zero(&user));
     }
     for user in [
@@ -26,10 +23,7 @@ fn public_user_projection_preserves_falsy_values_and_enumerates_native_values() 
         FieldDate::from_milliseconds(123.0).into(),
         FieldDate::invalid().into(),
     ] {
-        let data = NativeSessionData {
-            session: SessionView::default(),
-            user,
-        };
+        let data = NativeSessionData::new(SessionView::default(), user);
         assert_eq!(data.public_user(&config)?, FieldMap::new().into());
     }
 
@@ -45,10 +39,7 @@ fn public_user_projection_preserves_falsy_values_and_enumerates_native_values() 
         FieldValue::from("A😀B"),
         Utf16String::from_units(vec![0x41, 0xd83d, 0xde00, 0x42]).into(),
     ] {
-        let data = NativeSessionData {
-            session: SessionView::default(),
-            user,
-        };
+        let data = NativeSessionData::new(SessionView::default(), user);
         assert_eq!(
             data.public_user(&config)?,
             FieldMap::from([
@@ -87,7 +78,7 @@ fn native_session_input_preserves_user_shape_and_shared_values_before_explicit_v
             ("session".into(), FieldMap::new().into()),
             ("user".into(), user.clone()),
         ]))?;
-        assert!(data.user.strict_equals(&user));
+        assert!(data.user_value()?.strict_equals(&user));
         if user.is_object() {
             let view = data.user_view()?;
             assert!(view.id.is_undefined());
@@ -108,7 +99,7 @@ fn native_session_input_preserves_user_shape_and_shared_values_before_explicit_v
         "session".into(),
         FieldMap::new().into(),
     )]))?;
-    assert!(missing.user.is_undefined());
+    assert!(missing.user_value()?.is_undefined());
     Ok(())
 }
 
@@ -122,7 +113,10 @@ fn native_session_json_decode_keeps_user_absence_null_arrays_and_numeric_keys() 
         serde_json::json!({"session": {}, "user": {"0": {"id": 7}, "id": null}}),
     ] {
         let data: NativeSessionData = serde_json::from_value(source.clone())?;
-        assert_eq!(data.user.is_undefined(), source.get("user").is_none());
+        assert_eq!(
+            data.user_value()?.is_undefined(),
+            source.get("user").is_none()
+        );
         assert_eq!(serde_json::to_value(data)?, source);
     }
     Ok(())
@@ -206,7 +200,7 @@ async fn native_snapshot_tokens_keep_mapping_identity_and_many_relationships() -
             let relation = NativeSessionData::from(relation.ok_or_else(|| {
                 AuthError::internal("Native token lookup must retain the loaded User relationship")
             })?);
-            assert_eq!(relation.user, FieldValue::from(expected));
+            assert_eq!(relation.user_value()?, FieldValue::from(expected));
             for unmatched in [
                 FieldValue::from("7"),
                 FieldMap::from([("token".into(), 7.into())]).into(),

@@ -275,10 +275,7 @@ async fn exercise(mode: &'static str, storage: &'static str) -> AuthResult<()> {
         organization: org.id.field_value(),
     });
     context.extensions.insert(signer);
-    let native = NativeSessionData {
-        session,
-        user: FieldMap::from(user.clone()).into(),
-    };
+    let native = NativeSessionData::new(session, FieldMap::from(user.clone()).into());
     let request: AuthRequest = test_helpers::create_auth_json_request_no_query(
         HttpMethod::Post,
         "/organization/accept-invitation",
@@ -418,14 +415,13 @@ async fn exercise(mode: &'static str, storage: &'static str) -> AuthResult<()> {
     assert_eq!(published.is_some(), matches!(mode, "commit" | "member"));
     if let Some(published) = published {
         assert_eq!(
-            published.session.active_team_id.field_value(),
+            published.session_property("activeTeamId").unwrap(),
             team.id.field_value()
         );
         assert!(
             !published
-                .session
-                .active_organization_id
-                .field_value()
+                .session_property("activeOrganizationId")
+                .unwrap()
                 .is_truthy()
         );
     }

@@ -5,7 +5,7 @@ description: Transfer an existing authenticated session with a single-use token.
 
 Register `OneTimeTokenPlugin::new()`. An authenticated `GET /one-time-token/generate` returns `{ "token": "..." }`. `POST /one-time-token/verify` accepts that token, consumes it atomically, and returns the original session and user. The recipient receives a signed session cookie.
 
-Tokens expire after three minutes. `.expires_in(chrono::Duration::minutes(1))` changes the lifetime; the Rust API uses a duration, while Better Auth's numeric option uses minutes. `.store_token(TokenStorage::Hashed)` stores a SHA-256 digest. `TokenStorage::Custom` supports an application hasher. `.generate_token(generator)` receives `NativeSessionData` for custom token generation. Read `data.session` and `data.user`, or use `data.user_view()` when the User is an object.
+Tokens expire after three minutes. `.expires_in(chrono::Duration::minutes(1))` changes the lifetime; the Rust API uses a duration, while Better Auth's numeric option uses minutes. `.store_token(TokenStorage::Hashed)` stores a SHA-256 digest. `TokenStorage::Custom` supports an application hasher. `.generate_token(generator)` receives `NativeSessionData` for custom token generation. Read `data.session_value()?` and `data.user_value()?`, or use `data.user_view()?` when the User is an object. Native clones retain the same root and observe callback property mutations.
 
 The lifetime starts after token generation and before the storage hasher runs. A slow asynchronous hasher does not extend the deadline. A token that expires during hashing cannot transfer the session.
 

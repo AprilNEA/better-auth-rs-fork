@@ -51,7 +51,7 @@ async fn typed_generator_and_proof_share_commit_and_rollback() -> AuthResult<()>
                         .get_verification_including_expired(MARKER)
                         .await?
                         .ok_or_else(|| AuthError::internal("The transaction marker is missing"))?;
-                    assert_eq!(marker.value, data.session.token);
+                    assert_eq!(marker.value, data.session_view()?.token);
                     assert!(
                         endpoint
                             .auth
@@ -61,7 +61,10 @@ async fn typed_generator_and_proof_share_commit_and_rollback() -> AuthResult<()>
                             .is_none()
                     );
                     let _ = tx
-                        .create_verification(verification(CALLBACK_RECORD, &data.session.token))
+                        .create_verification(verification(
+                            CALLBACK_RECORD,
+                            &data.session_view()?.token,
+                        ))
                         .await?;
                     let _ = generated.fetch_add(1, Ordering::SeqCst);
                     Ok(TOKEN.to_owned())
@@ -91,10 +94,7 @@ async fn typed_generator_and_proof_share_commit_and_rollback() -> AuthResult<()>
             })
             .await?;
         let expected_token = session.token.clone();
-        let data = NativeSessionData {
-            session,
-            user: FieldMap::from(user).into(),
-        };
+        let data = NativeSessionData::new(session, FieldMap::from(user).into());
         let legacy_calls = Arc::new(AtomicUsize::new(0));
         let legacy = legacy_calls.clone();
         let plugin = OneTimeTokenPlugin::new().generate_token(Arc::new(move |_| {
@@ -105,12 +105,12 @@ async fn typed_generator_and_proof_share_commit_and_rollback() -> AuthResult<()>
         let result = transaction(ctx.database.as_ref(), move |tx| {
             Box::pin(async move {
                 let _ = tx
-                    .create_verification(verification(MARKER, &data.session.token))
+                    .create_verification(verification(MARKER, &data.session_view()?.token))
                     .await?;
                 let mut endpoint =
                     EndpointContext::native(None, None, FieldValue::Undefined, during.as_ref());
                 endpoint.transaction = Some(tx);
-                let selected_token = data.session.token.clone();
+                let selected_token = data.session_view()?.token.clone();
                 let token = plugin.generate_in_endpoint(data, &endpoint).await?;
                 assert_eq!(token, TOKEN);
                 for identifier in [MARKER, CALLBACK_RECORD, PROOF] {

@@ -64,14 +64,17 @@ async fn selected_users_without_an_admin_identity_reach_session_storage() -> Aut
         .await
         .map_err(SessionIssueError::into_auth_error)?
         .ok_or_else(|| AuthError::internal("Expected created Session"))?;
-        assert!(issued.user.strict_equals(&user));
+        assert!(issued.user_value()?.strict_equals(&user));
         let stored = ctx
             .database
-            .get_session(issued.session.token.typed().unwrap())
+            .get_session(issued.session_property("token")?.as_str().unwrap())
             .await?
             .ok_or_else(|| AuthError::internal("Expected persisted Session"))?;
-        assert_eq!(stored.id, issued.session.id);
-        assert_eq!(stored.user_id, issued.session.user_id);
+        assert_eq!(stored.id.field_value(), issued.session_property("id")?);
+        assert_eq!(
+            stored.user_id.field_value(),
+            issued.session_property("userId")?
+        );
     }
     assert_eq!(*owners.0.lock().unwrap(), ids);
     assert!(matches!(

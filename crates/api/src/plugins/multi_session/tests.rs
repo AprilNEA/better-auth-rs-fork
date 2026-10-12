@@ -84,13 +84,16 @@ async fn session_list_deduplicates_raw_relationship_ids_before_public_projection
     let request = device_request(&ctx, &sessions, "/multi-session/list-device-sessions");
     let raw = list_sessions(&request, &ctx, true).await.unwrap();
     assert_eq!(raw.len(), 2);
-    assert!(raw.iter().all(|data| data.user.as_array().is_some()));
-    let mut expected = raw.into_iter().next().unwrap();
-    expected
-        .session
-        .filter_returned_fields(&ctx.config.session)
+    assert!(
+        raw.iter()
+            .all(|data| data.user_value().unwrap().as_array().is_some())
+    );
+    let expected = raw
+        .into_iter()
+        .next()
+        .unwrap()
+        .public_data(&ctx.config)
         .unwrap();
-    expected.user = expected.public_user(&ctx.config.user).unwrap();
     let response = MultiSessionPlugin::new()
         .handle_list(&request, &ctx)
         .await
@@ -115,7 +118,16 @@ async fn active_session_preserves_the_selected_relationship_through_cookie_and_r
         .await
         .unwrap();
     let issued = request.new_session().unwrap().unwrap();
-    assert!(issued.user.as_object().unwrap().get("0").unwrap().is_some());
+    assert!(
+        issued
+            .user_value()
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("0")
+            .unwrap()
+            .is_some()
+    );
     assert!(issued.user_field("id").unwrap().is_undefined());
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap(),
@@ -131,10 +143,10 @@ async fn remember_session_uses_new_session_even_after_its_database_row_is_delete
     ctx.session_manager()
         .set_native_session_cookie(
             &request,
-            NativeSessionData {
-                session: session.clone(),
-                user: vec![FieldValue::from(FieldMap::new())].into(),
-            },
+            NativeSessionData::new(
+                session.clone(),
+                vec![FieldValue::from(FieldMap::new())].into(),
+            ),
             None,
         )
         .await

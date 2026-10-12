@@ -8,7 +8,7 @@ pub use invitation::*;
 pub use member::*;
 pub use org::*;
 
-use better_auth_core::entity::{AuthMember, AuthSession};
+use better_auth_core::entity::AuthMember;
 use better_auth_core::error::{AuthError, AuthResult};
 use better_auth_core::plugin::AuthContext;
 use better_auth_core::session::NativeSessionData;
@@ -71,14 +71,14 @@ async fn request_only_session<S: better_auth_core::AuthSchema>(
 /// Resolve the organization ID from the request or the session.
 pub(crate) fn resolve_organization_id(
     org_id: Option<&str>,
-    session: &impl AuthSession,
+    session: &NativeSessionData,
     missing: AuthError,
 ) -> AuthResult<better_auth_core::FieldValue> {
     if let Some(id) = org_id.filter(|id| !id.is_empty()) {
         return Ok(id.into());
     }
 
-    let id = session.active_organization_id().field_value();
+    let id = session.session_property("activeOrganizationId")?;
     id.is_truthy().then_some(id).ok_or(missing)
 }
 
@@ -94,7 +94,7 @@ pub(crate) async fn has_permission_core(
 ) -> AuthResult<HasPermissionResponse> {
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        &session.session,
+        session,
         AuthError::from_code(
             "BAD_REQUEST",
             "NO_ACTIVE_ORGANIZATION",

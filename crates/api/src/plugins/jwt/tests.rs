@@ -183,6 +183,8 @@ async fn callbacks_receive_the_complete_session_and_custom_signing_options() {
                 &EndpointContext::native(None, None, better_auth_core::FieldValue::Null, &ctx),
             )
             .await
+            .unwrap()
+            .decode::<String>()
             .unwrap(),
     )
     .unwrap();
@@ -262,10 +264,7 @@ async fn cookie_signer_resolves_keys_before_rejecting_missing_subject() -> AuthR
         let result = manager
             .set_native_session_cookie(
                 &request,
-                NativeSessionData {
-                    session: session.clone(),
-                    user: projected_user.into(),
-                },
+                NativeSessionData::new(session.clone(), projected_user.into()),
                 Some(false),
             )
             .await;

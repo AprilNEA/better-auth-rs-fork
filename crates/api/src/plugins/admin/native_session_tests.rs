@@ -175,7 +175,7 @@ impl ValidateUserInfo<StatelessSchema> for Admission {
         self.0
             .lock()
             .unwrap()
-            .push(context.session.as_ref().unwrap().user.clone());
+            .push(context.session.as_ref().unwrap().user_value()?);
         Ok(None)
     }
 }
@@ -360,7 +360,10 @@ async fn admin_impersonation_keeps_native_actor_ids_and_allows_authorized_self_t
                     .unwrap();
                 assert_eq!(session.user_id.field_value(), FieldValue::from("17"));
                 assert_eq!(session.impersonated_by.field_value(), actor_id);
-                assert_eq!(request.new_session()?.unwrap().session.token, session.token);
+                assert_eq!(
+                    request.new_session()?.unwrap().session_view()?.token,
+                    session.token
+                );
             } else {
                 assert_http_error(
                     &result?,

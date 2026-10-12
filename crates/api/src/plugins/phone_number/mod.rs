@@ -3,9 +3,9 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use better_auth_core::utils::password::hash_password;
 use better_auth_core::wire::UserView;
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthSession,
-    AuthUser, CreateAccount, CreateUser, CreateVerification, FieldDate, FieldValue, RequestMeta,
-    SchemaValue, UpdateUser,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthUser,
+    CreateAccount, CreateUser, CreateVerification, FieldDate, FieldValue, RequestMeta, SchemaValue,
+    UpdateUser,
 };
 use chrono::Duration;
 use rand::Rng;
@@ -529,7 +529,7 @@ impl PhoneNumberPlugin {
                 None,
                 better_auth_core::FieldMap::from([
                     ("status".into(), true.into()),
-                    ("token".into(), session.session.token.field_value()),
+                    ("token".into(), session.session_property("token")?),
                     (
                         "user".into(),
                         better_auth_core::FieldMap::from(ctx.user_view(&user).await?).into(),
@@ -657,7 +657,7 @@ impl PhoneNumberPlugin {
             ));
         };
         let mut output = better_auth_core::FieldMap::from([
-            ("token".into(), issued.session.token().field_value()),
+            ("token".into(), issued.session_property("token")?),
             (
                 "user".into(),
                 better_auth_core::FieldMap::from(ctx.user_view(user).await?).into(),

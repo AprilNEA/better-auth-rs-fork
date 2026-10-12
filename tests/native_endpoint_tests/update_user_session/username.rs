@@ -83,13 +83,10 @@ async fn username_hook_reads_current_identity_only_when_validation_consumes_it()
                 case,
                 thrown: thrown.clone(),
                 state: state.clone(),
-                data: NativeSessionData {
-                    session: SessionView::from_field_values(session(
-                        "injected-token",
-                        "snapshot-user",
-                    ))?,
-                    user: native_user(case, &shared, &state, &thrown)?,
-                },
+                data: NativeSessionData::new(
+                    SessionView::from_field_values(session("injected-token", "snapshot-user"))?,
+                    native_user(case, &shared, &state, &thrown)?,
+                ),
             };
             let mut original = user("7");
             let _ = original.insert("username".into(), "same_user".into());

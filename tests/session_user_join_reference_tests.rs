@@ -176,19 +176,20 @@ fn snapshot_fields(
     config: &AuthConfig,
     internal: bool,
 ) -> AuthResult<FieldValue> {
-    let mut data = NativeSessionData::from(
+    let data = NativeSessionData::from(
         joined
             .ok_or_else(|| AuthError::internal("Requested Session relationship was not loaded"))?,
     );
     if internal {
-        if data.user.is_null() {
+        if data.user_value()?.is_null() {
             return Ok(FieldValue::Null);
         }
-        data.session.filter_returned_fields(&config.session)?;
-        return Ok(FieldMap::from(data).into());
+        return Ok(data
+            .with_values(data.public_session(&config.session)?, data.user_value()?)
+            .field_value());
     }
     let mut fields = FieldMap::from(session);
-    let _ = fields.insert("user".into(), data.user);
+    let _ = fields.insert("user".into(), data.user_value()?);
     Ok(fields.into())
 }
 
@@ -280,7 +281,7 @@ async fn operation<S: AuthSchema>(
             .await?;
         return Ok(resolved
             .data
-            .map_or(FieldValue::Null, |data| FieldMap::from(data).into()));
+            .map_or(FieldValue::Null, |data| data.field_value()));
     }
     let Some(snapshot) = store.get_session_snapshot(token).await? else {
         return Ok(FieldValue::Null);

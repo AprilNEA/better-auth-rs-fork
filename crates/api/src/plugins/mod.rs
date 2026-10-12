@@ -362,7 +362,8 @@ pub use email_verification::{
 pub use jwt::{
     JwtAdapterFuture, JwtAlgorithm, JwtApi, JwtAudience, JwtCallOverrides, JwtCallbackFuture,
     JwtCallbacks, JwtCustomSign, JwtDefinePayload, JwtExpiration, JwtGetSubject, JwtKeyOptions,
-    JwtKeyPairConfig, JwtPlugin, JwtPluginConfig, JwtSigningOptions, JwtTokenOptions,
+    JwtKeyPairConfig, JwtNativeCustomSign, JwtNativeDefinePayload, JwtNativeGetSubject, JwtPlugin,
+    JwtPluginConfig, JwtSigningOptions, JwtTokenOptions,
 };
 pub use magic_link::{MagicLinkConfig, MagicLinkMessage, MagicLinkPlugin, SendMagicLink};
 pub use multi_session::{MultiSessionConfig, MultiSessionPlugin};

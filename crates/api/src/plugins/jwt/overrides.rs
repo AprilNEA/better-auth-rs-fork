@@ -9,7 +9,7 @@ pub struct JwtTokenOptions {
     #[serde(default, deserialize_with = "input::expiration")]
     pub expiration_time: Option<JwtExpiration>,
     #[serde(skip)]
-    pub custom_sign: Option<JwtCustomSign>,
+    pub custom_sign: Option<JwtNativeCustomSign>,
 }
 
 /// Key defaults that replace the entire upstream `jwks` option group for one native signing call.

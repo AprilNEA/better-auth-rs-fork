@@ -42,20 +42,18 @@ pub(crate) async fn invite_member_core(
     request: Option<&AuthRequest>,
 ) -> AuthResult<InvitationView> {
     let org_value = body.organization_id.field_value();
-    let org_value = org_value
-        .is_truthy()
-        .then_some(org_value)
-        .or_else(|| {
-            let id = session.session.active_organization_id.field_value();
-            id.is_truthy().then_some(id)
-        })
-        .ok_or_else(|| {
-            AuthError::from_code(
-                "BAD_REQUEST",
-                "ORGANIZATION_NOT_FOUND",
-                "Organization not found",
-            )
-        })?;
+    let org_value = if org_value.is_truthy() {
+        org_value
+    } else {
+        session.session_property("activeOrganizationId")?
+    };
+    let org_value = org_value.is_truthy().then_some(org_value).ok_or_else(|| {
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "ORGANIZATION_NOT_FOUND",
+            "Organization not found",
+        )
+    })?;
     let email = crate::plugins::organization::input::string_operation(
         &body.email,
         "invitation email.toLowerCase",
@@ -228,11 +226,9 @@ pub(crate) async fn invite_member_core(
         {
             let limit = config
                 .pending_invitation_limit(
-                    OrganizationMemberEvent {
-                        member: &member,
-                        user: &session.user,
-                        organization: &organization_view,
-                    },
+                    &member,
+                    &organization_view,
+                    || session.user_value(),
                     OrganizationEndpoint::new(ctx, request),
                 )
                 .await?;
@@ -304,10 +300,7 @@ pub(crate) async fn invite_member_core(
                         .team_member_limit(OrganizationTeamMemberLimit {
                             organization_id: &org_id,
                             team_id: &team_id,
-                            session: OrganizationSession {
-                                user: &session.user,
-                                session: &session.session,
-                            },
+                            session,
                         })
                         .await?;
                     if let Some(limit) = limit
@@ -360,7 +353,7 @@ pub(crate) async fn invite_member_core(
                     &mut draft,
                     OrganizationUser {
                         organization: &organization_view,
-                        user: &session.user,
+                        user: &session.user_value()?,
                     },
                 )
                 .await?;
@@ -380,12 +373,14 @@ pub(crate) async fn invite_member_core(
     endpoint.session = Some(session.clone());
     let task = crate::plugins::organization::callbacks::delivery(
         config,
-        InvitationEmail {
-            invitation: invitation_view.clone(),
-            organization: organization_view.clone(),
-            member,
-            inviter: session.user.clone(),
-            request: endpoint.request.cloned(),
+        || {
+            Ok(InvitationEmail {
+                invitation: invitation_view.clone(),
+                organization: organization_view.clone(),
+                member,
+                inviter: session.user_value()?,
+                request: endpoint.request.cloned(),
+            })
         },
         &endpoint,
     )?;
@@ -399,7 +394,7 @@ pub(crate) async fn invite_member_core(
         hooks
             .after_create_invitation(OrganizationInvitationEvent {
                 invitation: &invitation,
-                user: &session.user,
+                user: &session.user_value()?,
                 organization: &organization_view,
             })
             .await?;
@@ -485,7 +480,7 @@ pub(crate) async fn list_invitations_core(
 ) -> AuthResult<Vec<InvitationView>> {
     let org_id = resolve_organization_id(
         query.organization_id.as_deref(),
-        &session.session,
+        session,
         AuthError::from_status(
             "BAD_REQUEST",
             better_auth_core::FieldMap::from([(
@@ -641,10 +636,7 @@ pub(crate) async fn accept_invitation_core(
         })?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
     let limit = config
-        .member_limit(OrganizationUser {
-            organization: &organization_view,
-            user: &session.user,
-        })
+        .member_limit(&organization_view, || session.user_value())
         .await?;
     if count >= limit as i64 {
         return Err(AuthError::from_code(
@@ -653,31 +645,26 @@ pub(crate) async fn accept_invitation_core(
             "Organization membership limit reached",
         ));
     }
-    let event = OrganizationInvitationEvent {
-        invitation: &invitation,
-        user: &session.user,
-        organization: &organization_view,
-    };
     if let Some(hooks) = &config.hooks {
-        hooks.before_accept_invitation(event).await?;
+        hooks
+            .before_accept_invitation(OrganizationInvitationEvent {
+                invitation: &invitation,
+                user: &session.user_value()?,
+                organization: &organization_view,
+            })
+            .await?;
     }
 
-    let resolver = InvitationTeamLimits {
-        config,
-        session: OrganizationSession {
-            user: &session.user,
-            session: &session.session,
-        },
-    };
+    let resolver = InvitationTeamLimits { config, session };
     let manager = ctx.session_manager();
     let request = request.clone();
-    let user = session.user.clone();
+    let session_source = session.clone();
     let (member, accepted, _) = ctx
         .database
         .accept_invitation_with_session_effects_values(
             &body.invitation_id.as_str().into(),
             &session.user_property("id")?,
-            Some(&session.session.token.field_value()),
+            Some(&session.session_property("token")?),
             config.teams.enabled,
             better_auth_core::store::TeamMemberLimits::Resolver(&resolver),
             better_auth_core::store::SessionWriteEffects {
@@ -687,7 +674,7 @@ pub(crate) async fn accept_invitation_core(
                         manager
                             .set_native_session_cookie_in_transaction(
                                 &request,
-                                NativeSessionData { session, user },
+                                session_source.with_session(session)?,
                                 None,
                                 transaction.as_ref(),
                             )
@@ -703,7 +690,8 @@ pub(crate) async fn accept_invitation_core(
                 &member,
                 OrganizationInvitationEvent {
                     invitation: &accepted,
-                    ..event
+                    user: &session.user_value()?,
+                    organization: &organization_view,
                 },
             )
             .await?;
@@ -766,13 +754,14 @@ pub(crate) async fn reject_invitation_core(
             )
         })?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
-    let event = OrganizationInvitationEvent {
-        invitation: &invitation,
-        user: &session.user,
-        organization: &organization_view,
-    };
     if let Some(hooks) = &config.hooks {
-        hooks.before_reject_invitation(event).await?;
+        hooks
+            .before_reject_invitation(OrganizationInvitationEvent {
+                invitation: &invitation,
+                user: &session.user_value()?,
+                organization: &organization_view,
+            })
+            .await?;
     }
     let updated_invitation = ctx
         .database
@@ -783,7 +772,8 @@ pub(crate) async fn reject_invitation_core(
         hooks
             .after_reject_invitation(OrganizationInvitationEvent {
                 invitation: updated_invitation.as_ref().unwrap_or(&invitation),
-                ..event
+                user: &session.user_value()?,
+                organization: &organization_view,
             })
             .await?;
     }
@@ -855,13 +845,14 @@ pub(crate) async fn cancel_invitation_core(
             )
         })?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
-    let event = OrganizationInvitationEvent {
-        invitation: &invitation,
-        user: &session.user,
-        organization: &organization_view,
-    };
     if let Some(hooks) = &config.hooks {
-        hooks.before_cancel_invitation(event).await?;
+        hooks
+            .before_cancel_invitation(OrganizationInvitationEvent {
+                invitation: &invitation,
+                user: &session.user_value()?,
+                organization: &organization_view,
+            })
+            .await?;
     }
     let updated_invitation = ctx
         .database
@@ -872,7 +863,8 @@ pub(crate) async fn cancel_invitation_core(
         hooks
             .after_cancel_invitation(OrganizationInvitationEvent {
                 invitation: updated_invitation.as_ref().unwrap_or(&invitation),
-                ..event
+                user: &session.user_value()?,
+                organization: &organization_view,
             })
             .await?;
     }

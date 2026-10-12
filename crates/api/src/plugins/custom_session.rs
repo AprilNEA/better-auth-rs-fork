@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use better_auth_core::{
     AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-    AuthSchema, FieldValue, FromFieldMap, HttpMethod, ResponseBody, session::NativeSessionData,
+    AuthSchema, FieldValue, HttpMethod, ResponseBody, session::NativeSessionData,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -28,7 +28,7 @@ impl CustomSessionInput {
             better_auth_core::AuthError::internal("Custom session input must be an object")
         })?;
         Ok(Self {
-            data: NativeSessionData::from_field_values(fields.snapshot_fields()?)?,
+            data: NativeSessionData::from_native(value.clone(), false),
             needs_refresh: fields.get("needsRefresh")?.unwrap_or_default().decode()?,
         })
     }
@@ -252,7 +252,7 @@ mod tests {
             let input = CustomSessionInput::from_response(&body)?.ok_or_else(|| {
                 better_auth_core::AuthError::internal("Expected native custom session input")
             })?;
-            assert!(input.data.user.strict_equals(&user));
+            assert!(input.data.user_value()?.strict_equals(&user));
             assert_eq!(input.needs_refresh, Some(true));
         }
         Ok(())
@@ -272,7 +272,10 @@ mod tests {
             .ok_or_else(|| {
                 better_auth_core::AuthError::internal("Expected JSON custom session input")
             })?;
-            assert_eq!(input.data.user.is_undefined(), source.get("user").is_none());
+            assert_eq!(
+                input.data.user_value()?.is_undefined(),
+                source.get("user").is_none()
+            );
             assert_eq!(serde_json::to_value(input)?, source);
         }
         Ok(())

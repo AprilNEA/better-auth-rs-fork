@@ -28,14 +28,14 @@ fn hidden_native_user_function_rejects_public_clone_before_filtering() -> AuthRe
             ..Default::default()
         },
     );
-    let data = NativeSessionData {
-        session: SessionView::default(),
-        user: FieldMap::from([
+    let data = NativeSessionData::new(
+        SessionView::default(),
+        FieldMap::from([
             ("id".into(), "native-user".into()),
             ("hidden".into(), vec![function.clone()].into()),
         ])
         .into(),
-    };
+    );
     assert!(matches!(
         data.public_user(&config),
         Err(AuthError::DataClone)

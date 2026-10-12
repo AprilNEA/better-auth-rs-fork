@@ -480,7 +480,7 @@ async fn signed_authentication_consumes_projected_admin_bans_after_counter_write
             );
             let published = request.new_session()?.ok_or("Session was not published")?;
             assert_eq!(
-                FieldMap::from(published.session),
+                published.session_value()?.enumerable_fields()?,
                 FieldMap::from(
                     fixture
                         .ctx
@@ -491,7 +491,7 @@ async fn signed_authentication_consumes_projected_admin_bans_after_counter_write
                 "{name}"
             );
             assert_eq!(
-                published.user,
+                published.user_value()?,
                 FieldValue::from(FieldMap::from(
                     fixture.ctx.internal_user_view(&stored_owner).await?
                 )),

@@ -44,10 +44,10 @@ async fn check(case: &'static str, signed_cookie: bool) -> AuthResult<()> {
     let shared: FieldValue = FieldMap::from([("value".into(), FieldValue::Undefined)]).into();
     let state = Arc::new(Mutex::new(Observed::default()));
     let thrown = FieldValue::from(FieldMap::from([("failure".into(), case.into())]));
-    let data = NativeSessionData {
-        session: SessionView::from_field_values(session("injected-token", "snapshot-user"))?,
-        user: getter::injected_user(case, &shared, &state, &thrown)?,
-    };
+    let data = NativeSessionData::new(
+        SessionView::from_field_values(session("injected-token", "snapshot-user"))?,
+        getter::injected_user(case, &shared, &state, &thrown)?,
+    );
     let hooks = SessionHooks {
         case,
         data: data.clone(),
@@ -358,30 +358,44 @@ async fn check(case: &'static str, signed_cookie: bool) -> AuthResult<()> {
     let issued = observed.issued[0]
         .as_ref()
         .ok_or_else(|| AuthError::internal("Expected issued native session"))?;
-    assert!(observed.versions[0].user.strict_equals(&issued.user));
+    assert!(
+        observed.versions[0]
+            .user_value()?
+            .strict_equals(&issued.user_value()?)
+    );
     for snapshot in [&observed.versions[0], issued] {
-        ordered(&snapshot.user.enumerable_fields()?, &expected);
+        ordered(&snapshot.user_value()?.enumerable_fields()?, &expected);
         assert_eq!(
-            FieldMap::from(snapshot.session.clone()),
+            snapshot.session_value()?.enumerable_fields()?,
             session("injected-token", "snapshot-user")
         );
-        if !refreshed && data.user.is_object() {
+        if !refreshed && data.user_value()?.is_object() {
             assert!(
                 snapshot
-                    .user
+                    .user_value()?
                     .model_property("shared")?
                     .strict_equals(&shared)
             );
             assert!(
                 snapshot
-                    .user
+                    .user_value()?
                     .model_property("alias")?
                     .strict_equals(&shared)
             );
         }
         if case == "array-user" {
-            assert!(snapshot.user.model_property("0")?.strict_equals(&shared));
-            assert!(snapshot.user.model_property("1")?.strict_equals(&shared));
+            assert!(
+                snapshot
+                    .user_value()?
+                    .model_property("0")?
+                    .strict_equals(&shared)
+            );
+            assert!(
+                snapshot
+                    .user_value()?
+                    .model_property("1")?
+                    .strict_equals(&shared)
+            );
         }
     }
     let cookies = response

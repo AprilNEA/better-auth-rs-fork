@@ -45,14 +45,16 @@ async fn creation_policy_observes_native_user_and_falsy_session_user_uses_body_s
         .create_user(CreateUser::new().with_email("org-policy@example.test"))
         .await
         .unwrap();
-    let mut data = session(&ctx, &user).await;
+    let data = session(&ctx, &user).await;
     for raw in [
         FieldValue::Bool(true),
         vec![FieldValue::from("relationship")].into(),
         FieldValue::Null,
         false.into(),
     ] {
-        data.user = raw.clone();
+        data.field_value()
+            .set_model_property("user", raw.clone())
+            .unwrap();
         let body = serde_json::from_value(
             serde_json::json!({"name":"Policy", "slug":"policy", "userId":user.id}),
         )
@@ -172,15 +174,20 @@ async fn mutation_hooks_keep_session_user_identity_and_committed_failure_effects
     let marker: FieldValue = vec![FieldValue::from("same-object")].into();
     let mut fields = FieldMap::from(user.clone());
     let _ = fields.insert("marker".into(), marker);
-    data.user = fields.into();
-    *hooks.expected.lock().unwrap() = Some(data.user.clone());
-    data.session = ctx
-        .database
-        .update_session_active_organization_by_token_value(
-            &data.session.token.field_value(),
-            Some(&organization.id.field_value()),
+    data.field_value()
+        .set_model_property("user", fields.into())
+        .unwrap();
+    *hooks.expected.lock().unwrap() = Some(data.user_value().unwrap());
+    data = data
+        .with_session(
+            ctx.database
+                .update_session_active_organization_by_token_value(
+                    &data.session_property("token").unwrap(),
+                    Some(&organization.id.field_value()),
+                )
+                .await
+                .unwrap(),
         )
-        .await
         .unwrap();
     hooks.fail_update.store(true, Ordering::SeqCst);
     let update: UpdateOrganizationRequest =
@@ -215,7 +222,7 @@ async fn mutation_hooks_keep_session_user_identity_and_committed_failure_effects
     );
     assert_eq!(
         ctx.database
-            .get_session_by_token_value(&data.session.token.field_value())
+            .get_session_by_token_value(&data.session_property("token").unwrap())
             .await
             .unwrap()
             .unwrap()
@@ -263,7 +270,7 @@ async fn clearing_active_context_keeps_native_user_in_cookie_callbacks() {
         version: CookieCacheVersion::dynamic(move |data| {
             let capture = capture.clone();
             async move {
-                capture.lock().unwrap().push(data.user);
+                capture.lock().unwrap().push(data.user_value()?);
                 Ok("native-organization".into())
             }
         }),
@@ -288,14 +295,19 @@ async fn clearing_active_context_keeps_native_user_in_cookie_callbacks() {
         false.into(),
         vec![FieldValue::from("relationship")].into(),
     ] {
-        data.user = raw.clone();
-        data.session = ctx
-            .database
-            .update_session_active_organization_by_token_value(
-                &data.session.token.field_value(),
-                Some(&"active".into()),
+        data.field_value()
+            .set_model_property("user", raw.clone())
+            .unwrap();
+        data = data
+            .with_session(
+                ctx.database
+                    .update_session_active_organization_by_token_value(
+                        &data.session_property("token").unwrap(),
+                        Some(&"active".into()),
+                    )
+                    .await
+                    .unwrap(),
             )
-            .await
             .unwrap();
         let request = test_helpers::create_auth_json_request_no_query(
             HttpMethod::Post,
@@ -321,12 +333,13 @@ async fn clearing_active_context_keeps_native_user_in_cookie_callbacks() {
                 .new_session()
                 .unwrap()
                 .unwrap()
-                .user
+                .user_value()
+                .unwrap()
                 .strict_equals(&raw)
         );
         let stored = ctx
             .database
-            .get_session_by_token_value(&data.session.token.field_value())
+            .get_session_by_token_value(&data.session_property("token").unwrap())
             .await
             .unwrap()
             .unwrap();
@@ -437,4 +450,94 @@ async fn trusted_member_capacity_failure_cleans_up_native_identifiers() {
             .unwrap()
             .is_empty()
     );
+}
+
+struct ReplaceSessionUser {
+    root: FieldValue,
+    replacement: FieldValue,
+    observed: Mutex<Vec<FieldValue>>,
+}
+
+#[async_trait::async_trait]
+impl OrganizationHooks for ReplaceSessionUser {
+    async fn before_update_organization(
+        &self,
+        _: &mut better_auth_core::UpdateOrganization,
+        actor: OrganizationActor<'_>,
+    ) -> AuthResult<()> {
+        self.observed.lock().unwrap().push(actor.user.clone());
+        self.root
+            .set_model_property("user", self.replacement.clone())
+    }
+
+    async fn after_update_organization(
+        &self,
+        _: &OrganizationResponse,
+        actor: OrganizationActor<'_>,
+    ) -> AuthResult<()> {
+        self.observed.lock().unwrap().push(actor.user.clone());
+        Err(AuthError::internal("after-update native replacement"))
+    }
+}
+
+#[tokio::test]
+async fn organization_hooks_read_the_shared_root_at_each_callback_boundary() {
+    let mut config = OrganizationConfig::default();
+    let ctx = context(test_helpers::create_test_config(), &config).await;
+    let user = ctx
+        .database
+        .create_user(CreateUser::new().with_email("org-root@example.test"))
+        .await
+        .unwrap();
+    let organization = ctx
+        .database
+        .create_organization(CreateOrganization::new("Before", "root"))
+        .await
+        .unwrap();
+    let _ = ctx
+        .database
+        .create_member(CreateMember {
+            organization_id: organization.id.clone(),
+            user_id: user.id.clone(),
+            role: "owner".into(),
+            additional_fields: Default::default(),
+        })
+        .await
+        .unwrap();
+    let original: FieldValue = FieldMap::from(user).into();
+    let data = better_auth_core::session::NativeSessionData::from_native(
+        FieldMap::from([
+            ("session".into(), FieldValue::Null),
+            ("user".into(), original.clone()),
+        ])
+        .into(),
+        true,
+    );
+    let hooks = Arc::new(ReplaceSessionUser {
+        root: data.field_value(),
+        replacement: FieldValue::Null,
+        observed: Mutex::new(Vec::new()),
+    });
+    config.hooks = Some(hooks.clone());
+    let update = serde_json::from_value(serde_json::json!({
+        "organizationId": organization.id,
+        "data": {"name": "After"}
+    }))
+    .unwrap();
+    assert!(matches!(
+        update_organization_core(&update, &data, &config, &ctx).await,
+        Err(AuthError::Internal(message)) if message == "after-update native replacement"
+    ));
+    let observed = hooks.observed.lock().unwrap().clone();
+    assert_eq!(observed.len(), 2);
+    assert!(observed[0].strict_equals(&original));
+    assert_eq!(observed[1], FieldValue::Null);
+    assert_eq!(data.user_value().unwrap(), FieldValue::Null);
+    let stored = ctx
+        .database
+        .get_organization_by_id_value(&organization.id.field_value())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.name.field_value(), FieldValue::from("After"));
 }

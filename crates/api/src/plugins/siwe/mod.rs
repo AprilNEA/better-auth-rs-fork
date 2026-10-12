@@ -4,8 +4,8 @@ mod request;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use better_auth_core::{
-    AuthContext, AuthError, AuthRecordFields, AuthRequest, AuthResponse, AuthResult, AuthSchema,
-    AuthUser, CreateAccount, CreateUser, CreateVerification, FieldMap, FieldValue, RequestMeta,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthUser,
+    CreateAccount, CreateUser, CreateVerification, FieldMap, FieldValue, RequestMeta,
 };
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use serde_json::{Value, json};
@@ -382,12 +382,7 @@ impl SiwePlugin {
                 .into(),
             ));
         };
-        let token = data
-            .session
-            .field_values()?
-            .get("token")
-            .cloned()
-            .unwrap_or_default();
+        let token = data.session_property("token")?;
         ctx.session_manager()
             .set_native_session_cookie(req, data, None)
             .await?;

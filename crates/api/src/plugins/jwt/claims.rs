@@ -3,22 +3,24 @@ use better_auth_core::utils::jwt::numeric_date;
 
 pub(super) fn default_expiration(
     expiration: &JwtExpiration,
-    issued: Option<&FieldValue>,
+    issued: &FieldValue,
+    now: i64,
 ) -> AuthResult<FieldValue> {
     let seconds = FieldValue::from_json(expiration.claim(0.0))?;
     if matches!(expiration, JwtExpiration::At(_)) {
         return Ok(seconds);
     }
-    let issued = issued
-        .filter(|value| !value.is_null() && !value.is_undefined())
-        .cloned()
-        .unwrap_or_else(|| Utc::now().timestamp().into());
+    let issued = if issued.is_null() || issued.is_undefined() {
+        now.into()
+    } else {
+        issued.clone()
+    };
     better_auth_core::query::field_add(&issued, &seconds)
 }
 
 pub(super) fn prepare_local_claims(
     payload: &mut FieldMap,
-    original: &FieldMap,
+    original: &FieldValue,
     defaults: &FieldMap,
 ) -> AuthResult<()> {
     let claim = |name: &str| defaults.get(name).unwrap_or(&FieldValue::Undefined);
@@ -39,15 +41,18 @@ pub(super) fn prepare_local_claims(
         ));
     }
     let _ = payload.insert("aud".into(), audience.clone());
-    for name in ["iat", "sub", "nbf", "jti"] {
-        if let Some(value) = original.get(name).filter(|value| value.is_truthy()) {
-            let value = match name {
-                "iat" => numeric_date(value, "setIssuedAt")?,
-                "nbf" => numeric_date(value, "setNotBefore")?,
-                _ => {
-                    require_string(name, value)?;
-                    value.clone()
-                }
+    let issued = claim("iat");
+    if issued.is_truthy() {
+        let _ = payload.insert("iat".into(), numeric_date(issued, "setIssuedAt")?);
+    }
+    for name in ["sub", "nbf", "jti"] {
+        if original.model_property(name)?.is_truthy() {
+            let value = original.model_property(name)?;
+            let value = if name == "nbf" {
+                numeric_date(&value, "setNotBefore")?
+            } else {
+                require_string(name, &value)?;
+                value
             };
             let _ = payload.insert(name.into(), value);
         }

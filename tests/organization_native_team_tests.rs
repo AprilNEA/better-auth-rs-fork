@@ -120,7 +120,7 @@ impl OrganizationPolicy for State {
         data: OrganizationTeamLimit<'_>,
         _: OrganizationEndpoint<'_>,
     ) -> AuthResult<Option<usize>> {
-        self.record(json!({"phase":"limit","organizationId":data.organization_id.json()?,"user":data.session.map(|session| session.user.model_property("id")?.json()).transpose()?}))?;
+        self.record(json!({"phase":"limit","organizationId":data.organization_id.json()?,"user":data.session.map(|session| session.user_property("id")?.json()).transpose()?}))?;
         Ok(Some(100))
     }
 }

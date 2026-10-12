@@ -33,7 +33,7 @@ impl<S: AuthSchema> OwnedEndpointContext<S> {
     }
 }
 impl<S: AuthSchema> EndpointContext<'_, S> {
-    /// Retain this endpoint for asynchronous work that may outlive its response.
+    /// Retain this endpoint and its native Session root for work that may outlive the response.
     pub fn to_owned(&self) -> OwnedEndpointContext<S> {
         OwnedEndpointContext {
             input_request: self.input_request.cloned(),

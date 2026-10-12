@@ -46,14 +46,14 @@ fn native(value: &FieldValue) -> AuthResult<Value> {
 }
 
 fn data(user: FieldValue) -> AuthResult<NativeSessionData> {
-    Ok(NativeSessionData {
-        session: SessionView::from_field_values(FieldMap::from([
+    Ok(NativeSessionData::new(
+        SessionView::from_field_values(FieldMap::from([
             ("id".into(), "sid".into()),
             ("token".into(), "session-token".into()),
             ("userId".into(), "owner".into()),
         ]))?,
         user,
-    })
+    ))
 }
 
 fn users() -> Vec<(&'static str, FieldValue)> {
@@ -96,15 +96,15 @@ fn config(policy: &'static str, events: &Events) -> JwtPluginConfig {
         config.define_payload = Some(Arc::new(move |data| {
             let events = events.clone();
             Box::pin(async move {
-                let observed = native(&FieldValue::from_json(data.clone())?)?;
+                let observed = native(&data)?;
                 record(
                     &events,
-                    json!(["payload", {"native": observed, "json": data}]),
+                    json!(["payload", {"native": observed, "json": data.json()?}]),
                 )?;
                 if policy == "payload-failure" {
                     return Err(AuthError::internal("payload failure"));
                 }
-                Ok(Map::from_iter([("callback".into(), true.into())]))
+                Ok(FieldMap::from([("callback".into(), true.into())]).into())
             })
         }));
     }
@@ -113,10 +113,10 @@ fn config(policy: &'static str, events: &Events) -> JwtPluginConfig {
         config.get_subject = Some(Arc::new(move |data| {
             let events = events.clone();
             Box::pin(async move {
-                let observed = native(&FieldValue::from_json(data.clone())?)?;
+                let observed = native(&data)?;
                 record(
                     &events,
-                    json!(["subject", {"native": observed, "json": data}]),
+                    json!(["subject", {"native": observed, "json": data.json()?}]),
                 )?;
                 if policy == "subject-failure" {
                     return Err(AuthError::internal("subject failure"));
@@ -185,7 +185,7 @@ async fn capture(
                 let events = recorded.clone();
                 Box::pin(async move {
                     let snapshot = match &endpoint.session {
-                        Some(data) => native(&FieldMap::from(data.clone()).into())?,
+                        Some(data) => native(&data.field_value())?,
                         None => Value::Null,
                     };
                     record(&events, json!(["keys", snapshot]))?;
@@ -204,7 +204,10 @@ async fn capture(
         let signer = cache::CookieSigner { plugin, runtime };
         signer
             .sign(
-                FieldMap::from(session.ok_or("Cookie capture requires Session data")?),
+                session
+                    .ok_or("Cookie capture requires Session data")?
+                    .field_value()
+                    .enumerable_fields()?,
                 60.0,
                 SessionCookieContext {
                     request: &request,
@@ -216,7 +219,10 @@ async fn capture(
     } else {
         let mut endpoint = EndpointContext::new(Some(&request), FieldValue::Null, &context);
         endpoint.session = session.clone();
-        plugin.sign_session(session, &endpoint).await
+        plugin
+            .sign_session(session, &endpoint)
+            .await
+            .and_then(|token| token.decode::<String>())
     };
     let events = events
         .lock()
@@ -365,7 +371,7 @@ async fn token_header_and_cookie_keys_observe_native_relationship_snapshots() ->
                 let snapshot = endpoint.session.as_ref().ok_or_else(|| {
                     AuthError::internal("JWT key callback lost its native Session")
                 })?;
-                record(&events, native(&FieldMap::from(snapshot.clone()).into())?)?;
+                record(&events, native(&snapshot.field_value())?)?;
                 endpoint.auth.database.list_jwks().await.map(Some)
             })
         }),
@@ -453,9 +459,9 @@ async fn token_header_and_cookie_keys_observe_native_relationship_snapshots() ->
     };
     let token = signer
         .sign(
-            FieldMap::from(data(
-                FieldMap::from([("id".into(), "owner".into())]).into(),
-            )?),
+            data(FieldMap::from([("id".into(), "owner".into())]).into())?
+                .field_value()
+                .enumerable_fields()?,
             60.0,
             cookie_context(),
         )
@@ -465,6 +471,6 @@ async fn token_header_and_cookie_keys_observe_native_relationship_snapshots() ->
         .lock()
         .map_err(|_| AuthError::internal("JWT capture event lock poisoned"))?
         .clone();
-    assert_eq!(recorded, vec![native(&FieldMap::from(snapshot).into())?; 4]);
+    assert_eq!(recorded, vec![native(&snapshot.field_value())?; 4]);
     Ok(())
 }

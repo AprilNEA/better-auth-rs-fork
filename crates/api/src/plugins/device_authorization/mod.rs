@@ -431,13 +431,13 @@ impl DeviceAuthorizationPlugin {
                 FAILED_TO_CREATE_SESSION,
             ));
         };
-        let session = FieldMap::from(issued.session.clone());
-        let token = session.get("token").cloned().unwrap_or_default();
+        let session = issued.session_value()?;
+        let token = session.model_property("token")?;
         ctx.session_manager().publish_session(req, issued.clone())?;
         if let Some(storage) = &ctx.secondary_storage {
             let envelope = FieldValue::from(FieldMap::from([
-                ("user".into(), issued.user),
-                ("session".into(), session.clone().into()),
+                ("user".into(), issued.user_value()?),
+                ("session".into(), session.clone()),
             ]));
             let value = envelope.stringify_native()?;
             storage
@@ -848,10 +848,10 @@ async fn find_device_code_by_user_code(
         }))
 }
 
-fn device_session_ttl(session: &FieldMap) -> AuthResult<f64> {
-    let expires = session.get("expiresAt").unwrap_or(&FieldValue::Undefined);
+fn device_session_ttl(session: &FieldValue) -> AuthResult<f64> {
+    let expires = session.model_property("expiresAt")?;
     Ok(
-        ((better_auth_core::query::field_date(expires)?.milliseconds()
+        ((better_auth_core::query::field_date(&expires)?.milliseconds()
             - Utc::now().timestamp_millis() as f64)
             / 1_000.0)
             .floor(),

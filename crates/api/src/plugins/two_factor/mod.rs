@@ -9,7 +9,7 @@ use sha2::Sha256;
 use std::sync::Arc;
 use totp_rs::{Algorithm, TOTP};
 
-use better_auth_core::entity::{AuthRecordFields, AuthSession, AuthUser};
+use better_auth_core::entity::{AuthRecordFields, AuthUser};
 use better_auth_core::session::NativeSessionData;
 use better_auth_core::utils::cookie_utils::{
     create_clear_cookie, create_session_like_cookie, related_cookie_name,
@@ -749,7 +749,7 @@ async fn resolve_two_factor_state<S: better_auth_core::AuthSchema>(
             let key = format!(
                 "{}!{}",
                 SchemaValue::<String>::from_field(data.user_property("id")?).display_string()?,
-                data.session.id().display_string()?
+                SchemaValue::<String>::from_field(data.session_property("id")?).display_string()?
             );
             return Ok(ResolvedTwoFactorState::Session {
                 data: Box::new(data),
@@ -817,11 +817,11 @@ async fn verify_existing_session_factor(
             updated_user
                 .clone()
                 .map_or(FieldValue::Null, |user| FieldMap::from(user).into()),
-            data.session.field_values()?,
+            data.session_value()?.enumerable_fields()?,
             ctx,
         )
         .await?;
-        delete_factor_session(&data.session, ctx).await?;
+        delete_factor_session(&data, ctx).await?;
         complete_enrollment.await?;
         return Ok((
             SessionTokenResponse {
@@ -832,11 +832,7 @@ async fn verify_existing_session_factor(
                         .cloned()
                         .unwrap_or_default()
                 } else {
-                    data.session
-                        .field_values()?
-                        .get("token")
-                        .cloned()
-                        .unwrap_or_default()
+                    data.session_property("token")?
                 },
                 // TS keeps the verify response on the pre-update snapshot even
                 // though the re-issued session already observes 2FA as enabled.
@@ -859,12 +855,7 @@ async fn verify_existing_session_factor(
     complete_enrollment.await?;
     Ok((
         SessionTokenResponse {
-            token: data
-                .session
-                .field_values()?
-                .get("token")
-                .cloned()
-                .unwrap_or_default(),
+            token: data.session_property("token")?,
             user: data.public_user(&ctx.config.user)?,
         },
         Vec::new(),
@@ -924,10 +915,10 @@ async fn finalize_pending_two_factor<S: better_auth_core::AuthSchema>(
     manager
         .set_native_session_cookie(
             req,
-            better_auth_core::session::NativeSessionData {
-                user: FieldMap::from(pending.user.clone()).into(),
-                session: session.clone(),
-            },
+            better_auth_core::session::NativeSessionData::new(
+                session.clone(),
+                FieldMap::from(pending.user.clone()).into(),
+            ),
             None,
         )
         .await?;
@@ -981,10 +972,10 @@ impl ResolvedTwoFactorState {
         }
     }
 
-    fn user(&self) -> FieldValue {
+    fn user(&self) -> AuthResult<FieldValue> {
         match self {
-            Self::Session { data, .. } => data.user.clone(),
-            Self::Pending(pending) => FieldMap::from(pending.user.clone()).into(),
+            Self::Session { data, .. } => data.user_value(),
+            Self::Pending(pending) => Ok(FieldMap::from(pending.user.clone()).into()),
         }
     }
 

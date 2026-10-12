@@ -55,7 +55,7 @@ fn native_body_object(
     req: &better_auth_core::AuthRequest,
 ) -> better_auth_core::AuthResult<better_auth_core::FieldValue> {
     let body = req.input_field_value()?;
-    if body.as_object().is_none() {
+    if !crate::plugins::json_body::native_object(&body) {
         return Err(crate::plugins::json_body::validation_error(
             &crate::plugins::json_body::native_invalid_type("body", "object", Some(&body)),
         ));
@@ -93,15 +93,11 @@ impl VerifyRegistrationRequest {
                 ("createSession", "boolean", &create_session),
             ]
             .into_iter()
-            .filter_map(|(name, expected, value)| {
-                (!value.is_undefined() && json_body::native_type_name(Some(value)) != expected)
-                    .then(|| {
-                        json_body::native_invalid_type(
-                            &format!("body.{name}"),
-                            expected,
-                            Some(value),
-                        )
-                    })
+            .filter(|&(_, expected, value)| {
+                !value.is_undefined() && json_body::native_type_name(Some(value)) != expected
+            })
+            .map(|(name, expected, value)| {
+                json_body::native_invalid_type(&format!("body.{name}"), expected, Some(value))
             }),
         );
         if !errors.is_empty() {
@@ -130,9 +126,9 @@ impl VerifyAuthenticationRequest {
         }
         let body = native_body_object(req)?;
         let response = body.model_property("response")?;
-        match response.as_object() {
-            Some(_) => Ok(Self {
-                response: response.enumerable_fields()?.into(),
+        match json_body::native_record(&response)? {
+            Some(fields) => Ok(Self {
+                response: fields.into(),
             }),
             None => Err(json_body::validation_error(
                 &json_body::native_invalid_type("body.response", "record", Some(&response)),

@@ -163,8 +163,8 @@ async fn update_session_preserves_native_users_and_stateless_missing_row_fallbac
         let response = fixture.update(&req).await?;
         assert_eq!(body(&response)["session"]["label"], "changed");
         let published = req.new_session()?.unwrap();
-        assert_eq!(published.user, user);
-        assert_eq!(published.session.token, fixture.session.token);
+        assert_eq!(published.user_value()?, user);
+        assert_eq!(published.session_view()?.token, fixture.session.token);
         assert_eq!(
             fixture
                 .ctx
@@ -206,8 +206,8 @@ async fn update_session_preserves_native_users_and_stateless_missing_row_fallbac
         } else {
             assert_eq!(body(&result?)["session"]["label"], "fallback");
             let published = req.new_session()?.unwrap();
-            assert_eq!(published.user, FieldValue::Bool(false));
-            assert_eq!(published.session.id, fixture.session.id);
+            assert_eq!(published.user_value()?, FieldValue::Bool(false));
+            assert_eq!(published.session_view()?.id, fixture.session.id);
         }
         assert!(
             fixture
@@ -790,7 +790,11 @@ async fn consumers_read_real_many_relationships_without_a_typed_user_gate() -> A
         let published = req.new_session()?.unwrap();
         assert!(published.user_field("id")?.is_undefined());
         assert_eq!(
-            published.user.as_object().unwrap().snapshot_fields()?["0"]
+            published
+                .user_value()?
+                .as_object()
+                .unwrap()
+                .snapshot_fields()?["0"]
                 .as_object()
                 .unwrap()
                 .snapshot_fields()?["id"],

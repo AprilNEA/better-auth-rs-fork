@@ -39,7 +39,8 @@ pub use better_auth_api::plugins::{
 pub use better_auth_api::plugins::{
     JwtAdapterFuture, JwtAlgorithm, JwtApi, JwtAudience, JwtCallOverrides, JwtCallbackFuture,
     JwtCallbacks, JwtCustomSign, JwtDefinePayload, JwtExpiration, JwtGetSubject, JwtKeyOptions,
-    JwtKeyPairConfig, JwtPlugin, JwtPluginConfig, JwtSigningOptions, JwtTokenOptions, jwt,
+    JwtKeyPairConfig, JwtNativeCustomSign, JwtNativeDefinePayload, JwtNativeGetSubject, JwtPlugin,
+    JwtPluginConfig, JwtSigningOptions, JwtTokenOptions, jwt,
 };
 pub use better_auth_api::plugins::{OAuthPopupPlugin, OAuthProxyConfig, OAuthProxyPlugin};
 pub use better_auth_api::plugins::{OneTapConfig, OneTapPlugin, one_tap};

@@ -399,9 +399,7 @@ impl AdminPlugin {
             .and_then(|value| verify_cookie_value(&value, ctx.config.signing_secret()))
             .unwrap_or_default();
         let mut payload = session
-            .session
-            .token
-            .field_value()
+            .session_property("token")?
             .display_utf16()?
             .as_utf16()
             .to_vec();
@@ -453,8 +451,7 @@ impl AdminPlugin {
             .await?
             .ok_or_else(|| {
                 AuthError::from_status("UNAUTHORIZED", better_auth_core::FieldValue::Undefined)
-            })?
-            .session;
+            })?;
         let (data, dont_remember) = stop_impersonating_core(&session, req, ctx).await?;
 
         ctx.session_manager()
@@ -471,10 +468,7 @@ impl AdminPlugin {
             create_clear_cookie(&admin_cookie_name, &ctx.config)?,
         )?;
         let response = better_auth_core::FieldMap::from([
-            (
-                "session".into(),
-                better_auth_core::FieldMap::from(ctx.session_view(&data.session).await?).into(),
-            ),
+            ("session".into(), data.public_session(&ctx.config.session)?),
             ("user".into(), data.public_user(&ctx.config.user)?),
         ])
         .into();
@@ -584,7 +578,11 @@ impl AdminPlugin {
                 .into(),
             ));
         }
-        let (user_id, role) = if let Some(session) = session.filter(|data| data.user.is_truthy()) {
+        let session = match session {
+            Some(data) if data.user_value()?.is_truthy() => Some(data),
+            _ => None,
+        };
+        let (user_id, role) = if let Some(session) = session {
             (session.user_property("id")?, session.user_property("role")?)
         } else if let Some(role) = role {
             (user_id.unwrap_or_default().into(), role.into())

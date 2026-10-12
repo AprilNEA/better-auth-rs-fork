@@ -829,7 +829,7 @@ pub(crate) async fn sign_in_verified_profile(
     Ok(AuthResponse::native(
         None,
         better_auth_core::FieldMap::from([
-            ("token".into(), outcome.issued.session.token().field_value()),
+            ("token".into(), outcome.issued.session_property("token")?),
             ("user".into(), outcome.issued.public_user(&ctx.config.user)?),
         ])
         .into(),

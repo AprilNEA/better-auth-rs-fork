@@ -367,10 +367,10 @@ async fn run_case(
             new_password: PASSWORD.into(),
             revoke_other_sessions: Some(true),
         },
-        &NativeSessionData {
-            session: SessionView::from_field_values(session())?,
-            user: user.value.clone(),
-        },
+        &NativeSessionData::new(
+            SessionView::from_field_values(session())?,
+            user.value.clone(),
+        ),
         &PasswordManagementConfig::default(),
         &request,
         &RequestMeta::default(),
@@ -449,14 +449,14 @@ async fn selected_user_property_success_retains_the_user_handle() -> AuthResult<
         .await
         .map_err(SessionIssueError::into_auth_error)?
         .unwrap();
-        assert!(issued.user.strict_equals(&user.value));
+        assert!(issued.user_value()?.strict_equals(&user.value));
         assert_eq!(*trace.events.lock().unwrap(), ["user-id-1", "create"]);
         let rows = store.storage_rows(EntityRole::Session)?;
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].get("id"), Some(&issued.session.id.field_value()));
+        assert_eq!(rows[0].get("id"), Some(&issued.session_property("id")?));
         assert_eq!(
             rows[0].get("token"),
-            Some(&issued.session.token.field_value())
+            Some(&issued.session_property("token")?)
         );
         assert_eq!(rows[0].get("userId"), Some(&7.into()));
     }

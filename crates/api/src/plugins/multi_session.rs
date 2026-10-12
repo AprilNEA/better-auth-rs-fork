@@ -66,15 +66,13 @@ impl MultiSessionPlugin {
         let sessions = list_sessions(req, ctx, true).await?;
         let mut users: Vec<FieldValue> = Vec::new();
         let mut output = Vec::new();
-        for mut data in sessions {
+        for data in sessions {
             let id = data.user_field("id")?;
             if users.iter().any(|seen| seen.strict_equals(&id)) {
                 continue;
             }
             users.push(id);
-            data.session.filter_returned_fields(&ctx.config.session)?;
-            data.user = data.public_user(&ctx.config.user)?;
-            output.push(FieldValue::from(FieldMap::from(data)));
+            output.push(data.public_data(&ctx.config)?.field_value());
         }
         Ok(AuthResponse::native(None, output.into()))
     }
@@ -88,10 +86,17 @@ impl MultiSessionPlugin {
         let name = cookie_name(&token, &ctx.config);
         let token = signed_device_token(req, &name, &ctx.config).ok_or_else(invalid_session)?;
         let session = match find_session(ctx, &token.into()).await? {
-            Some(data) if !data.session.expires_at.is_before(Utc::now())? => Some(data),
+            Some(data)
+                if !better_auth_core::SchemaValue::<better_auth_core::FieldDate>::from_field(
+                    data.session_property("expiresAt")?,
+                )
+                .is_before(Utc::now())? =>
+            {
+                Some(data)
+            }
             _ => None,
         };
-        let Some(mut data) = session else {
+        let Some(data) = session else {
             better_auth_core::utils::cookie_utils::remove_set_cookie_entries(req, None, &name)?;
             req.append_response_header("Set-Cookie", create_clear_cookie(&name, &ctx.config)?)?;
             return Err(invalid_session());
@@ -99,9 +104,10 @@ impl MultiSessionPlugin {
         ctx.session_manager()
             .set_native_session_cookie(req, data.clone(), None)
             .await?;
-        data.session.filter_returned_fields(&ctx.config.session)?;
-        data.user = data.public_user(&ctx.config.user)?;
-        Ok(AuthResponse::native(None, FieldMap::from(data).into()))
+        Ok(AuthResponse::native(
+            None,
+            data.public_data(&ctx.config)?.field_value(),
+        ))
     }
 
     async fn handle_revoke<S: AuthSchema>(
@@ -121,9 +127,7 @@ impl MultiSessionPlugin {
         req.append_response_header("Set-Cookie", create_clear_cookie(&name, &ctx.config)?)?;
         let response = AuthResponse::json(None, &serde_json::json!({ "status": true }))?;
         if !current
-            .session
-            .token
-            .field_value()
+            .session_property("token")?
             .strict_equals(&token.into())
         {
             return Ok(response);
@@ -155,7 +159,9 @@ impl MultiSessionPlugin {
         let Some(data) = req.new_session()? else {
             return Ok(());
         };
-        let token = data.session.token.typed()?;
+        let token_value =
+            better_auth_core::SchemaValue::<String>::from_field(data.session_property("token")?);
+        let token = token_value.typed()?;
         let name = cookie_name(token, &ctx.config);
         if get_cookie(req, &name).is_some_and(|value| !value.is_empty())
             || response
@@ -285,16 +291,17 @@ async fn list_sessions<S: AuthSchema>(
             NativeSessionData::from(data)
         } else {
             let user = ctx.database.get_user_by_id_field(&session.user_id).await?;
-            NativeSessionData {
+            NativeSessionData::new(
                 session,
-                user: user
-                    .map(FieldMap::from)
+                user.map(FieldMap::from)
                     .map(FieldValue::from)
                     .unwrap_or(FieldValue::Null),
-            }
+            )
         };
-        if data.user.is_truthy() {
-            if data.session.expires_at.is_after(Utc::now())? {
+        if data.user_value()?.is_truthy() {
+            if better_auth_core::query::field_number(&data.session_property("expiresAt")?)?
+                > Utc::now().timestamp_millis() as f64
+            {
                 sessions.push(data);
             }
         } else {

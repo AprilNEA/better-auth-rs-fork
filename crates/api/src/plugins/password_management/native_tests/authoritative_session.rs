@@ -157,10 +157,10 @@ async fn check_authoritative_user<S: AuthSchema>(
         inject_session(
             &mut context,
             &plugin,
-            NativeSessionData {
-                session: session.clone(),
-                user: FieldMap::from([("id".into(), "stale-owner".into())]).into(),
-            },
+            NativeSessionData::new(
+                session.clone(),
+                FieldMap::from([("id".into(), "stale-owner".into())]).into(),
+            ),
         );
         let response = test_helpers::native_session::dispatch_plugin(&request, &context, &plugin)
             .await?

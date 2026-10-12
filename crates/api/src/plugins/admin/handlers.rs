@@ -703,11 +703,11 @@ pub(crate) async fn impersonate_user_core(
 }
 
 pub(crate) async fn stop_impersonating_core(
-    session: &impl AuthSession,
+    session: &NativeSessionData,
     req: &better_auth_core::AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<(NativeSessionData, bool)> {
-    let admin_id = session.impersonated_by().field_value();
+    let admin_id = session.session_property("impersonatedBy")?;
     if !admin_id.is_truthy() {
         return Err(AuthError::from_status(
             "BAD_REQUEST",
@@ -754,11 +754,11 @@ pub(crate) async fn stop_impersonating_core(
             .await?
             .into()
     };
-    if !data.user.is_truthy() {
+    if !data.user_value()?.is_truthy() {
         return Err(impersonation_error(MESSAGE_FAILED_TO_FIND_ADMIN_SESSION));
     }
     ctx.database
-        .delete_session_by_token_value(&session.token().field_value())
+        .delete_session_by_token_value(&session.session_property("token")?)
         .await?;
     Ok((data, dont_remember))
 }

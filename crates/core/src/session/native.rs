@@ -6,20 +6,16 @@ use crate::{
     wire::{SessionView, UserView},
 };
 
-/// Session data before the selected User value crosses a typed authentication boundary.
-#[derive(Debug, Clone, serde::Deserialize)]
+/// A shared native Session root before an explicit typed or serialization boundary.
+#[derive(Debug, Clone)]
 pub struct NativeSessionData {
-    /// Session passed to the credential writer.
-    pub session: SessionView,
-    /// Preserve the selected User object or relationship array for trusted callbacks.
-    #[serde(
-        default,
-        deserialize_with = "crate::field_value::serde::value::deserialize"
-    )]
-    pub user: FieldValue,
+    root: FieldValue,
+    active: bool,
+    // Public projection can turn a selected relationship array into a numeric-key object.
+    relationship_array: bool,
 }
 
-/// Retain relationship cardinality after public projection changes an array into an object.
+/// Retain the selected relationship cardinality through native snapshot replacement.
 #[derive(Debug, Clone)]
 pub(crate) struct SessionSnapshot {
     pub(crate) data: NativeSessionData,
@@ -28,15 +24,16 @@ pub(crate) struct SessionSnapshot {
 
 impl SessionSnapshot {
     pub(crate) fn into_typed(self) -> AuthResult<Option<SessionData>> {
-        if self.relationship_array {
+        if self.relationship_array || self.data.relationship_array {
             return Err(super::relationship_array_error());
         }
-        match self.data.user {
+        match self.data.user_value()? {
             FieldValue::Null => Ok(None),
             FieldValue::Object(fields) => Ok(Some(SessionData {
-                session: self.data.session,
+                session: self.data.session_view()?,
                 user: UserView::try_from(fields.snapshot_fields()?)?,
             })),
+            FieldValue::Array(_) => Err(super::relationship_array_error()),
             _ => Err(AuthError::internal("Session User must be an object")),
         }
     }
@@ -53,10 +50,9 @@ impl From<SessionData> for SessionSnapshot {
 
 impl From<NativeSessionData> for SessionSnapshot {
     fn from(data: NativeSessionData) -> Self {
-        let relationship_array = matches!(&data.user, FieldValue::Array(_));
         Self {
+            relationship_array: data.relationship_array,
             data,
-            relationship_array,
         }
     }
 }
@@ -72,10 +68,54 @@ impl From<SessionData<JoinValue<UserView>>> for SessionSnapshot {
 }
 
 impl NativeSessionData {
+    /// Allocate one native root from a typed Session and the selected native User.
+    pub fn new(session: SessionView, user: FieldValue) -> Self {
+        let active = session.active;
+        let relationship_array = matches!(&user, FieldValue::Array(_));
+        Self {
+            root: FieldMap::from([
+                ("session".into(), FieldMap::from(session).into()),
+                ("user".into(), user),
+            ])
+            .into(),
+            active,
+            relationship_array,
+        }
+    }
+
+    /// Retain a native root without reading properties. Liveness comes from the trusted source.
+    pub fn from_native(root: FieldValue, active: bool) -> Self {
+        Self {
+            root,
+            active,
+            relationship_array: false,
+        }
+    }
+
+    /// Return the same native root handle without reading its properties.
+    pub fn field_value(&self) -> FieldValue {
+        self.root.clone()
+    }
+
+    /// Read the current native Session value.
+    pub fn session_value(&self) -> AuthResult<FieldValue> {
+        self.root.model_property("session")
+    }
+
+    /// Read the current native User value.
+    pub fn user_value(&self) -> AuthResult<FieldValue> {
+        self.root.model_property("user")
+    }
+
+    /// Read a native Session property at its business consumption boundary.
+    pub fn session_property(&self, name: &str) -> AuthResult<FieldValue> {
+        self.session_value()?.model_property(name)
+    }
+
     /// Read a User model field. Relationship arrays have no User model fields.
     pub fn user_field(&self, name: &str) -> AuthResult<FieldValue> {
         Ok(self
-            .user
+            .user_value()?
             .as_object()
             .map(|fields| fields.get(name))
             .transpose()?
@@ -86,14 +126,32 @@ impl NativeSessionData {
     /// Read a User property at a required property-access boundary.
     /// Non-null primitives have no User fields; null and undefined reject property access.
     pub fn user_property(&self, name: &str) -> AuthResult<FieldValue> {
-        self.user.model_property(name)
+        self.user_value()?.model_property(name)
+    }
+
+    /// Read a typed Session snapshot without making the snapshot authoritative.
+    pub fn session_view(&self) -> AuthResult<SessionView> {
+        let session = self.session_value()?;
+        let fields = session.as_object().ok_or_else(|| {
+            AuthError::internal("Session response must contain a `session` object")
+        })?;
+        let mut fields = fields.snapshot_fields()?;
+        let order = fields.keys().cloned().collect();
+        let active_field = fields.shift_remove("active");
+        let mut session = <SessionView as crate::FromFieldMap>::from_field_values(fields)?;
+        session.active = self.active;
+        session.field_order = order;
+        if let Some(value) = active_field {
+            let _ = session.additional_fields.insert("active".into(), value);
+        }
+        Ok(session)
     }
 
     /// Read an object through native User slots without requiring a typed User identity.
     /// Preserve numeric keys, absent fields, explicit null, and callback replacement values.
     pub fn user_view(&self) -> AuthResult<UserView> {
-        let fields = self
-            .user
+        let user = self.user_value()?;
+        let fields = user
             .as_object()
             .ok_or_else(|| AuthError::internal("Session User must be an object"))?;
         UserView::try_from(fields.snapshot_fields()?)
@@ -102,39 +160,93 @@ impl NativeSessionData {
     /// Consume public object fields without rejecting the selected relationship cardinality.
     /// Use the session manager's typed resolution when the caller requires one User.
     pub fn into_views(self) -> AuthResult<(UserView, SessionView)> {
-        let user = self.user_view()?;
-        Ok((user, self.session))
+        Ok((self.user_view()?, self.session_view()?))
+    }
+
+    /// Construct a new issuance root with a replacement Session and the current User.
+    pub fn with_session(&self, session: SessionView) -> AuthResult<Self> {
+        let mut data = Self::new(session, self.user_value()?);
+        data.relationship_array |= self.relationship_array;
+        Ok(data)
+    }
+
+    /// Allocate a new root from values already read in the caller's evaluation order.
+    pub fn with_values(&self, session: FieldValue, user: FieldValue) -> Self {
+        let relationship_array = self.relationship_array || matches!(&user, FieldValue::Array(_));
+        Self {
+            root: FieldMap::from([("session".into(), session), ("user".into(), user)]).into(),
+            active: self.active,
+            relationship_array,
+        }
+    }
+
+    /// Construct a new root with a replacement User and the current Session handle.
+    pub fn with_user(&self, user: FieldValue) -> AuthResult<Self> {
+        Ok(self.with_values(self.session_value()?, user))
+    }
+
+    /// Clone enumerable Session fields and remove fields with `returned: false`.
+    pub fn public_session(&self, config: &crate::config::SessionConfig) -> AuthResult<FieldValue> {
+        public_fields(self.session_value()?, |name| {
+            config
+                .fields()
+                .get(name)
+                .is_none_or(|field| field.returned())
+        })
     }
 
     /// Clone enumerable User fields and remove fields with `returned: false`.
     /// Arrays become numeric-key objects only at this output boundary.
     pub fn public_user(&self, config: &UserConfig) -> AuthResult<FieldValue> {
-        if !self.user.is_truthy() {
-            return Ok(self.user.clone());
-        }
-        let value = StructuredCloneContext::new().clone_value(&self.user)?;
-        let mut fields = value.enumerable_fields()?;
-        fields.retain(|name, _| {
+        public_fields(self.user_value()?, |name| {
             config
                 .fields()
                 .get(name)
                 .is_none_or(|field| field.returned())
-        });
-        Ok(fields.into())
+        })
+    }
+
+    /// Allocate the public response independently of previously published snapshots.
+    pub fn public_data(&self, config: &crate::AuthConfig) -> AuthResult<Self> {
+        let session = self.public_session(&config.session)?;
+        let user = self.user_value()?;
+        let relationship_array = self.relationship_array || matches!(&user, FieldValue::Array(_));
+        let user = public_fields(user, |name| {
+            config
+                .user
+                .fields()
+                .get(name)
+                .is_none_or(|field| field.returned())
+        })?;
+        Ok(Self {
+            root: FieldMap::from([("session".into(), session), ("user".into(), user)]).into(),
+            active: self.active,
+            relationship_array,
+        })
+    }
+
+    pub(crate) fn active(&self) -> bool {
+        self.active
     }
 }
 
+fn public_fields(value: FieldValue, returned: impl Fn(&str) -> bool) -> AuthResult<FieldValue> {
+    if !value.is_truthy() {
+        return Ok(value);
+    }
+    let value = StructuredCloneContext::new().clone_value(&value)?;
+    let mut fields = value.enumerable_fields()?;
+    fields.retain(|name, _| returned(name));
+    Ok(fields.into())
+}
+
 impl crate::FromFieldMap for NativeSessionData {
-    fn from_field_values(mut fields: FieldMap) -> AuthResult<Self> {
-        let session = fields.shift_remove("session").unwrap_or_default();
-        let session = session.as_object().ok_or_else(|| {
-            AuthError::internal("Session response must contain a `session` object")
-        })?;
+    fn from_field_values(fields: FieldMap) -> AuthResult<Self> {
+        let relationship_array = matches!(fields.get("user"), Some(FieldValue::Array(_)));
         Ok(Self {
-            session: <SessionView as crate::FromFieldMap>::from_field_values(
-                session.snapshot_fields()?,
-            )?,
-            user: fields.shift_remove("user").unwrap_or_default(),
+            root: fields.into(),
+            active: false,
+            relationship_array,
         })
     }
 }
@@ -147,10 +259,7 @@ impl From<(UserView, SessionView)> for NativeSessionData {
 
 impl From<SessionData> for NativeSessionData {
     fn from(data: SessionData) -> Self {
-        Self {
-            session: data.session,
-            user: FieldMap::from(data.user).into(),
-        }
+        Self::new(data.session, FieldMap::from(data.user).into())
     }
 }
 
@@ -178,9 +287,9 @@ impl SessionData<JoinValue<UserView>> {
 
 impl From<SessionData<JoinValue<UserView>>> for NativeSessionData {
     fn from(data: SessionData<JoinValue<UserView>>) -> Self {
-        Self {
-            session: data.session,
-            user: match data.user {
+        Self::new(
+            data.session,
+            match data.user {
                 JoinValue::One(Some(user)) => FieldMap::from(user).into(),
                 JoinValue::One(None) => FieldValue::Null,
                 JoinValue::Many(users) => users
@@ -189,27 +298,27 @@ impl From<SessionData<JoinValue<UserView>>> for NativeSessionData {
                     .collect::<Vec<_>>()
                     .into(),
             },
-        }
-    }
-}
-
-impl From<NativeSessionData> for FieldMap {
-    fn from(data: NativeSessionData) -> Self {
-        Self::from([
-            ("session".into(), Self::from(data.session).into()),
-            ("user".into(), data.user),
-        ])
+        )
     }
 }
 
 impl serde::Serialize for NativeSessionData {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        crate::field_value::serde::map::serialize(&FieldMap::from(self.clone()), serializer)
+        crate::field_value::serde::value::serialize(&self.root, serializer)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for NativeSessionData {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::field_value::serde::value::deserialize(deserializer)
+            .map(|root| Self::from_native(root, false))
     }
 }
 
 #[cfg(test)]
 mod function_tests;
+#[cfg(test)]
+mod root_tests;
 #[cfg(test)]
 mod value_tests;
 
@@ -387,7 +496,7 @@ mod tests {
         let issued = request
             .new_session()?
             .ok_or_else(|| AuthError::internal("Native refresh must publish the issued Session"))?;
-        assert!(issued.user.is_object());
+        assert!(issued.user_value()?.is_object());
         assert!(issued.user_field("id")?.is_undefined());
         assert!(matches!(
             request.session_snapshot(),
@@ -396,7 +505,7 @@ mod tests {
         let snapshot = request.native_session_snapshot()?.ok_or_else(|| {
             AuthError::internal("Native Session snapshot must preserve the selected relationship")
         })?;
-        assert_eq!(snapshot.user, issued.user);
+        assert_eq!(snapshot.user_value()?, issued.user_value()?);
 
         let mut native_request = AuthRequest::new(HttpMethod::Get, "/get-session");
         native_request.headers = request.headers.clone();
@@ -409,7 +518,7 @@ mod tests {
                 AuthError::internal("Native resolution must preserve the selected relationship")
             })?;
         let selected = native
-            .user
+            .user_value()?
             .as_object()
             .ok_or_else(|| {
                 AuthError::internal("Native User relationship must become a numeric-key object")
@@ -440,14 +549,17 @@ mod tests {
             };
             let view = resolved.user_view()?;
             assert!(view.id.is_undefined());
-            assert_eq!(FieldValue::from(FieldMap::from(view)), resolved.user);
+            assert_eq!(
+                FieldValue::from(FieldMap::from(view)),
+                resolved.user_value()?
+            );
             assert!(request.server_context("auth.current-user-id")?.is_none());
             assert!(
                 request
                     .native_session_snapshot()?
                     .unwrap()
-                    .user
-                    .strict_equals(&resolved.user)
+                    .user_value()?
+                    .strict_equals(&resolved.user_value()?)
             );
             assert!(matches!(
                 request.session_snapshot(),
@@ -476,10 +588,7 @@ mod tests {
                 ..Default::default()
             },
         );
-        let mut data = NativeSessionData {
-            session: session()?,
-            user: user.clone(),
-        };
+        let data = NativeSessionData::new(session()?, user.clone());
         let public = data.public_user(&config)?;
         let public = public
             .as_object()
@@ -487,7 +596,8 @@ mod tests {
             .snapshot_fields()?;
         assert!(!public.contains_key("secretNote"));
         assert_eq!(public.get("ownUndefined"), Some(&FieldValue::Undefined));
-        data.user = vec![user.clone()].into();
+        data.field_value()
+            .set_model_property("user", vec![user.clone()].into())?;
         assert!(data.user_field("id")?.is_undefined());
         let public = data.public_user(&config)?;
         assert_eq!(
@@ -507,7 +617,7 @@ mod tests {
         };
         assert!(date_field("when")?.same_object(date_field("sameWhen")?));
         assert!(!date_field("when")?.same_object(&date));
-        assert!(matches!(data.user, FieldValue::Array(_)));
+        assert!(matches!(data.user_value()?, FieldValue::Array(_)));
         Ok(())
     }
 
@@ -528,8 +638,8 @@ mod tests {
                 let expected = expected.clone();
                 let recorded = recorded.clone();
                 async move {
-                    assert!(data.user.strict_equals(&expected));
-                    assert!(data.session.user_id.is_undefined());
+                    assert!(data.user_value()?.strict_equals(&expected));
+                    assert!(data.session_property("userId")?.is_undefined());
                     let _ = recorded.fetch_add(1, Ordering::SeqCst);
                     Ok("native".into())
                 }
@@ -546,10 +656,7 @@ mod tests {
             .await?;
         assert!(session.user_id.is_undefined());
         let token = session.token.typed()?.clone();
-        let data = NativeSessionData {
-            session,
-            user: user.clone(),
-        };
+        let data = NativeSessionData::new(session, user.clone());
         let request = AuthRequest::new(HttpMethod::Post, "/sign-in/social");
         manager
             .set_native_session_cookie(&request, data.clone(), None)
@@ -558,8 +665,8 @@ mod tests {
         let snapshot = request
             .new_session()?
             .ok_or_else(|| AuthError::internal("Missing issued snapshot"))?;
-        assert!(snapshot.user.strict_equals(&user));
-        assert!(snapshot.session.user_id.is_undefined());
+        assert!(snapshot.user_value()?.strict_equals(&user));
+        assert!(snapshot.session_property("userId")?.is_undefined());
         let headers = request.take_response_headers()?;
         let cookies = headers
             .get_all("set-cookie")

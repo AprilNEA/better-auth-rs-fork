@@ -7,8 +7,8 @@ use better_auth_core::{
     AuthConfig, AuthContext, AuthRequest, AuthResult, AuthSchema, CreateInvitation, CreateMember,
     CreateOrganization, CreateTeam, FieldValue, Invitation, Member, Team, TeamMember,
     UpdateOrganization, UpdateTeam,
+    session::NativeSessionData,
     store::{InvitationStore, MemberStore, OrganizationStore, TeamStore},
-    wire::SessionView,
 };
 
 /// Request and persistence capabilities supplied to endpoint-aware callbacks.
@@ -435,14 +435,8 @@ pub trait OrganizationHooks: Send + Sync {
     }
 }
 
-/// Authenticated session supplied to dynamic team limits.
-#[derive(Clone, Copy)]
-pub struct OrganizationSession<'a> {
-    /// Authenticated user, which may differ from the member being added.
-    pub user: &'a FieldValue,
-    /// Current authenticated session.
-    pub session: &'a SessionView,
-}
+/// Native authenticated Session root supplied to dynamic team limits.
+pub type OrganizationSession<'a> = &'a NativeSessionData;
 
 /// Context for the maximum-team callback.
 #[derive(Clone, Copy)]

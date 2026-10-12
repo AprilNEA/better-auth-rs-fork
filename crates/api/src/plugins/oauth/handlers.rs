@@ -554,7 +554,7 @@ async fn sign_in_with_id_token_core(
         .await?;
     let response = better_auth_core::FieldMap::from([
         ("redirect".into(), false.into()),
-        ("token".into(), outcome.issued.session.token().field_value()),
+        ("token".into(), outcome.issued.session_property("token")?),
         ("url".into(), better_auth_core::FieldValue::Undefined),
         ("user".into(), outcome.issued.public_user(&ctx.config.user)?),
     ]);

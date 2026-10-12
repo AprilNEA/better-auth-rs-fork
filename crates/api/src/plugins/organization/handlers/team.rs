@@ -1,6 +1,5 @@
 use better_auth_core::error::{AuthError, AuthResult};
 use better_auth_core::plugin::{AuthContext, AuthRoute};
-use better_auth_core::session::NativeSessionData;
 use better_auth_core::types::{AuthRequest, AuthResponse, HttpMethod, Team};
 use serde::Deserialize;
 use validator::Validate;
@@ -218,11 +217,7 @@ pub(crate) async fn handle_team_request(
         _ => {}
     }
     let data = require_native_session(req, ctx).await?;
-    let session = &data.session;
-    let actor = OrganizationSession {
-        user: &data.user,
-        session,
-    };
+    let session = &data;
     macro_rules! body {
         ($ty:ty) => {
             super::super::request::read::<$ty>(req, &config.schema)?
@@ -289,18 +284,22 @@ pub(crate) async fn handle_team_request(
                 })?;
             let organization_view =
                 crate::plugins::organization::fields::organization(&organization, ctx)?;
-            let event = OrganizationTeamEvent {
-                team: &team,
-                user: Some(&data.user),
-                organization: &organization_view,
-            };
             let mut updates = better_auth_core::UpdateTeam {
                 additional_fields,
                 name,
                 ..Default::default()
             };
             if let Some(hooks) = &config.hooks {
-                hooks.before_update_team(&mut updates, event).await?;
+                hooks
+                    .before_update_team(
+                        &mut updates,
+                        OrganizationTeamEvent {
+                            team: &team,
+                            user: Some(&data.user_value()?),
+                            organization: &organization_view,
+                        },
+                    )
+                    .await?;
             }
             let updated = ctx
                 .database
@@ -311,7 +310,8 @@ pub(crate) async fn handle_team_request(
                 hooks
                     .after_update_team(OrganizationTeamEvent {
                         team: &updated,
-                        ..event
+                        user: Some(&data.user_value()?),
+                        organization: &organization_view,
                     })
                     .await?;
             }
@@ -346,31 +346,24 @@ pub(crate) async fn handle_team_request(
             let body = body!(ActiveBody);
             let team_id = match body.team_id {
                 NullableStringField::Null => {
-                    if !session.active_team_id.field_value().is_truthy() {
+                    if !session.session_property("activeTeamId")?.is_truthy() {
                         return Ok(Some(AuthResponse::json(None, &serde_json::Value::Null)?));
                     }
                     let updated = ctx
                         .database
                         .update_session_active_team_by_token_value(
-                            &session.token.field_value(),
+                            &session.session_property("token")?,
                             None,
                         )
                         .await?;
                     let manager = ctx.session_manager();
                     manager
-                        .set_native_session_cookie(
-                            req,
-                            NativeSessionData {
-                                session: updated,
-                                user: data.user.clone(),
-                            },
-                            None,
-                        )
+                        .set_native_session_cookie(req, data.with_session(updated)?, None)
                         .await?;
                     return Ok(Some(AuthResponse::json(None, &serde_json::Value::Null)?));
                 }
                 NullableStringField::Value(id) if !id.is_empty() => FieldValue::from(id),
-                _ => session.active_team_id.field_value(),
+                _ => session.session_property("activeTeamId")?,
             };
             if !team_id.is_truthy() {
                 return Ok(Some(AuthResponse::json(None, &serde_json::Value::Null)?));
@@ -400,20 +393,13 @@ pub(crate) async fn handle_team_request(
             let updated = ctx
                 .database
                 .update_session_active_team_by_token_value(
-                    &session.token.field_value(),
+                    &session.session_property("token")?,
                     Some(&team.id.field_value()),
                 )
                 .await?;
             let manager = ctx.session_manager();
             manager
-                .set_native_session_cookie(
-                    req,
-                    NativeSessionData {
-                        session: updated,
-                        user: data.user.clone(),
-                    },
-                    None,
-                )
+                .set_native_session_cookie(req, data.with_session(updated)?, None)
                 .await?;
             AuthResponse::native(None, team.field_values()?.into())
         }
@@ -431,7 +417,8 @@ pub(crate) async fn handle_team_request(
             let org = explicit_org
                 .as_deref()
                 .map(FieldValue::from)
-                .unwrap_or_else(|| session.active_organization_id.field_value());
+                .map(Ok)
+                .unwrap_or_else(|| session.session_property("activeOrganizationId"))?;
             if !is_self || explicit_org.is_some() {
                 if !org.is_truthy() {
                     return Err(AuthError::from_code(
@@ -506,7 +493,8 @@ pub(crate) async fn handle_team_request(
                 .query_string("teamId")?
                 .filter(|id| !id.is_empty())
                 .map(FieldValue::from)
-                .unwrap_or_else(|| session.active_team_id.field_value());
+                .map(Ok)
+                .unwrap_or_else(|| session.session_property("activeTeamId"))?;
             if !team_id.is_truthy() {
                 return Err(AuthError::from_code(
                     "BAD_REQUEST",
@@ -650,7 +638,7 @@ pub(crate) async fn handle_team_request(
                     .team_member_limit(OrganizationTeamMemberLimit {
                         team_id: &body.team_id.as_str().into(),
                         organization_id: &org,
-                        session: actor,
+                        session,
                     })
                     .await?;
                 let member = ctx

@@ -51,6 +51,9 @@ pub async fn run(base: &str, input: Value) -> AuthResult<Value> {
         define_payload: Some(Arc::new(move |data| {
             let events = payload_events.clone();
             Box::pin(async move {
+                let data = data.json()?.ok_or_else(|| {
+                    better_auth::AuthError::internal("Session fixture has no JSON value")
+                })?;
                 let expires = chrono::DateTime::parse_from_rfc3339(
                     data["session"]["expiresAt"].as_str().unwrap(),
                 )
@@ -60,7 +63,7 @@ pub async fn run(base: &str, input: Value) -> AuthResult<Value> {
                 events.lock().unwrap().push(
                     json!({"event":"payload","name":payload["name"],"expired":payload["expired"]}),
                 );
-                Ok(serde_json::from_value(payload)?)
+                better_auth_core::FieldValue::from_json(payload)
             })
         })),
         ..Default::default()

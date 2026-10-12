@@ -49,18 +49,18 @@ impl CustomSessionCallback<StatelessSchema> for Capture {
             .map_err(|_| AuthError::internal("Custom session trace lock poisoned"))?
             .push(Event::Customize {
                 path: request.path().into(),
-                user: input.data.user.clone(),
+                user: input.data.user_value()?,
             });
         request.set_response_header("x-custom-session", "observed")?;
         // This callback selects JSON output, whose Rust value cannot represent a lone surrogate.
-        let FieldValue::Object(user) = &mut input.data.user else {
+        let FieldValue::Object(user) = input.data.user_value()? else {
             return Err(AuthError::internal(
                 "Expected public User object in this fixture",
             ));
         };
         let mut fields = user.snapshot_fields()?;
         let _ = fields.remove("loneSurrogate");
-        *user = fields.into();
+        input.data = input.data.with_user(fields.into())?;
         Ok(serde_json::to_value(input)?)
     }
 }

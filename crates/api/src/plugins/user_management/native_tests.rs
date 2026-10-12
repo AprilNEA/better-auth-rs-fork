@@ -141,7 +141,7 @@ async fn change_email_spreads_raw_users_and_keeps_the_original_callback_session(
                 EmailVerificationCallbacks::<StatelessSchema>::send(move |message, endpoint| {
                     captured.lock().unwrap().push((
                         message.user.clone(),
-                        endpoint.session.as_ref().unwrap().user.clone(),
+                        endpoint.session.as_ref().unwrap().user_value()?,
                     ));
                     Ok(None)
                 }),
@@ -164,7 +164,7 @@ async fn change_email_spreads_raw_users_and_keeps_the_original_callback_session(
         let mut expected = user.enumerable_fields()?;
         let _ = expected.insert("email".into(), "new@native-user.test".into());
         let expected = FieldValue::from(expected);
-        assert_eq!(req.new_session()?.unwrap().user, expected);
+        assert_eq!(req.new_session()?.unwrap().user_value()?, expected);
         assert_eq!(*delivered.lock().unwrap(), [(expected, user.clone())]);
         let stored = fixture
             .ctx
@@ -327,7 +327,10 @@ async fn deletion_confirmation_keeps_raw_sender_payload_and_deletes_the_native_o
         .callbacks(
             UserManagementCallbacks::<StatelessSchema>::new().delete_account_verification(
                 move |message, endpoint| {
-                    assert_eq!(message.user, endpoint.session.as_ref().unwrap().user);
+                    assert_eq!(
+                        message.user,
+                        endpoint.session.as_ref().unwrap().user_value()?
+                    );
                     *captured.lock().unwrap() = Some((
                         message.user.clone(),
                         message.token.clone(),
@@ -503,7 +506,11 @@ async fn real_many_user_relationships_reach_change_and_delete_consumers() -> Aut
             FieldValue::from("changed@native-user.test")
         );
         assert_eq!(
-            published.user.as_object().unwrap().snapshot_fields()?["0"]
+            published
+                .user_value()?
+                .as_object()
+                .unwrap()
+                .snapshot_fields()?["0"]
                 .as_object()
                 .unwrap()
                 .snapshot_fields()?["id"],

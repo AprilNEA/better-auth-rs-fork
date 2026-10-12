@@ -602,11 +602,14 @@ async fn finalization_preserves_selected_native_owner_token_and_cookie() -> Test
     let published = fixture.request.new_session()?.unwrap();
     assert_eq!(published.user_field("id")?, FieldValue::from(17.0));
     assert_eq!(
-        published.session.field_values()?.get("userId"),
+        published
+            .session_value()?
+            .enumerable_fields()?
+            .get("userId"),
         Some(&FieldValue::from("17"))
     );
     assert_eq!(
-        published.session.field_values()?.get("token"),
+        published.session_value()?.enumerable_fields()?.get("token"),
         Some(&42.0.into())
     );
     let queued = fixture.request.take_response_headers()?;

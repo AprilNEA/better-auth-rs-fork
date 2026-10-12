@@ -85,7 +85,7 @@ pub(super) async fn send_verification_email_core(
                 "Email is already verified",
             ));
         }
-        send_for_user(data.user.clone(), &email, body, config, &endpoint).await?;
+        send_for_user(data.user_value()?, &email, body, config, &endpoint).await?;
     } else {
         let start = std::time::Instant::now();
         let user = ctx.database.get_user_by_email(&body.email).await?;
@@ -282,10 +282,11 @@ pub(super) async fn verify_email_core(
                 .await?;
             }
         }
-        let mut fields = active.user.enumerable_fields()?;
+        let session_value = active.session_value()?;
+        let mut fields = active.user_value()?.enumerable_fields()?;
         let _ = fields.insert("email".into(), update_to.clone());
         let _ = fields.insert("emailVerified".into(), verified.into());
-        active.user = fields.into();
+        active = active.with_values(session_value, fields.into());
         ctx.session_manager()
             .set_native_session_cookie(req, active, None)
             .await?;
@@ -331,9 +332,10 @@ pub(super) async fn verify_email_core(
             _ => None,
         };
         let mut data = active_session(current, &user, req, ctx).await?;
-        let mut fields = data.user.enumerable_fields()?;
+        let session_value = data.session_value()?;
+        let mut fields = data.user_value()?.enumerable_fields()?;
         let _ = fields.insert("emailVerified".into(), true.into());
-        data.user = fields.into();
+        data = data.with_values(session_value, fields.into());
         ctx.session_manager()
             .set_native_session_cookie(req, data, None)
             .await?;

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use better_auth_core::entity::{AuthSession, AuthUser};
+use better_auth_core::entity::AuthUser;
 use better_auth_core::{AuthContext, AuthPlugin, AuthRoute};
 use better_auth_core::{AuthError, AuthResult};
 use better_auth_core::{AuthRecordFields, FieldMap, FieldValue};
@@ -388,7 +388,7 @@ async fn finalize_sign_in_with_user_core(
             "Failed to create session",
         ));
     };
-    let token = issued.session.token().into_owned();
+    let session = issued.session_value()?;
     let manager = ctx.session_manager();
     manager
         .set_native_session_cookie(req, issued, Some(remember_me == Some(false)))
@@ -399,7 +399,7 @@ async fn finalize_sign_in_with_user_core(
     }
     let response = SignInResponse {
         redirect: callback_url.is_some_and(|url| !url.is_empty()),
-        token: token.clone(),
+        token: better_auth_core::SchemaValue::from_field(session.model_property("token")?),
         url: callback_url.map(str::to_owned),
         user: ctx.user_view(&user).await?,
     };

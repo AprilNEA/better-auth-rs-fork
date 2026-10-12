@@ -97,6 +97,82 @@ pub type JwtGetSubject = Arc<dyn Fn(Value) -> JwtCallbackFuture<String> + Send +
 pub type JwtCustomSign =
     Arc<dyn Fn(Map<String, Value>, JwtSigningOptions) -> JwtCallbackFuture<String> + Send + Sync>;
 
+/// Define a payload while retaining the original Session object and dynamic return value.
+pub type JwtNativeDefinePayload =
+    Arc<dyn Fn(FieldValue) -> JwtCallbackFuture<FieldValue> + Send + Sync>;
+/// Select a native subject. Null and undefined use the current Session User ID.
+pub type JwtNativeGetSubject =
+    Arc<dyn Fn(FieldValue) -> JwtCallbackFuture<FieldValue> + Send + Sync>;
+/// Sign native claims, the optional protected header, and the key-selection object.
+pub type JwtNativeCustomSign =
+    Arc<dyn Fn(FieldValue, FieldValue, FieldValue) -> JwtCallbackFuture<FieldValue> + Send + Sync>;
+
+impl JwtPlugin {
+    /// Define claims through an explicit JSON callback boundary.
+    pub fn define_payload(self, callback: JwtDefinePayload) -> Self {
+        self.define_payload_native(Arc::new(move |session| {
+            let callback = callback.clone();
+            Box::pin(async move {
+                Ok(FieldMap::from_json(callback(callback_json(&session)?).await?)?.into())
+            })
+        }))
+    }
+
+    /// Define claims without serializing the original Session or callback return value.
+    pub fn define_payload_native(mut self, callback: JwtNativeDefinePayload) -> Self {
+        self.config.define_payload = Some(callback);
+        self
+    }
+
+    /// Select a string subject through an explicit JSON callback boundary.
+    pub fn get_subject(self, callback: JwtGetSubject) -> Self {
+        self.get_subject_native(Arc::new(move |session| {
+            let callback = callback.clone();
+            Box::pin(async move { Ok(callback(callback_json(&session)?).await?.into()) })
+        }))
+    }
+
+    /// Select a native subject, preserving nullish fallback and other dynamic values.
+    pub fn get_subject_native(mut self, callback: JwtNativeGetSubject) -> Self {
+        self.config.get_subject = Some(callback);
+        self
+    }
+
+    /// Sign JSON claims and return a string through the typed convenience boundary.
+    pub fn custom_sign(self, callback: JwtCustomSign) -> Self {
+        self.custom_sign_native(Arc::new(move |payload, header, selection| {
+            let callback = callback.clone();
+            Box::pin(async move {
+                let payload = serde_json::from_value(callback_json(&payload)?)?;
+                let key = selection.model_property("signingKeyId")?;
+                let algorithm = selection.model_property("signingAlgorithm")?;
+                let options = JwtSigningOptions {
+                    key_id: key.json()?.map(serde_json::from_value).transpose()?,
+                    algorithm: algorithm.json()?.map(serde_json::from_value).transpose()?,
+                    header: if header.is_undefined() {
+                        Map::new()
+                    } else {
+                        serde_json::from_value(callback_json(&header)?)?
+                    },
+                };
+                Ok(callback(payload, options).await?.into())
+            })
+        }))
+    }
+
+    /// Sign native claims without narrowing the header, own undefined fields, or return value.
+    pub fn custom_sign_native(mut self, callback: JwtNativeCustomSign) -> Self {
+        self.config.custom_sign = Some(callback);
+        self
+    }
+}
+
+fn callback_json(value: &FieldValue) -> AuthResult<Value> {
+    value.json()?.ok_or_else(|| {
+        AuthError::type_error("The JSON JWT callback input has no JSON representation")
+    })
+}
+
 /// Per-call protected headers and key selection, matching upstream signing overrides.
 #[derive(Clone, Debug, Default)]
 pub struct JwtSigningOptions {

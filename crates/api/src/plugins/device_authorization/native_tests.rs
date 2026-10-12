@@ -406,7 +406,7 @@ async fn native_session_values_reach_publication_cache_and_response_without_coer
             published.user_field("name")?,
             FieldValue::from("Selected User")
         );
-        let session = FieldMap::from(published.session.clone());
+        let session = published.session_value()?.enumerable_fields()?;
         assert!(session["token"].strict_equals(&token));
         let writes = fixture.storage.writes.lock().unwrap();
         assert_eq!(writes.len(), 3);
@@ -418,11 +418,11 @@ async fn native_session_values_reach_publication_cache_and_response_without_coer
             .as_ref()
             .ok_or("Cache write preceded session publication")?;
         assert_eq!(
-            FieldMap::from(at_write.clone()),
-            FieldMap::from(published.clone())
+            at_write.field_value().enumerable_fields()?,
+            published.field_value().enumerable_fields()?
         );
         let expected = FieldValue::from(FieldMap::from([
-            ("user".into(), published.user),
+            ("user".into(), published.user_value()?),
             ("session".into(), session.into()),
         ]))
         .stringify()?

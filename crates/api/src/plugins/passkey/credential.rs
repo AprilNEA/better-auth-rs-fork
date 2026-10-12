@@ -77,7 +77,7 @@ impl WebAuthnCredential {
 }
 
 pub(super) enum PreparedCredential {
-    Legacy(WebAuthnCredential),
+    Legacy(Box<WebAuthnCredential>),
     Native {
         public_key: Vec<u8>,
         transports: Option<Vec<Utf16String>>,
@@ -96,10 +96,10 @@ impl PreparedCredential {
                         AuthError::internal(format!("Failed to decode stored passkey: {error}"))
                     })?;
                 stored.cred.registration_policy = VERIFICATION_POLICY;
-                Ok(Self::Legacy(WebAuthnCredential {
+                Ok(Self::Legacy(Box::new(WebAuthnCredential {
                     cred: stored.cred,
                     storage,
-                }))
+                })))
             }
             PasskeyStorage::Native => Ok(Self::Native {
                 public_key: decode_public_key(passkey.public_key())?,
@@ -114,7 +114,7 @@ impl PreparedCredential {
         credential_id: &str,
     ) -> AuthResult<WebAuthnCredential> {
         match self {
-            Self::Legacy(credential) => Ok(credential),
+            Self::Legacy(credential) => Ok(*credential),
             Self::Native {
                 public_key,
                 transports,

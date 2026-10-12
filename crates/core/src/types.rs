@@ -635,7 +635,7 @@ impl AuthRequest {
             .map(Option::flatten)
     }
 
-    /// Read the endpoint snapshot without requiring the selected relationship to be one User.
+    /// Share the endpoint's native root without requiring the selected relationship to be one User.
     /// Preserve the public User shape, including numeric-key objects from relationship arrays.
     pub fn native_session_snapshot(
         &self,

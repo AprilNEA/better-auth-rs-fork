@@ -251,7 +251,8 @@ async fn authorize_member(
 ) -> AuthResult<(FieldValue, String)> {
     let organization_id = organization_id
         .map(FieldValue::from)
-        .unwrap_or_else(|| session.session.active_organization_id.field_value());
+        .map(Ok)
+        .unwrap_or_else(|| session.session_property("activeOrganizationId"))?;
     let organization_id = organization_id
         .is_truthy()
         .then_some(organization_id)
@@ -438,7 +439,8 @@ pub async fn handle_role_request(
                 .organization_id
                 .as_deref()
                 .map(FieldValue::from)
-                .unwrap_or_else(|| session.session.active_organization_id.field_value())
+                .map(Ok)
+                .unwrap_or_else(|| session.session_property("activeOrganizationId"))?
                 .is_truthy()
             {
                 return Err(AuthError::from_code(
@@ -787,7 +789,7 @@ mod tests {
         let request = create_auth_json_request_no_query(
             HttpMethod::Post,
             "/organization/update-role",
-            Some(session.session.token.typed().unwrap()),
+            Some(session.session_view().unwrap().token.typed().unwrap()),
             Some(json!({
                 "organizationId": org.id, "roleId": role.id, "data": { "id": 7 }
             })),

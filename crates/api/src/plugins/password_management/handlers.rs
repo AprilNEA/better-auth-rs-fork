@@ -303,7 +303,7 @@ pub(crate) async fn change_password_core(
             .await?;
         let issued = issue_selected_user_session_optional(
             ctx,
-            data.user.clone(),
+            data.user_value()?,
             meta,
             ctx.config.session.expires_in(),
         )
@@ -316,7 +316,7 @@ pub(crate) async fn change_password_core(
                 "Failed to get session",
             )
         })?;
-        let token = issued.session.token.field_value();
+        let token = issued.session_property("token")?;
         ctx.session_manager()
             .set_native_session_cookie(req, issued, None)
             .await?;

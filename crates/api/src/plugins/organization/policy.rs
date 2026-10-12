@@ -1,5 +1,6 @@
+use super::types::OrganizationResponse;
 use super::{OrganizationConfig, hooks::*};
-use better_auth_core::{AuthResult, FieldValue, Team};
+use better_auth_core::{AuthResult, FieldValue, Member, Team};
 
 impl OrganizationConfig {
     pub(crate) fn creator_role(&self) -> &str {
@@ -29,9 +30,18 @@ impl OrganizationConfig {
         }
         Ok(self.organization_limit.is_some_and(|limit| count >= limit))
     }
-    pub(crate) async fn member_limit(&self, event: OrganizationUser<'_>) -> AuthResult<usize> {
+    pub(crate) async fn member_limit(
+        &self,
+        organization: &OrganizationResponse,
+        user: impl FnOnce() -> AuthResult<FieldValue>,
+    ) -> AuthResult<usize> {
         if let Some(policy) = &self.membership_limit_callback {
-            return policy.membership_limit(event).await;
+            return policy
+                .membership_limit(OrganizationUser {
+                    organization,
+                    user: &user()?,
+                })
+                .await;
         }
         Ok(self
             .membership_limit
@@ -40,11 +50,22 @@ impl OrganizationConfig {
     }
     pub(crate) async fn pending_invitation_limit(
         &self,
-        event: OrganizationMemberEvent<'_>,
+        member: &Member,
+        organization: &OrganizationResponse,
+        user: impl FnOnce() -> AuthResult<FieldValue>,
         ctx: OrganizationEndpoint<'_>,
     ) -> AuthResult<usize> {
         if let Some(policy) = &self.policy
-            && let Some(value) = policy.invitation_limit(event, ctx).await?
+            && let Some(value) = policy
+                .invitation_limit(
+                    OrganizationMemberEvent {
+                        member,
+                        organization,
+                        user: &user()?,
+                    },
+                    ctx,
+                )
+                .await?
         {
             return Ok(value);
         }

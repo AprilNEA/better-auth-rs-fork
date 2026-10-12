@@ -66,15 +66,15 @@ impl FieldObjectSource for Probe {
 }
 
 fn data(session_payload: FieldValue, user_name: FieldValue) -> AuthResult<NativeSessionData> {
-    Ok(NativeSessionData {
-        session: SessionView::from_field_values(FieldMap::from([
+    Ok(NativeSessionData::new(
+        SessionView::from_field_values(FieldMap::from([
             ("id".into(), "session".into()),
             ("token".into(), "token".into()),
             ("userId".into(), "owner".into()),
             ("payload".into(), session_payload),
         ]))?,
-        user: FieldMap::from([("id".into(), "owner".into()), ("name".into(), user_name)]).into(),
-    })
+        FieldMap::from([("id".into(), "owner".into()), ("name".into(), user_name)]).into(),
+    ))
 }
 
 #[tokio::test]
@@ -194,13 +194,11 @@ async fn cache_failures_preserve_filter_version_json_order_and_original_errors()
 #[tokio::test]
 async fn payload_preserves_public_active_extension_and_omits_private_active() -> AuthResult<()> {
     for visible in [None, Some(FieldValue::from("public-active"))] {
-        let mut data = data(FieldValue::Null, "Owner".into())?;
-        data.session.active = true;
+        let original = data(FieldValue::Null, "Owner".into())?;
+        let data = NativeSessionData::from_native(original.field_value(), true);
         if let Some(value) = &visible {
-            let _ = data
-                .session
-                .additional_fields
-                .insert("active".into(), value.clone());
+            data.session_value()?
+                .set_model_property("active", value.clone())?;
         }
         let (payload, _) = payload(
             &data,
@@ -228,10 +226,10 @@ async fn payload_preserves_public_active_extension_and_omits_private_active() ->
                 .snapshot_fields()?,
             expected
         );
-        assert!(data.session.active);
+        assert!(data.active());
         assert_eq!(
-            data.session.additional_fields.get("active"),
-            visible.as_ref()
+            data.session_value()?.as_object().unwrap().get("active")?,
+            visible
         );
     }
     Ok(())
@@ -368,6 +366,46 @@ async fn clone_boundaries_reject_functions_before_to_json_and_preserve_absent_se
                 "{strategy:?}/{declared}"
             );
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn version_callback_mutations_follow_cache_projection_identity() -> AuthResult<()> {
+    for filter_session in [false, true] {
+        let data = data("before".into(), "Before".into())?;
+        let root = data.field_value();
+        let cache = CookieCacheConfig {
+            version: CookieCacheVersion::dynamic(move |observed| {
+                let root = root.clone();
+                async move {
+                    assert!(observed.field_value().strict_equals(&root));
+                    observed
+                        .session_value()?
+                        .set_model_property("payload", "after".into())?;
+                    observed
+                        .user_value()?
+                        .set_model_property("name", "After".into())?;
+                    Ok("mutated".into())
+                }
+            }),
+            ..Default::default()
+        };
+        let mut config = AuthConfig::default();
+        if filter_session {
+            config.session.additional_fields = Some(Default::default());
+        }
+        let (payload, _) = payload(&data, &config, &cache, false).await?;
+        let session = payload.get("session").ok_or(AuthError::SessionNotFound)?;
+        let user = payload.get("user").ok_or(AuthError::UserNotFound)?;
+        assert_eq!(
+            session.model_property("payload")?,
+            if filter_session { "before" } else { "after" }.into()
+        );
+        assert_eq!(user.model_property("name")?, "Before".into());
+        assert_eq!(data.session_property("payload")?, "after".into());
+        assert_eq!(data.user_property("name")?, "After".into());
+        assert_eq!(payload.get("version"), Some(&"mutated".into()));
     }
     Ok(())
 }

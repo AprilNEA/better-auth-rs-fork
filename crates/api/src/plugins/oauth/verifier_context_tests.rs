@@ -490,7 +490,7 @@ async fn exercise_endpoint_verifier(
                     owner_id.as_deref()
                 );
                 if let Some(data) = &context.session {
-                    let session = &data.session;
+                    let session = data.session_view()?;
                     assert_eq!(session.user_id.field_value(), data.user_field("id")?);
                     assert!(
                         context

@@ -625,21 +625,24 @@ async fn session_subject_reads_array_function_and_date_own_ids_without_calling_t
     ] {
         user.set_model_property("id", "native-owner".into())?;
         user.set_model_property("marker", "kept".into())?;
-        let session = NativeSessionData {
-            user,
-            session: SessionView::from_field_values(FieldMap::from([
+        let session = NativeSessionData::new(
+            SessionView::from_field_values(FieldMap::from([
                 ("id".into(), "session".into()),
                 ("token".into(), "session-token".into()),
                 ("userId".into(), "native-owner".into()),
             ]))?,
-        };
+            user,
+        );
         let token = plugin
             .sign_session(
                 Some(session),
                 &EndpointContext::native(None, None, FieldValue::Null, &ctx),
             )
             .await?;
-        let payload = plugin.verify(&token, None, &ctx).await?.unwrap();
+        let payload = plugin
+            .verify(&token.decode::<String>()?, None, &ctx)
+            .await?
+            .unwrap();
         assert_eq!(payload["sub"], "native-owner");
         assert_eq!(payload["marker"], "kept");
     }
@@ -654,10 +657,8 @@ async fn session_subject_reads_array_function_and_date_own_ids_without_calling_t
         ),
     ] {
         trace.events.lock().unwrap().clear();
-        let session = NativeSessionData {
-            user,
-            session: SessionView::from_field_values(FieldMap::new())?,
-        };
+        let session =
+            NativeSessionData::new(SessionView::from_field_values(FieldMap::new())?, user);
         let result = plugin
             .sign_session(
                 Some(session),

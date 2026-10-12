@@ -31,7 +31,7 @@ pub(crate) async fn get_active_member_core(
     session: &NativeSessionData,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<MemberResponse> {
-    let org_id = session.session.active_organization_id.field_value();
+    let org_id = session.session_property("activeOrganizationId")?;
     if !org_id.is_truthy() {
         return Err(AuthError::from_code(
             "BAD_REQUEST",
@@ -78,7 +78,7 @@ pub(crate) async fn list_members_core(
     } else {
         resolve_organization_id(
             query.organization_id.as_deref(),
-            &session.session,
+            session,
             AuthError::from_code(
                 "BAD_REQUEST",
                 "NO_ACTIVE_ORGANIZATION",
@@ -180,7 +180,7 @@ pub(crate) async fn get_active_member_role_core(
     } else {
         resolve_organization_id(
             query.organization_id.as_deref(),
-            &session.session,
+            session,
             AuthError::from_code(
                 "BAD_REQUEST",
                 "NO_ACTIVE_ORGANIZATION",
@@ -240,7 +240,7 @@ pub(crate) async fn remove_member_core(
 ) -> AuthResult<RemovedMemberResponse> {
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        &session.session,
+        session,
         AuthError::from_code(
             "BAD_REQUEST",
             "NO_ACTIVE_ORGANIZATION",
@@ -392,15 +392,13 @@ pub(crate) async fn remove_member_core(
         .user_property("id")?
         .strict_equals(&target_member.user_id().field_value())
         && session
-            .session
-            .active_organization_id
-            .field_value()
+            .session_property("activeOrganizationId")?
             .strict_equals(&target_member.organization_id.field_value())
     {
         let _ = ctx
             .database
             .update_session_active_organization_by_token_value(
-                &session.session.token.field_value(),
+                &session.session_property("token")?,
                 None,
             )
             .await?;
@@ -425,7 +423,7 @@ pub(crate) async fn update_member_role_core(
     }
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        &session.session,
+        session,
         AuthError::from_code(
             "BAD_REQUEST",
             "NO_ACTIVE_ORGANIZATION",

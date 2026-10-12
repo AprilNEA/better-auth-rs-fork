@@ -95,14 +95,14 @@ pub struct JwtPluginConfig {
     #[config(default = None)]
     pub remote_url: Option<String>,
     /// Application-managed signing callback. Requires `remote_url`.
-    #[config(default = None)]
-    pub custom_sign: Option<JwtCustomSign>,
+    #[config(default = None, skip)]
+    pub custom_sign: Option<JwtNativeCustomSign>,
     /// Session payload callback, before default claims and subject selection.
-    #[config(default = None)]
-    pub define_payload: Option<JwtDefinePayload>,
+    #[config(default = None, skip)]
+    pub define_payload: Option<JwtNativeDefinePayload>,
     /// Session subject callback.
-    #[config(default = None)]
-    pub get_subject: Option<JwtGetSubject>,
+    #[config(default = None, skip)]
+    pub get_subject: Option<JwtNativeGetSubject>,
     /// Public discovery path.
     #[config(default = "/jwks".to_owned())]
     pub jwks_path: String,
@@ -245,7 +245,10 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
                 })?;
             endpoint.session = Some(session.clone());
             let token = self.sign_session(Some(session), &endpoint).await?;
-            return Ok(Some(AuthResponse::json(None, &json!({"token": token}))?));
+            return Ok(Some(AuthResponse::native(
+                None,
+                FieldMap::from([("token".into(), token)]).into(),
+            )));
         }
         Ok(None)
     }
@@ -268,14 +271,24 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
                     return Ok(());
                 }
                 let snapshot = req.native_session_snapshot()?;
-                if snapshot.is_none() && req.new_session()?.is_none() {
+                let candidate = match snapshot
+                    .as_ref()
+                    .filter(|data| data.field_value().is_truthy())
+                {
+                    Some(data) => Some(data.clone()),
+                    None => req.new_session()?,
+                };
+                let Some(candidate) = candidate.filter(|data| data.field_value().is_truthy())
+                else {
+                    return Ok(());
+                };
+                if !candidate.session_value()?.is_truthy() {
                     return Ok(());
                 }
                 let mut endpoint = EndpointContext::new(Some(req), request_body(req)?, ctx);
                 endpoint.session = snapshot.clone();
                 endpoint.response = Some(response);
                 let token = self.sign_session(snapshot, &endpoint).await?;
-                let _ = response.headers.insert("set-auth-jwt", token);
                 let mut exposed: Vec<_> = response
                     .headers
                     .get("access-control-expose-headers")
@@ -291,6 +304,11 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
                 if !exposed.iter().any(|value| value == "set-auth-jwt") {
                     exposed.push("set-auth-jwt".into());
                 }
+                response
+                    .headers
+                    .merge(better_auth_core::Headers::from_field_value(
+                        &FieldMap::from([("set-auth-jwt".into(), token)]).into(),
+                    )?);
                 let _ = response
                     .headers
                     .insert("Access-Control-Expose-Headers", exposed.join(", "));
@@ -488,3 +506,6 @@ mod native_tests;
 mod session_contract_tests;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod callback_contract_tests;

@@ -603,8 +603,14 @@ async fn fractional_cookie_cache_lifetimes_match_pinned_fixture() {
                 clock(before) <= issued_ms && issued_ms <= clock(after),
                 "{label}/{name}: full captured lifetime survives authenticated decoding"
             );
-            assert_eq!(decoded.data.user.id, data.user.id);
-            assert_eq!(decoded.data.session.token, data.session.token);
+            assert_eq!(
+                decoded.data.user_property("id").unwrap(),
+                data.user.id.field_value()
+            );
+            assert_eq!(
+                decoded.data.session_property("token").unwrap(),
+                data.session.token.field_value()
+            );
             if strategy != CookieCacheStrategy::Compact {
                 assert_eq!(expires % 1000, lifetime_ms % 1000);
             }

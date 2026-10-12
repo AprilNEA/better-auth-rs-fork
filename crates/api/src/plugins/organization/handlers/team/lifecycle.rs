@@ -30,11 +30,13 @@ pub(super) async fn create(
         .as_deref()
         .filter(|id| !id.is_empty())
         .map(FieldValue::from)
+        .map(Ok)
         .or_else(|| {
             session
                 .as_ref()
-                .map(|session| session.session.active_organization_id.field_value())
+                .map(|session| session.session_property("activeOrganizationId"))
         })
+        .transpose()?
         .filter(FieldValue::is_truthy)
         .ok_or_else(|| {
             AuthError::from_code(
@@ -69,16 +71,12 @@ pub(super) async fn create(
         )
         .await?;
     }
-    let actor = session.as_ref().map(|session| OrganizationSession {
-        user: &session.user,
-        session: &session.session,
-    });
     let teams = list_teams(&org, ctx, config).await?;
     if let Some(maximum) = config
         .team_limit(
             OrganizationTeamLimit {
                 organization_id: &org,
-                session: actor,
+                session: session.as_ref(),
             },
             OrganizationEndpoint::new(ctx, Some(req)),
         )
@@ -121,7 +119,11 @@ pub(super) async fn create(
             .before_create_team(
                 &mut data,
                 &organization_view,
-                session.as_ref().map(|session| &session.user),
+                session
+                    .as_ref()
+                    .map(|session| session.user_value())
+                    .transpose()?
+                    .as_ref(),
             )
             .await?;
     }
@@ -134,7 +136,11 @@ pub(super) async fn create(
         hooks
             .after_create_team(OrganizationTeamEvent {
                 team: &team,
-                user: session.as_ref().map(|session| &session.user),
+                user: session
+                    .as_ref()
+                    .map(|session| session.user_value())
+                    .transpose()?
+                    .as_ref(),
                 organization: &organization_view,
             })
             .await?;
@@ -154,11 +160,13 @@ pub(super) async fn remove(
         .as_deref()
         .filter(|id| !id.is_empty())
         .map(FieldValue::from)
+        .map(Ok)
         .or_else(|| {
             session
                 .as_ref()
-                .map(|session| session.session.active_organization_id.field_value())
+                .map(|session| session.session_property("activeOrganizationId"))
         })
+        .transpose()?
         .filter(FieldValue::is_truthy)
         .ok_or_else(|| {
             AuthError::from_code(
@@ -186,9 +194,7 @@ pub(super) async fn remove(
                 )
             })?;
         if session
-            .session
-            .active_team_id
-            .field_value()
+            .session_property("activeTeamId")?
             .strict_equals(&body.team_id.as_str().into())
         {
             return Err(AuthError::from_code(
@@ -238,19 +244,34 @@ pub(super) async fn remove(
             )
         })?;
     let organization_view = fields::organization(&organization, ctx)?;
-    let event = OrganizationTeamEvent {
-        team: &team,
-        user: session.as_ref().map(|session| &session.user),
-        organization: &organization_view,
-    };
     if let Some(hooks) = &config.hooks {
-        hooks.before_delete_team(event).await?;
+        hooks
+            .before_delete_team(OrganizationTeamEvent {
+                team: &team,
+                user: session
+                    .as_ref()
+                    .map(|session| session.user_value())
+                    .transpose()?
+                    .as_ref(),
+                organization: &organization_view,
+            })
+            .await?;
     }
     ctx.database
         .delete_team_for_organization_value(&team.id.field_value(), &org)
         .await?;
     if let Some(hooks) = &config.hooks {
-        hooks.after_delete_team(event).await?;
+        hooks
+            .after_delete_team(OrganizationTeamEvent {
+                team: &team,
+                user: session
+                    .as_ref()
+                    .map(|session| session.user_value())
+                    .transpose()?
+                    .as_ref(),
+                organization: &organization_view,
+            })
+            .await?;
     }
     AuthResponse::json(
         None,

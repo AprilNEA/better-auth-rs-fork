@@ -28,10 +28,7 @@ pub(super) async fn issue_factor_session(
     ctx.session_manager()
         .set_native_session_cookie(
             req,
-            better_auth_core::session::NativeSessionData {
-                user,
-                session: session.clone(),
-            },
+            better_auth_core::session::NativeSessionData::new(session.clone(), user),
             None,
         )
         .await?;
@@ -55,17 +52,11 @@ pub(super) async fn update_two_factor_user(
 }
 
 pub(super) async fn delete_factor_session(
-    session: &impl AuthSession,
+    session: &NativeSessionData,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<()> {
     ctx.database
-        .delete_session_by_token_value(
-            &session
-                .field_values()?
-                .get("token")
-                .cloned()
-                .unwrap_or_default(),
-        )
+        .delete_session_by_token_value(&session.session_property("token")?)
         .await
 }
 

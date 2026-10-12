@@ -81,7 +81,10 @@ async fn native_snapshot_keeps_secondary_key_identity_and_database_relationships
         cached_relation
             .ok_or_else(|| AuthError::internal("Cached snapshot must retain the cached User"))?,
     );
-    assert_eq!(cached_relation.user.json()?, Some(cached["user"].clone()));
+    assert_eq!(
+        cached_relation.user_value()?.json()?,
+        Some(cached["user"].clone())
+    );
     assert!(
         store
             .get_session_snapshot_value(&other_token)
@@ -99,7 +102,7 @@ async fn native_snapshot_keeps_secondary_key_identity_and_database_relationships
             AuthError::internal("Database fallback must preserve the Many relationship")
         })?);
         assert_eq!(
-            relation.user,
+            relation.user_value()?,
             FieldValue::from(vec![FieldValue::from(FieldMap::from(user.clone()))])
         );
     }

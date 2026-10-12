@@ -1,8 +1,8 @@
 use super::{JwtCallOverrides, JwtKeyPairConfig, JwtPlugin, JwtPluginConfig, JwtSigningOptions};
 use crate::plugins::endpoint_context::EndpointContext;
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthRoute, AuthSchema,
-    HttpMethod, Jwk, NativeRequest, store::AuthTransaction,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthRoute, AuthSchema, FieldMap,
+    FieldValue, HttpMethod, Jwk, NativeRequest, store::AuthTransaction,
 };
 use serde_json::{Map, Value, json};
 
@@ -63,8 +63,31 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
 
     /// Sign application claims with the registered plugin defaults.
     pub async fn sign(&self, payload: Map<String, Value>) -> AuthResult<String> {
-        self.sign_with_options(payload, &JwtSigningOptions::default())
+        self.sign_value(FieldMap::from_json(payload)?.into())
+            .await?
+            .decode()
+    }
+
+    /// Sign native application claims and retain the custom signer's return value.
+    pub async fn sign_value(&self, payload: FieldValue) -> AuthResult<FieldValue> {
+        self.sign_native(payload, None, None, self.plugin.config.clone(), None)
             .await
+    }
+
+    /// Sign native claims with explicit key selection and protected headers.
+    pub async fn sign_value_with_options(
+        &self,
+        payload: FieldValue,
+        options: &JwtSigningOptions,
+    ) -> AuthResult<FieldValue> {
+        self.sign_native(
+            payload,
+            Some(options),
+            None,
+            self.plugin.config.clone(),
+            None,
+        )
+        .await
     }
 
     /// Replace supplied option groups for one call, preserving omitted groups and instance defaults.
@@ -77,13 +100,14 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         let mut override_context = self.context.clone();
         let options = overrides.apply(&mut config, &mut override_context);
         self.sign_native(
-            payload,
-            &JwtSigningOptions::default(),
+            FieldMap::from_json(payload)?.into(),
+            None,
             Some(options),
             config,
             Some(override_context),
         )
-        .await
+        .await?
+        .decode()
     }
 
     /// Sign application claims with explicit key selection and protected headers.
@@ -92,44 +116,53 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         payload: Map<String, Value>,
         options: &JwtSigningOptions,
     ) -> AuthResult<String> {
-        self.sign_native(payload, options, None, self.plugin.config.clone(), None)
-            .await
+        self.sign_value_with_options(FieldMap::from_json(payload)?.into(), options)
+            .await?
+            .decode()
     }
 
     async fn sign_native(
         &self,
-        payload: Map<String, Value>,
-        options: &JwtSigningOptions,
+        payload: FieldValue,
+        options: Option<&JwtSigningOptions>,
         overrides: Option<Value>,
         config: JwtPluginConfig,
         override_context: Option<AuthContext<S>>,
-    ) -> AuthResult<String> {
-        let mut body = Map::from_iter([("payload".into(), Value::Object(payload))]);
+    ) -> AuthResult<FieldValue> {
+        let mut body = FieldMap::from([("payload".into(), payload)]);
         if let Some(overrides) = &overrides {
-            let _ = body.insert("overrideOptions".into(), overrides.clone());
+            let _ = body.insert(
+                "overrideOptions".into(),
+                FieldValue::from_json(overrides.clone())?,
+            );
         }
-        let route = AuthRoute::server_only(HttpMethod::Post, "signJWT")
-            .body_validator(|request| validate(request, true));
+        let route =
+            AuthRoute::server_only(HttpMethod::Post, "signJWT").body_validator(validate_sign);
         let response = self
             .context
-            .dispatch_native(
+            .dispatch_native_value(
                 self.source,
                 route,
-                Some(body.into()),
-                None,
+                body.into(),
+                FieldValue::Undefined,
                 |request, resolved| async move {
                     let input = request.validated_body::<SignInput>().ok_or_else(|| {
                         AuthError::internal("Missing validated JWT signing input")
                     })?;
+                    let override_options = input
+                        .override_options
+                        .as_ref()
+                        .map(FieldValue::json)
+                        .transpose()?
+                        .flatten();
                     let mut context = (*resolved).clone();
                     let mut effective_config = self.plugin.config.clone();
-                    if let Some(value) = &input.override_options {
+                    if let Some(value) = &override_options {
                         let updated =
                             super::overrides::from_input::<S>(value, &config, overrides.as_ref())?;
                         let _ = updated.apply(&mut effective_config, &mut context);
                     }
-                    if input
-                        .override_options
+                    if override_options
                         .as_ref()
                         .is_some_and(|value| value.get("adapter").is_some())
                     {
@@ -159,17 +192,16 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
                     );
                     endpoint.transaction = self.transaction;
                     let token = JwtPlugin::with_config(effective_config)
-                        .sign_in_endpoint(input.payload.clone(), options, &endpoint)
+                        .sign_value_in_endpoint(input.payload.clone(), options, &endpoint)
                         .await?;
-                    AuthResponse::json(None, &json!({"token":token}))
+                    Ok(AuthResponse::native(
+                        None,
+                        FieldMap::from([("token".into(), token)]).into(),
+                    ))
                 },
             )
             .await?;
-        #[derive(serde::Deserialize)]
-        struct Result {
-            token: String,
-        }
-        Ok(serde_json::from_slice::<Result>(&response.body.bytes()?)?.token)
+        response.body.field_value()?.model_property("token")
     }
 
     /// Provision a key using the registered storage callbacks and encryption policy.
@@ -193,8 +225,8 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         issuer: Option<&str>,
     ) -> AuthResult<Option<Map<String, Value>>> {
         let body = super::verification::verification_body(token, issuer);
-        let route = AuthRoute::server_only(HttpMethod::Post, "verifyJWT")
-            .body_validator(|request| validate(request, false));
+        let route =
+            AuthRoute::server_only(HttpMethod::Post, "verifyJWT").body_validator(validate_verify);
         let response = self
             .context
             .dispatch_native(
@@ -229,11 +261,9 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
     }
 }
 
-#[derive(serde::Deserialize)]
 struct SignInput {
-    payload: Map<String, Value>,
-    #[serde(rename = "overrideOptions")]
-    override_options: Option<Value>,
+    payload: FieldValue,
+    override_options: Option<FieldValue>,
 }
 #[derive(serde::Deserialize)]
 struct VerifyInput {
@@ -241,9 +271,8 @@ struct VerifyInput {
     issuer: Option<String>,
 }
 
-fn validate(
+fn validate_verify(
     request: &AuthRequest,
-    sign: bool,
 ) -> AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
     use crate::plugins::json_body::{invalid_type, validation_error};
     use better_auth_core::endpoint_input::ValidatedBody;
@@ -252,14 +281,7 @@ fn validate(
         .as_ref()
         .and_then(Value::as_object)
         .ok_or_else(|| validation_error(&invalid_type("body", "object", input.as_ref())))?;
-    let fields = if sign {
-        [
-            ("payload", "record", true),
-            ("overrideOptions", "record", false),
-        ]
-    } else {
-        [("token", "string", true), ("issuer", "string", false)]
-    };
+    let fields = [("token", "string", true), ("issuer", "string", false)];
     let mut errors = Vec::new();
     let mut projected = Map::new();
     for (field, kind, required) in fields {
@@ -283,15 +305,49 @@ fn validate(
         return Err(validation_error(&errors.join("; ")));
     }
     let value = Value::Object(projected);
-    if sign {
-        Ok(ValidatedBody::new(
-            Some(value.clone()),
-            serde_json::from_value::<SignInput>(value)?,
-        ))
-    } else {
-        Ok(ValidatedBody::new(
-            Some(value.clone()),
-            serde_json::from_value::<VerifyInput>(value)?,
-        ))
+    Ok(ValidatedBody::new(
+        Some(value.clone()),
+        serde_json::from_value::<VerifyInput>(value)?,
+    ))
+}
+
+fn validate_sign(
+    request: &AuthRequest,
+) -> AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
+    use crate::plugins::json_body::{native_invalid_type, validation_error};
+    use better_auth_core::endpoint_input::ValidatedBody;
+    let body = request.input_field_value()?;
+    if !crate::plugins::json_body::native_object(&body) {
+        return Err(validation_error(&native_invalid_type(
+            "body",
+            "object",
+            Some(&body),
+        )));
     }
+    let mut projected = FieldMap::new();
+    let mut errors = Vec::new();
+    for (name, required) in [("payload", true), ("overrideOptions", false)] {
+        let value = body.model_property(name)?;
+        if value.is_undefined() && !required {
+            if body.has_property(name)? {
+                let _ = projected.insert(name.into(), value);
+            }
+        } else if let Some(fields) = crate::plugins::json_body::native_record(&value)? {
+            let _ = projected.insert(name.into(), fields.into());
+        } else {
+            errors.push(native_invalid_type(
+                &format!("body.{name}"),
+                "record",
+                Some(&value),
+            ));
+        }
+    }
+    if !errors.is_empty() {
+        return Err(validation_error(&errors.join("; ")));
+    }
+    let input = SignInput {
+        payload: projected.get("payload").cloned().unwrap_or_default(),
+        override_options: projected.get("overrideOptions").cloned(),
+    };
+    Ok(ValidatedBody::native(projected.into(), input))
 }

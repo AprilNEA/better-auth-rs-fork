@@ -116,12 +116,7 @@ fn native(value: &FieldValue) -> AuthResult<FieldValue> {
 }
 
 fn session(value: Option<&NativeSessionData>) -> FieldValue {
-    value.map_or(FieldValue::Null, |value| {
-        object([
-            ("session", FieldMap::from(value.session.clone()).into()),
-            ("user", value.user.clone()),
-        ])
-    })
+    value.map_or(FieldValue::Null, NativeSessionData::field_value)
 }
 
 #[derive(Clone, Default)]

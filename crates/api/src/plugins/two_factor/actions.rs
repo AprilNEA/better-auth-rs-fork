@@ -35,11 +35,11 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
             req,
             updated.id().into_owned(),
             FieldMap::from(updated).into(),
-            data.session.field_values()?,
+            data.session_value()?.enumerable_fields()?,
             ctx,
         )
         .await?;
-        delete_factor_session(&data.session, ctx).await?;
+        delete_factor_session(data, ctx).await?;
         return Ok((
             EnableResponse {
                 method: "otp",
@@ -87,11 +87,11 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
             req,
             updated_user.id().into_owned(),
             FieldMap::from(updated_user).into(),
-            data.session.field_values()?,
+            data.session_value()?.enumerable_fields()?,
             ctx,
         )
         .await?;
-        delete_factor_session(&data.session, ctx).await?;
+        delete_factor_session(data, ctx).await?;
     }
 
     let mut fields = FieldMap::from([
@@ -156,11 +156,11 @@ pub(super) async fn disable_core(
         req,
         updated_user.id().into_owned(),
         FieldMap::from(updated_user).into(),
-        data.session.field_values()?,
+        data.session_value()?.enumerable_fields()?,
         ctx,
     )
     .await?;
-    delete_factor_session(&data.session, ctx).await?;
+    delete_factor_session(data, ctx).await?;
 
     let mut set_cookie_headers = Vec::new();
 
@@ -380,10 +380,10 @@ pub(super) async fn send_otp_core<S: better_auth_core::AuthSchema>(
         .await?;
 
     let task: Option<better_auth_core::background::BackgroundFuture> = match sender {
-        Sender::Callback(callback) => callback(&state.user(), &otp, &endpoint)?,
+        Sender::Callback(callback) => callback(&state.user()?, &otp, &endpoint)?,
         Sender::Legacy(sender) => {
             let sender = sender.clone();
-            let user = state.user();
+            let user = state.user()?;
             Some(better_auth_core::background::BackgroundFuture::new(
                 async move { sender.send(&user, &otp).await },
             ))
@@ -631,12 +631,7 @@ pub(super) async fn verify_backup_code_core(
             if body.disable_session.unwrap_or(false) {
                 Ok((
                     SessionTokenResponse {
-                        token: data
-                            .session
-                            .field_values()?
-                            .get("token")
-                            .cloned()
-                            .unwrap_or_default(),
+                        token: data.session_property("token")?,
                         user: data.public_user(&ctx.config.user)?,
                     },
                     Vec::new(),

@@ -151,7 +151,11 @@ fn restore_challenge<T: serde::Serialize + serde::de::DeserializeOwned>(
     challenge: &FieldValue,
 ) -> AuthResult<T> {
     // webauthn-rs-core 0.5.4 exposes its persistence format through Serde. Keep engine policy from its builders.
-    let mut state = serde_json::to_value(state)?;
-    state["challenge"] = challenge.decode::<String>()?.into();
-    Ok(serde_json::from_value(state)?)
+    let serde_json::Value::Object(mut fields) = serde_json::to_value(state)? else {
+        return Err(AuthError::internal(
+            "WebAuthn engine state must serialize as an object",
+        ));
+    };
+    let _ = fields.insert("challenge".into(), challenge.decode::<String>()?.into());
+    Ok(serde_json::from_value(fields.into())?)
 }

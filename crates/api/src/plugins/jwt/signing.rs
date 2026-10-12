@@ -24,26 +24,35 @@ impl JwtPlugin {
         &self,
         session: Option<better_auth_core::session::NativeSessionData>,
         endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<String> {
-        let user = || {
-            session.as_ref().map(|data| &data.user).ok_or_else(|| {
-                AuthError::type_error(
-                    "null is not an object (evaluating 'ctx.context.session.user')",
-                )
-            })
+    ) -> AuthResult<FieldValue> {
+        let current = || {
+            session
+                .as_ref()
+                .map(|data| data.field_value())
+                .unwrap_or(FieldValue::Null)
         };
-        let mut payload = FieldMap::from([("iat".into(), (Utc::now().timestamp() as f64).into())]);
-        match &self.config.define_payload {
-            Some(callback) => {
-                payload.extend(FieldMap::from_json(
-                    callback(serde_json::to_value(&session)?).await?,
-                )?);
-            }
-            None => keys::spread(&mut payload, user()?.clone())?,
-        }
-        let subject = match &self.config.get_subject {
-            Some(callback) => callback(serde_json::to_value(&session)?).await?.into(),
-            None => match user()? {
+        let user = || {
+            session
+                .as_ref()
+                .ok_or_else(|| {
+                    AuthError::type_error(
+                        "null is not an object (evaluating 'ctx.context.session.user')",
+                    )
+                })?
+                .user_value()
+        };
+        let defined = match &self.config.define_payload {
+            Some(callback) => callback(current()).await?,
+            None => user()?,
+        };
+        let mut payload = FieldMap::from([("iat".into(), endpoint.auth.now().timestamp().into())]);
+        keys::spread(&mut payload, defined)?;
+        let mut subject = match &self.config.get_subject {
+            Some(callback) => callback(current()).await?,
+            None => FieldValue::Undefined,
+        };
+        if subject.is_null() || subject.is_undefined() {
+            subject = match user()? {
                 FieldValue::Null => {
                     return Err(AuthError::type_error(
                         "null is not an object (evaluating 'ctx.context.session.user.id')",
@@ -55,10 +64,10 @@ impl JwtPlugin {
                     ));
                 }
                 value => value.model_property("id")?,
-            },
-        };
+            };
+        }
         let _ = payload.insert("sub".into(), subject);
-        self.sign_fields_in_endpoint(payload, &JwtSigningOptions::default(), endpoint)
+        self.sign_value_in_endpoint(payload.into(), None, endpoint)
             .await
     }
 
@@ -68,16 +77,24 @@ impl JwtPlugin {
         payload: Map<String, Value>,
         ctx: &AuthContext<S>,
     ) -> AuthResult<String> {
-        self.sign_with_options(payload, &JwtSigningOptions::default(), ctx)
-            .await
+        self.sign_context(payload, None, ctx).await
     }
 
-    /// Sign a native payload with explicit protected headers and key selection.
+    /// Sign JSON claims with explicit protected headers and key selection.
     /// Use `sign_in_endpoint` to retain an endpoint request and transaction.
     pub async fn sign_with_options<S: AuthSchema>(
         &self,
         payload: Map<String, Value>,
         options: &JwtSigningOptions,
+        ctx: &AuthContext<S>,
+    ) -> AuthResult<String> {
+        self.sign_context(payload, Some(options), ctx).await
+    }
+
+    async fn sign_context<S: AuthSchema>(
+        &self,
+        payload: Map<String, Value>,
+        options: Option<&JwtSigningOptions>,
         ctx: &AuthContext<S>,
     ) -> AuthResult<String> {
         ctx.with_native_context(Default::default(), |resolved| async move {
@@ -87,46 +104,74 @@ impl JwtPlugin {
                 &resolved,
             );
             endpoint.path = Some("virtual:");
-            self.sign_in_endpoint(payload, options, &endpoint).await
+            self.sign_value_in_endpoint(FieldMap::from_json(payload)?.into(), options, &endpoint)
+                .await?
+                .decode()
         })
         .await
     }
 
-    /// Sign with the supplied endpoint context, including its active transaction.
+    /// Sign JSON claims with the supplied endpoint context and active transaction.
     pub async fn sign_in_endpoint<S: AuthSchema>(
         &self,
         payload: Map<String, Value>,
         options: &JwtSigningOptions,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<String> {
-        self.sign_fields_in_endpoint(FieldMap::from_json(payload)?, options, endpoint)
-            .await
+        self.sign_value_in_endpoint(
+            FieldMap::from_json(payload)?.into(),
+            Some(options),
+            endpoint,
+        )
+        .await?
+        .decode()
     }
 
-    async fn sign_fields_in_endpoint<S: AuthSchema>(
+    /// Sign native claims and preserve the custom signer's original return value.
+    /// An absent options value leaves the protected header undefined for a custom signer.
+    pub async fn sign_value_in_endpoint<S: AuthSchema>(
         &self,
-        fields: FieldMap,
-        options: &JwtSigningOptions,
+        fields: FieldValue,
+        options: Option<&JwtSigningOptions>,
         endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<String> {
+    ) -> AuthResult<FieldValue> {
+        let now = endpoint.auth.now().timestamp();
         let config = &endpoint.auth.config;
-        let defaults = self.default_claims(&fields, config)?;
+        let defaults = self.default_claims(&fields, config, now)?;
         if let Some(callback) = &self.config.custom_sign {
-            let mut payload = fields.clone();
-            for name in ["iat", "exp", "nbf", "iss", "aud"] {
-                let value = defaults
-                    .get(name)
-                    .or_else(|| fields.get(name))
-                    .cloned()
-                    .unwrap_or_default();
-                let _ = payload.insert(name.into(), value);
-            }
-            return callback(payload.json()?, options.clone()).await;
+            let mut payload = FieldMap::new();
+            keys::spread(&mut payload, fields)?;
+            payload.extend(defaults);
+            let header = options
+                .map(|options| FieldMap::from_json(options.header.clone()).map(FieldValue::from))
+                .transpose()?
+                .unwrap_or_default();
+            let selection = FieldMap::from([
+                (
+                    "signingKeyId".into(),
+                    options
+                        .and_then(|options| options.key_id.as_ref())
+                        .map(|id| id.clone().into())
+                        .unwrap_or_default(),
+                ),
+                (
+                    "signingAlgorithm".into(),
+                    options
+                        .and_then(|options| options.algorithm)
+                        .map(|algorithm| algorithm.name().into())
+                        .unwrap_or_default(),
+                ),
+            ]);
+            return callback(payload.into(), header, selection.into()).await;
         }
+        let empty = JwtSigningOptions::default();
+        let options = options.unwrap_or(&empty);
         let key = self.resolve_local_signing_key(options, endpoint).await?;
-        let mut payload = better_auth_core::StructuredCloneContext::new().clone_map(&fields)?;
+        let mut payload = better_auth_core::StructuredCloneContext::new()
+            .clone_value(&fields)?
+            .enumerable_fields()?;
         claims::prepare_local_claims(&mut payload, &fields, &defaults)?;
-        key.sign(payload, options)
+        Ok(key.sign(payload, options)?.into())
     }
 
     pub(super) async fn resolve_local_signing_key<S: AuthSchema>(
@@ -250,38 +295,41 @@ impl JwtPlugin {
 
     fn default_claims(
         &self,
-        payload: &FieldMap,
+        payload: &FieldValue,
         config: &better_auth_core::AuthConfig,
+        now: i64,
     ) -> AuthResult<FieldMap> {
-        let expiration =
-            claims::default_expiration(&self.config.expiration_time, payload.get("iat"))?;
-        let mut defaults = FieldMap::new();
-        for (claim, default) in [
-            ("exp", expiration),
-            (
-                "iss",
-                self.config
-                    .issuer
-                    .as_deref()
-                    .unwrap_or_else(|| config.base_url.as_static().unwrap_or(""))
-                    .into(),
-            ),
-            (
-                "aud",
-                match &self.config.audience {
-                    Some(audience) => FieldValue::from_json(serde_json::to_value(audience)?)?,
-                    None => config.base_url.as_static().unwrap_or("").into(),
-                },
-            ),
-        ] {
-            let value = payload
-                .get(claim)
-                .filter(|value| !value.is_null() && !value.is_undefined())
-                .cloned()
-                .unwrap_or(default);
-            let _ = defaults.insert(claim.to_owned(), value);
+        let issued = payload.model_property("iat")?;
+        let mut expiry = payload.model_property("exp")?;
+        let default_expiry =
+            claims::default_expiration(&self.config.expiration_time, &issued, now)?;
+        if expiry.is_null() || expiry.is_undefined() {
+            expiry = default_expiry;
         }
-        Ok(defaults)
+        let not_before = payload.model_property("nbf")?;
+        let mut issuer = payload.model_property("iss")?;
+        if issuer.is_null() || issuer.is_undefined() {
+            issuer = self
+                .config
+                .issuer
+                .as_deref()
+                .unwrap_or_else(|| config.base_url.as_static().unwrap_or(""))
+                .into();
+        }
+        let mut audience = payload.model_property("aud")?;
+        if audience.is_null() || audience.is_undefined() {
+            audience = match &self.config.audience {
+                Some(audience) => FieldValue::from_json(serde_json::to_value(audience)?)?,
+                None => config.base_url.as_static().unwrap_or("").into(),
+            };
+        }
+        Ok(FieldMap::from([
+            ("iat".into(), issued),
+            ("exp".into(), expiry),
+            ("nbf".into(), not_before),
+            ("iss".into(), issuer),
+            ("aud".into(), audience),
+        ]))
     }
 }
 

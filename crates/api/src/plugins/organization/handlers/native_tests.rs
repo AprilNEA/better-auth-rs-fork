@@ -52,10 +52,7 @@ pub(super) async fn session(
         })
         .await
         .unwrap();
-    NativeSessionData {
-        session,
-        user: FieldMap::from(user.clone()).into(),
-    }
+    NativeSessionData::new(session, FieldMap::from(user.clone()).into())
 }
 
 pub(super) fn assert_coded_error(error: AuthError, status: u16, expected: &[u8]) {
@@ -102,7 +99,7 @@ async fn full_organization_keeps_native_dates_undefined_and_response_identity() 
     let _ = ctx
         .database
         .update_session_active_organization_by_token_value(
-            &data.session.token.field_value(),
+            &data.session_property("token").unwrap(),
             Some(&organization.id.field_value()),
         )
         .await
@@ -110,7 +107,7 @@ async fn full_organization_keeps_native_dates_undefined_and_response_identity() 
     let request = test_helpers::create_auth_json_request_no_query(
         HttpMethod::Get,
         "/organization/get-full-organization",
-        Some(data.session.token.typed().unwrap()),
+        Some(data.session_view().unwrap().token.typed().unwrap()),
         None,
     );
     let mut response = super::org::handle_get_full_organization(&request, &ctx, &config)
@@ -160,7 +157,9 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
         .create_organization(CreateOrganization::new("Native", "native"))
         .await
         .unwrap();
-    data.user = FieldValue::Null;
+    data.field_value()
+        .set_model_property("user", FieldValue::Null)
+        .unwrap();
     assert_coded_error(
         get_active_member_core(&data, &ctx).await.unwrap_err(),
         400,
@@ -188,13 +187,16 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
         br#"{"message":"Organization not found","code":"ORGANIZATION_NOT_FOUND"}"#,
     );
     let active = organization.id.typed().unwrap();
-    data.session = ctx
-        .database
-        .update_session_active_organization_by_token_value(
-            &data.session.token.field_value(),
-            Some(&organization.id.field_value()),
+    data = data
+        .with_session(
+            ctx.database
+                .update_session_active_organization_by_token_value(
+                    &data.session_property("token").unwrap(),
+                    Some(&organization.id.field_value()),
+                )
+                .await
+                .unwrap(),
         )
-        .await
         .unwrap();
     assert!(matches!(
         get_active_member_core(&data, &ctx).await,
@@ -202,7 +204,7 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
     ));
     assert_eq!(
         ctx.database
-            .get_session_by_token_value(&data.session.token.field_value())
+            .get_session_by_token_value(&data.session_property("token").unwrap())
             .await
             .unwrap()
             .unwrap()
@@ -215,7 +217,9 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
         3.0.into(),
         Vec::<FieldValue>::new().into(),
     ] {
-        data.user = primitive;
+        data.field_value()
+            .set_model_property("user", primitive)
+            .unwrap();
         assert!(
             list_organizations_core(&data, &ctx)
                 .await
@@ -236,7 +240,7 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
         );
         assert_eq!(
             ctx.database
-                .get_session_by_token_value(&data.session.token.field_value())
+                .get_session_by_token_value(&data.session_property("token").unwrap())
                 .await
                 .unwrap()
                 .unwrap()
@@ -322,23 +326,26 @@ async fn native_member_page_preserves_projected_values_and_strict_join_identity(
         users.push(user);
     }
     let mut data = session(&ctx, &users[0]).await;
-    data.session = ctx
-        .database
-        .update_session_active_organization_by_token_value(
-            &data.session.token.field_value(),
-            Some(&organization.id.field_value()),
+    data = data
+        .with_session(
+            ctx.database
+                .update_session_active_organization_by_token_value(
+                    &data.session_property("token").unwrap(),
+                    Some(&organization.id.field_value()),
+                )
+                .await
+                .unwrap(),
         )
-        .await
         .unwrap();
     let stored_session = ctx
         .database
-        .get_session_by_token_value(&data.session.token.field_value())
+        .get_session_by_token_value(&data.session_property("token").unwrap())
         .await
         .unwrap();
     let request = test_helpers::create_auth_request_no_query(
         HttpMethod::Get,
         "/organization/list-members",
-        Some(data.session.token.typed().unwrap()),
+        Some(data.session_view().unwrap().token.typed().unwrap()),
         None,
     );
     let response = handle_list_members(&request, &config, &ctx).await.unwrap();
@@ -420,7 +427,7 @@ async fn native_member_page_preserves_projected_values_and_strict_join_identity(
     );
     assert_eq!(
         ctx.database
-            .get_session_by_token_value(&data.session.token.field_value())
+            .get_session_by_token_value(&data.session_property("token").unwrap())
             .await
             .unwrap(),
         stored_session
@@ -466,8 +473,11 @@ async fn active_member_role_returns_native_values_and_empty_target_uses_requeste
             ))
             .await
             .unwrap();
-        let mut data = session(&ctx, &user).await;
-        data.session.active_organization_id = Some(organization.id.typed().unwrap().clone()).into();
+        let data = session(&ctx, &user).await;
+        data.session_value()
+            .unwrap()
+            .set_model_property("activeOrganizationId", organization.id.field_value())
+            .unwrap();
         let response = get_active_member_role_core(
             &GetActiveMemberRoleQuery {
                 user_id: Some(String::new()),
@@ -510,10 +520,10 @@ async fn invitation_read_case(teams_enabled: bool) {
         })
         .await
         .unwrap();
-    let mut data = session(&ctx, &user).await;
+    let data = session(&ctx, &user).await;
     let stored_session = ctx
         .database
-        .get_session_by_token_value(&data.session.token.field_value())
+        .get_session_by_token_value(&data.session_property("token").unwrap())
         .await
         .unwrap();
     let organization = ctx
@@ -532,7 +542,9 @@ async fn invitation_read_case(teams_enabled: bool) {
         ))
         .await
         .unwrap();
-    data.user = FieldValue::Null;
+    data.field_value()
+        .set_model_property("user", FieldValue::Null)
+        .unwrap();
     assert!(
         get_invitation_core(
             &GetInvitationQuery {
@@ -554,7 +566,9 @@ async fn invitation_read_case(teams_enabled: bool) {
         list_user_invitations_core(Some(&data), Some("recipient@example.test"), &ctx).await,
         Err(AuthError::TypeError(message)) if message == "Cannot read properties of null (reading 'emailVerified')"
     ));
-    data.user = false.into();
+    data.field_value()
+        .set_model_property("user", false.into())
+        .unwrap();
     assert_coded_error(list_user_invitations_core(Some(&data), Some("recipient@example.test"), &ctx).await.unwrap_err(), 403, br#"{"message":"Email verification required to view or list invitations for the session email","code":"EMAIL_VERIFICATION_REQUIRED_FOR_INVITATION"}"#);
     assert_coded_error(
         list_user_invitations_core(None, None, &ctx)
@@ -588,11 +602,16 @@ async fn invitation_read_case(teams_enabled: bool) {
             assert_eq!(response.body.json().unwrap(), Some(expected.clone()));
         };
     for email in [FieldValue::Null, "".into(), false.into()] {
-        data.user = FieldMap::from([
-            ("email".into(), email),
-            ("emailVerified".into(), Vec::<FieldValue>::new().into()),
-        ])
-        .into();
+        data.field_value()
+            .set_model_property(
+                "user",
+                FieldMap::from([
+                    ("email".into(), email),
+                    ("emailVerified".into(), Vec::<FieldValue>::new().into()),
+                ])
+                .into(),
+            )
+            .unwrap();
         let rows = list_user_invitations_core(Some(&data), Some("RECIPIENT@example.test"), &ctx)
             .await
             .unwrap();
@@ -602,11 +621,16 @@ async fn invitation_read_case(teams_enabled: bool) {
         .await
         .unwrap();
     assert_response(&rows);
-    data.user = FieldMap::from([
-        ("email".into(), 17.0.into()),
-        ("emailVerified".into(), true.into()),
-    ])
-    .into();
+    data.field_value()
+        .set_model_property(
+            "user",
+            FieldMap::from([
+                ("email".into(), 17.0.into()),
+                ("emailVerified".into(), true.into()),
+            ])
+            .into(),
+        )
+        .unwrap();
     assert!(matches!(
         list_user_invitations_core(Some(&data), None, &ctx).await,
         Err(AuthError::TypeError(message)) if message == "user.email.toLowerCase is not a function"
@@ -614,7 +638,7 @@ async fn invitation_read_case(teams_enabled: bool) {
     let mut request = test_helpers::create_auth_request_no_query(
         HttpMethod::Get,
         "/organization/list-user-invitations",
-        Some(data.session.token.typed().unwrap()),
+        Some(data.session_view().unwrap().token.typed().unwrap()),
         None,
     );
     request.query = Some(serde_json::json!({"email": "recipient@example.test"}));
@@ -655,7 +679,7 @@ async fn invitation_read_case(teams_enabled: bool) {
     );
     assert_eq!(
         ctx.database
-            .get_session_by_token_value(&data.session.token.field_value())
+            .get_session_by_token_value(&data.session_property("token").unwrap())
             .await
             .unwrap(),
         stored_session

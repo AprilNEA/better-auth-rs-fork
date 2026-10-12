@@ -48,10 +48,7 @@ impl NativeSessionHook {
             .0
             .lock()
             .map_err(|_| AuthError::internal("Native Session fixture lock poisoned"))? =
-            Some(NativeSessionData {
-                session: session.clone(),
-                user,
-            });
+            Some(NativeSessionData::new(session.clone(), user));
         let name = context
             .config
             .auth_cookie("session_token", Default::default())

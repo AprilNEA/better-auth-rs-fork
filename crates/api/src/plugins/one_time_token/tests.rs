@@ -61,7 +61,13 @@ async fn expired_session_writes_cookie_and_new_session_before_rejecting_transfer
     );
     assert!(response.headers.contains_key("set-cookie"));
     assert_eq!(
-        request.new_session().unwrap().unwrap().session.token,
+        request
+            .new_session()
+            .unwrap()
+            .unwrap()
+            .session_view()
+            .unwrap()
+            .token,
         session.token
     );
     assert!(
@@ -129,18 +135,12 @@ async fn after_hook_generates_from_native_new_session_without_rereading_storage(
     let plugin = OneTimeTokenPlugin::new()
         .set_ott_header_on_new_session(true)
         .generate_token(Arc::new(move |data| {
-            assert!(data.user.strict_equals(&expected));
+            assert!(data.user_value().unwrap().strict_equals(&expected));
             Box::pin(async { Ok("native-transfer".to_owned()) })
         }));
     let request = AuthRequest::new(HttpMethod::Post, "/native-session");
     ctx.session_manager()
-        .publish_session(
-            &request,
-            NativeSessionData {
-                session: session.clone(),
-                user,
-            },
-        )
+        .publish_session(&request, NativeSessionData::new(session.clone(), user))
         .unwrap();
     ctx.database
         .delete_session(session.token.typed().unwrap())

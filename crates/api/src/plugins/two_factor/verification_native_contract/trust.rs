@@ -41,10 +41,10 @@ pub(super) async fn capture(scenario: &Json) -> AuthResult<Json> {
     )?;
     context.session_manager().publish_session(
         &request,
-        NativeSessionData {
-            session: better_auth_core::SessionView::from_field_values(session)?,
-            user: user.clone(),
-        },
+        NativeSessionData::new(
+            better_auth_core::SessionView::from_field_values(session)?,
+            user.clone(),
+        ),
     )?;
     let mut response = AuthResponse::native(None, FieldValue::Undefined);
     let before = harness.state(&inner)?;
@@ -59,12 +59,12 @@ pub(super) async fn capture(scenario: &Json) -> AuthResult<Json> {
                     .await;
                 let snapshot = request.new_session()?.unwrap();
                 assert!(
-                    snapshot.user.strict_equals(&user),
+                    snapshot.user_value()?.strict_equals(&user),
                     "The failure must retain the issued User identity"
                 );
                 let current = FieldValue::from(FieldMap::from([
-                    ("user".into(), snapshot.user),
-                    ("session".into(), FieldMap::from(snapshot.session).into()),
+                    ("user".into(), snapshot.user_value()?),
+                    ("session".into(), snapshot.session_value()?),
                 ]));
                 let context_headers = request.take_response_headers()?;
                 harness.record(

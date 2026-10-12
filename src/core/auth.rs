@@ -873,7 +873,7 @@ impl<S: AuthSchema> BetterAuth<S> {
         {
             Some(user) => better_auth_core::FieldMap::from(user).into(),
             None => {
-                let mut fields = session.user.enumerable_fields()?;
+                let mut fields = session.user_value()?.enumerable_fields()?;
                 if !name.is_undefined() {
                     let _ = fields.insert("name".into(), name);
                 }
@@ -886,14 +886,7 @@ impl<S: AuthSchema> BetterAuth<S> {
         };
         context
             .session_manager()
-            .set_native_session_cookie(
-                req,
-                better_auth_core::session::NativeSessionData {
-                    user,
-                    session: session.session,
-                },
-                None,
-            )
+            .set_native_session_cookie(req, session.with_user(user)?, None)
             .await?;
         AuthResponse::json(None, &better_auth_core::StatusResponse { status: true })
     }

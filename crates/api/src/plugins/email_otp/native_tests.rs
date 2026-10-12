@@ -347,3 +347,139 @@ async fn serial_user_id_updates_and_refreshes_the_selected_native_session_cache(
     assert!(request.new_session()?.is_none());
     Ok(())
 }
+
+#[tokio::test]
+async fn sign_in_reads_the_original_session_handle_after_cookie_version_mutation() -> AuthResult<()>
+{
+    use crate::plugins::{EmailPasswordPlugin, test_helpers::create_auth_json_request_no_query};
+    use better_auth_core::{CreateAccount, config::CookieCacheVersion};
+
+    let password = "SessionMutation123!";
+    let hash = better_auth_core::utils::password::hash_password(None, password).await?;
+    for password_sign_in in [false, true] {
+        for replace_root_session in [false, true] {
+            let observations = Arc::new(Mutex::new(Vec::new()));
+            let captured = observations.clone();
+            let mut config = create_test_config();
+            config.session.cookie_cache = Some(CookieCacheConfig {
+                enabled: Some(true),
+                version: CookieCacheVersion::dynamic(move |data| {
+                    let captured = captured.clone();
+                    async move {
+                        let session = data.session_value()?;
+                        let original_token = session.model_property("token")?;
+                        session.set_model_property("token", "mutated-local-token".into())?;
+                        if replace_root_session {
+                            let mut replacement = session.enumerable_fields()?;
+                            let _ = replacement.insert("token".into(), "replacement-token".into());
+                            data.field_value()
+                                .set_model_property("session", replacement.into())?;
+                        }
+                        captured.lock().unwrap().push((
+                            data.field_value(),
+                            session,
+                            original_token,
+                        ));
+                        Ok("mutated".into())
+                    }
+                }),
+                ..Default::default()
+            });
+            let config = Arc::new(config);
+            let credentials = EmailPasswordPlugin::new();
+            let otp = EmailOtpPlugin::new();
+            let ctx = initialize_test_context(
+                config.clone(),
+                Arc::new(EphemeralStore::new(config)),
+                &[&credentials, &otp],
+            )
+            .await?;
+            let user = ctx
+                .database
+                .create_user(CreateUser {
+                    email_verified: Some(true),
+                    ..CreateUser::new()
+                        .with_email(EMAIL)
+                        .with_name("Session Owner")
+                })
+                .await?;
+            let (path, body) = if password_sign_in {
+                let _ = ctx
+                    .database
+                    .create_account(
+                        CreateAccount {
+                            user_id: user.id.clone(),
+                            account_id: user.id.clone(),
+                            provider_id: "credential".into(),
+                            password: Some(hash.clone()).into(),
+                            ..Default::default()
+                        }
+                        .with_timestamps(Utc::now().into()),
+                    )
+                    .await?;
+                (
+                    "/sign-in/email",
+                    json!({"email": EMAIL, "password": password}),
+                )
+            } else {
+                let _ = ctx
+                    .database
+                    .create_verification(CreateVerification {
+                        identifier: EmailOtpType::SignIn.identifier(EMAIL).into(),
+                        value: "123456:0".into(),
+                        expires_at: (Utc::now() + Duration::minutes(5)).into(),
+                        ..Default::default()
+                    })
+                    .await?;
+                (
+                    "/sign-in/email-otp",
+                    json!({"email": EMAIL, "otp": "123456"}),
+                )
+            };
+            let request =
+                create_auth_json_request_no_query(HttpMethod::Post, path, None, Some(body));
+            let response = if password_sign_in {
+                credentials.on_request(&request, &ctx).await?.unwrap()
+            } else {
+                otp.sign_in(&request, &ctx).await?
+            };
+            assert_eq!(
+                response.body.field_value()?.model_property("token")?,
+                "mutated-local-token".into()
+            );
+            let (root, local_session, original_token) = {
+                let mut observations = observations.lock().unwrap();
+                assert_eq!(observations.len(), 1);
+                observations.pop().unwrap()
+            };
+            let issued = request.new_session()?.unwrap();
+            assert!(issued.field_value().strict_equals(&root));
+            assert_eq!(
+                issued.session_value()?.strict_equals(&local_session),
+                !replace_root_session
+            );
+            assert_eq!(
+                issued.session_property("token")?,
+                FieldValue::from(if replace_root_session {
+                    "replacement-token"
+                } else {
+                    "mutated-local-token"
+                })
+            );
+            let stored = ctx
+                .database
+                .get_session(original_token.as_str().unwrap())
+                .await?
+                .unwrap();
+            assert_eq!(stored.token.field_value(), original_token);
+            assert_eq!(
+                ctx.database
+                    .get_user_sessions(user.id.typed()?)
+                    .await?
+                    .len(),
+                1
+            );
+        }
+    }
+    Ok(())
+}

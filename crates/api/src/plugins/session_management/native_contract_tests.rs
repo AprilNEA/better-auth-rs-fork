@@ -123,9 +123,7 @@ fn observe(value: &FieldValue, shift: i64) -> AuthResult<Value> {
 }
 
 fn snapshot(value: Option<&NativeSessionData>) -> FieldValue {
-    value.map_or(FieldValue::Null, |value| {
-        FieldMap::from(value.clone()).into()
-    })
+    value.map_or(FieldValue::Null, |value| value.field_value())
 }
 
 fn returned(response: &AuthResponse) -> AuthResult<FieldValue> {
@@ -207,15 +205,13 @@ impl AfterEndpointHook<StatelessSchema> for Hooks {
         {
             let actual = selected.as_ref().unwrap();
             assert!(
-                actual.user.strict_equals(&injected.user),
+                actual.user_value()?.strict_equals(&injected.user_value()?),
                 "Native User identity must survive dispatch"
             );
             assert!(
                 actual
-                    .session
-                    .created_at
-                    .field_value()
-                    .strict_equals(&injected.session.created_at.field_value())
+                    .session_property("createdAt")?
+                    .strict_equals(&injected.session_property("createdAt")?)
             );
         }
         self.record(object([
@@ -615,8 +611,8 @@ async fn check(case: &Value) -> AuthResult<()> {
     let injected = revive(&case["input"]["injected"], clock.shift)?;
     if !injected.is_undefined() {
         let fields = injected.as_object().unwrap().snapshot_fields()?;
-        *hooks.injected.lock().unwrap() = Some(NativeSessionData {
-            session: SessionView::from_field_values(
+        *hooks.injected.lock().unwrap() = Some(NativeSessionData::new(
+            SessionView::from_field_values(
                 fields
                     .get("session")
                     .unwrap()
@@ -624,8 +620,8 @@ async fn check(case: &Value) -> AuthResult<()> {
                     .unwrap()
                     .snapshot_fields()?,
             )?,
-            user: fields.get("user").unwrap().clone(),
-        });
+            fields.get("user").unwrap().clone(),
+        ));
     }
     hooks.recording.store(true, Ordering::SeqCst);
     let result = dispatch(

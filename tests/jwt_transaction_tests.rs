@@ -218,3 +218,72 @@ async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollba
         ["get", "get", "create", "get", "get", "get", "create", "get"]
     );
 }
+
+#[tokio::test]
+async fn native_sign_endpoint_preserves_child_identity_undefined_and_custom_result()
+-> AuthResult<()> {
+    use better_auth::plugins::JwtAlgorithm;
+    use better_auth_core::{FieldMap, FieldValue};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let child: FieldValue = FieldMap::from([("retained".into(), true.into())]).into();
+    let payload: FieldValue = FieldMap::from([
+        ("child".into(), child.clone()),
+        ("absent".into(), FieldValue::Undefined),
+    ])
+    .into();
+    let returned: FieldValue = FieldMap::from([("native".into(), true.into())]).into();
+    let result = returned.clone();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let sign_calls = calls.clone();
+    let sign_input = payload.clone();
+    let sign_child = child.clone();
+    let plugin = JwtPlugin::new()
+        .remote_url("http://jwt-native-callbacks.test/keys".to_owned())
+        .algorithm(JwtAlgorithm::EdDsa)
+        .custom_sign_native(Arc::new(move |claims, header, selection| {
+            let input = sign_input.clone();
+            let child = sign_child.clone();
+            let returned = result.clone();
+            let calls = sign_calls.clone();
+            Box::pin(async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                assert!(!claims.strict_equals(&input));
+                assert!(claims.model_property("child")?.strict_equals(&child));
+                assert!(
+                    claims
+                        .as_object()
+                        .unwrap()
+                        .own_property_descriptor("absent")?
+                        .is_some()
+                );
+                assert!(claims.model_property("absent")?.is_undefined());
+                assert!(header.is_undefined());
+                assert_eq!(
+                    selection.enumerable_fields()?,
+                    FieldMap::from([
+                        ("signingKeyId".into(), FieldValue::Undefined),
+                        ("signingAlgorithm".into(), FieldValue::Undefined),
+                    ])
+                );
+                Ok(returned)
+            })
+        }));
+    let auth = BetterAuth::stateless(
+        AuthConfig::new("jwt-native-callbacks-secret-at-least-thirty-two-characters")
+            .base_url("http://jwt-native-callbacks.test"),
+    )
+    .plugin(plugin)
+    .build()
+    .await?;
+    let token = auth.jwt()?.sign_value(payload.clone()).await?;
+    assert!(token.strict_equals(&returned));
+    assert_eq!(
+        payload.enumerable_fields()?,
+        FieldMap::from([
+            ("child".into(), child),
+            ("absent".into(), FieldValue::Undefined),
+        ])
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    Ok(())
+}

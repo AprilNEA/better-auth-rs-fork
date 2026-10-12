@@ -22,16 +22,15 @@ async fn native_claims_reach_jose_setters_before_json_conversion() -> AuthResult
         ("jti".into(), 0.0.into()),
         ("nativeString".into(), unpaired.clone().into()),
     ]);
-    let session = better_auth_core::session::NativeSessionData {
-        session: Default::default(),
-        user: user.into(),
-    };
+    let session =
+        better_auth_core::session::NativeSessionData::new(Default::default(), user.into());
     let token = plugin
         .sign_session(
             Some(session),
             &EndpointContext::native(None, None, FieldValue::Null, &ctx),
         )
-        .await?;
+        .await?
+        .decode::<String>()?;
     let bytes = URL_SAFE_NO_PAD
         .decode(token.split('.').nth(1).unwrap())
         .map_err(|error| AuthError::internal(error.to_string()))?;
@@ -68,14 +67,14 @@ async fn native_signing_resolves_keys_before_clone_errors_without_calling_to_jso
             })
             .into(),
         )]);
-        let session = better_auth_core::session::NativeSessionData {
-            session: Default::default(),
-            user: FieldMap::from([
+        let session = better_auth_core::session::NativeSessionData::new(
+            Default::default(),
+            FieldMap::from([
                 ("id".into(), "owner".into()),
                 ("native".into(), native.into()),
             ])
             .into(),
-        };
+        );
         let request = AuthRequest::new(HttpMethod::Get, "/token");
         let result = if cookie {
             let signer = ctx
@@ -84,7 +83,7 @@ async fn native_signing_resolves_keys_before_clone_errors_without_calling_to_jso
                 .unwrap();
             signer
                 .sign(
-                    FieldMap::from(session),
+                    session.field_value().enumerable_fields()?,
                     60.0,
                     better_auth_core::session::SessionCookieContext {
                         request: &request,
@@ -100,6 +99,7 @@ async fn native_signing_resolves_keys_before_clone_errors_without_calling_to_jso
                     &EndpointContext::native(None, None, FieldValue::Null, &ctx),
                 )
                 .await
+                .and_then(|token| token.decode::<String>())
         };
         assert!(matches!(result, Err(AuthError::DataClone)), "{cookie}");
         assert_eq!(reads.load(Ordering::SeqCst), 1, "{cookie}");
@@ -191,10 +191,10 @@ async fn native_numeric_dates_fail_at_setter_or_final_encoding_after_key_resolut
         let _ = user.insert(name.into(), value);
         let result = plugin
             .sign_session(
-                Some(better_auth_core::session::NativeSessionData {
-                    session: Default::default(),
-                    user: user.into(),
-                }),
+                Some(better_auth_core::session::NativeSessionData::new(
+                    Default::default(),
+                    user.into(),
+                )),
                 &EndpointContext::native(None, None, FieldValue::Null, &ctx),
             )
             .await;
@@ -237,18 +237,18 @@ async fn custom_sign_json_callback_projects_once_without_entering_local_jose_clo
     let (ctx, reads) = context(&plugin, Vec::new()).await?;
     let token = plugin
         .sign_session(
-            Some(better_auth_core::session::NativeSessionData {
-                session: Default::default(),
-                user: FieldMap::from([
+            Some(better_auth_core::session::NativeSessionData::new(
+                Default::default(),
+                FieldMap::from([
                     ("id".into(), "owner".into()),
                     ("native".into(), native.into()),
                 ])
                 .into(),
-            }),
+            )),
             &EndpointContext::native(None, None, FieldValue::Null, &ctx),
         )
         .await?;
-    assert_eq!(token, "custom-signature");
+    assert_eq!(token, FieldValue::from("custom-signature"));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(reads.load(Ordering::SeqCst), 0);
     Ok(())
@@ -279,15 +279,15 @@ async fn invalid_claims_precede_native_key_id_json_without_losing_receiver() -> 
     for issued in [f64::NAN, 1_700_000_000.0] {
         let result = plugin
             .sign_session(
-                Some(better_auth_core::session::NativeSessionData {
-                    session: Default::default(),
-                    user: FieldMap::from([
+                Some(better_auth_core::session::NativeSessionData::new(
+                    Default::default(),
+                    FieldMap::from([
                         ("id".into(), "owner".into()),
                         ("iat".into(), issued.into()),
                         ("exp".into(), 1_900_000_000.0.into()),
                     ])
                     .into(),
-                }),
+                )),
                 &EndpointContext::native(None, None, FieldValue::Null, &ctx),
             )
             .await;
@@ -297,7 +297,7 @@ async fn invalid_claims_precede_native_key_id_json_without_losing_receiver() -> 
             assert!(calls.lock().unwrap().is_empty());
             assert_eq!(reads.load(Ordering::SeqCst), 1);
         } else {
-            let token = result?;
+            let token = result?.decode::<String>()?;
             assert_eq!(
                 tests::header(&token),
                 json!({"alg":"EdDSA", "kid":"encoded-key"})

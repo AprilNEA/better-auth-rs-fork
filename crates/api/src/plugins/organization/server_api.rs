@@ -3,7 +3,7 @@ use crate::plugins::endpoint_context::EndpointContext;
 use better_auth_core::entity::{AuthRecordFields, AuthUser};
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResult, AuthSchema, FieldMap, FieldValue,
-    FromFieldMap, Member,
+    FromFieldMap, Member, session::NativeSessionData,
 };
 mod native;
 mod store;
@@ -108,12 +108,14 @@ impl OrganizationPlugin {
         let org_value = org_value
             .is_truthy()
             .then_some(org_value)
+            .map(Ok)
             .or_else(|| {
                 session
                     .as_ref()
-                    .map(|session| session.session.active_organization_id.field_value())
-                    .filter(FieldValue::is_truthy)
+                    .map(|session| session.session_property("activeOrganizationId"))
             })
+            .transpose()?
+            .filter(FieldValue::is_truthy)
             .ok_or(AuthError::from_code(
                 "BAD_REQUEST",
                 "NO_ACTIVE_ORGANIZATION",
@@ -192,7 +194,12 @@ impl OrganizationPlugin {
             user: &user_value,
             organization: &organization_view,
         };
-        if count >= self.config.member_limit(event).await? as i64 {
+        if count
+            >= self
+                .config
+                .member_limit(&organization_view, || Ok(user_value.clone()))
+                .await? as i64
+        {
             return Err(AuthError::from_code(
                 "FORBIDDEN",
                 "ORGANIZATION_MEMBERSHIP_LIMIT_REACHED",
@@ -213,27 +220,30 @@ impl OrganizationPlugin {
         let member = store.create_member(data.into_create()).await?;
         if let Some(team_id) = team_value {
             let result = async {
-                let maximum = if let Some(session) = &session {
-                    self.config
-                        .team_member_limit(OrganizationTeamMemberLimit {
-                            team_id: &team_id,
-                            organization_id: &org_value,
-                            session: OrganizationSession {
-                                user: &session.user,
-                                session: &session.session,
-                            },
-                        })
-                        .await?
-                } else if self
+                let maximum = if self
                     .config
                     .teams
                     .maximum_members_per_team_callback
                     .is_some()
                 {
-                    return Err(AuthError::from_status(
-                        "UNAUTHORIZED",
-                        better_auth_core::FieldValue::Undefined,
-                    ));
+                    let session = session.as_ref().ok_or_else(|| {
+                        AuthError::from_status("UNAUTHORIZED", FieldValue::Undefined)
+                    })?;
+                    let callback_session = NativeSessionData::from_native(
+                        FieldMap::from([
+                            ("user".into(), session.user_value()?),
+                            ("session".into(), session.session_value()?),
+                        ])
+                        .into(),
+                        false,
+                    );
+                    self.config
+                        .team_member_limit(OrganizationTeamMemberLimit {
+                            team_id: &team_id,
+                            organization_id: &org_value,
+                            session: &callback_session,
+                        })
+                        .await?
                 } else {
                     self.config.teams.maximum_members_per_team
                 };

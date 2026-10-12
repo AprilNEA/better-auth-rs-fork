@@ -30,7 +30,7 @@ pub(super) async fn registration_session<S: AuthSchema>(
         return optional_session(ctx, req).await;
     }
     let data = ctx.require_native_session(req).await?;
-    if !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)? {
+    if !crate::plugins::helpers::session_is_fresh(&data, &ctx.config)? {
         return Err(AuthError::from_code(
             "FORBIDDEN",
             "SESSION_NOT_FRESH",

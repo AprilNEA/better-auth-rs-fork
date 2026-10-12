@@ -211,11 +211,8 @@ async fn get_session_preserves_numeric_key_user_relationships() -> AuthResult<()
         let snapshot = request
             .native_session_snapshot()?
             .ok_or_else(|| AuthError::internal("Expected native Session snapshot"))?;
-        assert_eq!(snapshot.user, FieldValue::from(expected_users));
-        assert_eq!(
-            response.body.field_value()?,
-            FieldValue::from(FieldMap::from(snapshot.clone()))
-        );
+        assert_eq!(snapshot.user_value()?, FieldValue::from(expected_users));
+        assert_eq!(response.body.field_value()?, snapshot.field_value());
         assert_eq!(body, serde_json::to_value(&snapshot)?);
         assert!(snapshot.user_field("id")?.is_undefined());
         assert!(matches!(

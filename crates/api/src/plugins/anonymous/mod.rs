@@ -197,7 +197,7 @@ impl AnonymousPlugin {
         Ok(AuthResponse::native(
             None,
             better_auth_core::FieldMap::from([
-                ("token".into(), issued.session.token().field_value()),
+                ("token".into(), issued.session_property("token")?),
                 (
                     "user".into(),
                     better_auth_core::FieldMap::from(ctx.user_view(&user).await?).into(),
@@ -333,13 +333,13 @@ impl AnonymousPlugin {
                             }
                         }
                         if let Some(session) = session {
-                            Some(better_auth_core::session::NativeSessionData {
-                                user: better_auth_core::FieldMap::from(
+                            Some(better_auth_core::session::NativeSessionData::new(
+                                session,
+                                better_auth_core::FieldMap::from(
                                     ctx.internal_user_view(&user).await?,
                                 )
                                 .into(),
-                                session,
-                            })
+                            ))
                         } else {
                             None
                         }
@@ -356,7 +356,8 @@ impl AnonymousPlugin {
         };
         let mut anonymous_user = previous.user_view()?;
         anonymous_user.set_field("isAnonymous", true.into());
-        previous.user = better_auth_core::FieldMap::from(anonymous_user.clone()).into();
+        previous =
+            previous.with_user(better_auth_core::FieldMap::from(anonymous_user.clone()).into())?;
         let Some(new_session) = req.new_session()? else {
             if req.path() == "/sign-in/anonymous" {
                 return Err(AuthError::from_code(
@@ -369,9 +370,9 @@ impl AnonymousPlugin {
         };
         let link = AnonymousLink {
             anonymous_user,
-            anonymous_session: previous.session.clone(),
-            new_user: new_session.user.clone(),
-            new_session: new_session.session.clone(),
+            anonymous_session: previous.session_view()?,
+            new_user: new_session.user_value()?,
+            new_session: new_session.session_view()?,
             request: req.clone(),
         };
         if let Some(callback) = ctx

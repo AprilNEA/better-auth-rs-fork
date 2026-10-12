@@ -74,19 +74,19 @@ async fn password(scenario: &Json) -> AuthResult<Json> {
     harness.finish(before, harness.outcome(result)?, &inner)
 }
 
-fn resolved(state: &ResolvedTwoFactorState) -> FieldValue {
+fn resolved(state: &ResolvedTwoFactorState) -> AuthResult<FieldValue> {
     let session = match state {
-        ResolvedTwoFactorState::Session { data, .. } => FieldMap::from(data.session.clone()).into(),
+        ResolvedTwoFactorState::Session { data, .. } => data.session_value()?,
         ResolvedTwoFactorState::Pending(_) => FieldValue::Null,
     };
-    FieldMap::from([
+    Ok(FieldMap::from([
         (
             "session".into(),
-            FieldMap::from([("session".into(), session), ("user".into(), state.user())]).into(),
+            FieldMap::from([("session".into(), session), ("user".into(), state.user()?)]).into(),
         ),
         ("key".into(), state.key().into()),
     ])
-    .into()
+    .into())
 }
 
 async fn two_factor(scenario: &Json) -> AuthResult<Json> {
@@ -139,7 +139,7 @@ async fn two_factor(scenario: &Json) -> AuthResult<Json> {
                     let state = resolve_two_factor_state(&request, &context).await?;
                     harness.record("consumer:resolved", [("key".into(), state.key().into())]);
                     if !rearm {
-                        return Ok(resolved(&state));
+                        return resolved(&state);
                     }
                     let attempt = begin_attempt(&state, &request, &context, 3).await?;
                     harness.record("consumer:attempt-consumed", []);
@@ -150,7 +150,7 @@ async fn two_factor(scenario: &Json) -> AuthResult<Json> {
                         [("result".into(), harness.observe(&result)?)],
                     );
                     Ok(FieldMap::from([
-                        ("verification".into(), resolved(&state)),
+                        ("verification".into(), resolved(&state)?),
                         ("result".into(), result),
                     ])
                     .into())

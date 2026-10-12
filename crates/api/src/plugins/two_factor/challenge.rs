@@ -19,8 +19,8 @@ impl TwoFactorPlugin {
         if !data.user_field("twoFactorEnabled")?.is_truthy() {
             return Ok(());
         }
-        let fields = data
-            .user
+        let user_value = data.user_value()?;
+        let fields = user_value
             .as_object()
             .ok_or_else(|| AuthError::internal("A two-factor challenge requires a User object"))?;
         let user = better_auth_core::UserView::try_from(fields.snapshot_fields()?)?;
@@ -33,7 +33,7 @@ impl TwoFactorPlugin {
         }
 
         delete_session_cookies(req, &ctx.config, true, Some(&mut response.headers))?;
-        delete_factor_session(&data.session, ctx).await?;
+        delete_factor_session(&data, ctx).await?;
         req.clear_new_session()?;
         let challenge = begin_sign_in_challenge(&user, ctx, &mut response.headers).await?;
         response.replace_returned(AuthResponse::json(None, &challenge)?);

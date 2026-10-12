@@ -4,8 +4,8 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthSession,
-    AuthUser, CreateUser, CreateVerification, RequestMeta, middleware::EndpointRateLimit,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthUser,
+    CreateUser, CreateVerification, RequestMeta, middleware::EndpointRateLimit,
 };
 use chrono::{Duration, Utc};
 use rand::Rng;
@@ -314,9 +314,9 @@ impl MagicLinkPlugin {
         let Some(issued) = issued else {
             return Ok(error_redirect(error_callback, "failed_to_create_session"));
         };
-        let session = issued.session.clone();
+        let session = issued.session_value()?;
         ctx.session_manager()
-            .set_native_session_cookie(req, issued, None)
+            .set_native_session_cookie(req, issued.clone(), None)
             .await?;
         let response = if req
             .query_string("callbackURL")?
@@ -325,10 +325,12 @@ impl MagicLinkPlugin {
             AuthResponse::native(
                 None,
                 better_auth_core::FieldMap::from([
-                    ("token".into(), session.token().field_value()),
+                    ("token".into(), session.model_property("token")?),
                     (
                         "session".into(),
-                        better_auth_core::FieldMap::from(ctx.session_view(&session).await?).into(),
+                        issued
+                            .with_values(session, better_auth_core::FieldValue::Undefined)
+                            .public_session(&ctx.config.session)?,
                     ),
                     (
                         "user".into(),

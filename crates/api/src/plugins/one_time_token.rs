@@ -154,7 +154,6 @@ impl OneTimeTokenPlugin {
         data: NativeSessionData,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<String> {
-        let session_token = data.session.token.clone();
         let token = if let Some(callbacks) = endpoint
             .auth
             .extensions
@@ -163,7 +162,7 @@ impl OneTimeTokenPlugin {
             (callbacks.generator)(&data, endpoint).await?
         } else {
             match &self.config.generate_token {
-                Some(generate) => generate(data).await?,
+                Some(generate) => generate(data.clone()).await?,
                 None => {
                     let mut bytes = [0_u8; 24];
                     rand::thread_rng().fill_bytes(&mut bytes);
@@ -175,7 +174,7 @@ impl OneTimeTokenPlugin {
         let stored = self.config.store_token.encode(&token).await?;
         let verification = CreateVerification {
             identifier: (format!("one-time-token:{stored}")).into(),
-            value: session_token,
+            value: better_auth_core::SchemaValue::from_field(data.session_property("token")?),
             expires_at: expires_at.into(),
             ..Default::default()
         };
@@ -237,10 +236,12 @@ impl OneTimeTokenPlugin {
                 .set_native_session_cookie(req, data.clone(), None)
                 .await?;
         }
-        if data.session.expires_at.is_before(Utc::now())? {
+        if better_auth_core::query::field_number(&data.session_property("expiresAt")?)?
+            < Utc::now().timestamp_millis() as f64
+        {
             return message_error("Session expired");
         }
-        Ok(AuthResponse::native(None, FieldMap::from(data).into()))
+        Ok(AuthResponse::native(None, data.field_value()))
     }
 }
 
@@ -302,13 +303,11 @@ pub(crate) async fn find_session<S: AuthSchema>(
         return Ok(None);
     };
     if let Some(data) = snapshot {
-        let mut data = NativeSessionData::from(data);
-        if !data.user.is_truthy() {
+        let data = NativeSessionData::from(data);
+        if !data.user_value()?.is_truthy() {
             return Ok(None);
         }
-        data.session.filter_returned_fields(&ctx.config.session)?;
-        data.user = data.public_user(&ctx.config.user)?;
-        return Ok(Some(data));
+        return Ok(Some(data.public_data(&ctx.config)?));
     }
     let Some(user) = ctx
         .database
@@ -317,10 +316,10 @@ pub(crate) async fn find_session<S: AuthSchema>(
     else {
         return Ok(None);
     };
-    Ok(Some(NativeSessionData {
-        session: ctx.session_view(&session).await?,
-        user: FieldMap::from(ctx.user_view(&user).await?).into(),
-    }))
+    Ok(Some(NativeSessionData::new(
+        ctx.session_view(&session).await?,
+        FieldMap::from(ctx.user_view(&user).await?).into(),
+    )))
 }
 
 #[cfg(test)]
