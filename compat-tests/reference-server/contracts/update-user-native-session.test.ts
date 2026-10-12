@@ -43,8 +43,8 @@ function body(scenario: string) {
   return { name: 17, marker: "next" };
 }
 
-for (const scenario of ["clear", "cancel", "missing", "patch", "blocked", "set"]) for (const endpoint of [false, true]) {
-  if ((scenario === "blocked" && !endpoint) || (scenario === "set" && endpoint)) continue;
+for (const scenario of ["clear", "cancel", "missing", "patch", "application-shadowed", "blocked", "set"]) for (const endpoint of [false, true]) {
+  if ((["application-shadowed", "blocked"].includes(scenario) && !endpoint) || (scenario === "set" && endpoint)) continue;
   test(`Phone clear hook preserves original input and fallback ${scenario}, endpoint=${endpoint}`, async () => {
     const phoneUser = () => {
       const { marker, private: privateField, id, ...fields } = user("7");
@@ -65,9 +65,15 @@ for (const scenario of ["clear", "cancel", "missing", "patch", "blocked", "set"]
       logger: { disabled: true }, telemetry: { enabled: false },
       user: { additionalFields: {
         updatedAt: { type: "date", onUpdate: date },
-        ...(scenario === "blocked" ? { phoneNumber: { type: "string" as const, input: false } } : {}),
+        ...(scenario === "application-shadowed" ? { phoneNumber: { type: "string" as const, input: false } } : {}),
       } },
-      plugins: [phoneNumber({ async sendOTP() { throw new Error("Update-user must not send OTP"); } })],
+      plugins: [
+        phoneNumber({ async sendOTP() { throw new Error("Update-user must not send OTP"); } }),
+        ...(scenario === "blocked" ? [{
+          id: "phone-input-policy",
+          schema: { user: { fields: { phoneNumber: { type: "string" as const, input: false } } } },
+        }] : []),
+      ],
       hooks: {
         before: createAuthMiddleware(async ctx => { events.push("endpoint.before"); ctx.context.session = injected; }),
         after: createAuthMiddleware(async ctx => { events.push("endpoint.after"); issued.push(ctx.context.newSession); }),

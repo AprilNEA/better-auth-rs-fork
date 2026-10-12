@@ -1,6 +1,40 @@
 use super::*;
 use better_auth::plugins::PhoneNumberPlugin;
-use better_auth_core::UpdateUser;
+use better_auth_core::{UpdateUser, user_fields::UserConfig};
+
+struct PhoneInputPolicy;
+
+#[async_trait]
+impl AuthPlugin<S> for PhoneInputPolicy {
+    fn name(&self) -> &'static str {
+        "phone-input-policy"
+    }
+    fn routes(&self) -> Vec<AuthRoute> {
+        Vec::new()
+    }
+    fn schema(&self, fields: &mut better_auth_core::plugin_runtime::ModelFields) -> AuthResult<()> {
+        fields.register_user_fields(UserConfig {
+            additional_fields: Some(
+                [(
+                    "phoneNumber".into(),
+                    UserFieldConfig {
+                        input: Some(false),
+                        ..Default::default()
+                    },
+                )]
+                .into(),
+            ),
+        });
+        Ok(())
+    }
+    async fn on_request(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<AuthResponse>> {
+        Ok(None)
+    }
+}
 
 #[derive(Clone)]
 struct PhoneObserver {
@@ -56,9 +90,19 @@ fn phone_user() -> FieldMap {
 #[tokio::test]
 async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallback()
 -> AuthResult<()> {
-    for case in ["clear", "cancel", "missing", "patch", "blocked", "set"] {
+    for case in [
+        "clear",
+        "cancel",
+        "missing",
+        "patch",
+        "application-shadowed",
+        "blocked",
+        "set",
+    ] {
         for endpoint in [false, true] {
-            if (case == "blocked" && !endpoint) || (case == "set" && endpoint) {
+            if (matches!(case, "application-shadowed" | "blocked") && !endpoint)
+                || (case == "set" && endpoint)
+            {
                 continue;
             }
             let state = Arc::new(Mutex::new(Observed::default()));
@@ -95,7 +139,7 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                     ..Default::default()
                 },
             );
-            if case == "blocked" {
+            if case == "application-shadowed" {
                 let _ = config.user.fields_mut().insert(
                     "phoneNumber".into(),
                     UserFieldConfig {
@@ -117,9 +161,13 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                 case,
                 state: state.clone(),
             })]);
-            let auth = BetterAuth::stateless(config)
+            let mut auth = BetterAuth::stateless(config)
                 .store(raw.clone())
-                .plugin(PhoneNumberPlugin::new())
+                .plugin(PhoneNumberPlugin::new());
+            if case == "blocked" {
+                auth = auth.plugin(PhoneInputPolicy);
+            }
+            let auth = auth
                 .hooks(EndpointHooks {
                     before: Some(Arc::new(hooks.clone())),
                     after: Some(Arc::new(hooks)),
