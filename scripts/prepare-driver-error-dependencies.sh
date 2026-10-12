@@ -96,15 +96,58 @@ dependency_manifests=(
   compat-tests/schema-consumer/Cargo.toml
   examples/fullstack/backend/Cargo.toml
 )
+# The older lock must resolve the mutually constrained package family in one operation.
+dependency_constraints=(
+  'sea-orm@=2.0.0-rc.37'
+  'sea-orm-cli@=2.0.0-rc.37'
+  'sea-orm-macros@=2.0.0-rc.37'
+  'sea-orm-migration@=2.0.0-rc.37'
+  'sea-schema@=0.17.0-rc.17'
+  'sea-query@=1.0.0-rc.31'
+  'sea-query-sqlx@=0.8.0-rc.14'
+  'sqlx@=0.8.6'
+  'sqlx-core@=0.8.6'
+  'sqlx-postgres@=0.8.6'
+)
+dependency_constraint_names=()
+for dependency_constraint in "${dependency_constraints[@]}"; do
+  dependency_constraint_names+=("${dependency_constraint%@*}")
+done
 for dependency_index in "${!dependency_manifests[@]}"; do
   dependency_manifest="${dependency_manifests[$dependency_index]}"
-  # Migration permits the stable CLI, whose SeaQuery requirement conflicts with rc.37.
-  cargo update --manifest-path "$dependency_manifest" -p sea-orm-cli --precise 2.0.0-rc.37
-  cargo update --manifest-path "$dependency_manifest" -p sea-orm-macros --precise 2.0.0-rc.37
-  # SeaORM rc.37 pins SeaQuery rc.31 and sea-query-sqlx rc.14 exactly.
-  cargo update --manifest-path "$dependency_manifest" -p sea-orm --precise 2.0.0-rc.37
-  cargo update --manifest-path "$dependency_manifest" -p sea-schema --precise 0.17.0-rc.17
-  cargo update --manifest-path "$dependency_manifest" -p sqlx --precise 0.8.6
+  dependency_snapshot="$dependency_output/manifest-before-constraints-$dependency_index.toml"
+  python3 - "$dependency_manifest" "$dependency_snapshot" "${dependency_constraint_names[@]}" <<'PY_CHECK'
+import shutil
+import sys
+import tomllib
+from pathlib import Path
+
+manifest = Path(sys.argv[1])
+data = tomllib.loads(manifest.read_text())
+for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+    for name in sys.argv[3:]:
+        assert name not in data.get(section, {}), (manifest, section, name)
+shutil.copy2(manifest, sys.argv[2])
+PY_CHECK
+  cargo add --manifest-path "$dependency_manifest" --dev --no-default-features "${dependency_constraints[@]}"
+  cargo rm --manifest-path "$dependency_manifest" --dev "${dependency_constraint_names[@]}"
+  python3 - "$dependency_manifest" "$dependency_snapshot" <<'PY_CHECK'
+import shutil
+import sys
+import tomllib
+from pathlib import Path
+
+manifest = Path(sys.argv[1])
+snapshot = Path(sys.argv[2])
+current = tomllib.loads(manifest.read_text())
+original = tomllib.loads(snapshot.read_text())
+# Cargo may retain an empty table after removing the temporary dependencies.
+for data in (current, original):
+    if data.get("dev-dependencies") == {}:
+        data.pop("dev-dependencies")
+assert current == original, f"Temporary constraints changed persistent settings in {manifest}"
+shutil.copy2(snapshot, manifest)
+PY_CHECK
   cargo metadata --manifest-path "$dependency_manifest" --locked --all-features --format-version 1 \
     > "$dependency_output/graphs/$dependency_index.json"
 done
