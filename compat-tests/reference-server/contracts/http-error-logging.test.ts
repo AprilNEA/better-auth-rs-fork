@@ -102,3 +102,59 @@ for (const scenario of cases) {
       outcome: caught === replacement ? "replacement" : caught === cause ? "original" : "500" })}\n`);
   });
 }
+
+for (const callable of [true, false]) {
+  test(`HTTP error logging re-reads the message includes method: ${callable ? "native-method" : "non-callable"}`, async () => {
+    const events: string[] = [];
+    const logs: [string, unknown, unknown[]][] = [];
+    const outer: unknown[][] = [];
+    const payload = { message: "native logger message" };
+    const receiver = { includes: callable ? function (this: unknown, needle: string) {
+      expect(this).toBe(receiver);
+      events.push(`includes:${needle}`);
+      return { matched: true };
+    } : 42 };
+    let reads = 0;
+    const cause = { name: "RuntimeFailure", get message() {
+      events.push(`message:${++reads}`);
+      return reads === 1 ? "ordinary failure" : reads === 2 ? receiver : payload;
+    } };
+    const database = emptyDatabase();
+    const auth = betterAuth({
+      baseURL: origin, secret: "http-error-logging-secret-at-least-32-characters",
+      database: memoryAdapter(database), telemetry: { enabled: false }, rateLimit: { enabled: false },
+      logger: { log(level, message, ...args) { events.push("log"); logs.push([level, message, args]); } },
+      plugins: [{ id: "http-error-message-method", middlewares: [{ path: "/logging-failure",
+        middleware: Object.assign(async () => { throw cause; }, { options: {} }),
+      }], endpoints: { loggingFailure: createAuthEndpoint("/logging-failure", { method: "GET" }, async () => ({ unreachable: true })) } }],
+    });
+    await auth.$context;
+    logs.length = 0;
+    const originalConsole = console.error;
+    console.error = (...args: unknown[]) => { events.push("console"); outer.push(args); };
+    let response: Response | undefined;
+    let caught: unknown;
+    try { response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`)); }
+    catch (error) { caught = error; }
+    finally { console.error = originalConsole; }
+    if (callable) {
+      expect(caught).toBeUndefined();
+      expect(response!.status).toBe(500);
+      expect([...response!.headers]).toStrictEqual([]);
+      expect(await response!.text()).toBe("");
+      expect(logs).toStrictEqual([["error", payload, []]]);
+      expect(logs[0]![1]).toBe(payload);
+      expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
+      expect(events).toStrictEqual(["message:1", "message:2", "includes:no column", "message:3", "log", "console"]);
+    } else {
+      expect(caught).toBeInstanceOf(TypeError);
+      expect(response).toBeUndefined();
+      expect(logs).toStrictEqual([]);
+      expect(outer).toStrictEqual([]);
+      expect(events).toStrictEqual(["message:1", "message:2"]);
+    }
+    expect(database).toStrictEqual(emptyDatabase());
+    process.stdout.write(`${JSON.stringify({ case: "http-error-message-method", callable, events,
+      error: caught instanceof Error ? { name: caught.name, message: caught.message } : null })}\n`);
+  });
+}
