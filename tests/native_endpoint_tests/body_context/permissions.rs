@@ -107,9 +107,12 @@ async fn create_consumes_captured_permissions_after_callback_mutation() -> AuthR
     }
     let rows = store.storage_rows(EntityRole::ApiKey)?;
     assert_eq!(rows.len(), 1);
+    let stored = rows
+        .first()
+        .ok_or_else(|| AuthError::internal("Expected the created API Key storage row"))?;
     for field in ["createdAt", "updatedAt"] {
         assert!(
-            rows[0]
+            stored
                 .get(field)
                 .is_some_and(|value| value.as_date().is_some())
         );
@@ -118,7 +121,7 @@ async fn create_consumes_captured_permissions_after_callback_mutation() -> AuthR
     expected_storage["metadata"] = json!("null");
     expected_storage["permissions"] = json!("{\"nodes\":[\"read\",\"write\"]}");
     assert_eq!(
-        FieldValue::from(rows[0].clone()).json()?,
+        FieldValue::from(stored.clone()).json()?,
         Some(expected_storage)
     );
     for role in [

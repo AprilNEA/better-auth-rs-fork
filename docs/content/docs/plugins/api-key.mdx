@@ -77,6 +77,8 @@ Requestless typed Rust methods construct their input from their request DTOs bef
 
 Requestless server calls have no HTTP request. Server-only verification has no matcher path; its handler uses `virtual:`, or `/` after session authentication. Callback errors retain their status and response body through `AuthError::from(AuthResponse)`. Ordinary callback failures produce an empty HTTP `500` response; requestless APIs preserve the original error. A getter failure in the hook matcher uses the upstream matcher error response.
 
+Update wraps adapter and cache write failures in a new `INTERNAL_SERVER_ERROR` API error. The new body contains the thrown value's top-level `message`; the original status, code, and headers are discarded. A failing message getter propagates its own error. Ownership lookup and later metadata migration remain outside this catch. A failed output transform can therefore leave the completed database write persisted.
+
 A configured getter replaces that configuration's header lookup. Returning `None` does not fall back to its headers. Session authentication calls the getter once in the hook matcher and again in the handler. These hooks also run for native creation, update, and verification; a getter can therefore authenticate and consume a credential during a requestless call. Verification then consumes its own credential separately.
 
 Scoped verification calls its validator before lookup and propagates callback errors. Unscoped verification first finds the credential, then calls the owning configuration's validator inside the verification error boundary. Session authentication calls the selected validator before lookup. Validators run before enabled, expiration, permission, and quota checks.

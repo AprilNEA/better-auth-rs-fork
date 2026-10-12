@@ -1,6 +1,9 @@
 use super::*;
 use better_auth::server_api::UpdateKeyOptions;
-use better_auth_core::{ApiKey, ApiKeyView, FromFieldMap};
+use better_auth_core::{
+    ApiErrorClass, ApiErrorInit, ApiKey, ApiKeyView, FromFieldMap,
+    field_value::{FieldObject, FieldObjectSource, FieldPropertyDescriptor},
+};
 use std::sync::atomic::{AtomicU8, Ordering};
 
 #[path = "api_key_update_secondary.rs"]
@@ -298,4 +301,203 @@ async fn memory_updates_preserve_omitted_and_supplied_timestamp_policies() -> Au
 #[tokio::test]
 async fn sqlite_updates_preserve_omitted_and_supplied_timestamp_policies() -> AuthResult<()> {
     contract(sqlite().await?).await
+}
+
+struct MessageGetterFailure(FieldValue);
+
+impl FieldObjectSource for MessageGetterFailure {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(vec!["message".into()])
+    }
+
+    fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        Ok((name == "message").then_some(FieldPropertyDescriptor { enumerable: false }))
+    }
+
+    fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        if name == "message" {
+            return Err(AuthError::from_thrown(self.0.clone()));
+        }
+        Ok(None)
+    }
+
+    fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::type_error("The injected error is read-only"))
+    }
+
+    fn delete(&self, _: &str) -> AuthResult<Option<FieldValue>> {
+        Err(AuthError::type_error("The injected error is read-only"))
+    }
+
+    fn snapshot_fields(&self) -> AuthResult<FieldMap> {
+        let message = self.get("message")?.unwrap_or_default();
+        Ok(FieldMap::from([("message".into(), message)]))
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self).addr()
+    }
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare endpoint errors, callback order, and complete stored records with the upstream contract."
+)]
+async fn endpoint_error_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
+    for (kind, phase) in [
+        ("ordinary", "input"),
+        ("ordinary", "output"),
+        ("api", "input"),
+        ("api", "output"),
+        ("getter", "input"),
+        ("lookup", "output"),
+    ] {
+        let message = format!("{kind} {phase} storage failure");
+        let sentinel = AuthError::from_status(
+            "CONFLICT",
+            FieldMap::from([("message".into(), "message getter failure".into())]).into(),
+        );
+        let sentinel = required(sentinel.raw_value(), "Expected a native getter sentinel")?.clone();
+        let original = match kind {
+            "api" | "lookup" => {
+                let error = AuthError::try_api_error(ApiErrorInit {
+                    status: "CONFLICT".into(),
+                    body: FieldMap::from([
+                        (
+                            "message".into(),
+                            if kind == "lookup" {
+                                "lookup failure"
+                            } else {
+                                "original body message"
+                            }
+                            .into(),
+                        ),
+                        ("code".into(), "ORIGINAL".into()),
+                    ])
+                    .into(),
+                    headers: if kind == "lookup" {
+                        FieldMap::new().into()
+                    } else {
+                        FieldMap::from([("x-original".into(), "discarded".into())]).into()
+                    },
+                    ..Default::default()
+                })?;
+                let original = required(error.raw_value(), "Expected a native API error")?.clone();
+                if kind == "api" {
+                    let _ = required(original.as_object(), "Expected an API error object")?
+                        .set("message", message.clone().into())?;
+                }
+                original
+            }
+            "getter" => {
+                FieldObject::from_source(Arc::new(MessageGetterFailure(sentinel.clone()))).into()
+            }
+            _ => FieldMap::from([
+                ("name".into(), "Error".into()),
+                ("message".into(), message.clone().into()),
+            ])
+            .into(),
+        };
+        let key = seed(raw.as_ref(), &format!("endpoint-error-{kind}-{phase}")).await?;
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let auth = BetterAuth::new(config())
+            .store_arc(raw.clone())
+            .plugin(ApiKeyPlugin::builder().build())
+            .plugin(Fields(vec![(
+                EntityRole::ApiKey,
+                fields(
+                    "name",
+                    policy_with_error(events.clone(), Some(original.clone())),
+                ),
+            )]))
+            .build()
+            .await?;
+        if kind == "lookup" {
+            let error = required(
+                auth.store()
+                    .update_api_key(
+                        &key.id,
+                        UpdateApiKey {
+                            name: Some(Some("output-error".into()).into()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .err(),
+                "Expected the direct Adapter output failure",
+            )?;
+            assert!(
+                required(error.raw_value(), "Expected the original callback error")?
+                    .strict_equals(&original)
+            );
+        }
+        let mut expected_stored = stored(raw.as_ref(), &key).await?;
+        trace_lock(&events)?.clear();
+        let error = required(
+            auth.api_keys()?
+                .update(
+                    "ordinary-owner",
+                    key.id.typed()?,
+                    UpdateKeyOptions {
+                        name: Some(if kind == "lookup" {
+                            "Mobile".into()
+                        } else {
+                            format!("{phase}-error")
+                        }),
+                        ..Default::default()
+                    },
+                )
+                .await
+                .err(),
+            "Expected the endpoint update to fail",
+        )?;
+        let actual = required(error.raw_value(), "Expected a native endpoint error")?;
+        if kind == "getter" {
+            assert!(actual.strict_equals(&sentinel));
+        } else if kind == "lookup" {
+            assert!(actual.strict_equals(&original));
+        } else {
+            assert!(!actual.strict_equals(&original), "{kind}-{phase}");
+            assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+            assert_eq!(error.status_value()?, "INTERNAL_SERVER_ERROR".into());
+            assert_eq!(error.status_code()?, 500);
+            assert_eq!(error.message_value()?, message.clone().into());
+            let body = error.body_value()?;
+            assert_eq!(
+                body.enumerable_fields()?,
+                FieldMap::from([("message".into(), message.into())])
+            );
+            assert_eq!(error.headers_value()?.enumerable_fields()?, FieldMap::new());
+        }
+        let expected_events = if kind == "lookup" {
+            vec!["output:\"output-error\"".to_owned()]
+        } else if phase == "input" {
+            vec!["output:\"Desk\"".into(), "input:\"input-error\"".into()]
+        } else {
+            *required(expected_stored.get_mut("name"), "Expected a stored name")? =
+                json!("output-error");
+            vec![
+                "output:\"Desk\"".into(),
+                "input:\"output-error\"".into(),
+                "output:\"output-error\"".into(),
+            ]
+        };
+        assert_eq!(*trace_lock(&events)?, expected_events, "{kind}-{phase}");
+        assert_eq!(
+            stored(raw.as_ref(), &key).await?,
+            expected_stored,
+            "{kind}-{phase}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn memory_endpoint_update_wraps_write_errors_and_preserves_lookup_errors() -> AuthResult<()> {
+    endpoint_error_contract(memory()).await
+}
+
+#[tokio::test]
+async fn sqlite_endpoint_update_wraps_write_errors_and_preserves_lookup_errors() -> AuthResult<()> {
+    endpoint_error_contract(sqlite().await?).await
 }

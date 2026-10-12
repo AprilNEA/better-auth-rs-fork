@@ -1,5 +1,6 @@
 use better_auth_core::{
-    AuthContext, AuthRecordFields, AuthResult, CreateApiKey, FieldValue, SchemaValue, UpdateApiKey,
+    AuthContext, AuthError, AuthRecordFields, AuthResult, CreateApiKey, FieldMap, FieldValue,
+    SchemaValue, UpdateApiKey,
 };
 
 use super::request::CapturedInput;
@@ -547,7 +548,16 @@ pub(super) async fn update_key_for_user(
     if let Some(metadata) = metadata {
         let _ = fields.insert("metadata".into(), metadata);
     }
-    let updated = super::storage::update(config, ctx, api_key, fields).await?;
+    let updated = match super::storage::update(config, ctx, api_key, fields).await {
+        Ok(updated) => updated,
+        Err(error) => {
+            let message = error.message_value()?;
+            return Err(AuthError::from_status(
+                "INTERNAL_SERVER_ERROR",
+                FieldMap::from([("message".into(), message)]).into(),
+            ));
+        }
+    };
     plugin.maybe_delete_expired(ctx).await;
     super::metadata::single(ApiKeyView::try_from_api_key(&updated)?, config, ctx).await
 }

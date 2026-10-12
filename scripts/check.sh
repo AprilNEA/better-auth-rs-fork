@@ -620,6 +620,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-field-policies.test.ts \
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
@@ -639,7 +640,7 @@ run_stage() {
         plugins::passkey:: plugins::siwe:: \
         plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
-        --test plugin_model_fields_tests -- response_to_json:: || json_status=1
+        --test plugin_model_fields_tests -- response_to_json:: api_key::updates:: || json_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test native_endpoint_tests --test server_api_tests \
         --test organization_body_schema_tests \

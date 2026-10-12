@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
+import { APIError } from "@better-auth/core/error";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { getMigrations } from "better-auth/db/migration";
 
@@ -38,6 +39,70 @@ async function fixture(backend: "memory" | "sqlite", mode: "database" | "seconda
   const raw = (id: string) => database ? database.query<any, [string]>(`SELECT "${column}" FROM apikey WHERE id=?`).get(id) : memory.apikey.find(row => row.id === id);
   const snapshot = (id: string) => structuredClone(database ? database.query<any, [string]>("SELECT * FROM apikey WHERE id=?").get(id) : memory.apikey.find(row => row.id === id));
   return { auth, adapter: context.adapter, raw, snapshot, cache, close: () => database?.close() };
+}
+
+for (const backend of ["memory", "sqlite"] as const) {
+  for (const phase of ["input", "output"] as const) for (const kind of ["ordinary", "api"] as const) {
+    test(`API Key update wraps ${kind} ${phase} errors after the ${backend} write boundary`, async () => {
+      const trace: string[] = [];
+      const message = `${kind} ${phase} storage failure`;
+      const failure = kind === "api"
+        ? new APIError("CONFLICT", { message: "original body message", code: "ORIGINAL" }, { "x-original": "discarded" })
+        : new Error(message);
+      failure.message = message;
+      const f = await fixture(backend, "database", trace, fieldPlugin(trace, failure, failure));
+      try {
+        const created = await f.auth.api.createApiKey({ body: { userId: "ordinary-owner", name: "Desk" } });
+        const before = f.snapshot(created.id);
+        trace.length = 0;
+        let caught: any;
+        try { await f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: created.id, name: `${phase}-error` } }); }
+        catch (error) { caught = error; }
+        expect(caught).toBeInstanceOf(APIError);
+        expect(caught).not.toBe(failure);
+        expect(caught.status).toBe("INTERNAL_SERVER_ERROR");
+        expect(caught.statusCode).toBe(500);
+        expect(caught.body).toStrictEqual({ message });
+        expect(Object.keys(caught.body)).toStrictEqual(["message"]);
+        expect([...new Headers(caught.headers).entries()]).toStrictEqual([]);
+        expect(f.snapshot(created.id)).toStrictEqual(phase === "input" ? before : { ...before, name: "output-error" });
+        expect(trace).toStrictEqual(phase === "input"
+          ? ['output:"Desk"', 'input:"input-error"']
+          : ['output:"Desk"', 'input:"output-error"', 'output:"output-error"']);
+      } finally { f.close(); }
+    });
+  }
+
+  test(`API Key update retains message getter failures at the ${backend} catch boundary`, async () => {
+    const trace: string[] = [];
+    const sentinel = new APIError("CONFLICT", { message: "message getter failure" });
+    const failure = new Error("unread message");
+    Object.defineProperty(failure, "message", { get() { throw sentinel; } });
+    const f = await fixture(backend, "database", trace, fieldPlugin(trace, failure));
+    try {
+      const created = await f.auth.api.createApiKey({ body: { userId: "ordinary-owner", name: "Desk" } });
+      const before = f.snapshot(created.id);
+      trace.length = 0;
+      await expect(f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: created.id, name: "input-error" } })).rejects.toBe(sentinel);
+      expect(f.snapshot(created.id)).toStrictEqual(before);
+      expect(trace).toStrictEqual(['output:"Desk"', 'input:"input-error"']);
+    } finally { f.close(); }
+  });
+
+  test(`API Key update leaves ${backend} lookup failures outside the write catch`, async () => {
+    const trace: string[] = [];
+    const failure = new APIError("CONFLICT", { message: "lookup failure", code: "ORIGINAL" });
+    const f = await fixture(backend, "database", trace, fieldPlugin(trace, failure, failure));
+    try {
+      const created = await f.auth.api.createApiKey({ body: { userId: "ordinary-owner", name: "Desk" } });
+      await expect(f.adapter.update({ model: "apikey", where: [{ field: "id", value: created.id }], update: { name: "output-error" } })).rejects.toBe(failure);
+      const before = f.snapshot(created.id);
+      trace.length = 0;
+      await expect(f.auth.api.updateApiKey({ body: { userId: "ordinary-owner", keyId: created.id, name: "Mobile" } })).rejects.toBe(failure);
+      expect(f.snapshot(created.id)).toStrictEqual(before);
+      expect(trace).toStrictEqual(['output:"output-error"']);
+    } finally { f.close(); }
+  });
 }
 
 test("ordinary API Key names preserve adapter write phases and legal counter expressions", async () => {

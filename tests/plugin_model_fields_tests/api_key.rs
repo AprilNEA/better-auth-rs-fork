@@ -6,7 +6,15 @@ use better_auth_core::{CreateApiKey, UpdateApiKey, store::ApiKeyUsageWrite};
 mod updates;
 
 pub(super) fn policy(events: Arc<Mutex<Vec<String>>>) -> UserFieldConfig {
+    policy_with_error(events, None)
+}
+
+fn policy_with_error(
+    events: Arc<Mutex<Vec<String>>>,
+    error: Option<FieldValue>,
+) -> UserFieldConfig {
     let output = events.clone();
+    let input_error = error.clone();
     UserFieldConfig {
         required: Some(true),
         default_value: Some("Fallback".into()),
@@ -18,6 +26,9 @@ pub(super) fn policy(events: Arc<Mutex<Vec<String>>>) -> UserFieldConfig {
                     required(value.json()?, "Expected a present JSON callback value")?
                 ));
                 if value == FieldValue::from("input-error") {
+                    if let Some(error) = &input_error {
+                        return Err(AuthError::from_thrown(error.clone()));
+                    }
                     return Err(AuthError::internal("ordinary API Key input error"));
                 }
                 Ok(match value {
@@ -33,6 +44,9 @@ pub(super) fn policy(events: Arc<Mutex<Vec<String>>>) -> UserFieldConfig {
                     required(value.json()?, "Expected a present JSON callback value")?
                 ));
                 if value == FieldValue::from("output-error") {
+                    if let Some(error) = &error {
+                        return Err(AuthError::from_thrown(error.clone()));
+                    }
                     return Err(AuthError::internal("ordinary API Key output error"));
                 }
                 Ok(match value {

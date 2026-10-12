@@ -14,7 +14,9 @@ use better_auth_core::{
 };
 use std::collections::HashMap;
 
+#[path = "body_context/api_key.rs"]
 mod api_key;
+#[path = "body_context/permissions.rs"]
 mod permissions;
 
 const PATH: &str = "/sign-in/anonymous";
