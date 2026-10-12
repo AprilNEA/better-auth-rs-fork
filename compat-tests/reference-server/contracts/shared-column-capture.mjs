@@ -8,6 +8,7 @@ import { getMigrations } from "better-auth/db/migration";
 import { organization } from "better-auth/plugins";
 import { observeValue } from "./device-where-capture.mjs";
 import { observeSqliteCatalog } from "./sqlite-catalog.ts";
+import { captureFreshServerCatalog } from "./server-catalog-shared.mjs";
 import { writeObservation } from "./write-observation.mjs";
 
 const version = "1.7.6";
@@ -82,12 +83,7 @@ async function capture(backend, [model, first, nativeSecond], mode) {
     plugins: [organization(organizationOptions), ...(model === "teamMember" ? [{ id: "team-member-columns", schema: { teamMember: { fields: additionalFields } } }] : [])],
   };
   const schema = getAuthTables(options)[model];
-  const memory = {};
-  const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
-  const database = sqlite ?? memoryAdapter(memory);
-  try {
-    if (sqlite) await (await getMigrations({ ...options, database })).runMigrations();
-    const catalog = sqlite ? observeSqliteCatalog(sqlite, schema.modelName, "The shared column table must exist") : null;
+  async function run(database, catalog, rows) {
     const adapter = (await betterAuth({ ...options, database }).$context).adapter;
     for (const [parent, id] of [["user", "owner"], ["organization", "workspace"], ["team", "team"]]) {
       if (parent === model) continue;
@@ -96,9 +92,7 @@ async function capture(backend, [model, first, nativeSecond], mode) {
       await adapter.create({ model: parent, forceAllowId: true, data: { id, ...input(parent) } });
     }
     assert.deepEqual(state.events, []);
-    const stored = () => (sqlite
-      ? sqlite.query(`SELECT * FROM "${schema.modelName}" ORDER BY "id"`).all()
-      : memory[schema.modelName] ?? []).map(row => ({ keys: Object.keys(row), value: observeValue(row) }));
+    const stored = async () => (await rows()).map(row => ({ keys: Object.keys(row), value: observeValue(row) }));
     const where = [{ field: "id", value: "shared-row" }];
     const observe = async (name, method, fields = {}) => {
       const parameters = method === "create"
@@ -114,7 +108,7 @@ async function capture(backend, [model, first, nativeSecond], mode) {
         assert.ok(error instanceof Error);
         outcome = { returned: false, error: { name: error.name, message: error.message, sameCallbackError: error === callbackError, properties: observeValue(Object.fromEntries(Object.entries(error))) } };
       }
-      return { name, method, input: observeValue(parameters), ...outcome, events: state.events.splice(0), stored: stored() };
+      return { name, method, input: observeValue(parameters), ...outcome, events: state.events.splice(0), stored: await stored() };
     };
     const last = mode === "native-native-number" ? 27 : "last-writer";
     const operations = [
@@ -132,13 +126,30 @@ async function capture(backend, [model, first, nativeSecond], mode) {
     operations.push(await observe("delete", "delete"));
     operations.push(await observe("read-deleted", "findOne"));
     return { model, first, second, mode, configuration, fields: Object.keys(schema.fields), catalog, operations };
+  }
+  if (backend === "postgres" || backend === "mysql") {
+    const quote = backend === "postgres" ? '"' : "`";
+    const captured = await captureFreshServerCatalog(backend, [schema.modelName], options, context =>
+      run(context.options.database, null, () => context.query(`SELECT * FROM ${quote}${schema.modelName}${quote} ORDER BY ${quote}id${quote}`, [])));
+    captured.observation.catalog = { columns: captured.columns, migration: captured.migration };
+    return captured.observation;
+  }
+  const memory = {};
+  const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
+  const database = sqlite ?? memoryAdapter(memory);
+  try {
+    if (sqlite) await (await getMigrations({ ...options, database })).runMigrations();
+    const catalog = sqlite ? observeSqliteCatalog(sqlite, schema.modelName, "The shared column table must exist") : null;
+    return await run(database, catalog, () => sqlite
+      ? sqlite.query(`SELECT * FROM "${schema.modelName}" ORDER BY "id"`).all()
+      : memory[schema.modelName] ?? []);
   } finally {
     sqlite?.close();
   }
 }
 
 const [backend, output] = process.argv.slice(2);
-assert.ok(["memory", "sqlite"].includes(backend));
+assert.ok(["memory", "sqlite", "postgres", "mysql"].includes(backend));
 assert.ok(output, "Pass a backend and output path");
 const cases = [];
 for (const target of targets) {
