@@ -352,7 +352,7 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                 ),
                 "native-syntax-error" => (
                     401,
-                    json!({"message":"Something went wrong. Please try again later.","error":"JSON Parse error: Unexpected EOF","status":401}),
+                    json!({"message":"Something went wrong. Please try again later.","error":"JSON Parse error: Expected '}'","status":401}),
                 ),
                 "database-error" => (
                     401,

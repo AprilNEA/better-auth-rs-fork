@@ -18,7 +18,7 @@ const cases = [
   ["api-error", 403, { code: "VERIFIER_REJECTED", message: "verifier rejected" }],
   ["runtime-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
   ["native-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
-  ["native-syntax-error", 401, { message: "Something went wrong. Please try again later.", error: "JSON Parse error: Unexpected EOF", status: 401 }],
+  ["native-syntax-error", 401, { message: "Something went wrong. Please try again later.", error: "JSON Parse error: Expected '}'", status: 401 }],
   ["database-error", 401, { message: "Something went wrong. Please try again later.", error: "driver failure", status: 401 }],
   ["renamed-native-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
   ["plain-error-shaped-object", 401, { message: "Something went wrong. Please try again later.", error: "Unknown error", status: 401 }],
