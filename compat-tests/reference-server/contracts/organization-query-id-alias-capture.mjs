@@ -224,3 +224,33 @@ export async function captureInvitationClaimSelectorUpdates(onCase = () => {}) {
   }
   return { version: "1.7.6", backend: "memory", cases };
 }
+
+export async function captureInvitationClaimStatusPolicies(onCase = () => {}) {
+  const cases = [];
+  for (const type of ["json", "string"]) {
+    const memory = storage();
+    const selected = row("invitation", "invitation", "pending");
+    delete selected.status;
+    selected.stored_status = type === "json" ? JSON.stringify("pending") : "pending";
+    memory.invitation.push(selected);
+    const events = [];
+    const current = await context(memory, { invitation: { status: {
+      type, fieldName: "stored_status", transform: {
+        input(value) {
+          events.push(["input", "invitation.status", observeValue(value)]);
+          return type === "string" && value === "accepted" ? "claimed" : value;
+        },
+        output(value) {
+          events.push(["output", "invitation.status", observeValue(value)]);
+          return value;
+        },
+      },
+    } } });
+    const input = { invitationId: "invitation", status: "accepted", fromStatus: "pending" };
+    const step = await observedStep(memory, events, input, () => current.org.updateInvitation(input));
+    const captured = { scenario: `invitation-claim-status-${type}`, type, surface: "getOrgAdapter.updateInvitation", steps: [step] };
+    cases.push(captured);
+    await onCase(captured);
+  }
+  return { version: "1.7.6", backend: "memory", cases };
+}
