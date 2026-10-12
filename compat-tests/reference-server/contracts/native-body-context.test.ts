@@ -88,3 +88,64 @@ for (const http of [false, true]) for (const apiKeyHook of [false, true]) for (c
     }
   });
 }
+
+for (const [method, field, body] of [
+  ["createApiKey", "name", { userId: "owner", name: "original" }],
+  ["updateApiKey", "keyId", { userId: "owner", keyId: "original" }],
+  ["verifyApiKey", "key", { key: "original" }],
+] as const) {
+  test(`API Key getter mutations reach ${method} validation`, async () => {
+    const database = { user: [], session: [], account: [], verification: [], apikey: [] };
+    let calls = 0;
+    const auth = betterAuth({
+      baseURL: origin, secret, database: memoryAdapter(database),
+      logger: { disabled: true }, telemetry: { enabled: false },
+      plugins: [apiKey({ enableSessionForAPIKeys: true, customAPIKeyGetter(ctx) {
+        calls++;
+        ctx.body[field] = 7;
+        return null;
+      } })],
+    });
+    let caught: any;
+    try { await auth.api[method]({ body: { ...body } } as any); }
+    catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(APIError);
+    expect(caught.status).toBe("BAD_REQUEST");
+    expect(caught.body).toStrictEqual({ code: "VALIDATION_ERROR", message: `[body.${field}] Invalid input: expected string, received number` });
+    expect(calls).toBe(1);
+    expect(database).toStrictEqual({ user: [], session: [], account: [], verification: [], apikey: [] });
+  });
+}
+
+test("API Key schema retains native metadata until the permission callback", async () => {
+  const database = { user: [], session: [], account: [], verification: [], apikey: [] };
+  const failure = new APIError("CONFLICT", { message: "metadata observed" });
+  const metadata = { ownUndefined: undefined, date: new Date(1_893_456_000_000), get unread(): never { throw new Error("Metadata must not be enumerated"); } };
+  const events: string[] = [];
+  let raw: any;
+  const auth = betterAuth({
+    baseURL: origin, secret, database: memoryAdapter(database),
+    logger: { disabled: true }, telemetry: { enabled: false },
+    plugins: [apiKey({
+      enableSessionForAPIKeys: true, enableMetadata: true,
+      customAPIKeyGetter(ctx) { events.push("getter"); raw = ctx.body; ctx.body.metadata = metadata; return null; },
+      customKeyGenerator() { events.push("generator"); return "x".repeat(64); },
+      permissions: { defaultPermissions(referenceId, ctx) {
+        events.push("permissions");
+        expect(referenceId).toBe("owner");
+        expect(ctx.body).not.toBe(raw);
+        expect(ctx.body.metadata).toBe(metadata);
+        expect(Object.hasOwn(ctx.body.metadata, "ownUndefined")).toBe(true);
+        expect(ctx.body.metadata.date).toBe(metadata.date);
+        expect(Object.keys(ctx.body)).toStrictEqual(["expiresIn", "remaining", "metadata", "userId"]);
+        throw failure;
+      } },
+    })],
+  });
+  let caught: unknown;
+  try { await auth.api.createApiKey({ body: { userId: "owner" } }); }
+  catch (error) { caught = error; }
+  expect(caught).toBe(failure);
+  expect(events).toStrictEqual(["getter", "generator", "permissions"]);
+  expect(database).toStrictEqual({ user: [], session: [], account: [], verification: [], apikey: [] });
+});
