@@ -1,9 +1,9 @@
 use better_auth_core::{
-    AuthContext, AuthRequest, AuthResponse, AuthResult, AuthSchema, FieldValue, RequestMeta,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, FieldValue,
+    RequestMeta,
 };
 use serde_json::json;
 
-use super::config::error;
 use super::{UsernamePlugin, UsernameValidationOrder, request};
 use crate::plugins::email_password::{
     EmailPasswordConfig, SignInUsernameFailure, sign_in_username_core,
@@ -17,11 +17,15 @@ impl UsernamePlugin {
     ) -> AuthResult<AuthResponse> {
         let username = request::availability(request)?;
         if username.is_empty() {
-            return Err(error(422, "INVALID_USERNAME", "Username is invalid"));
+            return Err(AuthError::from_code(
+                "UNPROCESSABLE_ENTITY",
+                "INVALID_USERNAME",
+                "Username is invalid",
+            ));
         }
         let username = FieldValue::from(username);
         if let Some((code, message)) = self.config.validate_raw(&username).await? {
-            return Err(error(422, code, message));
+            return Err(AuthError::from_code("UNPROCESSABLE_ENTITY", code, message));
         }
         let found = context
             .database
@@ -46,8 +50,8 @@ impl UsernamePlugin {
     ) -> AuthResult<AuthResponse> {
         let body = request::sign_in(request)?;
         if body.username.is_empty() || body.password.is_empty() {
-            return Err(error(
-                401,
+            return Err(AuthError::from_code(
+                "UNAUTHORIZED",
                 "INVALID_USERNAME_OR_PASSWORD",
                 "Invalid username or password",
             ));
@@ -60,7 +64,7 @@ impl UsernamePlugin {
             body.username.clone().into()
         };
         if let Some((code, message)) = self.config.validate_raw(&username).await? {
-            return Err(error(422, code, message));
+            return Err(AuthError::from_code("UNPROCESSABLE_ENTITY", code, message));
         }
         let username = self.config.normalize(&username)?;
         let fallback = EmailPasswordConfig::default();
@@ -88,14 +92,16 @@ impl UsernamePlugin {
                 }
                 Ok(response)
             }
-            Err(SignInUsernameFailure::InvalidUsernameOrPassword) => Err(error(
-                401,
+            Err(SignInUsernameFailure::InvalidUsernameOrPassword) => Err(AuthError::from_code(
+                "UNAUTHORIZED",
                 "INVALID_USERNAME_OR_PASSWORD",
                 "Invalid username or password",
             )),
-            Err(SignInUsernameFailure::EmailNotVerified) => {
-                Err(error(403, "EMAIL_NOT_VERIFIED", "Email not verified"))
-            }
+            Err(SignInUsernameFailure::EmailNotVerified) => Err(AuthError::from_code(
+                "FORBIDDEN",
+                "EMAIL_NOT_VERIFIED",
+                "Email not verified",
+            )),
             Err(SignInUsernameFailure::Auth(error)) => Err(error),
         }
     }

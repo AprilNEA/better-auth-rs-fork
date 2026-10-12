@@ -421,11 +421,11 @@ impl<S: AuthSchema> SessionManager<S> {
                     "INTERNAL_SERVER_ERROR",
                     &[crate::observability::LogArgument::Error(&error)],
                 );
-                Err(AuthError::Upstream {
-                    status: 500,
-                    code: "FAILED_TO_GET_SESSION",
-                    message: "Failed to get session",
-                })
+                Err(AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
+                    "FAILED_TO_GET_SESSION",
+                    "Failed to get session",
+                ))
             }
         }
     }
@@ -934,11 +934,11 @@ fn relationship_array_error() -> AuthError {
 }
 
 fn failed_session_update() -> AuthError {
-    AuthError::Upstream {
-        status: 401,
-        code: "FAILED_TO_GET_SESSION",
-        message: "Failed to get session",
-    }
+    AuthError::from_code(
+        "UNAUTHORIZED",
+        "FAILED_TO_GET_SESSION",
+        "Failed to get session",
+    )
 }
 
 #[cfg(test)]

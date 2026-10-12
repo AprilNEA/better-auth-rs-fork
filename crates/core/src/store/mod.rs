@@ -1588,6 +1588,23 @@ pub trait MemberStore: Send + Sync {
         let id = crate::SchemaValue::<String>::from_field(id.clone());
         self.update_member_role(id.typed()?, role).await
     }
+    /// Return the updated member, or `None` when the update matches no record.
+    async fn update_member_role_optional(
+        &self,
+        member_id: &str,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
+        self.update_member_role_optional_value(&member_id.into(), role)
+            .await
+    }
+    /// Preserve the native selector and nullable adapter result through role updates.
+    async fn update_member_role_optional_value(
+        &self,
+        id: &crate::FieldValue,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
+        self.update_member_role_value(id, role).await.map(Some)
+    }
     async fn delete_member(&self, member_id: &str) -> AuthResult<()>;
     async fn delete_member_value(&self, id: &crate::FieldValue) -> AuthResult<()> {
         let id = crate::SchemaValue::<String>::from_field(id.clone());

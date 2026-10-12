@@ -62,6 +62,45 @@ pub(crate) mod test_helpers {
 
     pub type TestDatabase = dyn better_auth_core::store::AuthStore<BundledSchema>;
 
+    pub fn assert_coded_api_error(
+        error: &better_auth_core::AuthError,
+        status: &str,
+        http_status: u16,
+        code: &str,
+        message: &str,
+    ) {
+        use better_auth_core::{ApiErrorClass, FieldMap, FieldValue};
+
+        assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+        assert_eq!(
+            error
+                .status_value()
+                .expect("native status should be readable"),
+            FieldValue::from(status)
+        );
+        assert_eq!(
+            error.status_code().expect("HTTP status should be readable"),
+            http_status
+        );
+        let body = error.body_value().expect("native body should be readable");
+        let fields = body
+            .as_object()
+            .expect("coded error body should be an object")
+            .snapshot_fields()
+            .expect("coded error fields should be readable");
+        assert_eq!(
+            fields.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["message", "code"]
+        );
+        assert_eq!(
+            fields,
+            FieldMap::from([
+                ("message".into(), message.into()),
+                ("code".into(), code.into()),
+            ])
+        );
+    }
+
     /// Materialize HTTP output after invoking an internal handler directly.
     pub fn finalize_response(
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,

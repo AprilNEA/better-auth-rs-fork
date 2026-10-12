@@ -255,11 +255,9 @@ impl UserManagementPlugin {
             .require_authoritative_native_session(req)
             .await
             .map_err(|error| match error {
-                AuthError::Unauthenticated => AuthError::Upstream {
-                    status: 401,
-                    code: "UNAUTHORIZED",
-                    message: "Unauthorized",
-                },
+                AuthError::Unauthenticated => {
+                    AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+                }
                 error => error,
             })?;
         let body = request::change_email(req)?;

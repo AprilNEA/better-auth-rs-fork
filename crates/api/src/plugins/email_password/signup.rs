@@ -205,10 +205,12 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                 apply_default_role(&admission_context, &mut create_user);
                 tx.create_user_fields_optional(create_user)
                     .await?
-                    .ok_or(AuthError::Upstream {
-                        status: 400,
-                        code: "FAILED_TO_CREATE_USER",
-                        message: "Failed to create user",
+                    .ok_or_else(|| {
+                        AuthError::from_code(
+                            "BAD_REQUEST",
+                            "FAILED_TO_CREATE_USER",
+                            "Failed to create user",
+                        )
                     })
             }
             .await;
@@ -235,11 +237,11 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                         "Failed to create user",
                         &[better_auth_core::observability::LogArgument::Error(&error)],
                     );
-                    return Err(AuthError::Upstream {
-                        status: 422,
-                        code: "FAILED_TO_CREATE_USER",
-                        message: "Failed to create user",
-                    });
+                    return Err(AuthError::from_code(
+                        "UNPROCESSABLE_ENTITY",
+                        "FAILED_TO_CREATE_USER",
+                        "Failed to create user",
+                    ));
                 }
             };
 
@@ -285,10 +287,12 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                         active_organization_id: None,
                     })
                     .await?
-                    .ok_or(AuthError::Upstream {
-                        status: 400,
-                        code: "FAILED_TO_CREATE_SESSION",
-                        message: "Failed to create session",
+                    .ok_or_else(|| {
+                        AuthError::from_code(
+                            "BAD_REQUEST",
+                            "FAILED_TO_CREATE_SESSION",
+                            "Failed to create session",
+                        )
                     })?;
                 let token = session.token().field_value();
 

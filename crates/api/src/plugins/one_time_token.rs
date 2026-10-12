@@ -250,11 +250,9 @@ fn message_error(message: &str) -> AuthResult<AuthResponse> {
 
 pub(crate) fn session_required(error: AuthError) -> AuthError {
     match error {
-        AuthError::Unauthenticated => AuthError::Upstream {
-            status: 401,
-            code: "UNAUTHORIZED",
-            message: "Unauthorized",
-        },
+        AuthError::Unauthenticated => {
+            AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+        }
         error => error,
     }
 }

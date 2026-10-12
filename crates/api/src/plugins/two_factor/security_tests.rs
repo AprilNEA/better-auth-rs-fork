@@ -67,14 +67,13 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
     }));
     let req = AuthRequest::new(HttpMethod::Post, "/two-factor/verify-totp");
     let failure = begin_attempt(&state, &req, &ctx).await.err().unwrap();
-    assert!(matches!(
-        failure,
-        AuthError::Upstream {
-            status: 500,
-            code: "FAILED_TO_INVALIDATE_TWO_FACTOR_CHALLENGE",
-            message: "Failed to invalidate two-factor challenge",
-        }
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &failure,
+        "INTERNAL_SERVER_ERROR",
+        500,
+        "FAILED_TO_INVALIDATE_TWO_FACTOR_CHALLENGE",
+        "Failed to invalidate two-factor challenge",
+    );
     assert!(
         req.take_response_headers()
             .unwrap()

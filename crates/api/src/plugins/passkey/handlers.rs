@@ -445,11 +445,11 @@ pub(super) async fn update_passkey_core(
         &body.id,
         user_id,
         ctx,
-        AuthError::Upstream {
-            status: 401,
-            code: "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
-            message: "You are not allowed to register this passkey",
-        },
+        AuthError::from_code(
+            "UNAUTHORIZED",
+            "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
+            "You are not allowed to register this passkey",
+        ),
     )
     .await?;
 

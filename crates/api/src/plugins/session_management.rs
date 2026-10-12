@@ -265,11 +265,11 @@ fn revocation_error(error: AuthError) -> AuthError {
         "Failed to revoke Sessions",
         &[better_auth_core::observability::LogArgument::Error(&error)],
     );
-    AuthError::Upstream {
-        status: 500,
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Internal Server Error",
-    }
+    AuthError::from_code(
+        "INTERNAL_SERVER_ERROR",
+        "INTERNAL_SERVER_ERROR",
+        "Internal Server Error",
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -311,11 +311,11 @@ impl SessionManagementPlugin {
     ) -> AuthResult<AuthResponse> {
         let data = ctx.require_native_session(req).await?;
         if !super::helpers::session_is_fresh(&data.session, &ctx.config)? {
-            return Err(AuthError::Upstream {
-                status: 403,
-                code: "SESSION_NOT_FRESH",
-                message: "Session is not fresh",
-            });
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "SESSION_NOT_FRESH",
+                "Session is not fresh",
+            ));
         }
         let result = async { list_sessions_core(&session_user_id(&data)?, ctx).await }.await;
         let mut sessions = result.map_err(|error| {

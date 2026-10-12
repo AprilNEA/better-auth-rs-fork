@@ -157,10 +157,11 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
         .await
         .unwrap();
     data.user = FieldValue::Null;
-    assert!(matches!(
-        get_active_member_core(&data, &ctx).await,
-        Err(AuthError::BadRequest(message)) if message == "No active organization"
-    ));
+    assert_coded_error(
+        get_active_member_core(&data, &ctx).await.unwrap_err(),
+        400,
+        br#"{"message":"No active organization","code":"NO_ACTIVE_ORGANIZATION"}"#,
+    );
     assert!(
         get_full_organization_core(&GetFullOrganizationQuery::default(), &data, &config, &ctx)
             .await
@@ -217,10 +218,11 @@ async fn native_read_routes_preserve_property_access_order_and_failed_membership
                 .unwrap()
                 .is_empty()
         );
-        assert!(matches!(
-            get_active_member_core(&data, &ctx).await,
-            Err(AuthError::BadRequest(message)) if message == "Member not found"
-        ));
+        assert_coded_error(
+            get_active_member_core(&data, &ctx).await.unwrap_err(),
+            400,
+            br#"{"message":"Member not found","code":"MEMBER_NOT_FOUND"}"#,
+        );
         assert_coded_error(
             get_full_organization_core(
                 &GetFullOrganizationQuery::default(), &data, &config, &ctx
@@ -371,10 +373,18 @@ async fn native_member_page_preserves_projected_values_and_strict_join_identity(
             .unwrap(),
         users
     );
-    assert!(matches!(
-        list_members_core(&ListMembersQuery::default(), &config, &data, &ctx).await,
-        Err(AuthError::Internal(message)) if message == "Unexpected error: User not found for member"
-    ));
+    let error = list_members_core(&ListMembersQuery::default(), &config, &data, &ctx)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.raw_value().unwrap().model_property("name").unwrap(),
+        FieldValue::from("BetterAuthError")
+    );
+    assert_eq!(
+        error.message_value().unwrap(),
+        FieldValue::from("Unexpected error: User not found for member")
+    );
+    assert!(!error.is_api_error().unwrap());
     assert_eq!(
         ctx.database
             .count_organization_members_value(&organization.id.field_value())
@@ -541,14 +551,14 @@ async fn invitation_read_case(teams_enabled: bool) {
         Err(AuthError::TypeError(message)) if message == "Cannot read properties of null (reading 'emailVerified')"
     ));
     data.user = false.into();
-    assert!(matches!(
-        list_user_invitations_core(Some(&data), Some("recipient@example.test"), &ctx).await,
-        Err(AuthError::Forbidden(message)) if message == "Email verification required to view or list invitations for the session email"
-    ));
-    assert!(matches!(
-        list_user_invitations_core(None, None, &ctx).await,
-        Err(AuthError::BadRequest(message)) if message == "Missing session headers, or email query parameter."
-    ));
+    assert_coded_error(list_user_invitations_core(Some(&data), Some("recipient@example.test"), &ctx).await.unwrap_err(), 403, br#"{"message":"Email verification required to view or list invitations for the session email","code":"EMAIL_VERIFICATION_REQUIRED_FOR_INVITATION"}"#);
+    assert_coded_error(
+        list_user_invitations_core(None, None, &ctx)
+            .await
+            .unwrap_err(),
+        400,
+        br#"{"message":"Missing session headers, or email query parameter."}"#,
+    );
     let mut expected = serde_json::json!([{
         "id": invitation.id, "organizationId": invitation.organization_id,
         "email": invitation.email, "role": invitation.role, "status": invitation.status,
@@ -604,10 +614,13 @@ async fn invitation_read_case(teams_enabled: bool) {
         None,
     );
     request.query = Some(serde_json::json!({"email": "recipient@example.test"}));
-    assert!(matches!(
-        handle_list_user_invitations(&request, &ctx).await,
-        Err(AuthError::BadRequest(message)) if message == "User email cannot be passed for client side API calls."
-    ));
+    assert_coded_error(
+        handle_list_user_invitations(&request, &ctx)
+            .await
+            .unwrap_err(),
+        400,
+        br#"{"message":"User email cannot be passed for client side API calls."}"#,
+    );
     request.query = None;
     let response = OrganizationPlugin::with_config(config)
         .on_request(&request, &ctx)

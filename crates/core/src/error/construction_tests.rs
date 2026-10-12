@@ -77,18 +77,35 @@ fn explicit_error_body_retains_order_extra_properties_and_identity() -> AuthResu
         ("omitted".into(), FieldValue::Undefined),
     ])
     .into();
-    let error = AuthError::from(AuthResponse::native(Some(409), body.clone()));
+    let errors = [
+        (
+            AuthError::from(AuthResponse::native(Some(409), body.clone())),
+            FieldValue::from(409u16),
+        ),
+        (
+            AuthError::from_status(409u16, body.clone()),
+            FieldValue::from(409u16),
+        ),
+        (
+            AuthError::from_status("CONFLICT", body.clone()),
+            FieldValue::from("CONFLICT"),
+        ),
+    ];
     let object = body
         .as_object()
         .ok_or_else(|| AuthError::internal("Expected explicit error object"))?;
     let _ = object.set("message", "User not found".into())?;
-    let observed = observe(
-        error,
-        409,
-        &["code", "message", "details", "omitted"],
-        br#"{"code":"CUSTOM","message":"User not found","details":{"reason":"retained"}}"#,
-    )?;
-    assert!(observed.strict_equals(&body));
+    for (error, status) in errors {
+        assert_eq!(error.status_value()?, status);
+        assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+        let observed = observe(
+            error,
+            409,
+            &["code", "message", "details", "omitted"],
+            br#"{"code":"CUSTOM","message":"User not found","details":{"reason":"retained"}}"#,
+        )?;
+        assert!(observed.strict_equals(&body));
+    }
     assert_eq!(object.get("omitted")?, Some(FieldValue::Undefined));
     Ok(())
 }
@@ -99,20 +116,19 @@ fn explicit_error_body_retains_order_extra_properties_and_identity() -> AuthResu
     reason = "An absent body and an explicit null remain distinct for native and HTTP callers"
 )]
 fn absent_and_null_error_bodies_remain_distinct() -> AuthResult<()> {
-    let absent = observe(
-        AuthResponse::native(Some(401), FieldValue::Undefined).into(),
-        401,
-        &[],
-        b"",
-    )?;
-    let null = observe(
-        AuthResponse::native(Some(401), FieldValue::Null).into(),
-        401,
-        &[],
-        b"null",
-    )?;
-    assert!(absent.is_undefined());
-    assert!(null.is_null());
+    for (absent, null) in [
+        (
+            AuthResponse::native(Some(401), FieldValue::Undefined).into(),
+            AuthResponse::native(Some(401), FieldValue::Null).into(),
+        ),
+        (
+            AuthError::from_status("UNAUTHORIZED", FieldValue::Undefined),
+            AuthError::from_status("UNAUTHORIZED", FieldValue::Null),
+        ),
+    ] {
+        assert!(observe(absent, 401, &[], b"")?.is_undefined());
+        assert!(observe(null, 401, &[], b"null")?.is_null());
+    }
     Ok(())
 }
 

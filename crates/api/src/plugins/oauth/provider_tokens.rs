@@ -183,11 +183,11 @@ async fn exchange_code(
 
 fn token_endpoint(provider: &ResolvedProvider) -> AuthResult<&str> {
     if provider.config.token_url.is_empty() {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "TOKEN_URL_NOT_FOUND",
-            message: "Invalid OAuth configuration. Token URL not found.",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOKEN_URL_NOT_FOUND",
+            "Invalid OAuth configuration. Token URL not found.",
+        ));
     }
     Ok(&provider.config.token_url)
 }
@@ -428,14 +428,13 @@ mod tests {
             .unwrap_err(),
         ];
         for error in errors {
-            assert!(matches!(
-                error,
-                AuthError::Upstream {
-                    status: 400,
-                    code: "TOKEN_URL_NOT_FOUND",
-                    message: "Invalid OAuth configuration. Token URL not found."
-                }
-            ));
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &error,
+                "BAD_REQUEST",
+                400,
+                "TOKEN_URL_NOT_FOUND",
+                "Invalid OAuth configuration. Token URL not found.",
+            );
         }
 
         provider.generic.as_mut().unwrap().config.get_token = Some(Arc::new(CustomExchange));

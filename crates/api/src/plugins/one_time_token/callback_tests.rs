@@ -374,14 +374,17 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
         .callbacks(callbacks(observations.clone(), false));
     let (ctx, data) = context(&plugin).await?;
     let anonymous = AuthRequest::new(HttpMethod::Get, "/one-time-token/generate");
-    assert!(matches!(
-        plugin.on_request(&anonymous, &ctx).await,
-        Err(AuthError::Upstream {
-            status: 401,
-            code: "UNAUTHORIZED",
-            ..
-        })
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &plugin
+            .on_request(&anonymous, &ctx)
+            .await
+            .err()
+            .expect("expected builtin API error"),
+        "UNAUTHORIZED",
+        401,
+        "UNAUTHORIZED",
+        "Unauthorized",
+    );
     let request = request(&ctx, &data, "/one-time-token/generate")?;
     let error = plugin.on_request(&request, &ctx).await.unwrap_err();
     assert!(error.is_api_error().unwrap());

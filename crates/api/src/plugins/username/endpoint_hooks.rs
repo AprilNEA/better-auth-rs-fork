@@ -1,10 +1,9 @@
 use better_auth_core::session::SessionRead;
 use better_auth_core::{
-    AuthContext, AuthRequest, AuthResult, AuthSchema, BeforeRequestAction, FieldValue,
+    AuthContext, AuthError, AuthRequest, AuthResult, AuthSchema, BeforeRequestAction, FieldValue,
 };
 use serde_json::Value;
 
-use super::config::error;
 use super::{UsernamePlugin, UsernameValidationOrder};
 
 impl UsernamePlugin {
@@ -60,7 +59,7 @@ impl UsernamePlugin {
                 if let Some(username) = body.get("username").and_then(Value::as_str) {
                     let username = FieldValue::from(username);
                     if let Some((code, message)) = self.config.validate_input(&username).await? {
-                        return Err(error(400, code, message));
+                        return Err(AuthError::from_code("BAD_REQUEST", code, message));
                     }
                     let normalized = self.config.normalize(&username)?;
                     let session = if signup {
@@ -74,8 +73,8 @@ impl UsernamePlugin {
                         && session.user_field("username")?.is_truthy()
                         && !session.user_field("username")?.strict_equals(&normalized)
                     {
-                        return Err(error(
-                            400,
+                        return Err(AuthError::from_code(
+                            "BAD_REQUEST",
                             "USERNAME_IS_IMMUTABLE",
                             "Username cannot be updated",
                         ));
@@ -91,8 +90,8 @@ impl UsernamePlugin {
                                 .transpose()?
                                 .is_none_or(|id| !existing.id.field_value().strict_equals(&id)))
                     {
-                        return Err(error(
-                            400,
+                        return Err(AuthError::from_code(
+                            "BAD_REQUEST",
                             "USERNAME_IS_ALREADY_TAKEN",
                             "Username is already taken. Please try another.",
                         ));
@@ -113,8 +112,8 @@ impl UsernamePlugin {
                         && let Some(validator) = &self.config.display_username_validator
                         && !validator.validate(&normalized).await?
                     {
-                        return Err(error(
-                            400,
+                        return Err(AuthError::from_code(
+                            "BAD_REQUEST",
                             "INVALID_DISPLAY_USERNAME",
                             "Display username is invalid",
                         ));

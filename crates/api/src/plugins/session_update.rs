@@ -17,11 +17,9 @@ pub(super) async fn handle(
         .require_native_session(req)
         .await
         .map_err(|error| match error {
-            AuthError::Unauthenticated => AuthError::Upstream {
-                status: 401,
-                code: "UNAUTHORIZED",
-                message: "Unauthorized",
-            },
+            AuthError::Unauthenticated => {
+                AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+            }
             error => error,
         })?;
     // Plugin schemas override application fields in the upstream input schema.
@@ -58,11 +56,11 @@ pub(super) async fn handle(
         .await?;
     if updated.is_none() && ctx.store_capabilities().server_sessions() {
         ctx.session_manager().clear_cookies(req)?;
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "FAILED_TO_GET_SESSION",
-            message: "Failed to get session",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "FAILED_TO_GET_SESSION",
+            "Failed to get session",
+        ));
     }
     let manager = ctx.session_manager();
     data.session = match updated {

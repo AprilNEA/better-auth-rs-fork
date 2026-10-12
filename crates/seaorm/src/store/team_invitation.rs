@@ -38,7 +38,13 @@ where
         let invitation = self
             .transition_invitation(invitation_id, Some("pending"), "accepted")
             .await?
-            .ok_or_else(|| AuthError::bad_request("Invitation not found"))?;
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "INVITATION_NOT_FOUND",
+                    "Invitation not found",
+                )
+            })?;
         match self
             .accept_claimed_invitation(
                 &invitation,
@@ -178,12 +184,18 @@ where
                     .await
                     .map_err(map_db_err)?;
                 if locked.rows_affected == 0 {
-                    return Err(AuthError::bad_request("Team not found"));
+                    return Err(AuthError::from_code(
+                        "BAD_REQUEST",
+                        "TEAM_NOT_FOUND",
+                        "Team not found",
+                    ));
                 }
                 let details = store
                     .read_team_details_with_condition(tx, condition, false)
                     .await?
-                    .ok_or_else(|| AuthError::bad_request("Team not found"))?;
+                    .ok_or_else(|| {
+                        AuthError::from_code("BAD_REQUEST", "TEAM_NOT_FOUND", "Team not found")
+                    })?;
                 let _ = details.into_public_parts(
                     maximum
                         .team_output_fields()
@@ -230,7 +242,11 @@ where
                         )
                         .await?
                         {
-                            return Err(AuthError::forbidden("Team member limit reached"));
+                            return Err(AuthError::from_code(
+                                "FORBIDDEN",
+                                "TEAM_MEMBER_LIMIT_REACHED",
+                                "Team member limit reached",
+                            ));
                         }
                         let _ = store
                             .create_reserved_team_member(tx, &team_value, user_id, &membership_key)

@@ -22,11 +22,11 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
                 .get::<Arc<TwoFactorCallbacks<S>>>()
                 .is_some_and(|callbacks| callbacks.sender.is_some())
         {
-            return Err(AuthError::Upstream {
-                status: 400,
-                code: "OTP_NOT_CONFIGURED",
-                message: "OTP is not available",
-            });
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "OTP_NOT_CONFIGURED",
+                "OTP is not available",
+            ));
         }
         let updated = update_two_factor_user(&data.user_property("id")?, true, ctx)
             .await?
@@ -50,11 +50,11 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
         ));
     }
     if config.totp_disabled {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "TOTP_NOT_CONFIGURED",
-            message: "TOTP is not available",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOTP_NOT_CONFIGURED",
+            "TOTP is not available",
+        ));
     }
     let existing = ctx
         .database
@@ -64,11 +64,11 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
         .as_ref()
         .is_some_and(|factor| !factor.verified.field_value().strict_equals(&false.into()))
     {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "TOTP_ALREADY_ENABLED",
-            message: "TOTP is already enabled",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOTP_ALREADY_ENABLED",
+            "TOTP is already enabled",
+        ));
     }
 
     let backup_codes = config.backup_code_options.generate();
@@ -487,11 +487,11 @@ pub(super) async fn verify_otp_core(
                 .get("twoFactorEnabled")
                 .is_some_and(FieldValue::is_truthy)
             {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "FAILED_TO_CREATE_SESSION",
-                    message: "Failed to create session",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "FAILED_TO_CREATE_SESSION",
+                    "Failed to create session",
+                ));
             }
             finalize_pending_two_factor(*pending, req, body.trust_device.unwrap_or(false), ctx)
                 .await

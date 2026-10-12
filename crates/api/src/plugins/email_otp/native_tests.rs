@@ -256,13 +256,13 @@ async fn cancelled_verification_keeps_null_callbacks_and_consumes_otp_before_ses
             let replay = EmailOtpPlugin::new()
                 .verify_email(&fixture.request(false).await?, &fixture.ctx)
                 .await;
-            assert!(matches!(
-                replay,
-                Err(AuthError::Upstream {
-                    code: "INVALID_OTP",
-                    ..
-                })
-            ));
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &replay.err().expect("expected builtin API error"),
+                "BAD_REQUEST",
+                400,
+                "INVALID_OTP",
+                "Invalid OTP",
+            );
             assert_eq!(fixture.calls.lock().unwrap().len(), 2);
         }
     }

@@ -152,13 +152,16 @@ async fn duplicate_in_transaction<S: AuthSchema>(auth: &BetterAuth<S>) {
     )
     .await
     .expect("username lookup must use the active transaction connection");
-    assert!(matches!(
-        result,
-        Err(AuthError::Upstream {
-            code: "USERNAME_IS_ALREADY_TAKEN",
-            ..
-        })
-    ));
+    let error = result.err().expect("duplicate username must fail");
+    assert_eq!(error.status_value().unwrap(), "BAD_REQUEST".into());
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(
+        error.body_value().unwrap().json().unwrap(),
+        Some(serde_json::json!({
+            "message": "Username is already taken. Please try another.",
+            "code": "USERNAME_IS_ALREADY_TAKEN"
+        }))
+    );
     assert!(
         auth.store()
             .get_user_by_email("first@example.com")

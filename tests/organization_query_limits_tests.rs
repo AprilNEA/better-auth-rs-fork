@@ -128,6 +128,14 @@ async fn check<S: AuthSchema>(
             error.instrumentation_message()?,
             "Unexpected error: User not found for member"
         );
+        assert!(!error.is_api_error()?);
+        assert_eq!(
+            error
+                .raw_value()
+                .ok_or_else(|| AuthError::internal("Expected native BetterAuthError"))?
+                .model_property("name")?,
+            "BetterAuthError".into()
+        );
     } else {
         let body: Value = serde_json::from_slice(&full?.body.bytes()?)?;
         assert_eq!(body["members"].as_array().map(Vec::len), Some(2));

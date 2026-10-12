@@ -82,14 +82,6 @@ impl Default for UsernameConfig {
     }
 }
 
-pub(super) fn error(status: u16, code: &'static str, message: &'static str) -> AuthError {
-    AuthError::Upstream {
-        status,
-        code,
-        message,
-    }
-}
-
 impl UsernameConfig {
     pub(super) fn normalize(&self, value: &FieldValue) -> AuthResult<FieldValue> {
         match &self.username_normalization {
@@ -183,8 +175,8 @@ impl UsernameConfig {
                 callback.validate(value).await?
             };
             if !valid {
-                return Err(error(
-                    400,
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
                     "INVALID_DISPLAY_USERNAME",
                     "Display username is invalid",
                 ));

@@ -11,7 +11,7 @@ use crate::types_org::{CreateMember, Member};
 use super::organization_models::{self as models, Entity, values};
 use super::{SeaOrmStore, map_db_err};
 use crate::SeaOrmOrganizationModel;
-use better_auth_core::{FieldValue, SchemaField};
+use better_auth_core::{FieldValue, SchemaField, store::schema::EntityRole};
 use sea_orm::sea_query::Expr;
 
 mod query;
@@ -163,7 +163,16 @@ where
         member_id: &better_auth_core::FieldValue,
         role: &str,
     ) -> AuthResult<Member> {
-        self.update_organization_model::<O::Member>(
+        self.update_member_role_optional_value(member_id, role)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Organization record not found"))
+    }
+    async fn update_member_role_optional_value(
+        &self,
+        member_id: &better_auth_core::FieldValue,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
+        self.update_organization_model_optional::<O::Member>(
             self.connection(),
             better_auth_core::store::schema::EntityRole::Member,
             member_id,
@@ -600,7 +609,7 @@ impl<
             ),
         )
         .await?;
-        self.delete_member_for_user_with_connection(
+        self.delete_resolved_member_for_user_with_connection(
             db,
             member_id,
             &member.organization_id.field_value(),
@@ -615,6 +624,39 @@ impl<
         member_id: &better_auth_core::FieldValue,
         organization_id: &better_auth_core::FieldValue,
         user_id: &better_auth_core::FieldValue,
+    ) -> AuthResult<()> {
+        let user_id = if user_id.is_truthy() {
+            user_id.clone()
+        } else {
+            let member = self
+                .find_organization_model::<O::Member>(db, EntityRole::Member, member_id)
+                .await?
+                .ok_or_else(|| AuthError::better_auth("Member not found"))?;
+            models::record::<O::Member>(
+                &member,
+                &self.organization_fields()?.member,
+                db.get_database_backend(),
+                (&self.model_fields, EntityRole::Member),
+            )
+            .await?
+            .user_id
+            .field_value()
+        };
+        self.delete_resolved_member_for_user_with_connection(
+            db,
+            member_id,
+            organization_id,
+            &user_id,
+        )
+        .await
+    }
+
+    async fn delete_resolved_member_for_user_with_connection<C: sea_orm::ConnectionTrait>(
+        &self,
+        db: &C,
+        member_id: &FieldValue,
+        organization_id: &FieldValue,
+        user_id: &FieldValue,
     ) -> AuthResult<()> {
         let _ = Entity::<O::Member>::delete_many()
             .filter(self.organization_field_equals::<O::Member>(

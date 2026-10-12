@@ -878,11 +878,11 @@ async fn finalize_pending_two_factor<S: better_auth_core::AuthSchema>(
         )
         .await?
     else {
-        return Err(AuthError::Upstream {
-            status: 500,
-            code: "FAILED_TO_CREATE_SESSION",
-            message: "failed to create session",
-        });
+        return Err(AuthError::from_code(
+            "INTERNAL_SERVER_ERROR",
+            "FAILED_TO_CREATE_SESSION",
+            "failed to create session",
+        ));
     };
     manager
         .set_native_session_cookie(

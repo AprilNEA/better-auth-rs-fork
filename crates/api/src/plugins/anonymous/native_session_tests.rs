@@ -287,14 +287,17 @@ async fn anonymous_delete_reads_the_public_object_from_a_many_user_relationship(
             .unwrap()
             .snapshot_fields()?;
         assert_eq!(selected_fields["id"], selected.id.field_value());
-        assert!(matches!(
-            plugin.delete(&req, &ctx).await,
-            Err(AuthError::Upstream {
-                status: 403,
-                code: "USER_IS_NOT_ANONYMOUS",
-                message: "User is not anonymous"
-            })
-        ));
+        crate::plugins::test_helpers::assert_coded_api_error(
+            &plugin
+                .delete(&req, &ctx)
+                .await
+                .err()
+                .expect("expected builtin API error"),
+            "FORBIDDEN",
+            403,
+            "USER_IS_NOT_ANONYMOUS",
+            "User is not anonymous",
+        );
         assert!(ctx.database.get_user_by_id("related-user").await?.is_some());
         assert_eq!(
             ctx.database.get_session(session.token.typed()?).await?,

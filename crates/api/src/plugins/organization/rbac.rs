@@ -295,23 +295,29 @@ async fn permission_roles(
             .await?
         {
             let role = row.role.display_string()?;
-            let stored: Statements = match decode_statements(&super::native_json::permission(
-                &row.permission,
-            )?) {
-                Ok(stored) => stored,
-                Err(error) => {
-                    better_auth_core::observability::logger::current().error(
-                        "Invalid permissions for organization role",
-                        &[
-                            better_auth_core::observability::LogArgument::Error(&error),
-                            better_auth_core::observability::LogArgument::Value(
-                                &serde_json::json!(role),
-                            ),
-                        ],
-                    );
-                    return Err(better_auth_core::AuthResponse::json(500, &serde_json::json!({"message": format!("Invalid permissions for role {role}")}))?.into());
-                }
-            };
+            let stored: Statements =
+                match decode_statements(&super::native_json::permission(&row.permission)?) {
+                    Ok(stored) => stored,
+                    Err(error) => {
+                        better_auth_core::observability::logger::current().error(
+                            "Invalid permissions for organization role",
+                            &[
+                                better_auth_core::observability::LogArgument::Error(&error),
+                                better_auth_core::observability::LogArgument::Value(
+                                    &serde_json::json!(role),
+                                ),
+                            ],
+                        );
+                        return Err(better_auth_core::AuthError::from_status(
+                            "INTERNAL_SERVER_ERROR",
+                            better_auth_core::FieldMap::from([(
+                                "message".into(),
+                                format!("Invalid permissions for role {role}").into(),
+                            )])
+                            .into(),
+                        ));
+                    }
+                };
             let statements = roles.entry(role).or_default();
             for (resource, actions) in stored {
                 let allowed = statements.entry(resource).or_default();

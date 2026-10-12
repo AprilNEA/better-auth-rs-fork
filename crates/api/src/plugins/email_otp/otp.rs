@@ -12,25 +12,13 @@ use crate::plugins::symmetric::{decrypt, encrypt};
 use std::sync::Arc;
 
 pub(super) fn invalid_otp() -> AuthError {
-    AuthError::Upstream {
-        status: 400,
-        code: "INVALID_OTP",
-        message: "Invalid OTP",
-    }
+    AuthError::from_code("BAD_REQUEST", "INVALID_OTP", "Invalid OTP")
 }
 fn expired_otp() -> AuthError {
-    AuthError::Upstream {
-        status: 400,
-        code: "OTP_EXPIRED",
-        message: "OTP expired",
-    }
+    AuthError::from_code("BAD_REQUEST", "OTP_EXPIRED", "OTP expired")
 }
 fn too_many_attempts() -> AuthError {
-    AuthError::Upstream {
-        status: 403,
-        code: "TOO_MANY_ATTEMPTS",
-        message: "Too many attempts",
-    }
+    AuthError::from_code("FORBIDDEN", "TOO_MANY_ATTEMPTS", "Too many attempts")
 }
 
 impl EmailOtpPlugin {

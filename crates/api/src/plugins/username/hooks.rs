@@ -2,9 +2,9 @@ use better_auth_core::plugin_runtime::PluginRuntime;
 use better_auth_core::store::database_hooks::{
     DatabaseHookContext, DatabaseHookUpdate, DatabaseHooks,
 };
-use better_auth_core::{AuthResult, AuthSchema, FieldMap, FieldValue};
+use better_auth_core::{AuthError, AuthResult, AuthSchema, FieldMap, FieldValue};
 
-use super::config::{UsernameConfig, error};
+use super::config::UsernameConfig;
 
 pub(super) struct UsernameHooks<S: AuthSchema> {
     pub(super) config: UsernameConfig,
@@ -20,7 +20,7 @@ impl<S: AuthSchema> UsernameHooks<S> {
         context: &DatabaseHookContext<'_, S>,
     ) -> AuthResult<()> {
         if let Some((code, message)) = self.config.validate_input(username).await? {
-            return Err(error(400, code, message));
+            return Err(AuthError::from_code("BAD_REQUEST", code, message));
         }
         let normalized = self.config.normalize(username)?;
         let existing = if let Some(transaction) = context.transaction {
@@ -38,8 +38,8 @@ impl<S: AuthSchema> UsernameHooks<S> {
             && current_user_id
                 .is_none_or(|id| !id.is_truthy() || !id.strict_equals(&user.id.field_value()))
         {
-            return Err(error(
-                400,
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
                 "USERNAME_IS_ALREADY_TAKEN",
                 "Username is already taken. Please try another.",
             ));

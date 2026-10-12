@@ -149,7 +149,7 @@ pub(crate) async fn find_team(
         .database
         .get_team_details_value(team_id, Some(organization_id), false)
         .await?
-        .ok_or_else(|| AuthError::from_code(400, "TEAM_NOT_FOUND", "Team not found"))?;
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "TEAM_NOT_FOUND", "Team not found"))?;
     Ok(details.into_public_parts(&config.schema.team)?.0)
 }
 
@@ -238,19 +238,20 @@ pub(crate) async fn handle_team_request(
                 optional_string(body.data.organization_id, "body.data.organizationId")?;
             let org = resolve_organization_id(
                 organization_id.as_deref(),
-                None,
                 session,
-                ctx,
-                AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
-            )
-            .await?;
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "NO_ACTIVE_ORGANIZATION",
+                    "No active organization",
+                ),
+            )?;
             let member = ctx
                 .database
                 .get_member_with_user_value(&org, &data.user_property("id")?)
                 .await?
                 .ok_or_else(|| {
                     AuthError::from_code(
-                        403,
+                        "FORBIDDEN",
                         "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM",
                         "You are not allowed to update this team",
                     )
@@ -260,7 +261,7 @@ pub(crate) async fn handle_team_request(
                 &org,
                 ("team", "update"),
                 AuthError::from_code(
-                    403,
+                    "FORBIDDEN",
                     "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_TEAM",
                     "You are not allowed to update this team",
                 ),
@@ -271,7 +272,7 @@ pub(crate) async fn handle_team_request(
             let team = find_team(&body.team_id.as_str().into(), &org, ctx, config).await?;
             if !team.organization_id.field_value().strict_equals(&org) {
                 return Err(AuthError::from_code(
-                    400,
+                    "BAD_REQUEST",
                     "TEAM_NOT_FOUND",
                     "Team not found",
                 ));
@@ -281,7 +282,11 @@ pub(crate) async fn handle_team_request(
                 .get_organization_by_id_value(&org)
                 .await?
                 .ok_or_else(|| {
-                    AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+                    AuthError::from_code(
+                        "BAD_REQUEST",
+                        "ORGANIZATION_NOT_FOUND",
+                        "Organization not found",
+                    )
                 })?;
             let organization_view =
                 crate::plugins::organization::fields::organization(&organization, ctx)?;
@@ -316,12 +321,13 @@ pub(crate) async fn handle_team_request(
         (HttpMethod::Get, "/organization/list-teams") => {
             let org = resolve_organization_id(
                 req.query_string("organizationId")?,
-                None,
                 session,
-                ctx,
-                AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
-            )
-            .await?;
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "NO_ACTIVE_ORGANIZATION",
+                    "No active organization",
+                ),
+            )?;
             if ctx
                 .database
                 .get_member_with_user_value(&org, &data.user_property("id")?)
@@ -329,7 +335,7 @@ pub(crate) async fn handle_team_request(
                 .is_none()
             {
                 return Err(AuthError::from_code(
-                    403,
+                    "FORBIDDEN",
                     "YOU_ARE_NOT_ALLOWED_TO_ACCESS_THIS_ORGANIZATION",
                     "You are not allowed to access this organization as an owner",
                 ));
@@ -372,12 +378,13 @@ pub(crate) async fn handle_team_request(
             }
             let org = resolve_organization_id(
                 None,
-                None,
                 session,
-                ctx,
-                AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
-            )
-            .await?;
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "NO_ACTIVE_ORGANIZATION",
+                    "No active organization",
+                ),
+            )?;
             let team = find_team(&team_id, &org, ctx, config).await?;
             if ctx
                 .database
@@ -386,7 +393,7 @@ pub(crate) async fn handle_team_request(
                 .is_none()
             {
                 return Err(AuthError::from_code(
-                    403,
+                    "FORBIDDEN",
                     "USER_IS_NOT_A_MEMBER_OF_THE_TEAM",
                     "User is not a member of the team",
                 ));
@@ -428,7 +435,7 @@ pub(crate) async fn handle_team_request(
             if !is_self || explicit_org.is_some() {
                 if !org.is_truthy() {
                     return Err(AuthError::from_code(
-                        400,
+                        "BAD_REQUEST",
                         "NO_ACTIVE_ORGANIZATION",
                         "No active organization",
                     ));
@@ -439,7 +446,7 @@ pub(crate) async fn handle_team_request(
                     .await?
                     .ok_or_else(|| {
                         AuthError::from_code(
-                            403,
+                            "FORBIDDEN",
                             "YOU_ARE_NOT_A_MEMBER_OF_THIS_ORGANIZATION",
                             "You are not a member of this organization",
                         )
@@ -450,7 +457,7 @@ pub(crate) async fn handle_team_request(
                         &org,
                         ("member", "update"),
                         AuthError::from_code(
-                            403,
+                            "FORBIDDEN",
                             "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER",
                             "You are not allowed to update this member",
                         ),
@@ -465,7 +472,7 @@ pub(crate) async fn handle_team_request(
                         .is_none()
                     {
                         return Err(AuthError::from_code(
-                            400,
+                            "BAD_REQUEST",
                             "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
                             "User is not a member of the organization",
                         ));
@@ -502,7 +509,7 @@ pub(crate) async fn handle_team_request(
                 .unwrap_or_else(|| session.active_team_id.field_value());
             if !team_id.is_truthy() {
                 return Err(AuthError::from_code(
-                    400,
+                    "BAD_REQUEST",
                     "YOU_DO_NOT_HAVE_AN_ACTIVE_TEAM",
                     "You do not have an active team",
                 ));
@@ -511,7 +518,9 @@ pub(crate) async fn handle_team_request(
                 .database
                 .get_team_details_value(&team_id, None, false)
                 .await?
-                .ok_or_else(|| AuthError::from_code(400, "TEAM_NOT_FOUND", "Team not found"))?;
+                .ok_or_else(|| {
+                    AuthError::from_code("BAD_REQUEST", "TEAM_NOT_FOUND", "Team not found")
+                })?;
             let team = details.into_public_parts(&config.schema.team)?.0;
             if ctx
                 .database
@@ -528,7 +537,7 @@ pub(crate) async fn handle_team_request(
                     .is_none()
             {
                 return Err(AuthError::from_code(
-                    400,
+                    "BAD_REQUEST",
                     "USER_IS_NOT_A_MEMBER_OF_THE_TEAM",
                     "User is not a member of the team",
                 ));
@@ -547,19 +556,20 @@ pub(crate) async fn handle_team_request(
             let body = body!(MemberBody);
             let org = resolve_organization_id(
                 body.organization_id.as_deref(),
-                None,
                 session,
-                ctx,
-                AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
-            )
-            .await?;
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "NO_ACTIVE_ORGANIZATION",
+                    "No active organization",
+                ),
+            )?;
             let member = ctx
                 .database
                 .get_member_with_user_value(&org, &data.user_property("id")?)
                 .await?
                 .ok_or_else(|| {
                     AuthError::from_code(
-                        400,
+                        "BAD_REQUEST",
                         "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
                         "User is not a member of the organization",
                     )
@@ -571,13 +581,13 @@ pub(crate) async fn handle_team_request(
                 ("member", if adding { "update" } else { "delete" }),
                 if adding {
                     AuthError::from_code(
-                        403,
+                        "FORBIDDEN",
                         "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_TEAM_MEMBER",
                         "You are not allowed to create a new member",
                     )
                 } else {
                     AuthError::from_code(
-                        403,
+                        "FORBIDDEN",
                         "YOU_ARE_NOT_ALLOWED_TO_REMOVE_A_TEAM_MEMBER",
                         "You are not allowed to remove a team member",
                     )
@@ -593,7 +603,7 @@ pub(crate) async fn handle_team_request(
                 .is_none()
             {
                 return Err(AuthError::from_code(
-                    400,
+                    "BAD_REQUEST",
                     "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
                     "User is not a member of the organization",
                 ));
@@ -604,7 +614,11 @@ pub(crate) async fn handle_team_request(
                 .get_organization_by_id_value(&org)
                 .await?
                 .ok_or_else(|| {
-                    AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+                    AuthError::from_code(
+                        "BAD_REQUEST",
+                        "ORGANIZATION_NOT_FOUND",
+                        "Organization not found",
+                    )
                 })?;
             let organization_view =
                 crate::plugins::organization::fields::organization(&organization, ctx)?;
@@ -613,10 +627,14 @@ pub(crate) async fn handle_team_request(
                 .get_user_by_id(&body.user_id)
                 .await?
                 .ok_or_else(|| {
-                    AuthError::from(AuthResponse::native(
-                        Some(400),
-                        FieldMap::from([("message".into(), "User not found".into())]).into(),
-                    ))
+                    AuthError::from_status(
+                        "BAD_REQUEST",
+                        better_auth_core::FieldMap::from([(
+                            "message".into(),
+                            "User not found".into(),
+                        )])
+                        .into(),
+                    )
                 })?;
             let target_value = FieldValue::from(FieldMap::from(target_user));
             let target = OrganizationTeamMemberTarget {
@@ -641,7 +659,7 @@ pub(crate) async fn handle_team_request(
                     .await?
                     .ok_or_else(|| {
                         AuthError::from_code(
-                            403,
+                            "FORBIDDEN",
                             "TEAM_MEMBER_LIMIT_REACHED",
                             "Team member limit reached",
                         )
@@ -657,7 +675,7 @@ pub(crate) async fn handle_team_request(
                     .await?
                     .ok_or_else(|| {
                         AuthError::from_code(
-                            400,
+                            "BAD_REQUEST",
                             "USER_IS_NOT_A_MEMBER_OF_THE_TEAM",
                             "User is not a member of the team",
                         )

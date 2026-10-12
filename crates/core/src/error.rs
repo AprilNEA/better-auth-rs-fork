@@ -185,24 +185,32 @@ impl AuthError {
         }
     }
 
+    /// Construct an API error with the original status and explicit body, including constructor failures.
+    pub fn from_status(status: impl Into<FieldValue>, body: FieldValue) -> Self {
+        match Self::try_api_error(ApiErrorInit {
+            status: status.into(),
+            body,
+            ..Default::default()
+        }) {
+            Ok(error) | Err(error) => error,
+        }
+    }
+
     /// Construct an upstream coded API error with `message` before `code` in the native body.
-    /// Use `AuthResponse::native(Some(status), body).into()` to preserve an explicit error body instead.
+    /// Use [`Self::from_status`] to preserve an explicit error body instead.
     pub fn from_code(
         status: impl Into<FieldValue>,
         code: impl Into<String>,
         message: impl Into<String>,
     ) -> Self {
-        match Self::try_api_error(ApiErrorInit {
-            status: status.into(),
-            body: FieldMap::from([
+        Self::from_status(
+            status,
+            FieldMap::from([
                 ("message".into(), message.into().into()),
                 ("code".into(), code.into().into()),
             ])
             .into(),
-            ..Default::default()
-        }) {
-            Ok(error) | Err(error) => error,
-        }
+        )
     }
 
     /// Diagnostic message for tracing. Response headers are never included.

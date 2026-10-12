@@ -182,11 +182,11 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
     if !better_auth_core::config::extract_origin(&origin)
         .is_some_and(|origin| ctx.is_origin_trusted(&origin))
     {
-        return Err(AuthError::Upstream {
-            status: 403,
-            code: "INVALID_ORIGIN",
-            message: "Invalid origin",
-        });
+        return Err(AuthError::from_code(
+            "FORBIDDEN",
+            "INVALID_ORIGIN",
+            "Invalid origin",
+        ));
     }
     let nonce = req
         .query_string("popupNonce")?

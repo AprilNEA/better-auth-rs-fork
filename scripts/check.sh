@@ -553,12 +553,24 @@ run_stage() {
     native-errors)
       cargo fmt --all -- --check
       local errors_status=0
-      cargo clippy --locked -p better-auth-core --lib -- -D warnings || errors_status=1
-      cargo test --locked -p better-auth-core --lib -- \
-        error:: plugin::tests::raw_api_errors:: || errors_status=1
       bun --no-install test \
         ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
-        ./compat-tests/reference-server/contracts/error-construction.test.ts || errors_status=1
+        ./compat-tests/reference-server/contracts/error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/organization-live-business.test.ts || errors_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || errors_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests --test native_endpoint_tests -- -D warnings || errors_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        error:: session:: plugin::tests::raw_api_errors:: \
+        store::ephemeral::member_delete:: store::joins::organization:: || errors_status=1
+      cargo test --locked -p better-auth-api --features axum --lib || errors_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache \
+        --test plugin_model_fields_tests -- organization_errors_preserve_constructor_provenance \
+        organization_role_business_consumes_ || errors_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test native_endpoint_tests --test organization_native_tests \
+        --test organization_query_limits_tests --test username_runtime_tests || errors_status=1
       return "$errors_status"
       ;;
     native-json)

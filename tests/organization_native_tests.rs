@@ -588,3 +588,148 @@ async fn member_deletion_rolls_back_when_the_team_snapshot_projection_fails() {
     migrator::run_migrations(&db).await.unwrap();
     deletion_projection_failure(&SeaOrmStore::<BundledSchema>::new(config, db)).await;
 }
+
+async fn deletion_subject_projection<S: AuthSchema>(
+    store: &dyn better_auth_core::store::AuthStore<S>,
+    subject: Option<&FieldValue>,
+) -> AuthResult<()> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    for id in ["stored-user", "projected-user", "third-user"] {
+        let _ = store.create_user(user(id)).await?;
+    }
+    for id in ["source", "selected"] {
+        let mut organization = CreateOrganization::new(id, id);
+        organization.id = Some(id.into());
+        let _ = store.create_organization(organization).await?;
+    }
+    let member = store
+        .create_member(CreateMember::new("source", "stored-user", "member"))
+        .await?;
+    let selected = store
+        .create_team(CreateTeam {
+            name: "Selected".into(),
+            organization_id: "selected".into(),
+            ..Default::default()
+        })
+        .await?;
+    let other = store
+        .create_team(CreateTeam {
+            name: "Other".into(),
+            organization_id: "source".into(),
+            ..Default::default()
+        })
+        .await?;
+    let projected = store
+        .add_team_member(&selected.id, "projected-user", Some(2))
+        .await?
+        .unwrap();
+    let retained = store
+        .add_team_member(&selected.id, "stored-user", Some(2))
+        .await?
+        .unwrap();
+    let elsewhere = store
+        .add_team_member(&other.id, "projected-user", Some(1))
+        .await?
+        .unwrap();
+    let reads = Arc::new(AtomicUsize::new(0));
+    let output_reads = reads.clone();
+    let explicit = subject.is_some();
+    let mut fields = better_auth_core::organization_fields::OrganizationFields::default();
+    let _ = fields.member.fields_mut().insert(
+        "userId".into(),
+        UserFieldConfig {
+            transform: Some(FieldTransforms {
+                output: Some(UserFieldTransform::new(move |_| {
+                    let read = output_reads.fetch_add(1, Ordering::SeqCst);
+                    Ok(if !explicit && read == 0 {
+                        FieldValue::Null
+                    } else {
+                        "projected-user".into()
+                    })
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    store.configure_organization_fields(fields)?;
+    if let Some(subject) = subject {
+        let error = store
+            .delete_member_for_user_value(&"missing".into(), &"selected".into(), subject)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.raw_value().unwrap().model_property("name")?,
+            "BetterAuthError".into()
+        );
+        assert_eq!(error.message_value()?, "Member not found".into());
+        assert!(!error.is_api_error()?);
+        assert_eq!(reads.load(Ordering::SeqCst), 0);
+        store
+            .delete_member_for_user_value(&member.id.field_value(), &"selected".into(), subject)
+            .await?;
+    } else {
+        store.delete_member_value(&member.id.field_value()).await?;
+    }
+    assert_eq!(reads.load(Ordering::SeqCst), 1, "subject: {subject:?}");
+    assert!(store.get_member_by_id(member.id.typed()?).await?.is_none());
+    let selected_members = store.list_team_members(selected.id.typed()?).await?;
+    assert_eq!(selected_members.len(), if explicit { 1 } else { 2 });
+    assert!(selected_members.contains(&retained));
+    assert_eq!(selected_members.contains(&projected), !explicit);
+    assert_eq!(
+        store.list_team_members(other.id.typed()?).await?,
+        vec![elsewhere]
+    );
+    if explicit {
+        assert!(
+            store
+                .add_team_member(&selected.id, "projected-user", Some(2))
+                .await?
+                .is_some()
+        );
+    }
+    assert!(
+        store
+            .add_team_member(&selected.id, "third-user", Some(2))
+            .await?
+            .is_none()
+    );
+    assert!(
+        store
+            .add_team_member(&other.id, "third-user", Some(1))
+            .await?
+            .is_none()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_deletion_resolves_falsy_subjects_once_before_team_cleanup() -> AuthResult<()> {
+    for subject in [
+        None,
+        Some(FieldValue::Undefined),
+        Some(FieldValue::Null),
+        Some(false.into()),
+        Some(0.0.into()),
+        Some((-0.0).into()),
+        Some(f64::NAN.into()),
+        Some("".into()),
+    ] {
+        let config = AuthConfig::new("organization-native-fixture-secret-long-enough");
+        deletion_subject_projection(
+            &better_auth_core::store::EphemeralStore::new(Arc::new(config.clone())),
+            subject.as_ref(),
+        )
+        .await?;
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        migrator::run_migrations(&db).await.unwrap();
+        deletion_subject_projection(
+            &SeaOrmStore::<BundledSchema>::new(config, db),
+            subject.as_ref(),
+        )
+        .await?;
+    }
+    Ok(())
+}

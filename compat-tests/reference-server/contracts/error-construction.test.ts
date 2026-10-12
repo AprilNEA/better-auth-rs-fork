@@ -67,3 +67,33 @@ for (const location of ["body", "query", "headers"] as const) {
     await observe(caught as EndpointAPIError, 400, ["message", "code"], JSON.stringify({ message, code: "VALIDATION_ERROR" }));
   });
 }
+
+test("update-user preserves named builtin errors and complete explicit bodies", async () => {
+  const { betterAuth } = await import("better-auth");
+  const { serializeSignedCookie } = await import("better-call");
+  const { memoryAdapter } = await import("better-auth/adapters/memory");
+  const now = new Date();
+  const user = { id: "owner", email: "owner@status.test", emailVerified: true, name: "Owner", createdAt: now, updatedAt: now };
+  const session = { user, session: { id: "session", userId: "owner", token: "token", createdAt: now, updatedAt: now, expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) } };
+  const database = { user: [user], session: [session.session], account: [], verification: [] };
+  const stored = structuredClone(database);
+  const secret = "status-contract-secret-at-least-32-characters";
+  const cookie = (await serializeSignedCookie("better-auth.session_token", "token", secret)).split(";")[0];
+  const auth = betterAuth({
+    database: memoryAdapter(database), baseURL: "http://status-contract.test",
+    secret,
+    logger: { disabled: true }, telemetry: { enabled: false },
+  });
+  for (const [hasSession, body, status, code, expected] of [
+    [false, {}, "UNAUTHORIZED", 401, { message: "Unauthorized", code: "UNAUTHORIZED" }],
+    [true, { email: "changed@status.test" }, "BAD_REQUEST", 400, { message: "Email can not be updated", code: "EMAIL_CAN_NOT_BE_UPDATED" }],
+    [true, {}, "BAD_REQUEST", 400, { message: "No fields to update" }],
+  ] as const) {
+    let caught: APIError | undefined;
+    try { await auth.api.updateUser({ body, headers: new Headers(hasSession ? { cookie } : {}) }); }
+    catch (error) { expect(error).toBeInstanceOf(APIError); caught = error as APIError; }
+    expect(caught?.status).toBe(status);
+    expect(await observe(caught!, code, Object.keys(expected), JSON.stringify(expected))).toStrictEqual(expected);
+    expect(database).toStrictEqual(stored);
+  }
+});

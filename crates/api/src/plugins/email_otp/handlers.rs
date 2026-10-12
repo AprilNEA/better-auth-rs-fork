@@ -25,11 +25,7 @@ fn success() -> AuthResult<AuthResponse> {
     AuthResponse::json(None, &json!({"success": true}))
 }
 fn user_not_found() -> AuthError {
-    AuthError::Upstream {
-        status: 400,
-        code: "USER_NOT_FOUND",
-        message: "User not found",
-    }
+    AuthError::from_code("BAD_REQUEST", "USER_NOT_FOUND", "User not found")
 }
 
 impl EmailOtpPlugin {
@@ -487,11 +483,9 @@ impl EmailOtpPlugin {
 
 fn session_error(error: AuthError) -> AuthError {
     match error {
-        AuthError::Unauthenticated => AuthError::Upstream {
-            status: 401,
-            code: "UNAUTHORIZED",
-            message: "Unauthorized",
-        },
+        AuthError::Unauthenticated => {
+            AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+        }
         other => other,
     }
 }

@@ -171,7 +171,11 @@ impl PhoneNumberPlugin {
         if let Some(validate) = &self.phone_number_validator
             && !validate(phone.to_owned()).await?
         {
-            return Err(error(400, "INVALID_PHONE_NUMBER", "Invalid phone number"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "INVALID_PHONE_NUMBER",
+                "Invalid phone number",
+            ));
         }
         Ok(())
     }
@@ -223,14 +227,22 @@ impl PhoneNumberPlugin {
                     .await?
             }
         }
-        .ok_or_else(|| error(400, "OTP_NOT_FOUND", "OTP not found"))?;
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "OTP_NOT_FOUND", "OTP not found"))?;
         if existing.expires_at.is_before(Utc::now())? {
             native::delete_verification(endpoint, identifier).await?;
-            return Err(error(400, "OTP_EXPIRED", "OTP expired"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "OTP_EXPIRED",
+                "OTP expired",
+            ));
         }
         if attempts(existing.value.typed()?) >= self.allowed_attempts {
             native::delete_verification(endpoint, identifier).await?;
-            return Err(error(403, "TOO_MANY_ATTEMPTS", "Too many attempts"));
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "TOO_MANY_ATTEMPTS",
+                "Too many attempts",
+            ));
         }
         let consumed = match endpoint.transaction {
             Some(transaction) => {
@@ -244,10 +256,14 @@ impl PhoneNumberPlugin {
                     .await?
             }
         }
-        .ok_or_else(|| error(400, "INVALID_OTP", "Invalid OTP"))?;
+        .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "INVALID_OTP", "Invalid OTP"))?;
         let count = attempts(consumed.value.typed()?);
         if count >= self.allowed_attempts {
-            return Err(error(403, "TOO_MANY_ATTEMPTS", "Too many attempts"));
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "TOO_MANY_ATTEMPTS",
+                "Too many attempts",
+            ));
         }
         let expected = consumed
             .value
@@ -266,7 +282,11 @@ impl PhoneNumberPlugin {
                 Some(transaction) => transaction.create_verification_optional(input).await?,
                 None => ctx.database.create_verification_optional(input).await?,
             };
-            return Err(error(400, "INVALID_OTP", "Invalid OTP"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "INVALID_OTP",
+                "Invalid OTP",
+            ));
         }
         Ok(())
     }
@@ -307,7 +327,11 @@ impl PhoneNumberPlugin {
             None
         };
         match verified {
-            Some(false) => Err(error(400, "INVALID_OTP", "Invalid OTP")),
+            Some(false) => Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "INVALID_OTP",
+                "Invalid OTP",
+            )),
             Some(true) => native::delete_verification(endpoint, &otp.phone_number).await,
             None => {
                 self.verify_stored_otp(endpoint, &otp.phone_number, &otp.code)
@@ -323,8 +347,8 @@ impl PhoneNumberPlugin {
         let body = request::read(req)?;
         let phone = string(&body, "phoneNumber");
         if !self.has_sender(ctx, Delivery::Verification) {
-            return Err(error(
-                501,
+            return Err(AuthError::from_code(
+                "NOT_IMPLEMENTED",
                 "SEND_OTP_NOT_IMPLEMENTED",
                 "sendOTP not implemented",
             ));
@@ -381,7 +405,7 @@ impl PhoneNumberPlugin {
         let existing_session = if update_phone {
             Some(ctx.require_native_session(req).await.map_err(|error| {
                 if matches!(error, AuthError::Unauthenticated) {
-                    self::error(401, "USER_NOT_FOUND", "User not found")
+                    AuthError::from_code("UNAUTHORIZED", "USER_NOT_FOUND", "User not found")
                 } else {
                     error
                 }
@@ -392,8 +416,8 @@ impl PhoneNumberPlugin {
         let found = ctx.database.get_user_by_phone_number(phone).await?;
         let user = if let Some(session) = &existing_session {
             if found.is_some() {
-                return Err(error(
-                    400,
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
                     "PHONE_NUMBER_EXIST",
                     "Phone number already exists",
                 ));
@@ -408,7 +432,13 @@ impl PhoneNumberPlugin {
                     },
                 )
                 .await?
-                .ok_or_else(|| error(500, "FAILED_TO_UPDATE_USER", "Failed to update user"))?
+                .ok_or_else(|| {
+                    AuthError::from_code(
+                        "INTERNAL_SERVER_ERROR",
+                        "FAILED_TO_UPDATE_USER",
+                        "Failed to update user",
+                    )
+                })?
         } else if let Some(user) = found {
             ctx.database
                 .update_user_by_id_value(
@@ -419,7 +449,13 @@ impl PhoneNumberPlugin {
                     },
                 )
                 .await?
-                .ok_or_else(|| error(500, "FAILED_TO_UPDATE_USER", "Failed to update user"))?
+                .ok_or_else(|| {
+                    AuthError::from_code(
+                        "INTERNAL_SERVER_ERROR",
+                        "FAILED_TO_UPDATE_USER",
+                        "Failed to update user",
+                    )
+                })?
         } else if let Some(email) = &self.temp_email {
             let rest = body
                 .as_object()
@@ -451,9 +487,19 @@ impl PhoneNumberPlugin {
 
             super::user_admission::create_user_optional(create, "phone-number", &endpoint)
                 .await?
-                .ok_or_else(|| error(500, "FAILED_TO_CREATE_USER", "Failed to create user"))?
+                .ok_or_else(|| {
+                    AuthError::from_code(
+                        "INTERNAL_SERVER_ERROR",
+                        "FAILED_TO_CREATE_USER",
+                        "Failed to create user",
+                    )
+                })?
         } else {
-            return Err(error(500, "FAILED_TO_UPDATE_USER", "Failed to update user"));
+            return Err(AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_UPDATE_USER",
+                "Failed to update user",
+            ));
         };
         endpoint.session = existing_session.clone();
         self.notify_verified(
@@ -524,8 +570,8 @@ impl PhoneNumberPlugin {
                 )
                 .await;
             }
-            return Err(error(
-                401,
+            return Err(AuthError::from_code(
+                "UNAUTHORIZED",
                 "PHONE_NUMBER_NOT_VERIFIED",
                 "Phone number not verified",
             ));
@@ -534,13 +580,15 @@ impl PhoneNumberPlugin {
             .await?
             .ok_or_else(invalid_credentials)?;
         if account.password.is_absent() {
-            return Err(error(401, "UNEXPECTED_ERROR", "Unexpected error"));
+            return Err(AuthError::from_code(
+                "UNAUTHORIZED",
+                "UNEXPECTED_ERROR",
+                "Unexpected error",
+            ));
         }
-        let hash = account
-            .password
-            .typed()?
-            .as_deref()
-            .ok_or_else(|| error(401, "UNEXPECTED_ERROR", "Unexpected error"))?;
+        let hash = account.password.typed()?.as_deref().ok_or_else(|| {
+            AuthError::from_code("UNAUTHORIZED", "UNEXPECTED_ERROR", "Unexpected error")
+        })?;
         match verify_password(ctx.password_policy.hasher.as_ref(), password, hash).await {
             Err(AuthError::InvalidCredentials) => return Err(invalid_credentials()),
             result => result?,
@@ -580,8 +628,12 @@ impl PhoneNumberPlugin {
             if !status {
                 ctx.config.logger.error("Failed to create session", &[]);
             }
-            error(
-                if status { 500 } else { 401 },
+            AuthError::from_code(
+                if status {
+                    "INTERNAL_SERVER_ERROR"
+                } else {
+                    "UNAUTHORIZED"
+                },
                 "FAILED_TO_CREATE_SESSION",
                 "Failed to create session",
             )
@@ -658,7 +710,9 @@ impl PhoneNumberPlugin {
             .database
             .get_user_by_phone_number(phone)
             .await?
-            .ok_or_else(|| error(400, "UNEXPECTED_ERROR", "Unexpected error"))?;
+            .ok_or_else(|| {
+                AuthError::from_code("BAD_REQUEST", "UNEXPECTED_ERROR", "Unexpected error")
+            })?;
         check_password_length(ctx, password, true)?;
         let hash = hash_password(ctx.password_policy.hasher.as_ref(), password).await?;
         if get_credential_account(ctx, user.id().into_owned())
@@ -708,10 +762,18 @@ fn check_password_length(
     check_min: bool,
 ) -> AuthResult<()> {
     if check_min && password.encode_utf16().count() < ctx.password_policy.min_length {
-        return Err(error(400, "PASSWORD_TOO_SHORT", "Password too short"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "PASSWORD_TOO_SHORT",
+            "Password too short",
+        ));
     }
     if password.encode_utf16().count() > ctx.password_policy.max_length {
-        return Err(error(400, "PASSWORD_TOO_LONG", "Password too long"));
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "PASSWORD_TOO_LONG",
+            "Password too long",
+        ));
     }
     Ok(())
 }
@@ -724,18 +786,11 @@ fn attempts(value: &str) -> u64 {
         .unwrap_or(0)
 }
 fn invalid_credentials() -> AuthError {
-    error(
-        401,
+    AuthError::from_code(
+        "UNAUTHORIZED",
         "INVALID_PHONE_NUMBER_OR_PASSWORD",
         "Invalid phone number or password",
     )
-}
-fn error(status: u16, code: &'static str, message: &'static str) -> AuthError {
-    AuthError::Upstream {
-        status,
-        code,
-        message,
-    }
 }
 fn string<'a>(body: &'a Value, key: &str) -> &'a str {
     body.get(key).and_then(Value::as_str).unwrap_or_default()
@@ -791,7 +846,7 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
                     .is_some_and(|value| !value.is_null())
                 {
                     return better_auth_core::observability::instrumentation::with_endpoint_hook(&_ctx.config, req, "before", "plugin:phone-number", async {
-                        Err(error(400, "PHONE_NUMBER_CANNOT_BE_UPDATED", "Phone number cannot be updated"))
+                        Err(AuthError::from_code("BAD_REQUEST", "PHONE_NUMBER_CANNOT_BE_UPDATED", "Phone number cannot be updated"))
                     }).await;
                 }
             }

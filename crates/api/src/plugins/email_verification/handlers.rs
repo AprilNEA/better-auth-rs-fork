@@ -116,11 +116,7 @@ fn verification_error(
             )?,
         });
     }
-    Err(AuthError::Upstream {
-        status: 401,
-        code,
-        message,
-    })
+    Err(AuthError::from_code("UNAUTHORIZED", code, message))
 }
 
 fn success(query: &VerifyEmailQuery, user: Option<FieldValue>) -> VerifyEmailResult {
@@ -154,10 +150,12 @@ async fn active_session(
     )
     .await
     .map_err(SessionIssueError::into_auth_error)?
-    .ok_or(AuthError::Upstream {
-        status: 500,
-        code: "FAILED_TO_CREATE_SESSION",
-        message: "Failed to create session",
+    .ok_or_else(|| {
+        AuthError::from_code(
+            "INTERNAL_SERVER_ERROR",
+            "FAILED_TO_CREATE_SESSION",
+            "Failed to create session",
+        )
     })
 }
 

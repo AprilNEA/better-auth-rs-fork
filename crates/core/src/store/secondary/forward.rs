@@ -253,6 +253,24 @@ impl<S: AuthSchema> MemberStore for SecondaryStore<S> {
     async fn update_member_role(&self, member_id: &str, role: &str) -> AuthResult<Member> {
         self.inner.update_member_role(member_id, role).await
     }
+    async fn update_member_role_optional(
+        &self,
+        member_id: &str,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
+        self.inner
+            .update_member_role_optional(member_id, role)
+            .await
+    }
+    async fn update_member_role_optional_value(
+        &self,
+        member_id: &crate::FieldValue,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
+        self.inner
+            .update_member_role_optional_value(member_id, role)
+            .await
+    }
     async fn delete_member_value(&self, member_id: &crate::FieldValue) -> AuthResult<()> {
         self.inner.delete_member_value(member_id).await
     }

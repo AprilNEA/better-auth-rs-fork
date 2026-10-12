@@ -798,11 +798,9 @@ impl<S: AuthSchema> BetterAuth<S> {
                 .require_session(req)
                 .await
                 .map_err(|error| match error {
-                    AuthError::Unauthenticated => AuthError::Upstream {
-                        status: 401,
-                        code: "UNAUTHORIZED",
-                        message: "Unauthorized",
-                    },
+                    AuthError::Unauthenticated => {
+                        AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+                    }
                     error => error,
                 })?;
 
@@ -812,7 +810,11 @@ impl<S: AuthSchema> BetterAuth<S> {
             .transpose()?
             .is_some_and(|value| value.is_truthy())
         {
-            return Err(AuthError::bad_request("Email can not be updated"));
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "EMAIL_CAN_NOT_BE_UPDATED",
+                "Email can not be updated",
+            ));
         }
 
         let clear_phone_number = context.get_metadata("phone-number.enabled")
@@ -827,7 +829,14 @@ impl<S: AuthSchema> BetterAuth<S> {
             || !image.is_undefined()
             || !additional_fields.is_empty();
         if !has_changes {
-            return Err(AuthError::bad_request("No fields to update"));
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "No fields to update".into(),
+                )])
+                .into(),
+            ));
         }
 
         let mut update_user = UpdateUser {

@@ -103,10 +103,10 @@ pub(super) fn validate_email(email: &str) -> AuthResult<()> {
     if json_body::valid_email(email)? {
         Ok(())
     } else {
-        Err(AuthError::Upstream {
-            status: 400,
-            code: "INVALID_EMAIL",
-            message: "Invalid email",
-        })
+        Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_EMAIL",
+            "Invalid email",
+        ))
     }
 }

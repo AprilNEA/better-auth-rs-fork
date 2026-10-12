@@ -85,12 +85,10 @@ impl OAuthSignInError {
     pub(super) fn into_auth_response(self) -> AuthResult<AuthResponse> {
         Ok(match self {
             Self::Auth(error) => return Err(error),
-            Self::Generic(message) if message == "email_not_verified" => AuthError::Upstream {
-                status: 403,
-                code: "EMAIL_NOT_VERIFIED",
-                message: "Email not verified",
+            Self::Generic(message) if message == "email_not_verified" => {
+                AuthError::from_code("FORBIDDEN", "EMAIL_NOT_VERIFIED", "Email not verified")
+                    .to_auth_response()
             }
-            .to_auth_response(),
             Self::Generic(message) => AuthResponse::json(
                 401,
                 &serde_json::json!({"code": "OAUTH_LINK_ERROR", "message": message}),
@@ -814,11 +812,7 @@ pub(crate) async fn sign_in_verified_profile(
     .map_err(|error| match error {
         OAuthSignInError::Auth(error) => error,
         OAuthSignInError::Generic(message) if message == "email_not_verified" => {
-            AuthError::Upstream {
-                status: 403,
-                code: "EMAIL_NOT_VERIFIED",
-                message: "Email not verified",
-            }
+            AuthError::from_code("FORBIDDEN", "EMAIL_NOT_VERIFIED", "Email not verified")
         }
         OAuthSignInError::Generic(message) => AuthError::authentication_failed(message),
         OAuthSignInError::Banned(message) => AuthError::banned_user(message),

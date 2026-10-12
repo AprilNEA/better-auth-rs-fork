@@ -150,11 +150,11 @@ impl AccountManagementPlugin {
     ) -> AuthResult<AuthResponse> {
         let data = ctx.require_native_session(req).await?;
         if !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)? {
-            return Err(AuthError::Upstream {
-                status: 403,
-                code: "SESSION_NOT_FRESH",
-                message: "Session is not fresh",
-            });
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "SESSION_NOT_FRESH",
+                "Session is not fresh",
+            ));
         }
 
         let unlink_req: UnlinkAccountRequest = match req.validated_body::<UnlinkAccountRequest>() {

@@ -21,11 +21,11 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
     ctx: &AuthContext<S>,
 ) -> AuthResult<StatusResponse> {
     if !config.change_email.enabled() {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "CHANGE_EMAIL_DISABLED",
-            message: "Change email is disabled",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "CHANGE_EMAIL_DISABLED",
+            "Change email is disabled",
+        ));
     }
     let new_email = body.new_email.to_lowercase();
     if data
@@ -315,11 +315,11 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
     if body.password.as_deref().is_none_or(str::is_empty)
         && !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)?
     {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "SESSION_EXPIRED",
-            message: "Session expired. Re-authenticate to perform this action.",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "SESSION_EXPIRED",
+            "Session expired. Re-authenticate to perform this action.",
+        ));
     }
     perform_user_deletion(data, req, config, ctx, false).await?;
 

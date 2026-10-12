@@ -150,17 +150,13 @@ fn accepted_claims(
 }
 
 fn unsupported() -> AuthError {
-    AuthError::Upstream {
-        status: 404,
-        code: "ID_TOKEN_NOT_SUPPORTED",
-        message: "id_token not supported",
-    }
+    AuthError::from_code(
+        "NOT_FOUND",
+        "ID_TOKEN_NOT_SUPPORTED",
+        "id_token not supported",
+    )
 }
 
 pub(super) fn invalid() -> AuthError {
-    AuthError::Upstream {
-        status: 401,
-        code: "INVALID_TOKEN",
-        message: "Invalid token",
-    }
+    AuthError::from_code("UNAUTHORIZED", "INVALID_TOKEN", "Invalid token")
 }

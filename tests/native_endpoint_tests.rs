@@ -324,3 +324,108 @@ async fn signing_options_follow_the_validated_hook_body() -> AuthResult<()> {
     assert_eq!(value.get("exp"), Some(&json!(9000)));
     Ok(())
 }
+
+#[tokio::test]
+async fn update_user_preserves_native_builtin_error_declarations() -> AuthResult<()> {
+    use better_auth::server_api::EndpointInput;
+    use better_auth_core::{ApiErrorClass, CreateSession, CreateUser, HttpMethod};
+    use chrono::Utc;
+    use std::collections::HashMap;
+
+    let hooks = Hooks::default();
+    let auth = build(&hooks).await?;
+    let user = auth
+        .store()
+        .create_user(
+            CreateUser::new()
+                .with_name("Owner")
+                .with_email("owner@status.test")
+                .with_email_verified(true),
+        )
+        .await?;
+    let session = auth
+        .store()
+        .create_session(CreateSession {
+            inherited_fields: Default::default(),
+            additional_fields: Default::default(),
+            user_id: user.id.clone(),
+            expires_at: (Utc::now() + auth.config().session.expires_in()).into(),
+            ip_address: None,
+            user_agent: None,
+            impersonated_by: None,
+            active_organization_id: None,
+        })
+        .await?;
+    let headers = HashMap::from([(
+        "cookie".to_owned(),
+        format!(
+            "better-auth.session_token={}",
+            better_auth_core::utils::cookie_utils::sign_cookie_value(
+                session.token.typed()?,
+                &auth.config().secret,
+            )
+        ),
+    )]);
+    let stored = serde_json::to_value(&user)?;
+    let stored_session = serde_json::to_value(&session)?;
+    for (authenticated, body, status, code, expected) in [
+        (
+            false,
+            json!({}),
+            "UNAUTHORIZED",
+            401,
+            json!({"message":"Unauthorized","code":"UNAUTHORIZED"}),
+        ),
+        (
+            true,
+            json!({"email":"changed@status.test"}),
+            "BAD_REQUEST",
+            400,
+            json!({"message":"Email can not be updated","code":"EMAIL_CAN_NOT_BE_UPDATED"}),
+        ),
+        (
+            true,
+            json!({}),
+            "BAD_REQUEST",
+            400,
+            json!({"message":"No fields to update"}),
+        ),
+    ] {
+        let error = auth
+            .call_endpoint(
+                HttpMethod::Post,
+                "/update-user",
+                EndpointInput {
+                    body: Some(body),
+                    headers: Some(if authenticated {
+                        headers.clone()
+                    } else {
+                        HashMap::new()
+                    }),
+                    ..Default::default()
+                },
+            )
+            .await
+            .err()
+            .ok_or_else(|| AuthError::internal("Invalid user update must fail"))?;
+        assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+        assert_eq!(error.status_value()?, status.into());
+        assert_eq!(error.status_code()?, code);
+        assert_eq!(error.body_value()?.json()?, Some(expected.clone()));
+        let response = error.to_auth_response().into_http_response()?;
+        assert_eq!(response.status, code);
+        assert_eq!(
+            response.body.bytes()?.as_ref(),
+            serde_json::to_vec(&expected)?
+        );
+        assert_eq!(
+            serde_json::to_value(auth.store().get_user_by_id(user.id.typed()?).await?)?,
+            stored
+        );
+        assert_eq!(
+            serde_json::to_value(auth.store().get_session(session.token.typed()?).await?)?,
+            stored_session
+        );
+    }
+    Ok(())
+}

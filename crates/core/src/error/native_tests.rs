@@ -295,12 +295,16 @@ fn response_conversion_propagates_the_original_constructor_failure() -> AuthResu
         move |_| Err(AuthError::from_thrown(failure.clone()))
     })
     .into();
-    let error = AuthError::from(crate::AuthResponse::native(Some(400), body));
-    assert!(
-        error
-            .raw_value()
-            .is_some_and(|value| value.strict_equals(&failure))
-    );
+    for error in [
+        AuthError::from(crate::AuthResponse::native(Some(400), body.clone())),
+        AuthError::from_status("BAD_REQUEST", body),
+    ] {
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&failure))
+        );
+    }
     Ok(())
 }
 

@@ -324,11 +324,11 @@ pub(super) fn decrypt_value<'a>(
 
 pub(super) fn require_totp(config: &TwoFactorConfig) -> AuthResult<()> {
     if config.totp_disabled {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "TOTP_NOT_CONFIGURED",
-            message: "totp isn't configured",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "TOTP_NOT_CONFIGURED",
+            "totp isn't configured",
+        ));
     }
     Ok(())
 }

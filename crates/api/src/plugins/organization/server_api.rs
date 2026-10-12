@@ -114,33 +114,36 @@ impl OrganizationPlugin {
                     .map(|session| session.session.active_organization_id.field_value())
                     .filter(FieldValue::is_truthy)
             })
-            .ok_or(AuthError::Upstream {
-                status: 400,
-                code: "NO_ACTIVE_ORGANIZATION",
-                message: "No active organization",
-            })?;
+            .ok_or(AuthError::from_code(
+                "BAD_REQUEST",
+                "NO_ACTIVE_ORGANIZATION",
+                "No active organization",
+            ))?;
         let team_value = input.team_id.field_value();
         let team_value = team_value.is_truthy().then_some(team_value);
         if team_value.is_some() && !self.config.teams.enabled {
             ctx.config.logger.error("Teams are not enabled", &[]);
-            return Err(better_auth_core::AuthResponse::json(
-                400,
-                &serde_json::json!({"message":"Teams are not enabled"}),
-            )?
-            .into());
+            return Err(AuthError::from_status(
+                "BAD_REQUEST",
+                better_auth_core::FieldMap::from([(
+                    "message".into(),
+                    "Teams are not enabled".into(),
+                )])
+                .into(),
+            ));
         }
         let user = store
-            .get_user_by_id_value(&user_id.ok_or(AuthError::Upstream {
-                status: 400,
-                code: "USER_NOT_FOUND",
-                message: "User not found",
-            })?)
+            .get_user_by_id_value(&user_id.ok_or(AuthError::from_code(
+                "BAD_REQUEST",
+                "USER_NOT_FOUND",
+                "User not found",
+            ))?)
             .await?
-            .ok_or(AuthError::Upstream {
-                status: 400,
-                code: "USER_NOT_FOUND",
-                message: "User not found",
-            })?;
+            .ok_or(AuthError::from_code(
+                "BAD_REQUEST",
+                "USER_NOT_FOUND",
+                "User not found",
+            ))?;
         if let Some(existing) = store
             .get_user_by_email(&crate::plugins::helpers::user_email(&user)?)
             .await?
@@ -149,39 +152,39 @@ impl OrganizationPlugin {
                 .await?
                 .is_some()
         {
-            return Err(AuthError::Upstream {
-                status: 400,
-                code: "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION",
-                message: "User is already a member of this organization",
-            });
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
+                "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION",
+                "User is already a member of this organization",
+            ));
         }
         if let Some(team_id) = &team_value {
             let (team, _) = store
                 .get_team_details_value(team_id, &org_value)
                 .await?
-                .ok_or(AuthError::Upstream {
-                    status: 400,
-                    code: "TEAM_NOT_FOUND",
-                    message: "Team not found",
-                })?
+                .ok_or(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "TEAM_NOT_FOUND",
+                    "Team not found",
+                ))?
                 .into_public_parts(&self.config.schema.team)?;
             if !team.organization_id.field_value().strict_equals(&org_value) {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "TEAM_NOT_FOUND",
-                    message: "Team not found",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "TEAM_NOT_FOUND",
+                    "Team not found",
+                ));
             }
         }
         let count = store.count_organization_members(&org_value).await?;
         let organization = store
             .get_organization_by_id_value(&org_value)
             .await?
-            .ok_or(AuthError::Upstream {
-                status: 400,
-                code: "ORGANIZATION_NOT_FOUND",
-                message: "Organization not found",
-            })?;
+            .ok_or(AuthError::from_code(
+                "BAD_REQUEST",
+                "ORGANIZATION_NOT_FOUND",
+                "Organization not found",
+            ))?;
         let organization_view =
             crate::plugins::organization::fields::organization(&organization, ctx)?;
         let user_value = FieldValue::from(user.field_values()?);
@@ -190,11 +193,11 @@ impl OrganizationPlugin {
             organization: &organization_view,
         };
         if count >= self.config.member_limit(event).await? as i64 {
-            return Err(AuthError::Upstream {
-                status: 403,
-                code: "ORGANIZATION_MEMBERSHIP_LIMIT_REACHED",
-                message: "Organization membership limit reached",
-            });
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "ORGANIZATION_MEMBERSHIP_LIMIT_REACHED",
+                "Organization membership limit reached",
+            ));
         }
         let mut data = OrganizationMemberDraft {
             additional_fields,
@@ -227,18 +230,21 @@ impl OrganizationPlugin {
                     .maximum_members_per_team_callback
                     .is_some()
                 {
-                    return Err(better_auth_core::AuthResponse::new(401).into());
+                    return Err(AuthError::from_status(
+                        "UNAUTHORIZED",
+                        better_auth_core::FieldValue::Undefined,
+                    ));
                 } else {
                     self.config.teams.maximum_members_per_team
                 };
                 let _ = store
                     .add_team_member_value(&team_id, &user.id().field_value(), maximum)
                     .await?
-                    .ok_or(AuthError::Upstream {
-                        status: 403,
-                        code: "TEAM_MEMBER_LIMIT_REACHED",
-                        message: "Team member limit reached",
-                    })?;
+                    .ok_or(AuthError::from_code(
+                        "FORBIDDEN",
+                        "TEAM_MEMBER_LIMIT_REACHED",
+                        "Team member limit reached",
+                    ))?;
                 AuthResult::Ok(())
             }
             .await;

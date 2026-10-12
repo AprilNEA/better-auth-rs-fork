@@ -16,7 +16,7 @@ impl EphemeralStore {
             Some((organization_id, _)) => {
                 let member = self
                     .operation(|op| op.capture_table(EntityRole::Member)?.get(&id))?
-                    .ok_or_else(|| AuthError::not_found("Member not found"))?;
+                    .ok_or_else(|| AuthError::better_auth("Member not found"))?;
                 let member = self.output_member(member).await?;
                 (
                     crate::SchemaValue::from_field(organization_id.clone()),

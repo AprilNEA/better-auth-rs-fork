@@ -224,11 +224,11 @@ fn cookie_name(token: &str, config: &better_auth_core::AuthConfig) -> String {
 }
 
 fn invalid_session() -> AuthError {
-    AuthError::Upstream {
-        status: 401,
-        code: "INVALID_SESSION_TOKEN",
-        message: "Invalid session token",
-    }
+    AuthError::from_code(
+        "UNAUTHORIZED",
+        "INVALID_SESSION_TOKEN",
+        "Invalid session token",
+    )
 }
 
 fn signed_device_token(

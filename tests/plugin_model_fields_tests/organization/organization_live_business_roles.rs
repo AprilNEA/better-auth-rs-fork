@@ -141,7 +141,14 @@ async fn check<S: AuthSchema>(
     };
     let actual = if fails && native {
         match actual {
-            Err(error @ AuthError::Response(_)) => error.to_auth_response(),
+            Err(error) => {
+                assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+                assert_eq!(
+                    error.status_value()?,
+                    FieldValue::from("INTERNAL_SERVER_ERROR")
+                );
+                error.to_auth_response()
+            }
             other => {
                 return Err(AuthError::internal(format!(
                     "Expected native invalid-permission APIError, got {other:?}"

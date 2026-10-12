@@ -371,18 +371,18 @@ async fn finalize_sign_in_with_user_core(
     .map_err(SessionIssueError::into_auth_error)?;
     let Some(issued) = issued else {
         let session_failure_status = match method {
-            CredentialSignIn::Email(_) => 401,
-            CredentialSignIn::Username => 500,
+            CredentialSignIn::Email(_) => "UNAUTHORIZED",
+            CredentialSignIn::Username => "INTERNAL_SERVER_ERROR",
         };
-        if session_failure_status == 401 {
+        if matches!(method, CredentialSignIn::Email(_)) {
             better_auth_core::observability::logger::current()
                 .error("Failed to create session", &[]);
         }
-        return Err(AuthError::Upstream {
-            status: session_failure_status,
-            code: "FAILED_TO_CREATE_SESSION",
-            message: "Failed to create session",
-        });
+        return Err(AuthError::from_code(
+            session_failure_status,
+            "FAILED_TO_CREATE_SESSION",
+            "Failed to create session",
+        ));
     };
     let token = issued.session.token().into_owned();
     let manager = ctx.session_manager();

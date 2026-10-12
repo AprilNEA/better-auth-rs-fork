@@ -130,10 +130,12 @@ impl AccountSelection {
                     .map(FieldValue::from)
                     .filter(FieldValue::is_truthy)
             })
-            .ok_or(AuthError::Upstream {
-                status: 400,
-                code: "USER_ID_OR_SESSION_REQUIRED",
-                message: "Either userId or session is required",
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "USER_ID_OR_SESSION_REQUIRED",
+                    "Either userId or session is required",
+                )
             })
     }
 
@@ -516,10 +518,12 @@ pub(super) async fn handle_account_info(
         .iter()
         .find(|(name, _)| account.provider_id == name.as_str())
         .map(|(_, provider)| provider)
-        .ok_or(AuthError::Upstream {
-            status: 400,
-            code: "PROVIDER_NOT_CONFIGURED",
-            message: "Account is not associated with a configured social provider.",
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "PROVIDER_NOT_CONFIGURED",
+                "Account is not associated with a configured social provider.",
+            )
         })?;
     let tokens = valid_access_token(&account, &selection, &user_id, config, req, ctx).await?;
     if !tokens.access_token.is_truthy()? {

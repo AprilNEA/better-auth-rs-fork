@@ -98,11 +98,11 @@ pub(super) fn build_authorization_url(
         }
     }
     if provider.config.auth_url.is_empty() {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "INVALID_OAUTH_CONFIGURATION",
-            message: "Invalid OAuth configuration",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_OAUTH_CONFIGURATION",
+            "Invalid OAuth configuration",
+        ));
     }
     let mut scopes = if generic.is_some() {
         input

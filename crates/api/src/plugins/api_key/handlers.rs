@@ -93,6 +93,7 @@ impl ApiKeyPlugin {
             })
         {
             return Err(super::api_key_error(
+                "UNAUTHORIZED",
                 super::ApiKeyErrorCode::UnauthorizedSession,
             ));
         }
@@ -101,7 +102,9 @@ impl ApiKeyPlugin {
             .map(|(_, user)| user.id.field_value())
             .or_else(|| body.user_id.as_deref().map(Into::into))
             .filter(FieldValue::is_truthy)
-            .ok_or_else(|| super::api_key_error(super::ApiKeyErrorCode::UnauthorizedSession))?;
+            .ok_or_else(|| {
+                super::api_key_error("UNAUTHORIZED", super::ApiKeyErrorCode::UnauthorizedSession)
+            })?;
         update_key_for_user(body, &user_id, self, ctx).await
     }
 }
@@ -116,6 +119,7 @@ pub(super) fn create_key_actor(
         && body.organization_id.as_deref().is_none_or(str::is_empty)
     {
         return Err(super::api_key_error(
+            "BAD_REQUEST",
             super::ApiKeyErrorCode::OrganizationIdRequired,
         ));
     }
@@ -129,6 +133,7 @@ pub(super) fn create_key_actor(
             .is_some_and(|id| !actor.strict_equals(&id.into()))
     {
         return Err(super::api_key_error(
+            "UNAUTHORIZED",
             super::ApiKeyErrorCode::UnauthorizedSession,
         ));
     }
@@ -141,7 +146,9 @@ pub(super) fn create_key_actor(
                 .map(FieldValue::from)
         })
         .filter(FieldValue::is_truthy)
-        .ok_or_else(|| super::api_key_error(super::ApiKeyErrorCode::UnauthorizedSession))
+        .ok_or_else(|| {
+            super::api_key_error("UNAUTHORIZED", super::ApiKeyErrorCode::UnauthorizedSession)
+        })
 }
 
 pub(super) fn validate_client_create(body: &CreateKeyRequest) -> AuthResult<()> {
@@ -154,6 +161,7 @@ pub(super) fn validate_client_create(body: &CreateKeyRequest) -> AuthResult<()> 
         || body.remaining.is_some()
     {
         return Err(super::api_key_error(
+            "BAD_REQUEST",
             super::ApiKeyErrorCode::ServerOnlyProperty,
         ));
     }
@@ -176,7 +184,10 @@ pub(super) async fn create_key_for_user(
                 .as_deref()
                 .filter(|id| !id.is_empty())
                 .ok_or_else(|| {
-                    super::api_key_error(super::ApiKeyErrorCode::OrganizationIdRequired)
+                    super::api_key_error(
+                        "BAD_REQUEST",
+                        super::ApiKeyErrorCode::OrganizationIdRequired,
+                    )
                 })?;
             helpers::require_org_api_key_permission(ctx, user_id, organization_id, "create")
                 .await?;
@@ -444,6 +455,7 @@ pub(crate) async fn update_key_core(
         .is_some_and(|id| !id.is_empty() && !user_id.strict_equals(&id.into()))
     {
         return Err(super::api_key_error(
+            "UNAUTHORIZED",
             super::ApiKeyErrorCode::UnauthorizedSession,
         ));
     }
@@ -456,6 +468,7 @@ pub(crate) async fn update_key_core(
         || body.permissions.is_some()
     {
         return Err(super::api_key_error(
+            "BAD_REQUEST",
             super::ApiKeyErrorCode::ServerOnlyProperty,
         ));
     }
@@ -476,6 +489,7 @@ pub(super) async fn update_key_for_user(
         None => None,
         Some(_) if config.key_expiration.disable_custom_expires_time => {
             return Err(super::api_key_error(
+                "BAD_REQUEST",
                 super::ApiKeyErrorCode::KeyDisabledExpiration,
             ));
         }
@@ -490,6 +504,7 @@ pub(super) async fn update_key_for_user(
         && !(metadata.is_null() || metadata.is_object() || metadata.is_array())
     {
         return Err(super::api_key_error(
+            "BAD_REQUEST",
             super::ApiKeyErrorCode::InvalidMetadataType,
         ));
     }
@@ -507,6 +522,7 @@ pub(super) async fn update_key_for_user(
         && body.permissions.is_none()
     {
         return Err(super::api_key_error(
+            "BAD_REQUEST",
             super::ApiKeyErrorCode::NoValuesToUpdate,
         ));
     }

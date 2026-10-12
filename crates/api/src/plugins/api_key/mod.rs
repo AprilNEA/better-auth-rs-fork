@@ -170,19 +170,8 @@ impl serde::Serialize for ApiKeyErrorCode {
     }
 }
 
-pub(super) fn api_key_error(code: ApiKeyErrorCode) -> AuthError {
-    let status = match code {
-        ApiKeyErrorCode::UnauthorizedSession | ApiKeyErrorCode::UserBanned => 401,
-        ApiKeyErrorCode::OrganizationPluginRequired => 500,
-        ApiKeyErrorCode::UserNotMemberOfOrganization
-        | ApiKeyErrorCode::InsufficientApiKeyPermissions => 403,
-        _ => 400,
-    };
-    AuthError::Upstream {
-        status,
-        code: code.as_str(),
-        message: code.message(),
-    }
+pub(super) fn api_key_error(status: &'static str, code: ApiKeyErrorCode) -> AuthError {
+    AuthError::from_code(status, code.as_str(), code.message())
 }
 
 // ---------------------------------------------------------------------------
@@ -238,7 +227,7 @@ impl ApiKeyPlugin {
         self.configurations
             .iter()
             .find(|config| is_default_config_id(&config.config_id))
-            .ok_or_else(|| api_key_error(ApiKeyErrorCode::NoDefaultConfiguration))
+            .ok_or_else(|| api_key_error("BAD_REQUEST", ApiKeyErrorCode::NoDefaultConfiguration))
     }
 }
 
@@ -618,7 +607,10 @@ impl ApiKeyPlugin {
         if let Some(p) = prefix.filter(|prefix| !prefix.is_empty()) {
             let len = p.encode_utf16().count();
             if len < config.min_prefix_length || len > config.max_prefix_length {
-                return Err(api_key_error(ApiKeyErrorCode::InvalidPrefixLength));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::InvalidPrefixLength,
+                ));
             }
         }
         Ok(())
@@ -635,12 +627,15 @@ impl ApiKeyPlugin {
         is_create: bool,
     ) -> AuthResult<()> {
         if is_create && config.require_name && name.is_none_or(str::is_empty) {
-            return Err(api_key_error(ApiKeyErrorCode::NameRequired));
+            return Err(api_key_error("BAD_REQUEST", ApiKeyErrorCode::NameRequired));
         }
         if let Some(n) = name.filter(|name| !is_create || !name.is_empty()) {
             let len = n.encode_utf16().count();
             if len < config.min_name_length || len > config.max_name_length {
-                return Err(api_key_error(ApiKeyErrorCode::InvalidNameLength));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::InvalidNameLength,
+                ));
             }
         }
         Ok(())
@@ -653,15 +648,24 @@ impl ApiKeyPlugin {
         let cfg = &config.key_expiration;
         if let Some(secs) = expires_in {
             if cfg.disable_custom_expires_time {
-                return Err(api_key_error(ApiKeyErrorCode::KeyDisabledExpiration));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::KeyDisabledExpiration,
+                ));
             }
             // expiresIn is in seconds; min/max are in days
             let days = secs / 86_400.0;
             if days < cfg.min_expires_in {
-                return Err(api_key_error(ApiKeyErrorCode::ExpiresInTooSmall));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::ExpiresInTooSmall,
+                ));
             }
             if days > cfg.max_expires_in {
-                return Err(api_key_error(ApiKeyErrorCode::ExpiresInTooLarge));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::ExpiresInTooLarge,
+                ));
             }
             Ok(Some(secs))
         } else {
@@ -681,10 +685,16 @@ impl ApiKeyPlugin {
             _ => true,
         }) {
             if !config.enable_metadata {
-                return Err(api_key_error(ApiKeyErrorCode::MetadataDisabled));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::MetadataDisabled,
+                ));
             }
             if !value.is_object() && !value.is_array() {
-                return Err(api_key_error(ApiKeyErrorCode::InvalidMetadataType));
+                return Err(api_key_error(
+                    "BAD_REQUEST",
+                    ApiKeyErrorCode::InvalidMetadataType,
+                ));
             }
         }
         Ok(())
@@ -699,9 +709,11 @@ impl ApiKeyPlugin {
             refill_amount.filter(|value| *value != 0.0),
         ) {
             (None, Some(_)) => Err(api_key_error(
+                "BAD_REQUEST",
                 ApiKeyErrorCode::RefillAmountAndIntervalRequired,
             )),
             (Some(_), None) => Err(api_key_error(
+                "BAD_REQUEST",
                 ApiKeyErrorCode::RefillIntervalAndAmountRequired,
             )),
             _ => Ok(()),
@@ -732,7 +744,10 @@ impl ApiKeyPlugin {
             validate_client_create(&body)?;
         }
         if original.is_some() && body.user_id.is_some() {
-            return Err(api_key_error(ApiKeyErrorCode::UnauthorizedSession));
+            return Err(api_key_error(
+                "UNAUTHORIZED",
+                ApiKeyErrorCode::UnauthorizedSession,
+            ));
         }
         let actor = create_key_actor(
             &body,
@@ -796,7 +811,7 @@ impl ApiKeyPlugin {
                     .map(FieldValue::from)
             })
             .filter(FieldValue::is_truthy)
-            .ok_or_else(|| api_key_error(ApiKeyErrorCode::UnauthorizedSession))?;
+            .ok_or_else(|| api_key_error("UNAUTHORIZED", ApiKeyErrorCode::UnauthorizedSession))?;
         if session.is_some()
             && body
                 .user_id
@@ -804,7 +819,10 @@ impl ApiKeyPlugin {
                 .filter(|id| !id.is_empty())
                 .is_some_and(|id| !actor.strict_equals(&id.into()))
         {
-            return Err(api_key_error(ApiKeyErrorCode::UnauthorizedSession));
+            return Err(api_key_error(
+                "UNAUTHORIZED",
+                ApiKeyErrorCode::UnauthorizedSession,
+            ));
         }
         let response = if client {
             update_key_core(&body, actor, self, ctx).await?
@@ -822,7 +840,7 @@ impl ApiKeyPlugin {
         let body: DeleteKeyRequest = request::read(req)?;
         let session = ctx.require_native_session(req).await?;
         if session.user_field("banned")?.as_bool() == Some(true) {
-            return Err(api_key_error(ApiKeyErrorCode::UserBanned));
+            return Err(api_key_error("UNAUTHORIZED", ApiKeyErrorCode::UserBanned));
         }
         let response = delete_key_core(&body, session.user_field("id")?, self, ctx).await?;
         AuthResponse::json(None, &response)

@@ -296,13 +296,13 @@ async fn change_email_normalizes_storage_and_tokens_but_preserves_session_owners
                 .is_some();
             let stored = FieldValue::from(FieldMap::from(stored));
             if has_session {
-                assert!(matches!(
-                    response,
-                    Err(AuthError::Upstream {
-                        code: "INVALID_USER",
-                        ..
-                    })
-                ));
+                crate::plugins::test_helpers::assert_coded_api_error(
+                    &response.err().expect("expected builtin API error"),
+                    "UNAUTHORIZED",
+                    401,
+                    "INVALID_USER",
+                    "Invalid user",
+                );
                 assert_eq!(stored, original);
                 assert!(req.new_session()?.is_none());
                 assert!(verified.lock().unwrap().is_empty());
@@ -651,13 +651,13 @@ async fn session_reads_follow_token_branches_and_caught_failures_use_anonymous_f
         &ctx,
     )
     .await;
-    assert!(matches!(
-        result,
-        Err(AuthError::Upstream {
-            code: "INVALID_TOKEN",
-            ..
-        })
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &result.err().expect("expected builtin API error"),
+        "UNAUTHORIZED",
+        401,
+        "INVALID_TOKEN",
+        "Invalid token",
+    );
     assert_eq!(reads.load(Ordering::SeqCst), 0);
     let mut req = AuthRequest::new(HttpMethod::Post, "/send-verification-email");
     let _ = req.headers.insert("cookie".into(), cookie);
@@ -816,14 +816,13 @@ async fn caught_session_failure_discards_nested_cookie_headers_but_keeps_outer_h
                 .session_manager()
                 .resolve_native_for_endpoint(&req, SessionRead::Cached)
                 .await;
-            assert!(matches!(
-                result,
-                Err(AuthError::Upstream {
-                    status: 500,
-                    code: "FAILED_TO_GET_SESSION",
-                    ..
-                })
-            ));
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &result.err().expect("expected builtin API error"),
+                "INTERNAL_SERVER_ERROR",
+                500,
+                "FAILED_TO_GET_SESSION",
+                "Failed to get session",
+            );
         }
         let headers = req.take_response_headers()?;
         assert_eq!(headers.get("x-outer").map(String::as_str), Some("kept"));

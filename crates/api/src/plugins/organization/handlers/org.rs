@@ -47,14 +47,16 @@ pub(crate) async fn create_organization_core(
             Some(id) => ctx.database.get_user_by_id(id).await?,
             None => None,
         }
-        .ok_or_else(|| AuthError::from(AuthResponse::new(401)))?;
+        .ok_or_else(|| {
+            AuthError::from_status("UNAUTHORIZED", better_auth_core::FieldValue::Undefined)
+        })?;
         FieldValue::from(FieldMap::from(user))
     };
     let user = &user;
     let system_action = session.is_none();
     if !config.may_create(user).await? && !system_action {
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_NEW_ORGANIZATION",
             "You are not allowed to create a new organization",
         ));
@@ -65,7 +67,7 @@ pub(crate) async fn create_organization_core(
         .await?
     {
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "YOU_HAVE_REACHED_THE_MAXIMUM_NUMBER_OF_ORGANIZATIONS",
             "You have reached the maximum number of organizations",
         ));
@@ -78,7 +80,7 @@ pub(crate) async fn create_organization_core(
         .is_some()
     {
         return Err(AuthError::from_code(
-            400,
+            "BAD_REQUEST",
             "ORGANIZATION_ALREADY_EXISTS",
             "Organization already exists",
         ));
@@ -227,12 +229,13 @@ pub(crate) async fn update_organization_core(
     let slug = nonempty(&body.data.slug, "slug")?;
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        None,
         &session.session,
-        ctx,
-        AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found"),
-    )
-    .await?;
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "ORGANIZATION_NOT_FOUND",
+            "Organization not found",
+        ),
+    )?;
 
     let member = ctx
         .database
@@ -241,7 +244,7 @@ pub(crate) async fn update_organization_core(
         .map(|joined| joined.member)
         .ok_or_else(|| {
             AuthError::from_code(
-                400,
+                "BAD_REQUEST",
                 "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
                 "User is not a member of the organization",
             )
@@ -258,7 +261,7 @@ pub(crate) async fn update_organization_core(
     .await?
     {
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_ORGANIZATION",
             "You are not allowed to update this organization",
         ));
@@ -269,7 +272,7 @@ pub(crate) async fn update_organization_core(
         && !existing.id.field_value().strict_equals(&org_id)
     {
         return Err(AuthError::from_code(
-            400,
+            "BAD_REQUEST",
             "ORGANIZATION_SLUG_ALREADY_TAKEN",
             "Organization slug already taken",
         ));
@@ -320,7 +323,7 @@ pub(crate) async fn delete_organization_core(
 ) -> AuthResult<OrganizationResponse> {
     if body.organization_id.is_empty() {
         return Err(AuthError::from_code(
-            400,
+            "BAD_REQUEST",
             "ORGANIZATION_NOT_FOUND",
             "Organization not found",
         ));
@@ -336,7 +339,7 @@ pub(crate) async fn delete_organization_core(
         .map(|joined| joined.member)
         .ok_or_else(|| {
             AuthError::from_code(
-                400,
+                "BAD_REQUEST",
                 "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
                 "User is not a member of the organization",
             )
@@ -353,7 +356,7 @@ pub(crate) async fn delete_organization_core(
     .await?
     {
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_ORGANIZATION",
             "You are not allowed to delete this organization",
         ));
@@ -377,7 +380,9 @@ pub(crate) async fn delete_organization_core(
         .database
         .get_organization_by_id(&body.organization_id)
         .await?
-        .ok_or_else(|| AuthError::from(AuthResponse::new(400)))?;
+        .ok_or_else(|| {
+            AuthError::from_status("BAD_REQUEST", better_auth_core::FieldValue::Undefined)
+        })?;
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
     let event = OrganizationUser {
@@ -456,7 +461,11 @@ pub(crate) async fn get_full_organization_core(
         })
         .await?
         .ok_or_else(|| {
-            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "ORGANIZATION_NOT_FOUND",
+                "Organization not found",
+            )
         })?;
     let organization = details.into_public_value(&config.schema)?;
     if ctx
@@ -476,7 +485,7 @@ pub(crate) async fn get_full_organization_core(
             )
             .await?;
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
@@ -495,7 +504,7 @@ pub(crate) async fn check_slug_core(
         .is_some()
     {
         return Err(AuthError::from_code(
-            400,
+            "BAD_REQUEST",
             "ORGANIZATION_SLUG_ALREADY_TAKEN",
             "Organization slug already taken",
         ));
@@ -555,7 +564,11 @@ pub(crate) async fn set_active_organization_core(
             .get_organization_by_slug(slug)
             .await?
             .ok_or_else(|| {
-                AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "ORGANIZATION_NOT_FOUND",
+                    "Organization not found",
+                )
             })?;
         organization.id().field_value()
     } else {
@@ -567,7 +580,7 @@ pub(crate) async fn set_active_organization_core(
     };
     if !org_id.is_truthy() {
         return Err(AuthError::from_code(
-            400,
+            "BAD_REQUEST",
             "ORGANIZATION_NOT_FOUND",
             "Organization not found",
         ));
@@ -586,7 +599,7 @@ pub(crate) async fn set_active_organization_core(
             )
             .await?;
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
@@ -597,7 +610,11 @@ pub(crate) async fn set_active_organization_core(
         .get_organization_by_id_value(&org_id)
         .await?
         .ok_or_else(|| {
-            AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found")
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "ORGANIZATION_NOT_FOUND",
+                "Organization not found",
+            )
         })?;
 
     let updated = ctx
@@ -638,7 +655,9 @@ pub(crate) async fn leave_organization_core(
             &session.user_property("id")?,
         )
         .await?
-        .ok_or_else(|| AuthError::from_code(400, "MEMBER_NOT_FOUND", "Member not found"))?;
+        .ok_or_else(|| {
+            AuthError::from_code("BAD_REQUEST", "MEMBER_NOT_FOUND", "Member not found")
+        })?;
 
     let member = &joined.member;
     if has_role(member, config.creator_role())? {
@@ -655,7 +674,7 @@ pub(crate) async fn leave_organization_core(
 
         if owner_count <= 1 {
             return Err(AuthError::from_code(
-                400,
+                "BAD_REQUEST",
                 "YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER",
                 "You cannot leave the organization as the only owner",
             ));
@@ -700,7 +719,10 @@ pub async fn handle_create_organization(
 ) -> AuthResult<AuthResponse> {
     let session = optional_session(req, ctx).await?;
     if session.is_none() && request_present(req, ctx) {
-        return Err(AuthResponse::new(401).into());
+        return Err(AuthError::from_status(
+            "UNAUTHORIZED",
+            better_auth_core::FieldValue::Undefined,
+        ));
     }
     let body: CreateOrganizationRequest = super::super::request::read(req, &config.schema)?;
     let (mut response, default_team_id) =
@@ -742,9 +764,11 @@ pub async fn handle_update_organization(
     let session = match ctx.require_native_session(req).await {
         Ok(session) => session,
         Err(AuthError::Unauthenticated) => {
-            return Err(
-                AuthResponse::json(401, &serde_json::json!({"message":"User not found"}))?.into(),
-            );
+            return Err(AuthError::from_status(
+                "UNAUTHORIZED",
+                better_auth_core::FieldMap::from([("message".into(), "User not found".into())])
+                    .into(),
+            ));
         }
         Err(error) => return Err(error),
     };
@@ -761,7 +785,7 @@ pub async fn handle_delete_organization(
 ) -> AuthResult<AuthResponse> {
     if config.disable_organization_deletion {
         return Err(AuthError::from_code(
-            404,
+            "NOT_FOUND",
             "ORGANIZATION_DELETION_DISABLED",
             "Organization deletion is disabled",
         ));
@@ -770,7 +794,9 @@ pub async fn handle_delete_organization(
         .require_native_session(req)
         .await
         .map_err(|error| match error {
-            AuthError::Unauthenticated => AuthResponse::new(401).into(),
+            AuthError::Unauthenticated => {
+                AuthError::from_status("UNAUTHORIZED", better_auth_core::FieldValue::Undefined)
+            }
             error => error,
         })?;
     let body: DeleteOrganizationRequest = super::super::request::read(req, &config.schema)?;
@@ -809,7 +835,13 @@ pub async fn handle_get_organization(
         }
         ctx.database.get_organization_by_id_value(&id).await?
     }
-    .ok_or_else(|| AuthError::from_code(400, "ORGANIZATION_NOT_FOUND", "Organization not found"))?;
+    .ok_or_else(|| {
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "ORGANIZATION_NOT_FOUND",
+            "Organization not found",
+        )
+    })?;
 
     if ctx
         .database
@@ -828,7 +860,7 @@ pub async fn handle_get_organization(
             )
             .await?;
         return Err(AuthError::from_code(
-            403,
+            "FORBIDDEN",
             "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
             "User is not a member of the organization",
         ));
@@ -897,229 +929,4 @@ pub async fn handle_leave_organization(
 }
 
 #[cfg(test)]
-mod tests {
-
-    use better_auth_core::types::{CreateOrganization, CreateUser, HttpMethod};
-    use chrono::Duration;
-
-    use crate::plugins::organization::{OrganizationConfig, OrganizationPlugin};
-    use crate::plugins::test_helpers::{
-        create_auth_json_request_no_query, create_test_config, create_test_context_with_plugins,
-        create_user, create_user_and_session,
-    };
-
-    use super::{get_full_organization_core, handle_create_organization};
-    use crate::plugins::organization::types::GetFullOrganizationQuery;
-
-    fn test_config() -> OrganizationConfig {
-        OrganizationConfig {
-            allow_user_to_create_organization: true,
-            organization_limit: None,
-            membership_limit: Some(100),
-            creator_role: "owner".to_string(),
-            invitation_expires_in: 172800.0,
-            invitation_limit: Some(100),
-            disable_organization_deletion: false,
-            roles: None,
-            send_invitation_email: None,
-            ..Default::default()
-        }
-    }
-
-    fn test_user(email: &str, name: &str) -> CreateUser {
-        CreateUser {
-            email: Some(email.to_string()),
-            name: Some(name.to_string()).into(),
-            ..CreateUser::default()
-        }
-    }
-
-    #[tokio::test]
-    async fn create_organization_keeps_current_active_organization_when_requested() {
-        let config = test_config();
-        let ctx = create_test_context_with_plugins(
-            create_test_config(),
-            &[&OrganizationPlugin::with_config(config.clone())],
-        )
-        .await;
-        let (user, session) = create_user_and_session(
-            &ctx,
-            test_user("owner@example.com", "Owner"),
-            Duration::hours(1),
-        )
-        .await;
-        let existing = ctx
-            .database
-            .create_organization(CreateOrganization {
-                additional_fields: Default::default(),
-                id: None,
-                name: "Existing".to_string().into(),
-                slug: "existing".to_string().into(),
-                logo: None.into(),
-                metadata: None.into(),
-            })
-            .await
-            .expect("organization should be created");
-        ctx.database
-            .update_session_active_organization(
-                session.token.typed().unwrap(),
-                Some(existing.id.typed().unwrap()),
-            )
-            .await
-            .expect("active organization should update");
-
-        let request = create_auth_json_request_no_query(
-            HttpMethod::Post,
-            "/organization/create",
-            Some(session.token.typed().unwrap()),
-            Some(serde_json::json!({
-                "name": "Next",
-                "slug": "next",
-                "keepCurrentActiveOrganization": true
-            })),
-        );
-
-        handle_create_organization(&request, &ctx, &config)
-            .await
-            .expect("request should succeed");
-
-        let updated_session = ctx
-            .database
-            .get_session(session.token.typed().unwrap())
-            .await
-            .expect("session lookup should succeed")
-            .expect("session should exist");
-        assert_eq!(
-            updated_session
-                .active_organization_id
-                .typed()
-                .unwrap()
-                .as_ref(),
-            Some(existing.id.typed().unwrap())
-        );
-        assert_eq!(user.id, session.user_id);
-    }
-
-    #[tokio::test]
-    async fn create_organization_updates_active_organization_by_default() {
-        let config = test_config();
-        let ctx = create_test_context_with_plugins(
-            create_test_config(),
-            &[&OrganizationPlugin::with_config(config.clone())],
-        )
-        .await;
-        let (_, session) = create_user_and_session(
-            &ctx,
-            test_user("owner2@example.com", "Owner"),
-            Duration::hours(1),
-        )
-        .await;
-
-        let request = create_auth_json_request_no_query(
-            HttpMethod::Post,
-            "/organization/create",
-            Some(session.token.typed().unwrap()),
-            Some(serde_json::json!({
-                "name": "Created",
-                "slug": "created"
-            })),
-        );
-
-        let response = handle_create_organization(&request, &ctx, &config)
-            .await
-            .expect("request should succeed");
-        let body: serde_json::Value = serde_json::from_slice(&response.body.bytes().unwrap())
-            .expect("response should be JSON");
-        let created_id = body["id"]
-            .as_str()
-            .expect("response should contain organization id");
-
-        let updated_session = ctx
-            .database
-            .get_session(session.token.typed().unwrap())
-            .await
-            .expect("session lookup should succeed")
-            .expect("session should exist");
-        assert_eq!(
-            updated_session
-                .active_organization_id
-                .typed()
-                .unwrap()
-                .as_deref(),
-            Some(created_id)
-        );
-    }
-
-    #[tokio::test]
-    async fn get_full_organization_respects_members_limit() {
-        let config = test_config();
-        let ctx = create_test_context_with_plugins(
-            create_test_config(),
-            &[&OrganizationPlugin::with_config(config.clone())],
-        )
-        .await;
-        let (user, session) = create_user_and_session(
-            &ctx,
-            test_user("owner3@example.com", "Owner"),
-            Duration::hours(1),
-        )
-        .await;
-        let organization = ctx
-            .database
-            .create_organization(CreateOrganization {
-                additional_fields: Default::default(),
-                id: None,
-                name: "Team".to_string().into(),
-                slug: "team".to_string().into(),
-                logo: None.into(),
-                metadata: None.into(),
-            })
-            .await
-            .expect("organization should be created");
-        ctx.database
-            .create_member(better_auth_core::types::CreateMember {
-                additional_fields: Default::default(),
-                organization_id: organization.id.clone(),
-                user_id: user.id.clone(),
-                role: config.creator_role.clone().into(),
-            })
-            .await
-            .expect("owner member should be created");
-
-        let extra_user = create_user(&ctx, test_user("member@example.com", "Member")).await;
-        ctx.database
-            .create_member(better_auth_core::types::CreateMember {
-                additional_fields: Default::default(),
-                organization_id: organization.id.clone(),
-                user_id: extra_user.id.clone(),
-                role: "member".into(),
-            })
-            .await
-            .expect("extra member should be created");
-
-        let response = get_full_organization_core(
-            &GetFullOrganizationQuery {
-                organization_id: Some(organization.id.typed().unwrap().clone()),
-                organization_slug: None,
-                members_limit: Some(1.0),
-            },
-            &(user, session).into(),
-            &config,
-            &ctx,
-        )
-        .await
-        .expect("request should succeed")
-        .expect("organization should exist");
-
-        assert_eq!(
-            response
-                .model_property("members")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .len()
-                .expect("member array must be readable"),
-            1
-        );
-    }
-}
+mod tests;

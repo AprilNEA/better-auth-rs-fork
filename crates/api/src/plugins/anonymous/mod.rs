@@ -112,8 +112,8 @@ impl AnonymousPlugin {
         if let Some(data) = &previous
             && data.user_field("isAnonymous")?.is_truthy()
         {
-            return Err(error(
-                400,
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
                 "ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY",
                 "Anonymous users cannot sign in again anonymously",
             ));
@@ -130,8 +130,8 @@ impl AnonymousPlugin {
             }
         } else {
             if !custom_email.validate_email() {
-                return Err(error(
-                    400,
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
                     "INVALID_EMAIL_FORMAT",
                     "Email was not generated in a valid format",
                 ));
@@ -174,10 +174,12 @@ impl AnonymousPlugin {
 
         let user = super::user_admission::create_user_optional(create, "anonymous", &endpoint)
             .await?
-            .ok_or(AuthError::Upstream {
-                status: 500,
-                code: "FAILED_TO_CREATE_USER",
-                message: "Failed to create user",
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
+                    "FAILED_TO_CREATE_USER",
+                    "Failed to create user",
+                )
             })?;
         let meta = RequestMeta::from_request_with_config(req, &ctx.config.advanced.ip_address);
         let issued = issue_selected_user_session_optional(
@@ -188,10 +190,12 @@ impl AnonymousPlugin {
         )
         .await
         .map_err(SessionIssueError::into_auth_error)?
-        .ok_or(AuthError::Upstream {
-            status: 400,
-            code: "COULD_NOT_CREATE_SESSION",
-            message: "Could not create session",
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "COULD_NOT_CREATE_SESSION",
+                "Could not create session",
+            )
         })?;
         let manager = ctx.session_manager();
         manager
@@ -219,21 +223,25 @@ impl AnonymousPlugin {
             .await
             .map_err(|cause| {
                 if matches!(cause, AuthError::Unauthenticated) {
-                    error(401, "UNAUTHORIZED", "Unauthorized")
+                    AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
                 } else {
                     cause
                 }
             })?
             .into_views()?;
         if self.disable_delete_anonymous_user {
-            return Err(error(
-                400,
+            return Err(AuthError::from_code(
+                "BAD_REQUEST",
                 "DELETE_ANONYMOUS_USER_DISABLED",
                 "Deleting anonymous users is disabled",
             ));
         }
         if !user.is_anonymous.is_truthy()? {
-            return Err(error(403, "USER_IS_NOT_ANONYMOUS", "User is not anonymous"));
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "USER_IS_NOT_ANONYMOUS",
+                "User is not anonymous",
+            ));
         }
         ctx.database
             .delete_user_sessions_by_user_value(&user.id.field_value())
@@ -243,8 +251,8 @@ impl AnonymousPlugin {
                     "Failed to delete anonymous user sessions",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
                 );
-                error(
-                    500,
+                AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
                     "FAILED_TO_DELETE_ANONYMOUS_USER_SESSIONS",
                     "Failed to delete anonymous user sessions",
                 )
@@ -257,8 +265,8 @@ impl AnonymousPlugin {
                     "Failed to delete anonymous user",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
                 );
-                error(
-                    500,
+                AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
                     "FAILED_TO_DELETE_ANONYMOUS_USER",
                     "Failed to delete anonymous user",
                 )
@@ -358,8 +366,8 @@ impl AnonymousPlugin {
         previous.user = better_auth_core::FieldMap::from(anonymous_user.clone()).into();
         let Some(new_session) = req.new_session()? else {
             if req.path() == "/sign-in/anonymous" {
-                return Err(error(
-                    400,
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
                     "ANONYMOUS_USERS_CANNOT_SIGN_IN_AGAIN_ANONYMOUSLY",
                     "Anonymous users cannot sign in again anonymously",
                 ));
@@ -415,14 +423,6 @@ impl AnonymousPlugin {
             }
         }
         Ok(())
-    }
-}
-
-fn error(status: u16, code: &'static str, message: &'static str) -> AuthError {
-    AuthError::Upstream {
-        status,
-        code,
-        message,
     }
 }
 

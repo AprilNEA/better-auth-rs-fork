@@ -686,11 +686,11 @@ async fn link_with_id_token_core(
         });
     }
     if account.is_some() {
-        return Err(AuthError::Upstream {
-            status: 409,
-            code: "SOCIAL_ACCOUNT_ALREADY_LINKED",
-            message: "Social account already linked",
-        });
+        return Err(AuthError::from_code(
+            "CONFLICT",
+            "SOCIAL_ACCOUNT_ALREADY_LINKED",
+            "Social account already linked",
+        ));
     }
 
     let linking = &ctx.config.account.account_linking;
@@ -707,11 +707,11 @@ async fn link_with_id_token_core(
             .is_truthy())
         || !linking.enabled()
     {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "LINKING_NOT_ALLOWED",
-            message: "Account not linked - linking not allowed",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "LINKING_NOT_ALLOWED",
+            "Account not linked - linking not allowed",
+        ));
     }
     let email = response
         .value
@@ -727,11 +727,11 @@ async fn link_with_id_token_core(
         "session.user.email",
     )?) && !linking.allow_different_emails
     {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "LINKING_DIFFERENT_EMAILS_NOT_ALLOWED",
-            message: "Account not linked - different emails not allowed",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "LINKING_DIFFERENT_EMAILS_NOT_ALLOWED",
+            "Account not linked - different emails not allowed",
+        ));
     }
 
     let created = async {
@@ -855,14 +855,9 @@ async fn social_sign_in_core(
     config: &OAuthConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<InitiatedOAuthFlow> {
-    let provider = config
-        .providers
-        .get(&body.provider)
-        .ok_or(AuthError::Upstream {
-            status: 404,
-            code: "PROVIDER_NOT_FOUND",
-            message: "Provider not found",
-        })?;
+    let provider = config.providers.get(&body.provider).ok_or_else(|| {
+        AuthError::from_code("NOT_FOUND", "PROVIDER_NOT_FOUND", "Provider not found")
+    })?;
 
     let callback_url = state_callback_url(body.callback_url.as_deref(), ctx)?;
     super::proxy::validate_callback_url(req, callback_url, ctx)?;
@@ -908,14 +903,9 @@ async fn link_social_core(
     config: &OAuthConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<InitiatedOAuthFlow> {
-    let provider = config
-        .providers
-        .get(&body.provider)
-        .ok_or(AuthError::Upstream {
-            status: 404,
-            code: "PROVIDER_NOT_FOUND",
-            message: "Provider not found",
-        })?;
+    let provider = config.providers.get(&body.provider).ok_or_else(|| {
+        AuthError::from_code("NOT_FOUND", "PROVIDER_NOT_FOUND", "Provider not found")
+    })?;
 
     let callback_url = state_callback_url(body.callback_url.as_deref(), ctx)?;
     super::proxy::validate_callback_url(req, callback_url, ctx)?;
@@ -1069,14 +1059,9 @@ pub(crate) async fn handle_social_sign_in(
         &ctx.config.advanced.ip_address,
     );
     if let Some(id_token) = &body.id_token {
-        let provider = config
-            .providers
-            .get(&body.provider)
-            .ok_or(AuthError::Upstream {
-                status: 404,
-                code: "PROVIDER_NOT_FOUND",
-                message: "Provider not found",
-            })?;
+        let provider = config.providers.get(&body.provider).ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "PROVIDER_NOT_FOUND", "Provider not found")
+        })?;
         return sign_in_with_id_token_core(req, &body, id_token, provider, config, &meta, ctx)
             .await;
     }
@@ -1109,14 +1094,9 @@ pub(crate) async fn handle_link_social(
     let body: LinkSocialRequest = super::request::read(req)?;
     let session = ctx.require_native_session(req).await?;
     if let Some(id_token) = &body.id_token {
-        let provider = config
-            .providers
-            .get(&body.provider)
-            .ok_or(AuthError::Upstream {
-                status: 404,
-                code: "PROVIDER_NOT_FOUND",
-                message: "Provider not found",
-            })?;
+        let provider = config.providers.get(&body.provider).ok_or_else(|| {
+            AuthError::from_code("NOT_FOUND", "PROVIDER_NOT_FOUND", "Provider not found")
+        })?;
         let response =
             link_with_id_token_core(req, &body, id_token, provider, &session, ctx).await?;
         return AuthResponse::json(None, &response);

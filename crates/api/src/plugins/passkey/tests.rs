@@ -34,16 +34,22 @@ fn verification_catch_preserves_only_better_auth_instances() -> AuthResult<()> {
                         .is_some_and(|(value, original)| value.strict_equals(original))
                 );
             } else {
-                assert_eq!(error.status_code()?, if registration { 500 } else { 400 });
-                assert_eq!(
-                    error.body_value()?.model_property("code")?,
-                    if registration {
-                        "FAILED_TO_VERIFY_REGISTRATION"
-                    } else {
-                        "AUTHENTICATION_FAILED"
-                    }
-                    .into()
-                );
+                let (status, http_status, code, message) = if registration {
+                    (
+                        "INTERNAL_SERVER_ERROR",
+                        500,
+                        "FAILED_TO_VERIFY_REGISTRATION",
+                        "Failed to verify registration",
+                    )
+                } else {
+                    (
+                        "BAD_REQUEST",
+                        400,
+                        "AUTHENTICATION_FAILED",
+                        "Authentication failed",
+                    )
+                };
+                test_helpers::assert_coded_api_error(&error, status, http_status, code, message);
             }
         }
         let structural = AuthError::from_thrown(
@@ -123,13 +129,13 @@ async fn native_session_relationship_uses_missing_id_semantics_at_each_passkey_b
         .handle_generate_register_options(&request, &ctx)
         .await
         .unwrap_err();
-    assert!(matches!(
-        error,
-        AuthError::Upstream {
-            code: "SESSION_REQUIRED",
-            ..
-        }
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &error,
+        "UNAUTHORIZED",
+        401,
+        "SESSION_REQUIRED",
+        "Passkey registration requires an authenticated session",
+    );
     let response = plugin
         .handle_list_user_passkeys(&request, &ctx)
         .await
@@ -508,9 +514,11 @@ async fn test_update_passkey_non_owner_uses_ts_error_message() {
     );
 
     let err = plugin.handle_update_passkey(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code().unwrap(), 401);
-    assert_eq!(
-        err.to_string(),
-        "You are not allowed to register this passkey"
+    test_helpers::assert_coded_api_error(
+        &err,
+        "UNAUTHORIZED",
+        401,
+        "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
+        "You are not allowed to register this passkey",
     );
 }

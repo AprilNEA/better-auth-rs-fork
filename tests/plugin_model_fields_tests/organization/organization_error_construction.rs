@@ -1,36 +1,67 @@
 use super::*;
+use better_auth::plugins::organization::RolePermissions;
 use better_auth::plugins::organization::{
     hooks::{OrganizationActor, OrganizationEndpoint, OrganizationMemberEvent, OrganizationUser},
     types::OrganizationResponse,
 };
-use better_auth_core::{CreateOrganization, UpdateOrganization};
+use better_auth_core::{
+    ApiErrorClass, CreateInvitation, CreateOrganization, CreateOrganizationRole, Member,
+    UpdateOrganization,
+};
 
 #[path = "organization_error_cases.rs"]
 mod cases;
 use cases::Case;
 
-struct ErrorHooks(Events);
+struct ErrorHooks<S: AuthSchema> {
+    events: Events,
+    store: Arc<dyn AuthStore<S>>,
+    case: Case,
+}
 
-impl ErrorHooks {
+impl<S: AuthSchema> ErrorHooks<S> {
     fn record(&self, name: &str) -> AuthResult<()> {
-        trace_lock(&self.0)?.push(vec![FieldValue::from(name)].into());
+        trace_lock(&self.events)?.push(vec![FieldValue::from(name)].into());
         Ok(())
     }
 }
 
 #[async_trait]
-impl OrganizationHooks for ErrorHooks {
+impl<S: AuthSchema> OrganizationHooks for ErrorHooks<S> {
     async fn before_update_team(
         &self,
         updates: &mut UpdateTeam,
         data: OrganizationTeamEvent<'_>,
     ) -> AuthResult<()> {
-        Hooks(self.0.clone())
+        Hooks(self.events.clone())
             .before_update_team(updates, data)
             .await
     }
     async fn after_update_team(&self, data: OrganizationTeamEvent<'_>) -> AuthResult<()> {
-        Hooks(self.0.clone()).after_update_team(data).await
+        Hooks(self.events.clone()).after_update_team(data).await
+    }
+    async fn before_update_member_role(
+        &self,
+        role: &mut String,
+        data: OrganizationMemberEvent<'_>,
+    ) -> AuthResult<()> {
+        self.record("beforeUpdateMemberRole")?;
+        if self.case.removes_target() {
+            self.store
+                .delete_member_value(&data.member.id.field_value())
+                .await?;
+        }
+        if self.case == Case::MemberUpdateHookMissing {
+            *role = "member".into();
+        }
+        Ok(())
+    }
+    async fn after_update_member_role(
+        &self,
+        _: &str,
+        _: OrganizationMemberEvent<'_>,
+    ) -> AuthResult<()> {
+        self.record("afterUpdateMemberRole")
     }
     async fn before_create_organization(
         &self,
@@ -82,7 +113,56 @@ async fn check<S: AuthSchema>(
     let _ = raw
         .update_session_active_organization_by_token_value(&token.as_str().into(), None)
         .await?;
-    if matches!(case, Case::OrgUpdateDenied | Case::OrgDeleteDenied) {
+    if case.member_target() {
+        let _ = raw
+            .insert_member(Member {
+                field_order: Default::default(),
+                additional_fields: Default::default(),
+                id: "target-member".into(),
+                organization_id: "organization".into(),
+                user_id: "user-b".into(),
+                role: "member".into(),
+                created_at: date().into(),
+            })
+            .await?;
+    }
+    if matches!(
+        case,
+        Case::CancelInvitationMember | Case::CancelInvitationDenied
+    ) {
+        let mut invitation = CreateInvitation::new(
+            "organization",
+            "user-b@fields.test",
+            "member",
+            "user-a",
+            date(),
+        );
+        invitation.id = Some("invitation-a".into());
+        invitation.created_at = Some(date());
+        let _ = raw.create_invitation(invitation).await?;
+    }
+    if case == Case::CancelInvitationMember {
+        raw.delete_member("owner-member").await?;
+    }
+    if case.role_permissions() {
+        let _ = raw
+            .update_member_role("owner-member", "role-manager")
+            .await?;
+    }
+    if case == Case::RoleUpdateMissingPermissions {
+        let _ = raw
+            .create_organization_role(CreateOrganizationRole {
+                additional_fields: Default::default(),
+                organization_id: "organization".into(),
+                role: "custom".into(),
+                permission: FieldMap::new().into(),
+            })
+            .await?;
+    }
+    if matches!(
+        case,
+        Case::OrgUpdateDenied | Case::OrgDeleteDenied | Case::CancelInvitationDenied
+    ) {
         let _ = raw.update_member_role("owner-member", "member").await?;
     }
     if case.clears_active() {
@@ -133,11 +213,36 @@ async fn check<S: AuthSchema>(
         ));
     }
     let reader = auth_config(
-        raw,
+        raw.clone(),
         Ids::default(),
         policies,
         OrganizationConfig {
-            hooks: Some(Arc::new(ErrorHooks(events.clone()))),
+            hooks: Some(Arc::new(ErrorHooks {
+                events: events.clone(),
+                store: raw,
+                case,
+            })),
+            ac: case.role_permissions().then(|| {
+                std::collections::HashMap::from([
+                    (
+                        "ac".into(),
+                        vec!["create".into(), "update".into(), "read".into()],
+                    ),
+                    (
+                        "organization".into(),
+                        vec!["delete".into(), "update".into()],
+                    ),
+                ])
+            }),
+            roles: case.role_permissions().then(|| {
+                std::collections::HashMap::from([(
+                    "role-manager".into(),
+                    RolePermissions {
+                        ac: vec!["create".into(), "update".into()],
+                        ..Default::default()
+                    },
+                )])
+            }),
             allow_user_to_create_organization: case != Case::OrgCreateDenied,
             organization_limit: (case == Case::OrgCreateLimit).then_some(0),
             disable_organization_deletion: matches!(
@@ -199,10 +304,23 @@ async fn check<S: AuthSchema>(
             )
             .await
     };
-    let (status, expected) = case.expected();
+    let (status_name, status, expected) = case.expected();
     let actual = if native {
         let error = required(result.err(), "Native endpoint must reject the operation")?;
         assert!(error.is_api_error()?);
+        assert!(
+            error.is_api_error_instance(ApiErrorClass::BetterAuth),
+            "{case:?}"
+        );
+        assert!(
+            error.is_api_error_instance(ApiErrorClass::BetterCall),
+            "{case:?}"
+        );
+        assert_eq!(
+            error.status_value()?,
+            FieldValue::from(status_name),
+            "{case:?}"
+        );
         assert_eq!(error.status_code()?, status, "{case:?}");
         ordered(&error.body_value()?, &expected)?;
         let response = error.to_auth_response();
@@ -225,6 +343,8 @@ async fn check<S: AuthSchema>(
             ]
             .into(),
         ]
+    } else if case.removes_target() {
+        vec![vec![FieldValue::from("beforeUpdateMemberRole")].into()]
     } else {
         Vec::new()
     };
@@ -245,6 +365,17 @@ async fn check<S: AuthSchema>(
             "{case:?}"
         );
         let _ = session.insert(field.into(), FieldValue::Null);
+    }
+    if case.removes_target() {
+        let members = before
+            .get_mut("member")
+            .ok_or_else(|| AuthError::internal("Expected complete stored Members"))?;
+        assert!(
+            members
+                .iter()
+                .any(|row| row.get("id") == Some(&FieldValue::from("target-member")))
+        );
+        members.retain(|row| row.get("id") != Some(&FieldValue::from("target-member")));
     }
     assert_eq!(storage.snapshot_with_roles(true).await?, before, "{case:?}");
     Ok(())

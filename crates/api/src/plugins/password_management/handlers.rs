@@ -291,10 +291,12 @@ pub(crate) async fn change_password_core(
         )
         .await
         .map_err(SessionIssueError::into_auth_error)?
-        .ok_or(AuthError::Upstream {
-            status: 500,
-            code: "FAILED_TO_GET_SESSION",
-            message: "Failed to get session",
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_GET_SESSION",
+                "Failed to get session",
+            )
         })?;
         let token = issued.session.token.field_value();
         ctx.session_manager()

@@ -142,7 +142,10 @@ async fn require_org_api_key_permission_value(
         .and_then(|value| value.as_bool())
         .unwrap_or(false)
     {
-        return Err(api_key_error(ApiKeyErrorCode::OrganizationPluginRequired));
+        return Err(api_key_error(
+            "INTERNAL_SERVER_ERROR",
+            ApiKeyErrorCode::OrganizationPluginRequired,
+        ));
     }
 
     let Some(member) = ctx
@@ -150,7 +153,10 @@ async fn require_org_api_key_permission_value(
         .get_member_value(organization_id, user_id)
         .await?
     else {
-        return Err(api_key_error(ApiKeyErrorCode::UserNotMemberOfOrganization));
+        return Err(api_key_error(
+            "FORBIDDEN",
+            ApiKeyErrorCode::UserNotMemberOfOrganization,
+        ));
     };
 
     let creator_role = ctx
@@ -186,6 +192,7 @@ async fn require_org_api_key_permission_value(
         Ok(())
     } else {
         Err(api_key_error(
+            "FORBIDDEN",
             ApiKeyErrorCode::InsufficientApiKeyPermissions,
         ))
     }

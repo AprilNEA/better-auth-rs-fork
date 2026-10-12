@@ -64,6 +64,13 @@ async fn storage_failure_returns_500_and_disables_http_caching() {
         .on_request(&req, &ctx)
         .await
         .unwrap_err();
+    test_helpers::assert_coded_api_error(
+        &error,
+        "INTERNAL_SERVER_ERROR",
+        500,
+        "FAILED_TO_GET_SESSION",
+        "Failed to get session",
+    );
     let mut response = error.to_auth_response();
     ctx.session_manager()
         .finish_response(&req, &mut response)

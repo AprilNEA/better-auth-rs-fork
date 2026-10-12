@@ -191,9 +191,12 @@ async fn update_session_preserves_native_users_and_stateless_missing_row_fallbac
             .await?;
         let result = fixture.update(&req).await;
         if stateful {
-            assert_eq!(
-                body(&result.unwrap_err().to_auth_response())["code"].as_str(),
-                Some("FAILED_TO_GET_SESSION")
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &result.unwrap_err(),
+                "UNAUTHORIZED",
+                401,
+                "FAILED_TO_GET_SESSION",
+                "Failed to get session",
             );
             assert!(req.new_session()?.is_none());
         } else {

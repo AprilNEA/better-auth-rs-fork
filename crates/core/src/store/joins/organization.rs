@@ -28,7 +28,7 @@ impl OrganizationDetails {
                     .rev()
                     .find(|user| user.id.field_value().same_value_zero(owner))
                     .ok_or_else(|| {
-                        AuthError::internal("Unexpected error: User not found for member")
+                        AuthError::better_auth("Unexpected error: User not found for member")
                     })?;
                 let mut member = schema
                     .member

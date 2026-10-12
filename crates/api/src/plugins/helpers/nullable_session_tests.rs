@@ -117,14 +117,13 @@ async fn email_signin_null_session_keeps_credentials_and_returns_unauthorized() 
         ),
     );
     let result = EmailPasswordPlugin::new().on_request(&req, &ctx).await;
-    assert!(matches!(
-        result,
-        Err(AuthError::Upstream {
-            status: 401,
-            code: "FAILED_TO_CREATE_SESSION",
-            message: "Failed to create session",
-        })
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &result.err().expect("expected builtin API error"),
+        "UNAUTHORIZED",
+        401,
+        "FAILED_TO_CREATE_SESSION",
+        "Failed to create session",
+    );
     assert!(
         ctx.database
             .get_user_sessions(owner.id.typed()?)
@@ -157,14 +156,13 @@ async fn password_replacement_null_session_keeps_password_change_and_revocation(
     let req = test_helpers::create_auth_request_no_query(HttpMethod::Post, "/change-password", Some(session.token.typed()?),
         Some(serde_json::json!({"currentPassword":"Password123!","newPassword":"Replacement123!","revokeOtherSessions":true}).to_string().into_bytes()));
     let result = PasswordManagementPlugin::new().on_request(&req, &ctx).await;
-    assert!(matches!(
-        result,
-        Err(AuthError::Upstream {
-            status: 500,
-            code: "FAILED_TO_GET_SESSION",
-            message: "Failed to get session",
-        })
-    ));
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &result.err().expect("expected builtin API error"),
+        "INTERNAL_SERVER_ERROR",
+        500,
+        "FAILED_TO_GET_SESSION",
+        "Failed to get session",
+    );
     assert!(
         ctx.database
             .get_user_sessions(owner.id.typed()?)

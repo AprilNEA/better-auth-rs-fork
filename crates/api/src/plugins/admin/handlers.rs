@@ -203,10 +203,12 @@ pub(crate) async fn create_user_core(
     let user =
         crate::plugins::user_admission::create_user_optional(create_user, "admin", &endpoint)
             .await?
-            .ok_or(AuthError::Upstream {
-                status: 500,
-                code: "FAILED_TO_CREATE_USER",
-                message: "Failed to create user",
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
+                    "FAILED_TO_CREATE_USER",
+                    "Failed to create user",
+                )
             })?;
 
     if let Some(password) = body
@@ -603,10 +605,12 @@ pub(crate) async fn impersonate_user_core(
         .database
         .create_session_optional(create_session)
         .await?
-        .ok_or(AuthError::Upstream {
-            status: 500,
-            code: "FAILED_TO_CREATE_USER",
-            message: "Failed to create user",
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_CREATE_USER",
+                "Failed to create user",
+            )
         })?;
     let data = ctx
         .session_manager()

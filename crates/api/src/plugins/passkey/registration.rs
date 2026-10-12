@@ -36,11 +36,11 @@ pub(super) async fn registration_session<S: AuthSchema>(
     }
     let data = ctx.require_native_session(req).await?;
     if !crate::plugins::helpers::session_is_fresh(&data.session, &ctx.config)? {
-        return Err(AuthError::Upstream {
-            status: 403,
-            code: "SESSION_NOT_FRESH",
-            message: "Session is not fresh",
-        });
+        return Err(AuthError::from_code(
+            "FORBIDDEN",
+            "SESSION_NOT_FRESH",
+            "Session is not fresh",
+        ));
     }
     Ok(Some(data))
 }
@@ -66,15 +66,13 @@ pub(super) async fn resolve_user<S: AuthSchema>(
         });
     }
     if config.registration.require_session {
-        return Err(AuthError::Upstream {
-            status: 401,
-            code: "SESSION_REQUIRED",
-            message: "Passkey registration requires an authenticated session",
-        });
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "SESSION_REQUIRED",
+            "Passkey registration requires an authenticated session",
+        ));
     }
-    let resolver = config.registration.resolve_user.as_ref().ok_or(AuthError::Upstream {
-        status: 400, code: "RESOLVE_USER_REQUIRED", message: "Passkey registration requires either an authenticated session or a resolveUser callback when requireSession is false",
-    })?;
+    let resolver = config.registration.resolve_user.as_ref().ok_or_else(|| AuthError::from_code("BAD_REQUEST", "RESOLVE_USER_REQUIRED", "Passkey registration requires either an authenticated session or a resolveUser callback when requireSession is false"))?;
     let users = Users {
         ctx,
         transaction: None,
@@ -102,18 +100,18 @@ pub(super) async fn resolve_extensions(
     }
 }
 fn invalid_user() -> AuthError {
-    AuthError::Upstream {
-        status: 400,
-        code: "RESOLVED_USER_INVALID",
-        message: "Resolved user is invalid",
-    }
+    AuthError::from_code(
+        "BAD_REQUEST",
+        "RESOLVED_USER_INVALID",
+        "Resolved user is invalid",
+    )
 }
 fn forbidden_user() -> AuthError {
-    AuthError::Upstream {
-        status: 401,
-        code: "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
-        message: "You are not allowed to register this passkey",
-    }
+    AuthError::from_code(
+        "UNAUTHORIZED",
+        "YOU_ARE_NOT_ALLOWED_TO_REGISTER_THIS_PASSKEY",
+        "You are not allowed to register this passkey",
+    )
 }
 pub(super) fn verification_error(error: AuthError, registration: bool) -> AuthError {
     if !error.is_api_error_instance(ApiErrorClass::BetterAuth) {
@@ -122,17 +120,17 @@ pub(super) fn verification_error(error: AuthError, registration: bool) -> AuthEr
             &[better_auth_core::observability::LogArgument::Error(&error)],
         );
         if registration {
-            AuthError::Upstream {
-                status: 500,
-                code: "FAILED_TO_VERIFY_REGISTRATION",
-                message: "Failed to verify registration",
-            }
+            AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_VERIFY_REGISTRATION",
+                "Failed to verify registration",
+            )
         } else {
-            AuthError::Upstream {
-                status: 400,
-                code: "AUTHENTICATION_FAILED",
-                message: "Authentication failed",
-            }
+            AuthError::from_code(
+                "BAD_REQUEST",
+                "AUTHENTICATION_FAILED",
+                "Authentication failed",
+            )
         }
     } else {
         error
@@ -365,10 +363,12 @@ impl<S: AuthSchema> Registration<S> {
                             .await?
                     }
                 }
-                .ok_or(AuthError::Upstream {
-                    status: 500,
-                    code: "USER_NOT_FOUND",
-                    message: "User not found",
+                .ok_or_else(|| {
+                    AuthError::from_code(
+                        "INTERNAL_SERVER_ERROR",
+                        "USER_NOT_FOUND",
+                        "User not found",
+                    )
                 })?,
             )
         } else {
@@ -405,10 +405,12 @@ impl<S: AuthSchema> Registration<S> {
                 }
                 None => self.ctx.database.create_session_optional(input).await?,
             }
-            .ok_or(AuthError::Upstream {
-                status: 500,
-                code: "UNABLE_TO_CREATE_SESSION",
-                message: "Unable to create session",
+            .ok_or_else(|| {
+                AuthError::from_code(
+                    "INTERNAL_SERVER_ERROR",
+                    "UNABLE_TO_CREATE_SESSION",
+                    "Unable to create session",
+                )
             })?;
             Some((user, session))
         } else {

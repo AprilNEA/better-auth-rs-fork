@@ -25,11 +25,11 @@ pub(super) async fn assert_not_locked(
         if better_auth_core::query::field_date(&until)?.milliseconds()
             > Utc::now().timestamp_millis() as f64
         {
-            return Err(AuthError::Upstream {
-                status: 429,
-                code: "ACCOUNT_TEMPORARILY_LOCKED",
-                message: "Too many failed verification attempts. Your account is temporarily locked. Please try again later.",
-            });
+            return Err(AuthError::from_code(
+                "TOO_MANY_REQUESTS",
+                "ACCOUNT_TEMPORARILY_LOCKED",
+                "Too many failed verification attempts. Your account is temporarily locked. Please try again later.",
+            ));
         }
         ctx.database
             .reset_two_factor_failures(&factor.id, Some(Utc::now().into()))
@@ -118,11 +118,11 @@ pub(super) async fn begin_attempt<S: better_auth_core::AuthSchema>(
                 "Failed to invalidate two-factor challenge",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
             );
-            return Err(AuthError::Upstream {
-                status: 500,
-                code: "FAILED_TO_INVALIDATE_TWO_FACTOR_CHALLENGE",
-                message: "Failed to invalidate two-factor challenge",
-            });
+            return Err(AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_INVALIDATE_TWO_FACTOR_CHALLENGE",
+                "Failed to invalidate two-factor challenge",
+            ));
         }
         return Err(AuthError::bad_request(
             "Too many attempts. Please request a new code.",

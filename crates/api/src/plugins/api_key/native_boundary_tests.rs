@@ -157,10 +157,12 @@ async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: Auth
             }
             Err(error) => {
                 assert!(!allowed, "{member_role}: {error}");
-                assert_eq!(error.status_code().unwrap(), 403);
-                assert_eq!(
-                    json_body(&error.to_auth_response())["code"],
-                    "INSUFFICIENT_API_KEY_PERMISSIONS"
+                crate::plugins::test_helpers::assert_coded_api_error(
+                    &error,
+                    "FORBIDDEN",
+                    403,
+                    "INSUFFICIENT_API_KEY_PERMISSIONS",
+                    "You do not have permission to perform this action on organization API keys.",
                 );
             }
         }

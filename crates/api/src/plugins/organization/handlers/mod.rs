@@ -25,7 +25,9 @@ pub(crate) async fn require_native_session<S: better_auth_core::AuthSchema>(
     ctx.require_native_session(req)
         .await
         .map_err(|error| match error {
-            AuthError::Unauthenticated => AuthError::from_code(401, "UNAUTHORIZED", "Unauthorized"),
+            AuthError::Unauthenticated => {
+                AuthError::from_code("UNAUTHORIZED", "UNAUTHORIZED", "Unauthorized")
+            }
             error => error,
         })
 }
@@ -57,29 +59,23 @@ async fn request_only_session<S: better_auth_core::AuthSchema>(
 ) -> AuthResult<Option<NativeSessionData>> {
     let session = optional_session(req, ctx).await?;
     if session.is_none() && request_present(req, ctx) {
-        return Err(AuthError::from_code(401, "UNAUTHORIZED", "Unauthorized"));
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "UNAUTHORIZED",
+            "Unauthorized",
+        ));
     }
     Ok(session)
 }
 
-/// Helper function to get organization ID from request or session
-pub(crate) async fn resolve_organization_id(
+/// Resolve the organization ID from the request or the session.
+pub(crate) fn resolve_organization_id(
     org_id: Option<&str>,
-    org_slug: Option<&str>,
     session: &impl AuthSession,
-    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     missing: AuthError,
 ) -> AuthResult<better_auth_core::FieldValue> {
     if let Some(id) = org_id.filter(|id| !id.is_empty()) {
         return Ok(id.into());
-    }
-
-    if let Some(slug) = org_slug.filter(|slug| !slug.is_empty()) {
-        if let Some(org) = ctx.database.get_organization_by_slug(slug).await? {
-            use better_auth_core::entity::AuthOrganization;
-            return Ok(org.id().field_value());
-        }
-        return Err(AuthError::not_found("Organization not found"));
     }
 
     let id = session.active_organization_id().field_value();
@@ -98,19 +94,26 @@ pub(crate) async fn has_permission_core(
 ) -> AuthResult<HasPermissionResponse> {
     let org_id = resolve_organization_id(
         body.organization_id.as_deref(),
-        None,
         &session.session,
-        ctx,
-        AuthError::from_code(400, "NO_ACTIVE_ORGANIZATION", "No active organization"),
-    )
-    .await?;
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "NO_ACTIVE_ORGANIZATION",
+            "No active organization",
+        ),
+    )?;
 
     let member = ctx
         .database
         .get_member_with_user_value(&org_id, &session.user_property("id")?)
         .await?
         .map(|joined| joined.member)
-        .ok_or_else(|| AuthError::forbidden("Not a member of this organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "UNAUTHORIZED",
+                "USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION",
+                "User is not a member of the organization",
+            )
+        })?;
 
     let has_all_permissions = check_permissions(
         member.role().typed()?,

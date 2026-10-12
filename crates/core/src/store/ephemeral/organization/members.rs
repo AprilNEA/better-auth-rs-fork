@@ -167,6 +167,15 @@ impl MemberStore for EphemeralStore {
         self.update_member_role_value(&id.into(), role).await
     }
     async fn update_member_role_value(&self, id: &Value, role: &str) -> AuthResult<Member> {
+        self.update_member_role_optional_value(id, role)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Member not found"))
+    }
+    async fn update_member_role_optional_value(
+        &self,
+        id: &Value,
+        role: &str,
+    ) -> AuthResult<Option<Member>> {
         let id = self.organization_query(EntityRole::Member, "id", id.clone())?;
         let patch = self
             .prepare_record_patch(
@@ -175,7 +184,7 @@ impl MemberStore for EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
-        let source = self
+        let Some(source) = self
             .raw("member", "update", |_| {
                 self.patch_organization_rows(
                     EntityRole::Member,
@@ -185,11 +194,14 @@ impl MemberStore for EphemeralStore {
                 )
             })
             .await?
-            .ok_or_else(|| AuthError::not_found("Member not found"))?;
-        Ok(self
-            .output_record_refs(EntityRole::Member, vec![source])
-            .await?
-            .remove(0))
+        else {
+            return Ok(None);
+        };
+        Ok(Some(
+            self.output_record_refs(EntityRole::Member, vec![source])
+                .await?
+                .remove(0),
+        ))
     }
     async fn delete_member(&self, id: &str) -> AuthResult<()> {
         self.delete_member_value(&id.into()).await

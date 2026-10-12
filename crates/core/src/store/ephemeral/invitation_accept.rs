@@ -88,7 +88,13 @@ impl EphemeralStore {
                 )?
                 .into_iter()
                 .next()
-                .ok_or_else(|| AuthError::bad_request("Invitation not found"))?;
+                .ok_or_else(|| {
+                    AuthError::from_code(
+                        "BAD_REQUEST",
+                        "INVITATION_NOT_FOUND",
+                        "Invitation not found",
+                    )
+                })?;
             row.apply_patch(patch.apply(FieldMap::new()))?;
             let fields = row.shallow_fields()?;
             Ok(InvitationClaim {
@@ -221,7 +227,9 @@ impl EphemeralStore {
                         &pending,
                     )
                     .await?
-                    .ok_or_else(|| AuthError::bad_request("Team not found"))?
+                    .ok_or_else(|| {
+                        AuthError::from_code("BAD_REQUEST", "TEAM_NOT_FOUND", "Team not found")
+                    })?
                     .into_public_parts(
                         maximum.team_output_fields().unwrap_or(&Default::default()),
                     )?;
@@ -286,7 +294,11 @@ impl EphemeralStore {
                 })?;
                 let mut prepared = self.prepare_team_reservation(team, actual, limit).await?;
                 if !prepared.reserved {
-                    return Err(AuthError::forbidden("Team member limit reached"));
+                    return Err(AuthError::from_code(
+                        "FORBIDDEN",
+                        "TEAM_MEMBER_LIMIT_REACHED",
+                        "Team member limit reached",
+                    ));
                 }
                 let before_create = staged
                     .operation(|op| op.capture_table(EntityRole::TeamMember)?.shallow_copy())?;

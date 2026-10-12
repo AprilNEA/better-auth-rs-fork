@@ -181,8 +181,8 @@ impl UpdateRole {
     }
 }
 
-fn role_error(action: &str) -> AuthError {
-    let (code, message) = match action {
+fn role_denial(action: &str) -> (&'static str, &'static str) {
+    match action {
         "create" => (
             "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_ROLE",
             "You are not allowed to create a role",
@@ -203,19 +203,11 @@ fn role_error(action: &str) -> AuthError {
             "YOU_ARE_NOT_ALLOWED_TO_READ_A_ROLE",
             "You are not allowed to read a role",
         ),
-    };
-    AuthError::Upstream {
-        status: 403,
-        code,
-        message,
     }
 }
 
 fn require_ac(config: &OrganizationConfig) -> AuthResult<&Permissions> {
-    config.ac.as_ref().ok_or(AuthError::Upstream {
-        status: 501, code: "MISSING_AC_INSTANCE",
-        message: "Dynamic Access Control requires a pre-defined ac instance on the server auth plugin. Read server logs for more information",
-    })
+    config.ac.as_ref().ok_or(AuthError::from_code("NOT_IMPLEMENTED", "MISSING_AC_INSTANCE", "Dynamic Access Control requires a pre-defined ac instance on the server auth plugin. Read server logs for more information"))
 }
 
 fn predefined(name: &str, config: &OrganizationConfig) -> bool {
@@ -241,11 +233,11 @@ async fn unused_name(
             .await?
             .is_some()
     {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "ROLE_NAME_IS_ALREADY_TAKEN",
-            message: "That role name is already taken",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "ROLE_NAME_IS_ALREADY_TAKEN",
+            "That role name is already taken",
+        ));
     }
     Ok(())
 }
@@ -265,20 +257,30 @@ async fn authorize_member(
         .then_some(organization_id)
         .ok_or_else(|| {
             if action == "create" {
-                AuthError::Upstream {
-                    status: 400,
-                    code: "YOU_MUST_BE_IN_AN_ORGANIZATION_TO_CREATE_A_ROLE",
-                    message: "You must be in an organization to create a role",
-                }
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "YOU_MUST_BE_IN_AN_ORGANIZATION_TO_CREATE_A_ROLE",
+                    "You must be in an organization to create a role",
+                )
             } else {
-                AuthError::bad_request("No active organization")
+                AuthError::from_code(
+                    "BAD_REQUEST",
+                    "NO_ACTIVE_ORGANIZATION",
+                    "No active organization",
+                )
             }
         })?;
     let member = ctx
         .database
         .get_member_value(&organization_id, &session.user_property("id")?)
         .await?
-        .ok_or_else(|| AuthError::forbidden("You are not a member of this organization"))?;
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "FORBIDDEN",
+                "YOU_ARE_NOT_A_MEMBER_OF_THIS_ORGANIZATION",
+                "You are not a member of this organization",
+            )
+        })?;
     let permission = if action == "list" { "read" } else { action };
     if !check_permission(
         member.role.typed()?,
@@ -290,7 +292,8 @@ async fn authorize_member(
     )
     .await?
     {
-        return Err(role_error(action));
+        let (code, message) = role_denial(action);
+        return Err(AuthError::from_code("FORBIDDEN", code, message));
     }
     Ok((organization_id, member.role.typed()?.clone()))
 }
@@ -307,11 +310,7 @@ async fn select_role(
 }
 
 fn role_not_found() -> AuthError {
-    AuthError::Upstream {
-        status: 400,
-        code: "ROLE_NOT_FOUND",
-        message: "Role not found",
-    }
+    AuthError::from_code("BAD_REQUEST", "ROLE_NOT_FOUND", "Role not found")
 }
 
 fn role_selectors(selector: &RoleSelector, organization_id: &FieldValue) -> AuthResult<FieldMap> {
@@ -340,18 +339,18 @@ async fn validate_permissions(
     action: &str,
     config: &OrganizationConfig,
     ctx: &AuthContext<impl AuthSchema>,
-) -> AuthResult<Option<AuthResponse>> {
+) -> AuthResult<()> {
     let ac = require_ac(config)?;
     let permission = permission.0.snapshot_fields()?;
     if permission
         .iter()
         .any(|(resource, _)| !ac.contains_key(resource))
     {
-        return Err(AuthError::Upstream {
-            status: 400,
-            code: "INVALID_RESOURCE",
-            message: "The provided permission includes an invalid resource",
-        });
+        return Err(AuthError::from_code(
+            "BAD_REQUEST",
+            "INVALID_RESOURCE",
+            "The provided permission includes an invalid resource",
+        ));
     }
     let mut missing = Vec::new();
     for (resource, actions) in &permission {
@@ -402,13 +401,18 @@ async fn validate_permissions(
         }
     }
     if missing.is_empty() {
-        return Ok(None);
+        return Ok(());
     }
-    let (status, code, message) = role_error(action).error_payload()?;
-    Ok(Some(AuthResponse::json(
-        status,
-        &json!({"code":code,"message":message,"missingPermissions":missing}),
-    )?))
+    let (code, message) = role_denial(action);
+    Err(AuthError::from_status(
+        "FORBIDDEN",
+        FieldMap::from([
+            ("message".into(), message.into()),
+            ("code".into(), code.into()),
+            ("missingPermissions".into(), missing.into()),
+        ])
+        .into(),
+    ))
 }
 
 /// Dispatch the enabled dynamic-role endpoints.
@@ -430,20 +434,20 @@ pub async fn handle_role_request(
                 .unwrap_or_else(|| session.session.active_organization_id.field_value())
                 .is_truthy()
             {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "YOU_MUST_BE_IN_AN_ORGANIZATION_TO_CREATE_A_ROLE",
-                    message: "You must be in an organization to create a role",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "YOU_MUST_BE_IN_AN_ORGANIZATION_TO_CREATE_A_ROLE",
+                    "You must be in an organization to create a role",
+                ));
             }
             let name = body.role.to_lowercase();
             // Predefined names are rejected before membership and permission checks.
             if predefined(&name, config) {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "ROLE_NAME_IS_ALREADY_TAKEN",
-                    message: "That role name is already taken",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "ROLE_NAME_IS_ALREADY_TAKEN",
+                    "That role name is already taken",
+                ));
             }
             let (organization_id, member_role) = authorize_member(
                 &session,
@@ -459,13 +463,13 @@ pub async fn handle_role_request(
                 .count_organization_roles_value(&organization_id)
                 .await?;
             if maximum.is_some_and(|limit| count >= limit as u64) {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "TOO_MANY_ROLES",
-                    message: "This organization has too many roles",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "TOO_MANY_ROLES",
+                    "This organization has too many roles",
+                ));
             }
-            if let Some(response) = validate_permissions(
+            validate_permissions(
                 &body.permission,
                 &member_role,
                 &organization_id,
@@ -473,10 +477,7 @@ pub async fn handle_role_request(
                 config,
                 ctx,
             )
-            .await?
-            {
-                return Ok(Some(response));
-            }
+            .await?;
             unused_name(&name, &organization_id, config, ctx).await?;
             let permission = body.permission.into_field();
             let mut role = ctx
@@ -552,11 +553,11 @@ pub async fn handle_role_request(
                 .as_deref()
                 .is_some_and(|name| predefined(name, config))
             {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "CANNOT_DELETE_A_PRE_DEFINED_ROLE",
-                    message: "Cannot delete a pre-defined role",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "CANNOT_DELETE_A_PRE_DEFINED_ROLE",
+                    "Cannot delete a pre-defined role",
+                ));
             }
             let role = select_role(&selector, &organization_id, ctx).await?;
             let _ = super::super::native_json::permission(&role.permission)?;
@@ -570,11 +571,11 @@ pub async fn handle_role_request(
                 .iter()
                 .any(|member_role| member_role.split(',').any(|name| role.role == name.trim()))
             {
-                return Err(AuthError::Upstream {
-                    status: 400,
-                    code: "ROLE_IS_ASSIGNED_TO_MEMBERS",
-                    message: "Cannot delete a role that is assigned to members. Please reassign the members to a different role first",
-                });
+                return Err(AuthError::from_code(
+                    "BAD_REQUEST",
+                    "ROLE_IS_ASSIGNED_TO_MEMBERS",
+                    "Cannot delete a role that is assigned to members. Please reassign the members to a different role first",
+                ));
             }
             ctx.database
                 .delete_organization_role_by_fields(&role_selectors(&selector, &organization_id)?)
@@ -618,8 +619,8 @@ pub async fn handle_role_request(
             } else {
                 better_auth_core::SchemaValue::Undefined
             };
-            if permission.is_some()
-                && let Some(response) = validate_permissions(
+            if permission.is_some() {
+                validate_permissions(
                     &requested,
                     &member_role,
                     &organization_id,
@@ -627,9 +628,7 @@ pub async fn handle_role_request(
                     config,
                     ctx,
                 )
-                .await?
-            {
-                return Ok(Some(response));
+                .await?;
             }
             let name = body
                 .data
@@ -886,11 +885,13 @@ mod tests {
         let denied =
             handle_role_request(&request(json!({"organization":["delete"]})), &ctx, &config)
                 .await
-                .unwrap()
-                .unwrap();
-        assert_eq!(denied.status, 403);
-        let denied: serde_json::Value =
-            serde_json::from_slice(&denied.body.bytes().unwrap()).unwrap();
+                .unwrap_err();
+        assert_eq!(
+            denied.status_value().unwrap(),
+            FieldValue::from("FORBIDDEN")
+        );
+        assert_eq!(denied.status_code().unwrap(), 403);
+        let denied = denied.body_value().unwrap().json().unwrap().unwrap();
         assert_eq!(denied["missingPermissions"], json!(["organization:delete"]));
         assert!(
             ctx.database
