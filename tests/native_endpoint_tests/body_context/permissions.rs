@@ -115,6 +115,7 @@ async fn create_consumes_captured_permissions_after_callback_mutation() -> AuthR
         );
     }
     let mut expected_storage = expected;
+    expected_storage["metadata"] = json!("null");
     expected_storage["permissions"] = json!("{\"nodes\":[\"read\",\"write\"]}");
     assert_eq!(
         FieldValue::from(rows[0].clone()).json()?,

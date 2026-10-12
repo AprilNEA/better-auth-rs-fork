@@ -202,7 +202,7 @@ test("API Key create retains captured permissions through nested mutation and to
   expect(created).toStrictEqual(expected);
   expect(database).toStrictEqual({
     user: [], session: [], account: [], verification: [],
-    apikey: [{ ...expected, permissions: '{"nodes":["read","write"]}' }],
+    apikey: [{ ...expected, metadata: "null", permissions: '{"nodes":["read","write"]}' }],
   });
   expect(input).toStrictEqual({ userId: "owner", permissions: { nodes: ["read"] } });
   expect(events).toStrictEqual(["generator", "permissions"]);
@@ -257,7 +257,7 @@ for (const suppliedConfig of [false, true]) {
     expect(created).toStrictEqual(expected);
     expect(database).toStrictEqual({
       user: [], session: [], account: [], verification: [],
-      apikey: [{ ...expected, permissions: '{"nodes":["read"]}' }],
+      apikey: [{ ...expected, metadata: "null", permissions: '{"nodes":["read"]}' }],
     });
     expect(validatorCalls).toBe(0);
     const before = structuredClone(database);
