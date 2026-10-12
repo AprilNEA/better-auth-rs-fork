@@ -32,7 +32,7 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
             device_type: "singleDevice".into(),
             backed_up: false,
             transports: Some("internal".into()),
-            credential: "unused by options".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: None.into(),
         })
         .await

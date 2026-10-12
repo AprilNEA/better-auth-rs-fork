@@ -48,6 +48,8 @@ Better Auth API errors from verification callbacks retain their native identity.
 
 ### Storage modes
 
+`EphemeralStore` defaults to `PasskeyStorage::Native`, including stores restored with `from_storage`. Native writes do not add private `credential` or `updatedAt` fields. For existing opaque Memory credentials, select `EphemeralStore::new(config).with_passkey_storage(PasskeyStorage::Legacy)` before installing the adapter. Runtime binding and transactions retain the selected mode. Creation and authentication updates reject a representation that does not match the selected mode; missing credential fields do not select a fallback mode.
+
 Fresh generated models use `PasskeyStorage::Native`: the 11 upstream columns contain the credential state, and createdAt is nullable. The private adapter reconstructs the WebauthnCore credential from the standard COSE public key, credential ID, counter, and transport hints. Registration verifies the full response before storage. Authentication verifies the challenge, origin, RP ID, signature, and counter before session creation. Authentication validates backup flags from the signed assertion independently of stored display fields.
 
 Options generation reads credential IDs and transports without decoding stored public keys. Descriptor IDs must be strings. The plugin removes `=` characters and rejects characters outside the base64url alphabet, matching upstream option generation. Empty IDs and incomplete base64 groups retain the upstream options behavior. This acceptance does not establish that a credential can authenticate.

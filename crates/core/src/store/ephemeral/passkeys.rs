@@ -17,7 +17,10 @@ impl EphemeralStore {
             .zip(rows)
             .map(|(mut fields, source)| {
                 let order = fields.keys().cloned().collect();
-                for name in ["credential", "updatedAt"] {
+                for name in ["credential", "updatedAt"]
+                    .into_iter()
+                    .filter(|_| self.passkey_storage == crate::PasskeyStorage::Legacy)
+                {
                     if !schema.fields().contains_key(name)
                         && let Some(value) = source.field(name)?
                     {
@@ -36,6 +39,9 @@ impl EphemeralStore {
         input: &FieldMap,
         updated_at: Option<crate::FieldDate>,
     ) -> AuthResult<FieldMap> {
+        if self.passkey_storage == crate::PasskeyStorage::Native {
+            return Ok(FieldMap::new());
+        }
         let schema = self.model_fields.plugin_fields(EntityRole::Passkey);
         let mut private = FieldMap::new();
         for name in ["credential", "updatedAt"] {
@@ -79,6 +85,10 @@ impl EphemeralStore {
 
 #[async_trait]
 impl PasskeyStore for EphemeralStore {
+    fn passkey_storage(&self) -> crate::PasskeyStorage {
+        self.passkey_storage
+    }
+
     async fn create_passkey_record(&self, input: FieldMap) -> AuthResult<Option<FieldMap>> {
         self.create_plugin_record(EntityRole::Passkey, input, Default::default())
             .await
@@ -105,6 +115,15 @@ impl PasskeyStore for EphemeralStore {
     }
 
     async fn create_passkey_optional(&self, input: CreatePasskey) -> AuthResult<Option<Passkey>> {
+        match (self.passkey_storage, &input.credential) {
+            (crate::PasskeyStorage::Native, crate::PasskeyCredentialState::Native)
+            | (crate::PasskeyStorage::Legacy, crate::PasskeyCredentialState::Legacy(_)) => {}
+            _ => {
+                return Err(AuthError::config(
+                    "Passkey creation does not match the model storage mode",
+                ));
+            }
+        }
         let mut fields = input.into_adapter_fields()?;
         let now: crate::FieldDate = Utc::now().into();
         let _ = fields.insert("createdAt".into(), now.clone().into());
@@ -167,6 +186,15 @@ impl PasskeyStore for EphemeralStore {
         id: &SchemaValue<String>,
         update: UpdatePasskeyAuthentication,
     ) -> AuthResult<Option<Passkey>> {
+        match (self.passkey_storage, &update) {
+            (crate::PasskeyStorage::Native, UpdatePasskeyAuthentication::Native { .. })
+            | (crate::PasskeyStorage::Legacy, UpdatePasskeyAuthentication::Legacy { .. }) => {}
+            _ => {
+                return Err(AuthError::config(
+                    "Passkey authentication update does not match the model storage mode",
+                ));
+            }
+        }
         let mut fields = FieldMap::new();
         let updated_at = match update {
             UpdatePasskeyAuthentication::Native { counter } => {

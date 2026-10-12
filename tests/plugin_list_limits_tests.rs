@@ -74,7 +74,12 @@ async fn run<S: AuthSchema>(
                 device_type: "singleDevice".into(),
                 backed_up: false,
                 transports: None,
-                credential: "fixture-credential".into(),
+                credential: match store.passkey_storage() {
+                    better_auth_core::PasskeyStorage::Native => {
+                        better_auth_core::PasskeyCredentialState::Native
+                    }
+                    better_auth_core::PasskeyStorage::Legacy => "fixture-credential".into(),
+                },
                 aaguid: None.into(),
             })
             .await?;

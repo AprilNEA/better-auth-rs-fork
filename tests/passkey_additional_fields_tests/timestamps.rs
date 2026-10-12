@@ -348,7 +348,7 @@ async fn contract<S: AuthSchema>(
 async fn memory_passkey_declared_timestamps_keep_factories_explicit_values_and_errors() -> TestResult
 {
     for mode in [PasskeyStorage::Legacy, PasskeyStorage::Native] {
-        let raw = EphemeralStore::new(Arc::new(config()));
+        let raw = EphemeralStore::new(Arc::new(config())).with_passkey_storage(mode);
         contract(Arc::new(raw.clone()), Backend::Memory(Box::new(raw)), mode).await?;
     }
     Ok(())

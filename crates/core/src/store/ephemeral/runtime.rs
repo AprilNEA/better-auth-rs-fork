@@ -21,6 +21,7 @@ impl RuntimeStore<StatelessSchema> for EphemeralStore {
         let organization_fields = model_fields.organization_fields(self.organization_fields()?);
         Ok(Arc::new(Self {
             session_config: config.session.clone(),
+            passkey_storage: self.passkey_storage,
             config,
             model_fields,
             state: self.state.clone(),

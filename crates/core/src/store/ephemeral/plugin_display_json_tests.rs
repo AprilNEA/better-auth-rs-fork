@@ -240,7 +240,7 @@ async fn json_api_key_name_callback_omission_does_not_become_null() -> AuthResul
 
 #[tokio::test]
 async fn json_passkey_display_updates_preserve_credential_state() -> AuthResult<()> {
-    let mut store = EphemeralStore::default();
+    let mut store = EphemeralStore::default().with_passkey_storage(crate::PasskeyStorage::Legacy);
     let label = |value: Value| -> Value { FieldMap::from_iter([("label".into(), value)]).into() };
     store.model_fields.register(
         EntityRole::Passkey,

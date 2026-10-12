@@ -125,7 +125,10 @@ async fn sqlite() -> AuthResult<Arc<dyn AuthStore<BundledSchema>>> {
 }
 
 fn memory() -> Arc<dyn AuthStore<StatelessSchema>> {
-    Arc::new(EphemeralStore::new(Arc::new(config())))
+    Arc::new(
+        EphemeralStore::new(Arc::new(config()))
+            .with_passkey_storage(better_auth_core::PasskeyStorage::Legacy),
+    )
 }
 
 fn required<T>(value: Option<T>, context: &str) -> AuthResult<T> {

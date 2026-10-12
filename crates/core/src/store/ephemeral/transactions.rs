@@ -425,6 +425,7 @@ impl EphemeralStore {
             verification_locks: self.verification_locks.clone(),
             device_code_transaction: Some(Arc::new(Mutex::new(devices))),
             session_config: self.session_config.clone(),
+            passkey_storage: self.passkey_storage,
             organization_fields: Arc::new(RwLock::new(self.organization_fields()?)),
             hooks: self.hooks.clone(),
             pending_hooks: Some(Arc::downgrade(&queue)),

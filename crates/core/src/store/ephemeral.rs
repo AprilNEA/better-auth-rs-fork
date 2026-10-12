@@ -144,6 +144,7 @@ pub struct EphemeralStore {
     verification_locks: Arc<Mutex<HashMap<String, Weak<tokio::sync::Mutex<()>>>>>,
     device_code_transaction: Option<Arc<Mutex<device_codes::DeviceCodeTransaction>>>,
     session_config: crate::config::SessionConfig,
+    passkey_storage: crate::PasskeyStorage,
     organization_fields: Arc<RwLock<crate::organization_fields::OrganizationFields>>,
     hooks: Vec<Arc<dyn DatabaseHooks<StatelessSchema>>>,
     pending_hooks: Option<Weak<PendingHookQueue>>,
@@ -183,6 +184,7 @@ impl EphemeralStore {
         Self {
             model_fields,
             session_config: config.session.clone(),
+            passkey_storage: crate::PasskeyStorage::Native,
             config,
             state: Arc::new(Mutex::new(State::default())),
             operations,
@@ -302,6 +304,13 @@ impl EphemeralStore {
             return self.operation(|op| Ok(Value::Number((op.table_length(role)? + 1) as f64)));
         }
         Ok(value)
+    }
+
+    /// Select Passkey storage before installing the adapter in an authentication context.
+    /// Native is the default. Select Legacy to preserve opaque credentials and private update timestamps.
+    pub fn with_passkey_storage(mut self, storage: crate::PasskeyStorage) -> Self {
+        self.passkey_storage = storage;
+        self
     }
 
     /// Register application lifecycle hooks in invocation order.

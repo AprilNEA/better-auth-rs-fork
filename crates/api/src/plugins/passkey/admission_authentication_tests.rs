@@ -46,8 +46,10 @@ impl MemoryFixture {
         let mut config = test_helpers::create_test_config().base_url(ORIGIN);
         config.telemetry.enabled = false;
         let config = Arc::new(config);
-        let raw: Arc<dyn AuthStore<StatelessSchema>> =
-            Arc::new(EphemeralStore::new(config.clone()));
+        let raw: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(
+            EphemeralStore::new(config.clone())
+                .with_passkey_storage(better_auth_core::PasskeyStorage::Legacy),
+        );
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut init =
             AuthInitContext::new(config.clone(), raw.clone()).expect("fixture context initializes");

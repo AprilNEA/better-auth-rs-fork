@@ -213,7 +213,7 @@ async fn api_key_numeric_id_sort_keeps_unordered_subtractions_equal() -> AuthRes
 
 #[tokio::test]
 async fn serial_passkey_ids_bind_updates_and_delete_all_reused_ids() -> AuthResult<()> {
-    let store = serial_store();
+    let store = serial_store().with_passkey_storage(crate::PasskeyStorage::Legacy);
     for label in ["first", "second", "third"] {
         let created = store.create_passkey(passkey(label)).await?;
         assert!(matches!(created.id.field_value(), Value::String(_)));

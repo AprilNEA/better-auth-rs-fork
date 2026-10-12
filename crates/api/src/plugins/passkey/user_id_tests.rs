@@ -171,7 +171,12 @@ async fn existing_passkey<S: AuthSchema>(ctx: &AuthContext<S>) -> TestResult<Pas
             device_type: "singleDevice".into(),
             backed_up: false,
             transports: Some("internal,hybrid".into()),
-            credential: PasskeyCredentialState::Legacy("unused by options".into()),
+            credential: match ctx.database.passkey_storage() {
+                better_auth_core::PasskeyStorage::Native => PasskeyCredentialState::Native,
+                better_auth_core::PasskeyStorage::Legacy => {
+                    PasskeyCredentialState::Legacy("unused by options".into())
+                }
+            },
             aaguid: None.into(),
         })
         .await?)

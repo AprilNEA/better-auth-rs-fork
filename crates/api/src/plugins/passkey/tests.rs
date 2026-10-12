@@ -298,7 +298,7 @@ async fn test_generate_register_options_sets_cookie_and_uses_query_name() {
             device_type: "singleDevice".to_string(),
             backed_up: false,
             transports: Some("usb,nfc".to_string()),
-            credential: "invalid-stored-passkey".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: Some("00000000-0000-0000-0000-000000000000".to_string()).into(),
         })
         .await
@@ -384,7 +384,7 @@ async fn test_generate_authenticate_options_with_auth_lists_allow_credentials() 
             device_type: "singleDevice".to_string(),
             backed_up: false,
             transports: Some("internal".to_string()),
-            credential: "invalid-stored-passkey".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: None.into(),
         })
         .await
@@ -514,7 +514,7 @@ async fn test_list_user_passkeys_matches_upstream_optional_fields() {
             device_type: "singleDevice".to_string(),
             backed_up: false,
             transports: None,
-            credential: "invalid-stored-passkey".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: Some("00000000-0000-0000-0000-000000000000".to_string()).into(),
         })
         .await
@@ -565,7 +565,7 @@ async fn test_delete_passkey_non_owner_is_forbidden() {
             device_type: "singleDevice".to_string(),
             backed_up: false,
             transports: None,
-            credential: "invalid-stored-passkey".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: None.into(),
         })
         .await
@@ -628,7 +628,7 @@ async fn test_update_passkey_non_owner_uses_ts_error_message() {
             device_type: "singleDevice".to_string(),
             backed_up: false,
             transports: None,
-            credential: "invalid-stored-passkey".into(),
+            credential: better_auth_core::PasskeyCredentialState::Native,
             aaguid: None.into(),
         })
         .await

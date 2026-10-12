@@ -1427,7 +1427,12 @@ async fn check_plugin_operations(
                 device_type: "singleDevice".into(),
                 backed_up: false,
                 transports: None,
-                credential: "private".into(),
+                credential: match store.passkey_storage() {
+                    better_auth_core::PasskeyStorage::Native => {
+                        better_auth_core::PasskeyCredentialState::Native
+                    }
+                    better_auth_core::PasskeyStorage::Legacy => "private".into(),
+                },
                 aaguid: None.into(),
             })
             .await?;
