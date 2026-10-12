@@ -38,6 +38,7 @@ use test_helpers::native_observation::NativeObservation;
 const NOW: f64 = 2_000_000_000_000.0;
 const PASSWORD: &str = "CorrectHorseBattery1!";
 
+#[path = "selected_user_property_tests/fixture_replay.rs"]
 mod fixture_replay;
 
 struct Trace {
