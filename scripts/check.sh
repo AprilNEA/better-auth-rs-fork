@@ -35,7 +35,28 @@ run_stage() {
     fullstack) cargo check --locked --manifest-path examples/fullstack/backend/Cargo.toml ;;
     quick-start) bun scripts/quick-start-check.ts ;;
     alignment) ./scripts/alignment-check.sh --skip-build ;;
-    reference-contracts) ./scripts/alignment-check.sh --reference-only ;;
+    reference-contracts)
+      if [[ -z "${CHECK_COMPAT_PROFILE:-}" ]]; then
+        ./scripts/alignment-check.sh --reference-only
+      else
+        local contract
+        local contract_pattern='[[:alnum:]][[:alnum:]_.-]*\.test\.(ts|mjs)'
+        if [[ ! "$CHECK_COMPAT_PROFILE" =~ ^${contract_pattern}(,${contract_pattern})*$ ]]; then
+          echo "Use comma-separated .test.ts or .test.mjs contract filenames." >&2
+          return 1
+        fi
+        local -a contracts paths
+        IFS=',' read -r -a contracts <<< "$CHECK_COMPAT_PROFILE"
+        for contract in "${contracts[@]}"; do
+          if [[ ! -f "compat-tests/reference-server/contracts/$contract" ]]; then
+            echo "Unknown upstream contract: $contract" >&2
+            return 1
+          fi
+          paths+=("./compat-tests/reference-server/contracts/$contract")
+        done
+        bun --no-install test "${paths[@]}"
+      fi
+      ;;
     client-configuration)
       cargo clippy --locked --test client_compat_tests -- -D warnings
       cargo test --locked --test client_compat_tests -- \
