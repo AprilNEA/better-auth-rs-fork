@@ -85,6 +85,8 @@ mod rows;
 mod runtime;
 #[cfg(test)]
 mod serial_primary_tests;
+#[cfg(test)]
+mod shared_column_contract_tests;
 mod session_hooks;
 mod sessions;
 mod state;

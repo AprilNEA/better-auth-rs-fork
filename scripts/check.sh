@@ -649,7 +649,7 @@ run_stage() {
       cargo test --locked -p better-auth-seaorm-macros --lib || cache_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache --test api_key_delete_expired_tests -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: passkey wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: store::ephemeral::shared_column_contract_tests:: passkey wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: plugins::passkey:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: plugins::email_password:: plugins::username:: plugins::user_management:: plugins::have_i_been_pwned:: plugins::device_authorization::native_tests || cache_status=1
       cargo test --locked -p better-auth-seaorm --lib -- store::plugin_record_tests:: store::plugin_rows::legacy_private_tests:: store::shared_column_tests:: || cache_status=1
