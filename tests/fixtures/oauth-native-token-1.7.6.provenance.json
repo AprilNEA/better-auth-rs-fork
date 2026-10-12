@@ -1,0 +1,488 @@
+{
+  "status": "immutable successful source capture; strict replay added separately; Rust parity pending",
+  "version": "1.7.6",
+  "run": "38202806036",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38202806036",
+  "commit": "17c04e30d809af4ad238da91cf0dafa14ccd7abf",
+  "originalActionsLog": {
+    "path": "/private/tmp/better-auth-ci-38202806036.log",
+    "bytes": 291427,
+    "sha256": "590441ceeea2ee83fc49fd0aa9a3a15a1935d533516971a10176477869f61798"
+  },
+  "copiedActionsLog": {
+    "path": "/private/tmp/better-auth-oauth-native-token-successful-38202806036/actions.log",
+    "bytes": 291427,
+    "sha256": "590441ceeea2ee83fc49fd0aa9a3a15a1935d533516971a10176477869f61798"
+  },
+  "records": {
+    "path": "/private/tmp/better-auth-oauth-native-token-successful-38202806036/oauth-native-token-1.7.6.records.jsonl",
+    "bytes": 200589,
+    "sha256": "3d64899043419afeead5b7ec79148ddc1f6b492fa3e813da2f3feb173ac5add4"
+  },
+  "fixture": {
+    "path": "/Users/Xuan/Developer/manus-ai/better-auth-align-user-fields/tests/fixtures/oauth-native-token-1.7.6.json",
+    "bytes": 399965,
+    "sha256": "4ba56a61b6398602a64efc52df53b96a03c26e0ceddf924348d63f341aad2e20"
+  },
+  "processObservation": {
+    "file": {
+      "path": "/Users/Xuan/Developer/manus-ai/better-auth-align-user-fields/tests/fixtures/oauth-native-token-process-1.7.6.json",
+      "bytes": 80,
+      "sha256": "90daa9e73609c7e83f046b6c0ab8931825844759bcd11d5c3a05d46868c8c123"
+    },
+    "observation": {
+      "contract": "oauth-native-token-process",
+      "exitCode": 0,
+      "stderr": ""
+    }
+  },
+  "sourceFiles": [
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-native-token-cases.mjs",
+      "path": "/private/tmp/better-auth-oauth-native-token-successful-38202806036/source/oauth-native-token-cases.mjs",
+      "bytes": 993,
+      "sha256": "e518e68dd6fa2c586fa686eb7fe09b92385986a83413e93fe119eeab79afd26c"
+    },
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-native-token-capture.mjs",
+      "path": "/private/tmp/better-auth-oauth-native-token-successful-38202806036/source/oauth-native-token-capture.mjs",
+      "bytes": 8497,
+      "sha256": "be961a9e0e63b25cd1e0accc560986db1f6032698c2e9e67d2211033b2f71bed"
+    },
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-native-token.test.ts",
+      "path": "/private/tmp/better-auth-oauth-native-token-successful-38202806036/source/oauth-native-token.test.ts",
+      "bytes": 1483,
+      "sha256": "ae6a7f73019c90941135d28b5d6fee6f69dd7f16361fb52531f2118faa84e05b"
+    }
+  ],
+  "counts": {
+    "cases": 51,
+    "outcomes": {
+      "returned": 36,
+      "thrown": 15
+    }
+  },
+  "preservation": {
+    "rawRecordBytes": true,
+    "fixtureValuesAndObjectKeyOrder": true,
+    "inputAndTokenDescriptors": true,
+    "callbackAndResultIdentity": true,
+    "functionSources": true,
+    "errorPropertiesAndPropertyOrder": true,
+    "hostFieldsAndStacks": true,
+    "eventsAndAccessorState": true,
+    "logsAndStorage": true,
+    "normalizations": []
+  },
+  "recordsIndex": [
+    {
+      "index": 0,
+      "name": "verifier-omitted",
+      "logLine": 28,
+      "logByteOffset": 1072,
+      "bytes": 3477,
+      "sha256": "5800a69d91c76b0b362e33266d078ac6b379e6a22324e9c8e0e7ffcb8a423014"
+    },
+    {
+      "index": 1,
+      "name": "verifier-undefined",
+      "logLine": 29,
+      "logByteOffset": 4549,
+      "bytes": 3662,
+      "sha256": "fb610fc8c2db419d20821a1878b00db3f164e92d5ca007073a6ed5b6f1b4b96f"
+    },
+    {
+      "index": 2,
+      "name": "verifier-null",
+      "logLine": 30,
+      "logByteOffset": 8211,
+      "bytes": 3599,
+      "sha256": "6bc371c0f9e37e9cbe66eeb9407f43ca06e1a03496c0ddcbdaf17a39ab531c67"
+    },
+    {
+      "index": 3,
+      "name": "verifier-false",
+      "logLine": 31,
+      "logByteOffset": 11810,
+      "bytes": 3605,
+      "sha256": "edf5313d20cca34da4f24ced0299da3f908ee39b7e113ee374e7b6dc7abfd81d"
+    },
+    {
+      "index": 4,
+      "name": "verifier-zero",
+      "logLine": 32,
+      "logByteOffset": 15415,
+      "bytes": 3590,
+      "sha256": "c9578f00dc6c3932937ca22792d2504a20c0e74262185a08400b51dab60b99f1"
+    },
+    {
+      "index": 5,
+      "name": "verifier-nan",
+      "logLine": 33,
+      "logByteOffset": 19005,
+      "bytes": 3678,
+      "sha256": "0ec0a25713faafa912e6c29991407d001ee4c9c166ecaf654dbb6560a217c7f1"
+    },
+    {
+      "index": 6,
+      "name": "verifier-empty",
+      "logLine": 34,
+      "logByteOffset": 22683,
+      "bytes": 3596,
+      "sha256": "d0973e998eef2db917f5f98cc0680433c77c3306729094dbca1b61bb0bff6a56"
+    },
+    {
+      "index": 7,
+      "name": "verifier-string",
+      "logLine": 35,
+      "logByteOffset": 26279,
+      "bytes": 3638,
+      "sha256": "098c931d2f81538de97d1fb0e2d6c4142a522860ccfb4fe82db7d5bf1f383e7b"
+    },
+    {
+      "index": 8,
+      "name": "verifier-date",
+      "logLine": 36,
+      "logByteOffset": 29917,
+      "bytes": 3737,
+      "sha256": "855c85b8ae536976c72c181fde36d7445e2574a7b1d6509fc78ad39fe4c31751"
+    },
+    {
+      "index": 9,
+      "name": "verifier-invalid-date",
+      "logLine": 37,
+      "logByteOffset": 33654,
+      "bytes": 3725,
+      "sha256": "bc690f6b9f1b1fde30e9457c1eedc3274add24b4b0c2dc2e85113991513d4c7f"
+    },
+    {
+      "index": 10,
+      "name": "verifier-array",
+      "logLine": 38,
+      "logByteOffset": 37379,
+      "bytes": 3794,
+      "sha256": "f2ab5a205c28b3e2754be3f7184aecd41b007c60d8670aab3b94077b994c27fe"
+    },
+    {
+      "index": 11,
+      "name": "verifier-object",
+      "logLine": 39,
+      "logByteOffset": 41173,
+      "bytes": 3773,
+      "sha256": "89538aa576aa30c14338227c6e5147c0106c963be0f2efc3df95f4088f43a490"
+    },
+    {
+      "index": 12,
+      "name": "result-undefined-absent",
+      "logLine": 40,
+      "logByteOffset": 44946,
+      "bytes": 4172,
+      "sha256": "ea25f3505d20a359102bceeeb842f5c8008fd9a86d24279c5ae20ff5d46209f7"
+    },
+    {
+      "index": 13,
+      "name": "result-undefined-default",
+      "logLine": 41,
+      "logByteOffset": 49118,
+      "bytes": 4157,
+      "sha256": "3caa9dcd46a0c3efc796adfe98a0fcbf5b85431606665dd6d5df6ef988332977"
+    },
+    {
+      "index": 14,
+      "name": "result-null-absent",
+      "logLine": 42,
+      "logByteOffset": 53275,
+      "bytes": 4115,
+      "sha256": "63c309d008aa9b2211f0809325cca2bbb3cb8a6f7d60f17b3e19fa9352aa60e3"
+    },
+    {
+      "index": 15,
+      "name": "result-null-default",
+      "logLine": 43,
+      "logByteOffset": 57390,
+      "bytes": 4100,
+      "sha256": "5ae1632d062252ffd8d03971c623ab306f6a30f8c93370a363f85acc354bdf49"
+    },
+    {
+      "index": 16,
+      "name": "result-false-absent",
+      "logLine": 44,
+      "logByteOffset": 61490,
+      "bytes": 2989,
+      "sha256": "2d2cfa6d9efa6879012a8668db578cb88fd2c54d74a879f432e64110c99f9664"
+    },
+    {
+      "index": 17,
+      "name": "result-false-default",
+      "logLine": 45,
+      "logByteOffset": 64479,
+      "bytes": 4061,
+      "sha256": "237832470bd94428a415de48a55d081007f94f72590c1376eae8e8b65db1e36b"
+    },
+    {
+      "index": 18,
+      "name": "result-zero-absent",
+      "logLine": 46,
+      "logByteOffset": 68540,
+      "bytes": 2974,
+      "sha256": "44bd9f5678fc4508cc1c4c8edc909d53686bc1928e763e3127f4bf67b04b4225"
+    },
+    {
+      "index": 19,
+      "name": "result-zero-default",
+      "logLine": 47,
+      "logByteOffset": 71514,
+      "bytes": 4050,
+      "sha256": "1664165c12a7bb63ff46c4d3533428ddf75a9c20c5f16aa7994d828360410a42"
+    },
+    {
+      "index": 20,
+      "name": "result-nan-absent",
+      "logLine": 48,
+      "logByteOffset": 75564,
+      "bytes": 3062,
+      "sha256": "609b3e22316949e0ec464529f41e2d3d1cac86c34f1e31d7b1d784709193b250"
+    },
+    {
+      "index": 21,
+      "name": "result-nan-default",
+      "logLine": 49,
+      "logByteOffset": 78626,
+      "bytes": 4107,
+      "sha256": "e6c80a1b92a2b9d86b65a388df4273a67a833f13c63ae4786d0d5ae69e4db08c"
+    },
+    {
+      "index": 22,
+      "name": "result-empty-absent",
+      "logLine": 50,
+      "logByteOffset": 82733,
+      "bytes": 2980,
+      "sha256": "f2701735be0a5a751a5069d435a89c074e6cd988aba9e2207aadb3ac05164424"
+    },
+    {
+      "index": 23,
+      "name": "result-empty-default",
+      "logLine": 51,
+      "logByteOffset": 85713,
+      "bytes": 4055,
+      "sha256": "1b309702d9313b7b18990683fb02e287b00e88352402800d5f4eafcd3d5fb4af"
+    },
+    {
+      "index": 24,
+      "name": "result-string-absent",
+      "logLine": 52,
+      "logByteOffset": 89768,
+      "bytes": 3022,
+      "sha256": "b331afadb159b35a720999f4eb8d41ebb24ac29047e456b717ea0b1c3ad1e9f2"
+    },
+    {
+      "index": 25,
+      "name": "result-string-default",
+      "logLine": 53,
+      "logByteOffset": 92790,
+      "bytes": 4084,
+      "sha256": "29d9b1da49c5a7e2acb420e1a19e59a8e7356eb16fbb0052c173a01bd39ce574"
+    },
+    {
+      "index": 26,
+      "name": "result-true-absent",
+      "logLine": 54,
+      "logByteOffset": 96874,
+      "bytes": 2983,
+      "sha256": "6b8c1d1e4f0a3cfc86d4dd227e2ebfe84080f2991ae14c27ee10615582a49cf4"
+    },
+    {
+      "index": 27,
+      "name": "result-true-default",
+      "logLine": 55,
+      "logByteOffset": 99857,
+      "bytes": 4056,
+      "sha256": "48a7e78cf6908a2e083600ddb785c98649aca9d90d61656dbf2e9ac5f1e131f2"
+    },
+    {
+      "index": 28,
+      "name": "result-number-absent",
+      "logLine": 56,
+      "logByteOffset": 103913,
+      "bytes": 2980,
+      "sha256": "2545a87d9a9c7e24b73e6a859573343121087d05eabd89f42521283355b78233"
+    },
+    {
+      "index": 29,
+      "name": "result-number-default",
+      "logLine": 57,
+      "logByteOffset": 106893,
+      "bytes": 4056,
+      "sha256": "d0e9e3770200a56716735df2a5ff339d0ee3350f06fa8bb744beec46573396d2"
+    },
+    {
+      "index": 30,
+      "name": "result-array-absent",
+      "logLine": 58,
+      "logByteOffset": 110949,
+      "bytes": 4135,
+      "sha256": "c0bc7d699dbc22a24e607834d4b22d4234ae1e5ea3894f77a96bec81094a135b"
+    },
+    {
+      "index": 31,
+      "name": "result-array-default",
+      "logLine": 59,
+      "logByteOffset": 115084,
+      "bytes": 4400,
+      "sha256": "c577b05c8745336ebf88dc9d7a928096316f562ad4e7f5070fe4153372bdb181"
+    },
+    {
+      "index": 32,
+      "name": "result-date-absent",
+      "logLine": 60,
+      "logByteOffset": 119484,
+      "bytes": 3241,
+      "sha256": "8a14ccab0316839451f2be7896aa2d32867c663a7a9b6ad7ca5e335c118f104f"
+    },
+    {
+      "index": 33,
+      "name": "result-date-default",
+      "logLine": 61,
+      "logByteOffset": 122725,
+      "bytes": 3504,
+      "sha256": "1e074aaa0ffb4b291aee61c79f90b9d2886ded36b1dd7d592a59338aff09b680"
+    },
+    {
+      "index": 34,
+      "name": "result-function-absent",
+      "logLine": 62,
+      "logByteOffset": 126229,
+      "bytes": 4267,
+      "sha256": "974580ede4af98c8f17e9dcd69c3604cdc9678c41a4c019bb233b5dcd8180538"
+    },
+    {
+      "index": 35,
+      "name": "result-function-default",
+      "logLine": 63,
+      "logByteOffset": 130496,
+      "bytes": 4532,
+      "sha256": "ed31afdfd24aaaf2b9305ce5239ecee54d69aa3311aa8bd0bf74cbbd94981b4e"
+    },
+    {
+      "index": 36,
+      "name": "result-object-absent",
+      "logLine": 64,
+      "logByteOffset": 135028,
+      "bytes": 3646,
+      "sha256": "80bed64d49ff2bce3dc8dc6a245ab09020c9f6eeabbe840441bedecb4ce0743d"
+    },
+    {
+      "index": 37,
+      "name": "result-object-default",
+      "logLine": 65,
+      "logByteOffset": 138674,
+      "bytes": 3911,
+      "sha256": "c8988f7d5c38701845d044c5b995310c9bf9db3f498ad2add1638f9889b4745b"
+    },
+    {
+      "index": 38,
+      "name": "expiry-getter-truthy",
+      "logLine": 66,
+      "logByteOffset": 142585,
+      "bytes": 5369,
+      "sha256": "cea34ce42a7ce2a43cef9be36b97e9d552604110be22f2bb9fd025feec1e492c"
+    },
+    {
+      "index": 39,
+      "name": "expiry-getter-falsy",
+      "logLine": 67,
+      "logByteOffset": 147954,
+      "bytes": 5437,
+      "sha256": "5aae9a929d3e43d5286d4992e5f3763651fad037dd7e73aee98c807f9ebcf108"
+    },
+    {
+      "index": 40,
+      "name": "expiry-getter-throws",
+      "logLine": 68,
+      "logByteOffset": 153391,
+      "bytes": 5981,
+      "sha256": "f57465e3169586c63113f8f0a3f813c9189b935de8096b0c81230824cafefcb5"
+    },
+    {
+      "index": 41,
+      "name": "expiry-setter-throws",
+      "logLine": 69,
+      "logByteOffset": 159372,
+      "bytes": 6082,
+      "sha256": "cc1a4ea27cb247609f3d83e92e73462d46a7ab780f2a5872e4e0d7a28e84cfd6"
+    },
+    {
+      "index": 42,
+      "name": "expiry-readonly",
+      "logLine": 70,
+      "logByteOffset": 165454,
+      "bytes": 4719,
+      "sha256": "f0fdbf71caaa1fe0ccdb4bc937d55fb350568d2a3bfc5e0b27d1cd9e0466dcb6"
+    },
+    {
+      "index": 43,
+      "name": "expiry-nonenumerable",
+      "logLine": 71,
+      "logByteOffset": 170173,
+      "bytes": 4036,
+      "sha256": "fa02524248f514efe11dfef8a7e675b9a0b3a4ba7c9465cf10fed742ba26b52f"
+    },
+    {
+      "index": 44,
+      "name": "sparse-array",
+      "logLine": 72,
+      "logByteOffset": 174209,
+      "bytes": 4025,
+      "sha256": "5866b86ecac7359eb1ec128c8de04e15cb3fc47af4b86a6f80435749ded31b0a"
+    },
+    {
+      "index": 45,
+      "name": "callback-throws",
+      "logLine": 73,
+      "logByteOffset": 178234,
+      "bytes": 4465,
+      "sha256": "470f395aff113516b032ffd0981d1d317e6dc306a5b424b2f895d2032d0c57b8"
+    },
+    {
+      "index": 46,
+      "name": "expiry-zero",
+      "logLine": 74,
+      "logByteOffset": 182699,
+      "bytes": 3607,
+      "sha256": "7feb05914d0af33e5dbe16ae8feb6be0fef2dc105387a6a66034b1a806597102"
+    },
+    {
+      "index": 47,
+      "name": "expiry-nan",
+      "logLine": 75,
+      "logByteOffset": 186306,
+      "bytes": 3634,
+      "sha256": "bbf827e2bb1669cd97fb6d3f942b1a1e51570fa42f72b27d94ad27f3e82c48c3"
+    },
+    {
+      "index": 48,
+      "name": "expiry-infinity",
+      "logLine": 76,
+      "logByteOffset": 189940,
+      "bytes": 3910,
+      "sha256": "505d69f058e38d55c9fab52a472ffb35ecc6a271e8fcd2febc4c26397d2e55a7"
+    },
+    {
+      "index": 49,
+      "name": "expiry-negative",
+      "logLine": 77,
+      "logByteOffset": 193850,
+      "bytes": 3900,
+      "sha256": "f8afc10f1c2d056e7506a122c729ed2506612438ca30e881945c2ad79443743a"
+    },
+    {
+      "index": 50,
+      "name": "expiry-fractional",
+      "logLine": 78,
+      "logByteOffset": 197750,
+      "bytes": 3911,
+      "sha256": "a45fc5a8138569c47959352d3d1ce0c8f83cd097e29d86bccb268a85101f3dbe"
+    }
+  ]
+}

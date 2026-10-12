@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
+import { assertObservationReplay, observationPointer as pointer, observationValueType as valueType } from "./observation-replay.mjs";
 
 const hostFields = ["stack", "originalLine", "originalColumn", "line", "column", "sourceURL"];
-const pointer = path => `/${path.map(part => String(part).replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
-const valueType = value => value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
 
 function errorPaths(scenario) {
   const paths = [["originalError"]];
@@ -44,20 +43,7 @@ export function assertCallbackReplay(actual, expected, scenario) {
   const hostPaths = new Set(errorPaths(scenario).flatMap(path => hostFields.map(name =>
     pointer(name === "stack" ? [...path, name] : [...path, "properties", name]))));
 
-  function compare(actual, expected, path) {
-    const location = `${scenario.name}${pointer(path)}`;
-    assert.equal(valueType(actual), valueType(expected), `${location}: value type`);
-    if (hostPaths.has(pointer(path))) return;
-    if (expected !== null && typeof expected === "object") {
-      if (Array.isArray(expected)) assert.equal(actual.length, expected.length, `${location}: array length`);
-      assert.deepEqual(Object.keys(actual), Object.keys(expected), `${location}: own key order`);
-      for (const name of Object.keys(expected)) compare(actual[name], expected[name], [...path, name]);
-    } else {
-      assert.equal(actual, expected, location);
-    }
-  }
-
-  compare(actual, expected, []);
+  assertObservationReplay(actual, expected, scenario.name, hostPaths);
   const hostShape = observations => observations.map(({ path, fields }) => ({
     path,
     fields: fields.map(({ value, ...shape }) => shape),

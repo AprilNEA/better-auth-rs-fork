@@ -1,0 +1,72 @@
+{
+  "version": "1.7.6",
+  "backend": "sqlite",
+  "status": "source extraction; Rust replay pending",
+  "run": "38202806036",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38202806036",
+  "commit": "17c04e30d809af4ad238da91cf0dafa14ccd7abf",
+  "artifactName": "focused-check-reference-contracts-17c04e30d809af4ad238da91cf0dafa14ccd7abf-1",
+  "artifactId": "11726271043",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38202806036.log",
+    "bytes": 291427,
+    "sha256": "590441ceeea2ee83fc49fd0aa9a3a15a1935d533516971a10176477869f61798"
+  },
+  "record": {
+    "path": "/private/tmp/better-auth-ci-38202806036-extracted/api-key-cleanup-reference-baseline-sqlite.source.jsonl",
+    "line": 85,
+    "byteOffset": 201951,
+    "bytes": 31956,
+    "sha256": "06150f5fcc70f632b2959be4f388d6094c2cba29cb9a41e44efdd05da419dc97"
+  },
+  "fixture": {
+    "path": "tests/fixtures/api-key-cleanup-reference-baseline-sqlite-1.7.6.json",
+    "bytes": 54873,
+    "sha256": "d8acbc158b95d22b9c26d5e9a99124b011649bb480f71bae78fc69cc0481037b"
+  },
+  "sourceFiles": [
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.mjs",
+      "sha256": "82d5d6aeede2ec8d718b67f9f56c8bc9fb3449110f2fa05e38a13dc4867228b2"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-capture.mjs",
+      "sha256": "6922be23e8913884ff463492ab13d0c63b34114ca3588001c684e32bc311d306"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-reference-baseline-capture.test.ts",
+      "sha256": "3ba1c07b63a4f1fcdb4a5870a1378f282a1a5f7faed641ee4c33d4d78c4ccad5"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/server-catalog-shared.mjs",
+      "sha256": "2d4e21ffda5120886e1b4152578f6a35d678143835f0265e6731b9834e4c265a"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "extraction": "Remove the log envelope contract key. Preserve all capture values and object key order. Format the capture as JSON.",
+  "normalizations": [],
+  "coverage": {
+    "cases": 1,
+    "userCreates": 2,
+    "apiKeyCreates": 3,
+    "cleanupCalls": 2,
+    "completeTableSnapshots": 14,
+    "fullErrorObservations": 0,
+    "originalScenarioConnectionObservations": 3
+  },
+  "observedEnvironment": {
+    "foreignKeys": [
+      {
+        "foreign_keys": 0
+      }
+    ]
+  },
+  "observedCleanupResults": [
+    2,
+    0
+  ],
+  "limitation": "This fixture proves the observed serial-reference cleanup behavior with existing referenced User rows. SQLite disables foreign key enforcement in the captured upstream connection; PostgreSQL and MySQL retain their observed environment settings."
+}

@@ -7,11 +7,15 @@ import { nativeTokenCases } from "./oauth-native-token-cases.mjs";
 import { createProtectedFunctionObserver } from "./protected-function-shared.mjs";
 import { withClock } from "./email-verification-duration-capture.mjs";
 import { writeObservation } from "./write-observation.mjs";
+import { assertTokenReplay, tokenHostObservations } from "./oauth-native-token-replay.mjs";
 
 const version = "1.7.6";
 const now = 2_000_000_000_123;
 const origin = "https://oauth-native-token.test";
 const date = "2030-01-02T03:04:05.000Z";
+const fixture = JSON.parse(readFileSync(new URL("../../../tests/fixtures/oauth-native-token-1.7.6.json", import.meta.url), "utf8"));
+assert.equal(fixture.version, version);
+assert.deepEqual(fixture.cases.map(record => record.name), nativeTokenCases().map(scenario => scenario.name));
 
 function inspect(value, observer) {
   if (value === null || typeof value !== "object" && typeof value !== "function") return observer.observe(value);
@@ -141,6 +145,8 @@ async function captureCase(scenario) {
     originalError: observedError(original, observer, original), logs, database, functions: observer.functions,
   };
   await writeObservation(`${JSON.stringify(record)}\n`);
+  await writeObservation(`${JSON.stringify({ contract: "oauth-native-token-host", name: scenario.name, observations: tokenHostObservations(record) })}\n`);
+  assertTokenReplay(record, fixture.cases.find(record => record.name === scenario.name));
   assert.deepEqual(record.after.input, record.before.input);
   assert.deepEqual(database, { user: [], session: [], account: [], verification: [] });
   assert.deepEqual(logs, []);
