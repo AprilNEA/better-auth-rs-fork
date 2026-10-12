@@ -3,9 +3,10 @@ import { readFileSync, writeSync } from "node:fs";
 import { APIError } from "better-call/error";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
-import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { symmetricDecrypt } from "better-auth/crypto";
 import { oAuthProxy } from "better-auth/plugins/oauth-proxy";
 import { callbackCases } from "./oauth-proxy-callback-cases.mjs";
+import { assertCallbackReplay, callbackHostObservations } from "./oauth-proxy-callback-replay.mjs";
 import { createProtectedFunctionObserver } from "./protected-function-shared.mjs";
 import { withClock } from "./email-verification-duration-capture.mjs";
 
@@ -51,7 +52,8 @@ function errorObservation(value, observer, original) {
 const descriptors = value => value !== null && (typeof value === "object" || typeof value === "function")
   ? Object.getOwnPropertyDescriptors(value) : undefined;
 
-async function captureCase(scenario) {
+async function captureCase(scenario, expected) {
+  assert.equal(expected.name, scenario.name);
   const observer = createProtectedFunctionObserver();
   const events = [];
   const logs = [];
@@ -125,8 +127,10 @@ async function captureCase(scenario) {
   if (scenario.input === "binding-string") stateData.oauthState = "7";
   if (scenario.input === "binding-object") stateData.oauthState = { value: 7 };
   const cookiePlaintext = scenario.input === "cookie-plaintext" ? scenario.plaintext : JSON.stringify(stateData);
-  const cookieCiphertext = await symmetricEncrypt({ key: secret, data: cookiePlaintext });
-  assert.equal(await symmetricDecrypt({ key: secret, data: cookieCiphertext }), cookiePlaintext);
+  const cookieCiphertext = expected.encryption.cookieCiphertext;
+  const decryptedCookie = await symmetricDecrypt({ key: secret, data: cookieCiphertext });
+  assert.equal(decryptedCookie, expected.encryption.cookiePlaintext);
+  assert.equal(decryptedCookie, cookiePlaintext);
   const packageData = { isOAuthProxy: true, state, stateCookie: cookieCiphertext };
   if (scenario.input === "package-field") {
     if (scenario.value === undefined) delete packageData[scenario.field];
@@ -136,8 +140,10 @@ async function captureCase(scenario) {
   if (["binding-numeric", "binding-string"].includes(scenario.input)) packageData.state = 7;
   if (scenario.input === "binding-object") packageData.state = { value: 7 };
   const packagePlaintext = scenario.input === "outer-plaintext" ? scenario.plaintext : JSON.stringify(packageData);
-  const ciphertext = await symmetricEncrypt({ key: secret, data: packagePlaintext });
-  assert.equal(await symmetricDecrypt({ key: secret, data: ciphertext }), packagePlaintext);
+  const ciphertext = expected.encryption.ciphertext;
+  const decryptedPackage = await symmetricDecrypt({ key: secret, data: ciphertext });
+  assert.equal(decryptedPackage, expected.encryption.packagePlaintext);
+  assert.equal(decryptedPackage, packagePlaintext);
   const getter = (object, label, key, value, throws = false) => Object.defineProperty(object, key, {
     enumerable: true, configurable: true,
     get() {
@@ -303,24 +309,40 @@ async function captureCase(scenario) {
   return { ...observe(), originalErrorUnchanged: true };
 }
 
-export async function captureOAuthProxyCallback(scenario) {
+export async function captureOAuthProxyCallback(scenario, expected) {
   for (const name of ["better-auth", "@better-auth/core"]) {
     assert.equal(JSON.parse(readFileSync(new URL(`../node_modules/${name}/package.json`, import.meta.url), "utf8")).version, version);
   }
-  return withClock(async setClock => { setClock(now); return captureCase(scenario); });
+  return withClock(async setClock => { setClock(now); return captureCase(scenario, expected); });
 }
 
 if (import.meta.main) {
-  const selected = callbackCases().filter(scenario => !process.argv[2] || scenario.name === process.argv[2]);
+  const fixture = JSON.parse(readFileSync(new URL("../../../tests/fixtures/oauth-proxy-callback-1.7.6.json", import.meta.url), "utf8"));
+  assert.equal(fixture.version, version);
+  const scenarios = callbackCases();
+  assert.deepEqual(fixture.cases.map(record => record.name), scenarios.map(scenario => scenario.name));
+  assert.equal(new Set(fixture.cases.map(record => record.name)).size, fixture.cases.length);
+  const selected = scenarios.filter(scenario => !process.argv[2] || scenario.name === process.argv[2]);
   assert.ok(selected.length > 0, "Select an existing OAuth proxy callback scenario");
   const failures = [];
   for (const scenario of selected) {
-    try { writeSync(1, `${JSON.stringify(await captureOAuthProxyCallback(scenario))}\n`); }
-    catch (error) {
+    try {
+      const expected = fixture.cases.find(record => record.name === scenario.name);
+      const actual = await captureOAuthProxyCallback(scenario, expected);
+      const serialized = JSON.stringify(actual);
+      writeSync(1, `${serialized}\n`);
+      const observation = JSON.parse(serialized);
+      writeSync(1, `${JSON.stringify({
+        contract: "oauth-proxy-callback-host", name: scenario.name,
+        source: callbackHostObservations(expected, scenario),
+        replay: callbackHostObservations(observation, scenario),
+      })}\n`);
+      assertCallbackReplay(observation, expected, scenario);
+    } catch (error) {
       failures.push(error);
       writeSync(1, `${JSON.stringify({ contract: "oauth-proxy-callback-case-failed", name: scenario.name, error: { name: error.name, message: error.message, stack: error.stack } })}\n`);
     }
   }
-  // Capture each independent case, then fail the process if any assertion failed.
-  if (failures.length) throw new AggregateError(failures, `${failures.length} OAuth proxy callback source cases failed`);
+  // Replay every independent case before reporting assertion failures.
+  if (failures.length) throw new AggregateError(failures, `${failures.length} OAuth proxy callback replay cases failed`);
 }

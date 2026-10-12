@@ -1,0 +1,1041 @@
+{
+  "status": "draft; source extraction only; no replay or Rust parity claim",
+  "version": "1.7.6",
+  "run": "38199792129",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38199792129",
+  "commit": "00c80ed20b574398184a2f5c4fcc792f6b2f7ce6",
+  "artifactName": "focused-check-reference-contracts-00c80ed20b574398184a2f5c4fcc792f6b2f7ce6-1",
+  "originalArtifact": {
+    "path": "/private/tmp/better-auth-cleanup-fields-38199792129/focused-check-reference-contracts-00c80ed20b574398184a2f5c4fcc792f6b2f7ce6-1/focused-check.log",
+    "bytes": 756173,
+    "sha256": "c94a6b17fb9b73852c5206c53881191b079d1ebc1df496cd35f67a110228dabc"
+  },
+  "originalActionsLog": {
+    "path": "/private/tmp/better-auth-ci-38199792129.log",
+    "bytes": 1208007,
+    "sha256": "7701d65f6326d293cd9f672f8c6cb5f1d7ab3ac1737ff58c3af662ec723a435f"
+  },
+  "copiedArtifact": {
+    "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/focused-check.log",
+    "bytes": 756173,
+    "sha256": "c94a6b17fb9b73852c5206c53881191b079d1ebc1df496cd35f67a110228dabc"
+  },
+  "copiedActionsLog": {
+    "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/actions.log",
+    "bytes": 1208007,
+    "sha256": "7701d65f6326d293cd9f672f8c6cb5f1d7ab3ac1737ff58c3af662ec723a435f"
+  },
+  "records": {
+    "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/oauth-proxy-callback-1.7.6.records.jsonl",
+    "bytes": 710293,
+    "sha256": "a6a0a36a03774d1e4b80e4026404223314d5e1757629f1e4224c850125a70e93"
+  },
+  "fixtureDraft": {
+    "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/oauth-proxy-callback-1.7.6.json",
+    "bytes": 933886,
+    "sha256": "14e6b6b704b473f06fc89e4033fb1f8bfa743b775de170e63aedcfbb89f47af1"
+  },
+  "processObservation": {
+    "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/oauth-proxy-callback-process.json",
+    "bytes": 69,
+    "sha256": "e9f53b7324071bfa34d4a9fa0c4de2484894fbc6c2a5c9d6c68dbd2b0b690fa9",
+    "artifactLine": 141,
+    "artifactByteOffset": 755911,
+    "observation": {
+      "contract": "oauth-proxy-callback-process",
+      "exitCode": 0,
+      "stderr": ""
+    }
+  },
+  "sourceFiles": [
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-proxy-callback-capture.mjs",
+      "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/source/oauth-proxy-callback-capture.mjs",
+      "bytes": 18837,
+      "sha256": "97871295857a8cf39d711644719bb1e0a129a3a223af1730df58ef045ce5eba9"
+    },
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-proxy-callback-cases.mjs",
+      "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/source/oauth-proxy-callback-cases.mjs",
+      "bytes": 8386,
+      "sha256": "d4edeabd12ffab5798e2f468cc7717f95471195729400141fa1bc23856fc030f"
+    },
+    {
+      "repositoryPath": "compat-tests/reference-server/contracts/oauth-proxy-callback.test.ts",
+      "path": "/private/tmp/better-auth-oauth-proxy-callback-next/successful-38199792129/source/oauth-proxy-callback.test.ts",
+      "bytes": 1691,
+      "sha256": "e1ada25e0f1ab3b4e3fcac136a15ecab6ccd86ee993baf720cf0714ed0771bb4"
+    }
+  ],
+  "counts": {
+    "cases": 105,
+    "scopes": {
+      "callback-contract": 100,
+      "embedding-only": 5
+    },
+    "outcomes": {
+      "returned": 53,
+      "thrown": 52
+    },
+    "globalLogCases": [
+      "invalid-user-json-becomes-undefined"
+    ]
+  },
+  "preservation": {
+    "rawRecordBytes": true,
+    "fixtureValuesAndObjectKeyOrder": true,
+    "ciphertextsAndPlaintexts": true,
+    "inputDescriptorsAndFunctionSources": true,
+    "errorPropertiesAndPropertyOrder": true,
+    "hostFieldsAndStacks": true,
+    "callbacksLogsAndStorage": true,
+    "normalizations": []
+  },
+  "recordsIndex": [
+    {
+      "index": 0,
+      "name": "native-root-undefined",
+      "scope": "callback-contract",
+      "artifactLine": 36,
+      "artifactByteOffset": 45618,
+      "bytes": 4975,
+      "sha256": "73cba8d9216d927bb4f5d66248e001da02ef9a5aed46fbcac8f37f68eb9c366c"
+    },
+    {
+      "index": 1,
+      "name": "native-root-null",
+      "scope": "callback-contract",
+      "artifactLine": 37,
+      "artifactByteOffset": 50593,
+      "bytes": 4906,
+      "sha256": "516ac601dc690e7fd22fc544832a847d164b7b96ab83fdaee0e3e52eee655d25"
+    },
+    {
+      "index": 2,
+      "name": "native-root-false",
+      "scope": "callback-contract",
+      "artifactLine": 38,
+      "artifactByteOffset": 55499,
+      "bytes": 4911,
+      "sha256": "9ee3ac09dbdf1472658f12417c8a60b00d3fe1577a96a1f477f958565a0124df"
+    },
+    {
+      "index": 3,
+      "name": "native-root-number",
+      "scope": "callback-contract",
+      "artifactLine": 39,
+      "artifactByteOffset": 60410,
+      "bytes": 4896,
+      "sha256": "cbf2531889f1b62e3bf8f0617cf81b93c21060c6716234f9d3f7b13b8915c331"
+    },
+    {
+      "index": 4,
+      "name": "native-root-string",
+      "scope": "callback-contract",
+      "artifactLine": 40,
+      "artifactByteOffset": 65306,
+      "bytes": 4916,
+      "sha256": "85c799878444a420ceecfa54e13756017df7cc60ace795c8c090cb732069a7bd"
+    },
+    {
+      "index": 5,
+      "name": "native-root-array",
+      "scope": "callback-contract",
+      "artifactLine": 41,
+      "artifactByteOffset": 70222,
+      "bytes": 5451,
+      "sha256": "6d1c798adbad3056663e94223159447b87de77310ff57e8a4e95a6754c7f581a"
+    },
+    {
+      "index": 6,
+      "name": "native-body-get-without-request",
+      "scope": "callback-contract",
+      "artifactLine": 42,
+      "artifactByteOffset": 75673,
+      "bytes": 8255,
+      "sha256": "37b558eb5e91412950b9459e261900abd75d53223ade6330a302de7c93f1a09f"
+    },
+    {
+      "index": 7,
+      "name": "native-body-post-without-request",
+      "scope": "callback-contract",
+      "artifactLine": 43,
+      "artifactByteOffset": 83928,
+      "bytes": 8257,
+      "sha256": "994e4dc9ceebdd7fb7765772e15ddf4c170d75a645726ff56698db41291c10b4"
+    },
+    {
+      "index": 8,
+      "name": "query-state-wins-over-invalid-body-state",
+      "scope": "callback-contract",
+      "artifactLine": 44,
+      "artifactByteOffset": 92185,
+      "bytes": 8541,
+      "sha256": "54f911ad186a176000ae7e90310c395cf81ae7c13e69228bdf5229d49eb5850b"
+    },
+    {
+      "index": 9,
+      "name": "nullish-query-state-undefined-uses-body",
+      "scope": "callback-contract",
+      "artifactLine": 45,
+      "artifactByteOffset": 100726,
+      "bytes": 8540,
+      "sha256": "b175bf7067a56b1bef213f9504e5ce8e0ec61120718c13bee96d3a50ccfae8c7"
+    },
+    {
+      "index": 10,
+      "name": "nullish-query-error-undefined-uses-body",
+      "scope": "callback-contract",
+      "artifactLine": 46,
+      "artifactByteOffset": 109266,
+      "bytes": 8579,
+      "sha256": "0008e745be9fcb6836203275a67e6e66e1bf8d7cffe9cd8fcd6f79fe3226b5cb"
+    },
+    {
+      "index": 11,
+      "name": "nullish-query-state-null-uses-body",
+      "scope": "callback-contract",
+      "artifactLine": 47,
+      "artifactByteOffset": 117845,
+      "bytes": 8503,
+      "sha256": "953810635c76fcd0684cf6dcd3beeb080dd40224b12cfb6be0166c75976c7c4d"
+    },
+    {
+      "index": 12,
+      "name": "nullish-query-error-null-uses-body",
+      "scope": "callback-contract",
+      "artifactLine": 48,
+      "artifactByteOffset": 126348,
+      "bytes": 8542,
+      "sha256": "bc8bd3662a17f78658c0793aa63914aebdf486eee9fd1328a730d5fd8131bd64"
+    },
+    {
+      "index": 13,
+      "name": "query-state-false-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 49,
+      "artifactByteOffset": 134890,
+      "bytes": 7983,
+      "sha256": "3946501ebeff5ac44c3c89606f7d90d756881d6f3347b453fafdf4b62e1b6a28"
+    },
+    {
+      "index": 14,
+      "name": "query-state-zero-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 50,
+      "artifactByteOffset": 142873,
+      "bytes": 7974,
+      "sha256": "7036197390c89b75c2be93b2b808778812bdd5d7327c4905553cbbf4c7811eaf"
+    },
+    {
+      "index": 15,
+      "name": "query-state-nan-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 51,
+      "artifactByteOffset": 150847,
+      "bytes": 8033,
+      "sha256": "0151a513e3c400aa75e049d9e60aaaf497dcc6a34449260e98c28d2f61007fb6"
+    },
+    {
+      "index": 16,
+      "name": "query-state-empty-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 52,
+      "artifactByteOffset": 158880,
+      "bytes": 7977,
+      "sha256": "a0d588956f14b86b32727f2cdeadd15d1c88d70b974523126eee20cbbd345e77"
+    },
+    {
+      "index": 17,
+      "name": "query-state-object-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 53,
+      "artifactByteOffset": 166857,
+      "bytes": 7978,
+      "sha256": "f89259a7455240a377943e76db6a7cee3a6208ca0deca4fe2f4fc4ce3a8793d7"
+    },
+    {
+      "index": 18,
+      "name": "query-state-array-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 54,
+      "artifactByteOffset": 174835,
+      "bytes": 7977,
+      "sha256": "82431bf2e8a5a771dfb3092c952ea2c7fb53561c5d2cea3895bf3454808ca36c"
+    },
+    {
+      "index": 19,
+      "name": "query-state-date-does-not-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 55,
+      "artifactByteOffset": 182812,
+      "bytes": 8048,
+      "sha256": "c0ab0fd5cd662ca107d8b324706aab3591deef5399135283730a56fdd0e28be0"
+    },
+    {
+      "index": 20,
+      "name": "query-state-symbol-does-not-use-body",
+      "scope": "embedding-only",
+      "artifactLine": 56,
+      "artifactByteOffset": 190860,
+      "bytes": 8053,
+      "sha256": "9bc90a9fcc7cbb86f46d82b99f4d69131245daa4fe8850fea61fcb19b2dd643e"
+    },
+    {
+      "index": 21,
+      "name": "query-error-wins",
+      "scope": "callback-contract",
+      "artifactLine": 57,
+      "artifactByteOffset": 198913,
+      "bytes": 8543,
+      "sha256": "ea6f1728274d95c45eb41e10b65f9b6fa36994f3e295c423be80dcb6e7eb8768"
+    },
+    {
+      "index": 22,
+      "name": "empty-query-error-suppresses-body-error",
+      "scope": "callback-contract",
+      "artifactLine": 58,
+      "artifactByteOffset": 207456,
+      "bytes": 8678,
+      "sha256": "2ebe2e626f7cf6aeeac117e807659bfcf1f5a123e6431eb6c07c67b38d1ac08e"
+    },
+    {
+      "index": 23,
+      "name": "empty-query-code-suppresses-body-code",
+      "scope": "callback-contract",
+      "artifactLine": 59,
+      "artifactByteOffset": 216134,
+      "bytes": 8670,
+      "sha256": "d9214a822fbe3f94f5a471312eb40a22d8454912f5b5b442a824ef8ffa36bd55"
+    },
+    {
+      "index": 24,
+      "name": "nullish-callback-fields-use-body",
+      "scope": "callback-contract",
+      "artifactLine": 60,
+      "artifactByteOffset": 224804,
+      "bytes": 9242,
+      "sha256": "50fdbe99a8903423521d5ee0dd297e7313bd4e8037e4b01b8db337ae509101f3"
+    },
+    {
+      "index": 25,
+      "name": "native-input-getters-and-identity",
+      "scope": "callback-contract",
+      "artifactLine": 61,
+      "artifactByteOffset": 234046,
+      "bytes": 11414,
+      "sha256": "af0f0bcd002b99ed398b0064035bf5e76ef0eb44b8e2eeda782391b00942b0b0"
+    },
+    {
+      "index": 26,
+      "name": "getter-throws-query-state",
+      "scope": "callback-contract",
+      "artifactLine": 62,
+      "artifactByteOffset": 245460,
+      "bytes": 8442,
+      "sha256": "541e0975562bef96d1cc2dc06695b641ca59250564674a66df38bf7a9fa461ca"
+    },
+    {
+      "index": 27,
+      "name": "getter-throws-query-unread",
+      "scope": "callback-contract",
+      "artifactLine": 63,
+      "artifactByteOffset": 253902,
+      "bytes": 9426,
+      "sha256": "d9f0163775efaafbc0a98509bb5867953bd9d7ca5fa4cd20d552b957339efab7"
+    },
+    {
+      "index": 28,
+      "name": "getter-throws-body-state",
+      "scope": "callback-contract",
+      "artifactLine": 64,
+      "artifactByteOffset": 263328,
+      "bytes": 8519,
+      "sha256": "9f7364c9a3baf3f5f88c2a438494f0b6d5ac903e322b9b323a28c5e48927166e"
+    },
+    {
+      "index": 29,
+      "name": "getter-throws-body-unread",
+      "scope": "callback-contract",
+      "artifactLine": 65,
+      "artifactByteOffset": 271847,
+      "bytes": 9501,
+      "sha256": "6fb16244fb2b4fe3f8df081ad872f460cbf864565b347e1913fe0bd70956d9b2"
+    },
+    {
+      "index": 30,
+      "name": "body-getter-throws-before-falsy-state-guard",
+      "scope": "callback-contract",
+      "artifactLine": 66,
+      "artifactByteOffset": 281348,
+      "bytes": 7721,
+      "sha256": "dcfced7292f3d23a2e65c6889738cd55f99a08254e8af235f350c5150ee5103e"
+    },
+    {
+      "index": 31,
+      "name": "query-symbol-getter-is-read-before-symbol-is-dropped",
+      "scope": "embedding-only",
+      "artifactLine": 67,
+      "artifactByteOffset": 289069,
+      "bytes": 10229,
+      "sha256": "c0acd0949a1db41ea8c249f4b6f8d6105c82604d88bf662695397e284822c6c3"
+    },
+    {
+      "index": 32,
+      "name": "body-symbol-getter-is-read",
+      "scope": "embedding-only",
+      "artifactLine": 68,
+      "artifactByteOffset": 299298,
+      "bytes": 10287,
+      "sha256": "aa7fd687a295f7546c48f74793c2976451df1801c82ee7bbd627951f798f8514"
+    },
+    {
+      "index": 33,
+      "name": "query-own-proto-value-becomes-inherited-default",
+      "scope": "embedding-only",
+      "artifactLine": 69,
+      "artifactByteOffset": 309585,
+      "bytes": 8299,
+      "sha256": "c2bdfebf1ea40c44996c8af87fcba7dbe57da039c97d330d8fe36a75bcb64136"
+    },
+    {
+      "index": 34,
+      "name": "body-own-proto-value-is-visible-to-state-read",
+      "scope": "embedding-only",
+      "artifactLine": 70,
+      "artifactByteOffset": 317884,
+      "bytes": 8385,
+      "sha256": "cbbc069d471bddd6ad7d648e37886250ebeda119c4a546d165b8e91e7204d5e3"
+    },
+    {
+      "index": 35,
+      "name": "malformed-cipher-before-invalid-query",
+      "scope": "callback-contract",
+      "artifactLine": 71,
+      "artifactByteOffset": 326269,
+      "bytes": 5638,
+      "sha256": "14dcc0ddd013efbd6b832fdd0cb9c3b08f97d4d646d8c8f37bbd21d6019dd45c"
+    },
+    {
+      "index": 36,
+      "name": "first-key-getter-error-is-caught",
+      "scope": "callback-contract",
+      "artifactLine": 72,
+      "artifactByteOffset": 331907,
+      "bytes": 7955,
+      "sha256": "11784bd0fc093b7a453105a3dfb96f29d79e8e01fa2ad89b0d3b8b1152edf888"
+    },
+    {
+      "index": 37,
+      "name": "outer-parse-rejection-37",
+      "scope": "callback-contract",
+      "artifactLine": 73,
+      "artifactByteOffset": 339862,
+      "bytes": 3884,
+      "sha256": "730e0d1ddcb95244e21f97114c6e7d118250381ea5703d9dd5959de223047471"
+    },
+    {
+      "index": 38,
+      "name": "outer-parse-rejection-38",
+      "scope": "callback-contract",
+      "artifactLine": 74,
+      "artifactByteOffset": 343746,
+      "bytes": 3956,
+      "sha256": "0095e752438207f852d987eb8d505bec08a94681d52eb01c11fdbb53e25aadaa"
+    },
+    {
+      "index": 39,
+      "name": "outer-parse-rejection-39",
+      "scope": "callback-contract",
+      "artifactLine": 75,
+      "artifactByteOffset": 347702,
+      "bytes": 3942,
+      "sha256": "a620372f7e6abee59c416f02eaf40bfafde28f023790ba929805b3e8bab162e2"
+    },
+    {
+      "index": 40,
+      "name": "outer-nullish-null",
+      "scope": "callback-contract",
+      "artifactLine": 76,
+      "artifactByteOffset": 351644,
+      "bytes": 4614,
+      "sha256": "01fdb999787425c86ef87a1c11ae767e3b8836c09132051e92b99db8448b6804"
+    },
+    {
+      "index": 41,
+      "name": "outer-nullish-undefined",
+      "scope": "callback-contract",
+      "artifactLine": 77,
+      "artifactByteOffset": 356258,
+      "bytes": 4664,
+      "sha256": "9eb44b2baa106c68f430905eff71337b1699e717a3b54089f2ba98145b661803"
+    },
+    {
+      "index": 42,
+      "name": "outer-primitive-42",
+      "scope": "callback-contract",
+      "artifactLine": 78,
+      "artifactByteOffset": 360922,
+      "bytes": 3765,
+      "sha256": "24d24352f0d31f8c02579c0c43f2349aa437c1b20aff4e8792f7b328694ad847"
+    },
+    {
+      "index": 43,
+      "name": "outer-primitive-43",
+      "scope": "callback-contract",
+      "artifactLine": 79,
+      "artifactByteOffset": 364687,
+      "bytes": 3737,
+      "sha256": "9f9e4434bf149e262aa3f7d7dd1060323e6dac117150d3af35a0f2b63eaace6c"
+    },
+    {
+      "index": 44,
+      "name": "outer-primitive-44",
+      "scope": "callback-contract",
+      "artifactLine": 80,
+      "artifactByteOffset": 368424,
+      "bytes": 3751,
+      "sha256": "d7f42b8cbd1ce8bc7e566df6ab9fb96e787c888848ddc58cc949f2910163cf24"
+    },
+    {
+      "index": 45,
+      "name": "outer-primitive-45",
+      "scope": "callback-contract",
+      "artifactLine": 81,
+      "artifactByteOffset": 372175,
+      "bytes": 3786,
+      "sha256": "e775380542ae7268692be0b9f0e5feb5efcbdce2c064c3ca00328db19e7b70b2"
+    },
+    {
+      "index": 46,
+      "name": "outer-primitive-46",
+      "scope": "callback-contract",
+      "artifactLine": 82,
+      "artifactByteOffset": 375961,
+      "bytes": 3746,
+      "sha256": "426e7300925a383abcf8350f90c969e96593be77e42b17f76f5865ea40e2ff20"
+    },
+    {
+      "index": 47,
+      "name": "outer-primitive-47",
+      "scope": "callback-contract",
+      "artifactLine": 83,
+      "artifactByteOffset": 379707,
+      "bytes": 3774,
+      "sha256": "ef8f578256b945307f20524c725685c43bd7a6ab7e48af07568185fa2d832894"
+    },
+    {
+      "index": 48,
+      "name": "outer-primitive-48",
+      "scope": "callback-contract",
+      "artifactLine": 84,
+      "artifactByteOffset": 383481,
+      "bytes": 3744,
+      "sha256": "c3a018ecaf40f354fe9da3e084e0367317a482b23f341fbb5cac638ff0f7ef69"
+    },
+    {
+      "index": 49,
+      "name": "outer-primitive-49",
+      "scope": "callback-contract",
+      "artifactLine": 85,
+      "artifactByteOffset": 387225,
+      "bytes": 3744,
+      "sha256": "a4917aa8c55e4c74d865ae27581a2696a4d914bcc694d2a673d8f5edd2110870"
+    },
+    {
+      "index": 50,
+      "name": "outer-primitive-50",
+      "scope": "callback-contract",
+      "artifactLine": 86,
+      "artifactByteOffset": 390969,
+      "bytes": 3914,
+      "sha256": "fac64dfedacb85a71d5391e707e0553a760ee552708153e12fbed9eca4d6ce13"
+    },
+    {
+      "index": 51,
+      "name": "package-isOAuthProxy-missing",
+      "scope": "callback-contract",
+      "artifactLine": 87,
+      "artifactByteOffset": 394883,
+      "bytes": 7717,
+      "sha256": "4540b5cd86a9707d27ab5beeb69bc14fb31e0da4fa37c57cef8a04b6e8ec053f"
+    },
+    {
+      "index": 52,
+      "name": "package-isOAuthProxy-null",
+      "scope": "callback-contract",
+      "artifactLine": 88,
+      "artifactByteOffset": 402600,
+      "bytes": 7856,
+      "sha256": "a6d4d1f9e3369fb8e28102072f5da54988f5b1580d215e5ebb31244057a1a87d"
+    },
+    {
+      "index": 53,
+      "name": "package-isOAuthProxy-false",
+      "scope": "callback-contract",
+      "artifactLine": 89,
+      "artifactByteOffset": 410456,
+      "bytes": 7864,
+      "sha256": "9e9c49718df63299f0f98237876c811bec78360c11a40cb472f42650a9884d38"
+    },
+    {
+      "index": 54,
+      "name": "package-isOAuthProxy-zero",
+      "scope": "callback-contract",
+      "artifactLine": 90,
+      "artifactByteOffset": 418320,
+      "bytes": 7835,
+      "sha256": "157954c567ce0898f5891711fa3fd70301f1778bf65d2ea22e1b4180cb53010a"
+    },
+    {
+      "index": 55,
+      "name": "package-isOAuthProxy-empty",
+      "scope": "callback-contract",
+      "artifactLine": 91,
+      "artifactByteOffset": 426155,
+      "bytes": 7845,
+      "sha256": "33d75ef1d5243c89a23fd6a497bc8bad2675773f44ee9cf2e887da7fe87554c6"
+    },
+    {
+      "index": 56,
+      "name": "package-state-missing",
+      "scope": "callback-contract",
+      "artifactLine": 92,
+      "artifactByteOffset": 434000,
+      "bytes": 7631,
+      "sha256": "a272e08b05853bd2904ed624bcf41c42ead27af183bf4b0f09ec1c4d66bb4dca"
+    },
+    {
+      "index": 57,
+      "name": "package-state-null",
+      "scope": "callback-contract",
+      "artifactLine": 93,
+      "artifactByteOffset": 441631,
+      "bytes": 7721,
+      "sha256": "3e5bea9923ef9e559d752be0b5d3d299aa645fcf57cad1dc80995d6ac9a33197"
+    },
+    {
+      "index": 58,
+      "name": "package-state-false",
+      "scope": "callback-contract",
+      "artifactLine": 94,
+      "artifactByteOffset": 449352,
+      "bytes": 7729,
+      "sha256": "934a35058b9b4920607fa4c5fd6179aab27ad868e9ef3a787ba395f0dd82002c"
+    },
+    {
+      "index": 59,
+      "name": "package-state-zero",
+      "scope": "callback-contract",
+      "artifactLine": 95,
+      "artifactByteOffset": 457081,
+      "bytes": 7700,
+      "sha256": "d45f1dfb404a4cab343212bba7aaf2d01227e4641b2077cc3b7d4d145e4e2e2d"
+    },
+    {
+      "index": 60,
+      "name": "package-state-empty",
+      "scope": "callback-contract",
+      "artifactLine": 96,
+      "artifactByteOffset": 464781,
+      "bytes": 7710,
+      "sha256": "1b64bf02cf136000627d81ad1cce0f3b0b558836733a5fdce1d2323c46a22c45"
+    },
+    {
+      "index": 61,
+      "name": "package-stateCookie-missing",
+      "scope": "callback-contract",
+      "artifactLine": 97,
+      "artifactByteOffset": 472491,
+      "bytes": 4109,
+      "sha256": "99474a49832d973c7133307aef04acd15debe924a4ae892c2b025cef2cf97c9b"
+    },
+    {
+      "index": 62,
+      "name": "package-stateCookie-null",
+      "scope": "callback-contract",
+      "artifactLine": 98,
+      "artifactByteOffset": 476600,
+      "bytes": 4241,
+      "sha256": "195f71adb5c0c924562c42b5edaa193f38be23878e49302a2ca1505a87ece3cf"
+    },
+    {
+      "index": 63,
+      "name": "package-stateCookie-false",
+      "scope": "callback-contract",
+      "artifactLine": 99,
+      "artifactByteOffset": 480841,
+      "bytes": 4249,
+      "sha256": "1650268868456a16c75cab7c162f478fd32fcf56dbeb188903b408ef94be5061"
+    },
+    {
+      "index": 64,
+      "name": "package-stateCookie-zero",
+      "scope": "callback-contract",
+      "artifactLine": 100,
+      "artifactByteOffset": 485090,
+      "bytes": 4220,
+      "sha256": "deb80a77bb3999378404968e3c62da23e5d6f534154b25d3f06f281dc8061edf"
+    },
+    {
+      "index": 65,
+      "name": "package-stateCookie-empty",
+      "scope": "callback-contract",
+      "artifactLine": 101,
+      "artifactByteOffset": 489310,
+      "bytes": 4230,
+      "sha256": "f7850e51aaef12b29ccdfaf2e686dfc74c6a5cb82ffdb5300dff4f4963811d13"
+    },
+    {
+      "index": 66,
+      "name": "package-isOAuthProxy-truthy-number",
+      "scope": "callback-contract",
+      "artifactLine": 102,
+      "artifactByteOffset": 493540,
+      "bytes": 7622,
+      "sha256": "7dbcc6736a098944ce4a61ace20b8cb5523a05d7f89b975da13226429b9178f4"
+    },
+    {
+      "index": 67,
+      "name": "package-isOAuthProxy-truthy-string",
+      "scope": "callback-contract",
+      "artifactLine": 103,
+      "artifactByteOffset": 501162,
+      "bytes": 7673,
+      "sha256": "813e179c7bd7f52b4bb8e936c65716a1fcc784592a84c9311c8c1938fe1c688a"
+    },
+    {
+      "index": 68,
+      "name": "package-isOAuthProxy-truthy-array",
+      "scope": "callback-contract",
+      "artifactLine": 104,
+      "artifactByteOffset": 508835,
+      "bytes": 7628,
+      "sha256": "425e9f94567ecc38976d1ed2442e6de7e11e50fc45681b78e76b17b46d061544"
+    },
+    {
+      "index": 69,
+      "name": "package-isOAuthProxy-truthy-object",
+      "scope": "callback-contract",
+      "artifactLine": 105,
+      "artifactByteOffset": 516463,
+      "bytes": 7629,
+      "sha256": "eb6e2c9024eeea5c00508b0bfb80cb6e5489a3be173f7cb4a6bb370574651a7a"
+    },
+    {
+      "index": 70,
+      "name": "package-state-truthy-number",
+      "scope": "callback-contract",
+      "artifactLine": 106,
+      "artifactByteOffset": 524092,
+      "bytes": 7487,
+      "sha256": "9024b6dcf10c155b0355f018cb260283dbc527b355ea261dc3ae7da901b969aa"
+    },
+    {
+      "index": 71,
+      "name": "package-state-truthy-string",
+      "scope": "callback-contract",
+      "artifactLine": 107,
+      "artifactByteOffset": 531579,
+      "bytes": 7538,
+      "sha256": "fd38d3238644f51e0aba601bcf9d1ba5d966756cb94bb27e8c1506ef597f3ef2"
+    },
+    {
+      "index": 72,
+      "name": "package-state-truthy-array",
+      "scope": "callback-contract",
+      "artifactLine": 108,
+      "artifactByteOffset": 539117,
+      "bytes": 7493,
+      "sha256": "419678c9205d5392284a2a6499f2bc49f4d77e77b76b70f5a4f750fd98d8090b"
+    },
+    {
+      "index": 73,
+      "name": "package-state-truthy-object",
+      "scope": "callback-contract",
+      "artifactLine": 109,
+      "artifactByteOffset": 546610,
+      "bytes": 7494,
+      "sha256": "11325b28ec62680d3b99018ef5b0c06c93b685b545d1aaf7082d68eb2e33d240"
+    },
+    {
+      "index": 74,
+      "name": "state-cookie-truthy-number-reaches-decrypt",
+      "scope": "callback-contract",
+      "artifactLine": 110,
+      "artifactByteOffset": 554104,
+      "bytes": 4997,
+      "sha256": "36a216c4d79290a050cab8de4c82ddc5f10b1269c76582b76cd7613d68f9675d"
+    },
+    {
+      "index": 75,
+      "name": "state-cookie-truthy-boolean-reaches-decrypt",
+      "scope": "callback-contract",
+      "artifactLine": 111,
+      "artifactByteOffset": 559101,
+      "bytes": 5021,
+      "sha256": "6eab70ef0b9f1f1a590edab0d791d1f1dacdbbf4a34923a862dccc3aa85a9374"
+    },
+    {
+      "index": 76,
+      "name": "state-cookie-truthy-array-reaches-decrypt",
+      "scope": "callback-contract",
+      "artifactLine": 112,
+      "artifactByteOffset": 564122,
+      "bytes": 5003,
+      "sha256": "7e08c85e047e9dded8aaf4e4bfe1ce88f32fec1b2c4dc4fb132e801f1dc9d1b7"
+    },
+    {
+      "index": 77,
+      "name": "state-cookie-truthy-object-reaches-decrypt",
+      "scope": "callback-contract",
+      "artifactLine": 113,
+      "artifactByteOffset": 569125,
+      "bytes": 5004,
+      "sha256": "e1b4bb0b63553e70fa5b78f9167aad09554f26c0f4010e66f8aae91258fb9758"
+    },
+    {
+      "index": 78,
+      "name": "state-cookie-truthy-string-reaches-decrypt",
+      "scope": "callback-contract",
+      "artifactLine": 114,
+      "artifactByteOffset": 574129,
+      "bytes": 5251,
+      "sha256": "e4229bb3a66b6a30ca6dab7f8e8a27bb591948cf53d4f907589378980511fda8"
+    },
+    {
+      "index": 79,
+      "name": "invalid-query-precedes-invalid-cookie",
+      "scope": "callback-contract",
+      "artifactLine": 115,
+      "artifactByteOffset": 579380,
+      "bytes": 7298,
+      "sha256": "06f3f904f20955721c232c752c7d8fc208c156b84c9d3ce4816942d44bdecf57"
+    },
+    {
+      "index": 80,
+      "name": "second-key-getter-error-is-logged-by-identity",
+      "scope": "callback-contract",
+      "artifactLine": 116,
+      "artifactByteOffset": 586678,
+      "bytes": 9341,
+      "sha256": "ac863b14f3763464429b7d4ae4bd70b459e46160b6bdf27647043ebaa9c013d9"
+    },
+    {
+      "index": 81,
+      "name": "cookie-parse-rejection-81",
+      "scope": "callback-contract",
+      "artifactLine": 117,
+      "artifactByteOffset": 596019,
+      "bytes": 5378,
+      "sha256": "ab4a1288dfa44d9ff377f564ef29abed5c34313146262df86952e50556fd5270"
+    },
+    {
+      "index": 82,
+      "name": "cookie-parse-rejection-82",
+      "scope": "callback-contract",
+      "artifactLine": 118,
+      "artifactByteOffset": 601397,
+      "bytes": 5585,
+      "sha256": "c298501e7d1cd02e47c8be52eb8eceed1b2453c86521dba9600551ca6288d2d0"
+    },
+    {
+      "index": 83,
+      "name": "cookie-parse-rejection-83",
+      "scope": "callback-contract",
+      "artifactLine": 119,
+      "artifactByteOffset": 606982,
+      "bytes": 5551,
+      "sha256": "8dfb44dcfb81633342283ed8b222bd4f8ce2f9bb7c51d7b00255dfa64761aca4"
+    },
+    {
+      "index": 84,
+      "name": "cookie-nullish-null",
+      "scope": "callback-contract",
+      "artifactLine": 120,
+      "artifactByteOffset": 612533,
+      "bytes": 5027,
+      "sha256": "2d8287c92f7002c237e2f01072c23b97e466f5bce91ba6e9f0e9f526d7b0f1be"
+    },
+    {
+      "index": 85,
+      "name": "cookie-nullish-undefined",
+      "scope": "callback-contract",
+      "artifactLine": 121,
+      "artifactByteOffset": 617560,
+      "bytes": 5127,
+      "sha256": "0b5d9d9a52e0741b9c17d613ab54bbff2da0539bc408da88d07bf8899ea99786"
+    },
+    {
+      "index": 86,
+      "name": "cookie-primitive-86",
+      "scope": "callback-contract",
+      "artifactLine": 122,
+      "artifactByteOffset": 622687,
+      "bytes": 4588,
+      "sha256": "9e4aacba78ac2b194be063fbba77dd431bb1d37cdd9f67a8b70755b613031b7a"
+    },
+    {
+      "index": 87,
+      "name": "cookie-primitive-87",
+      "scope": "callback-contract",
+      "artifactLine": 123,
+      "artifactByteOffset": 627275,
+      "bytes": 4520,
+      "sha256": "871f029aa88f7b0cb7ef59cdb59744118cc3823915cfeedd9fb5eefa9c9fb524"
+    },
+    {
+      "index": 88,
+      "name": "cookie-primitive-88",
+      "scope": "callback-contract",
+      "artifactLine": 124,
+      "artifactByteOffset": 631795,
+      "bytes": 4554,
+      "sha256": "9f45da18a4f5d326eab685db2f582043c94b8ad62a45267d6fb23c62d7b62579"
+    },
+    {
+      "index": 89,
+      "name": "cookie-primitive-89",
+      "scope": "callback-contract",
+      "artifactLine": 125,
+      "artifactByteOffset": 636349,
+      "bytes": 4639,
+      "sha256": "e0c4e1910a1b628630911031c786d177dbc1086f426081d9b759d355cec593f7"
+    },
+    {
+      "index": 90,
+      "name": "cookie-primitive-90",
+      "scope": "callback-contract",
+      "artifactLine": 126,
+      "artifactByteOffset": 640988,
+      "bytes": 4607,
+      "sha256": "90652a3fdd93e0b07d77a8640368d41d6d6f22bd3b8d9c728c4d0a4d6fa6a0b9"
+    },
+    {
+      "index": 91,
+      "name": "cookie-primitive-91",
+      "scope": "callback-contract",
+      "artifactLine": 127,
+      "artifactByteOffset": 645595,
+      "bytes": 4537,
+      "sha256": "ed8a490f4d005ade7687d2a9d16e9501d11e762bcf77fcd43e4b63f54fa6a527"
+    },
+    {
+      "index": 92,
+      "name": "cookie-primitive-92",
+      "scope": "callback-contract",
+      "artifactLine": 128,
+      "artifactByteOffset": 650132,
+      "bytes": 4537,
+      "sha256": "988a04e2c6845e0157d1e5b8bf35856063e33ff1ca64883ea5805dbef215dd01"
+    },
+    {
+      "index": 93,
+      "name": "cookie-primitive-93",
+      "scope": "callback-contract",
+      "artifactLine": 129,
+      "artifactByteOffset": 654669,
+      "bytes": 4947,
+      "sha256": "0952c8650846a9e969faf4ae0bd2b625cce1a2b39adf6305bdc307a28f15f443"
+    },
+    {
+      "index": 94,
+      "name": "state-binding-mismatch-precedes-provider-error",
+      "scope": "callback-contract",
+      "artifactLine": 130,
+      "artifactByteOffset": 659616,
+      "bytes": 8361,
+      "sha256": "61fd5bd12a2df344d2207c47646cc3beefb20eceaa10aca2261d66190204894e"
+    },
+    {
+      "index": 95,
+      "name": "numeric-state-binding-retains-type",
+      "scope": "callback-contract",
+      "artifactLine": 131,
+      "artifactByteOffset": 667977,
+      "bytes": 7751,
+      "sha256": "d6724ec24d740851fe17479658b9067e78aa65fe727814ec66d500cc8409b273"
+    },
+    {
+      "index": 96,
+      "name": "numeric-state-binding-rejects-string",
+      "scope": "callback-contract",
+      "artifactLine": 132,
+      "artifactByteOffset": 675728,
+      "bytes": 7784,
+      "sha256": "994b5428df4f9fe73a0c2234864d16308cf1c79af6cb1549f7bb97cd6317ee26"
+    },
+    {
+      "index": 97,
+      "name": "separate-object-state-bindings-are-not-identical",
+      "scope": "callback-contract",
+      "artifactLine": 133,
+      "artifactByteOffset": 683512,
+      "bytes": 8004,
+      "sha256": "75fa4731361a43c8f3e6034405201bbb86442126fecfcba408b6db792cb7396e"
+    },
+    {
+      "index": 98,
+      "name": "provider-error-precedes-missing-code",
+      "scope": "callback-contract",
+      "artifactLine": 134,
+      "artifactByteOffset": 691516,
+      "bytes": 8309,
+      "sha256": "89c05fa11c2d2dd3ce50785f99bcc6a09bee662b5bb7c0687d7e307c92cb2f66"
+    },
+    {
+      "index": 99,
+      "name": "missing-provider-is-reached-after-state-cookie",
+      "scope": "callback-contract",
+      "artifactLine": 135,
+      "artifactByteOffset": 699825,
+      "bytes": 8456,
+      "sha256": "48fdd290a0f4d0d187e3cd9d3119b670b37e7aec6904ce412c9ec2c75a34fbe2"
+    },
+    {
+      "index": 100,
+      "name": "missing-state-data-fields-reach-provider",
+      "scope": "callback-contract",
+      "artifactLine": 136,
+      "artifactByteOffset": 708281,
+      "bytes": 5853,
+      "sha256": "59aec72aee06b942703d4a8f0fa8c5e3d8f60f7cb33e5e18524d4a24676543bf"
+    },
+    {
+      "index": 101,
+      "name": "parseJSON-revives-code-verifier-date",
+      "scope": "callback-contract",
+      "artifactLine": 137,
+      "artifactByteOffset": 714134,
+      "bytes": 9705,
+      "sha256": "fa1eb5f14a1fba5dacb618ae56776eb9d0d48d055e9e9cff1fb7ddd9ea36537e"
+    },
+    {
+      "index": 102,
+      "name": "provider-validation-error-is-logged-by-identity",
+      "scope": "callback-contract",
+      "artifactLine": 138,
+      "artifactByteOffset": 723839,
+      "bytes": 11133,
+      "sha256": "cc48b8f7c4d2dddc0fbd1302158623c6ea421c9f870a66a379b073e1e927cbaf"
+    },
+    {
+      "index": 103,
+      "name": "provider-user-error-escapes-by-identity",
+      "scope": "callback-contract",
+      "artifactLine": 139,
+      "artifactByteOffset": 734972,
+      "bytes": 9657,
+      "sha256": "941dcf802e0ffddc7b462be53517aafae0b498d2122d27fc94eae61146b87e0d"
+    },
+    {
+      "index": 104,
+      "name": "invalid-user-json-becomes-undefined",
+      "scope": "callback-contract",
+      "artifactLine": 140,
+      "artifactByteOffset": 744629,
+      "bytes": 11282,
+      "sha256": "28d0357a78dc4275eeabf3b26daef884ae6716ab0707c158e0b8c7a9849ec8af"
+    }
+  ]
+}
