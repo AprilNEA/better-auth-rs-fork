@@ -33,22 +33,118 @@ fn endpoint_error_preserves_body_headers_and_redacts_diagnostics() {
 #[tokio::test]
 async fn endpoint_error_into_axum_preserves_json_and_repeated_headers() {
     use axum::response::IntoResponse;
-    let mut response =
-        crate::types::AuthResponse::json(429, &serde_json::json!({"details":{"tryAgainIn":1234}}))
-            .unwrap();
-    response.headers.append("Set-Cookie", "first=1");
-    response.headers.append("Set-Cookie", "second=2");
-    let output = AuthError::from(response).into_response();
-    assert_eq!(output.status(), 429);
-    assert_eq!(output.headers().get_all("set-cookie").iter().count(), 2);
-    assert_eq!(output.headers()["content-type"], "application/json");
-    let body = axum::body::to_bytes(output.into_body(), usize::MAX)
-        .await
+    for router_failure in [false, true] {
+        let mut response = crate::types::AuthResponse::json(
+            429,
+            &serde_json::json!({"details":{"tryAgainIn":1234}}),
+        )
         .unwrap();
-    assert_eq!(
-        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["details"]["tryAgainIn"],
-        1234
-    );
+        response.headers.append("Set-Cookie", "first=1");
+        response.headers.append("Set-Cookie", "second=2");
+        let error = AuthError::from(response);
+        let output = if router_failure {
+            finish_axum_response(crate::api_error::HttpFailure::Source(error).into_response())
+        } else {
+            error.into_response()
+        };
+        assert_eq!(output.status(), 429);
+        assert_eq!(output.headers().get_all("set-cookie").iter().count(), 2);
+        assert_eq!(output.headers()["content-type"], "application/json");
+        let body = axum::body::to_bytes(output.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["details"]["tryAgainIn"],
+            1234
+        );
+    }
+}
+
+#[cfg(feature = "axum")]
+#[tokio::test]
+async fn database_errors_are_sanitized_at_both_axum_error_boundaries() {
+    use axum::response::IntoResponse;
+
+    for router_failure in [false, true] {
+        for properties in [
+            None,
+            Some(FieldMap::from([
+                ("message".into(), "private query".into()),
+                ("name".into(), "error".into()),
+                ("detail".into(), "private row".into()),
+                ("schema".into(), "private schema".into()),
+                ("table".into(), "private table".into()),
+            ])),
+        ] {
+            let cause = DatabaseErrorCause::from_source(
+                "private diagnostic",
+                std::io::Error::other("private source"),
+                properties,
+            );
+            let error = AuthError::Database(DatabaseError::Query(cause));
+            let response = if router_failure {
+                finish_axum_response(crate::api_error::HttpFailure::Source(error).into_response())
+            } else {
+                error.into_response()
+            };
+            assert_eq!(
+                response.status(),
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            );
+            let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("The sanitized database error body must be readable");
+            assert!(body.is_empty());
+        }
+    }
+}
+
+#[cfg(feature = "axum")]
+#[tokio::test]
+async fn api_errors_are_materialized_once_at_both_axum_error_boundaries() {
+    use axum::response::IntoResponse;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    for router_failure in [false, true] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let error = AuthError::try_api_error(ApiErrorInit {
+            status: "TOO_MANY_REQUESTS".into(),
+            body: FieldMap::from([(
+                "toJSON".into(),
+                crate::FieldFunction::contextual(move |_, _| {
+                    let _ = observed.fetch_add(1, Ordering::SeqCst);
+                    Ok(FieldMap::from([("retryAfter".into(), 7.0.into())]).into())
+                })
+                .into(),
+            )])
+            .into(),
+            headers: FieldMap::from([("retry-after".into(), "7".into())]).into(),
+            ..Default::default()
+        })
+        .expect("The native API error must construct");
+        let response = if router_failure {
+            finish_axum_response(crate::api_error::HttpFailure::Source(error).into_response())
+        } else {
+            error.into_response()
+        };
+        assert_eq!(response.status(), 429);
+        assert_eq!(
+            response
+                .headers()
+                .get("retry-after")
+                .and_then(|value| value.to_str().ok()),
+            Some("7")
+        );
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("The API error body must be readable");
+        assert_eq!(body.as_ref(), br#"{"retryAfter":7}"#);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
 }
 
 // ── status_code ─────────────────────────────────────────────────────
@@ -155,8 +251,9 @@ fn internal_errors_are_500() {
     );
     assert_eq!(
         AuthError::Database(DatabaseError::Connection("c".into()))
-            .status_code()
-            .unwrap(),
+            .to_http_response()
+            .unwrap()
+            .status,
         500
     );
 }
@@ -327,7 +424,8 @@ fn database_error_display() {
 fn database_error_converts_to_auth_error() {
     let db_err = DatabaseError::Query("bad sql".into());
     let auth_err: AuthError = db_err.into();
-    assert_eq!(auth_err.status_code().unwrap(), 500);
+    assert!(auth_err.status_code().unwrap().is_undefined());
+    assert_eq!(auth_err.to_http_response().unwrap().status, 500);
 }
 
 // ── validation_error_response ───────────────────────────────────────

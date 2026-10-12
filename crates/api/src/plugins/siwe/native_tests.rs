@@ -263,6 +263,11 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
         "invalid-signature",
         "api-error",
         "runtime-error",
+        "native-error",
+        "native-syntax-error",
+        "database-error",
+        "renamed-native-error",
+        "plain-error-shaped-object",
     ] {
         for http in [false, true] {
             let (mut plugin, ctx, reads, verified) = fixture(false).await?;
@@ -285,6 +290,34 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                             })?)
                         }
                         "runtime-error" => Err(AuthError::internal("verifier failed")),
+                        "native-error" | "renamed-native-error" => {
+                            let original =
+                                AuthError::internal("verifier failed").into_thrown_value()?;
+                            if mode == "renamed-native-error" {
+                                original.set_model_property("name", "RenamedError".into())?;
+                            }
+                            Err(AuthError::from_thrown(original))
+                        }
+                        "native-syntax-error" => Err(FieldValue::parse_json("{").unwrap_err()),
+                        "database-error" => Err(better_auth_core::DatabaseError::Query(
+                            better_auth_core::DatabaseErrorCause::from_source(
+                                "Rust driver diagnostic",
+                                std::io::Error::other("driver source"),
+                                Some(FieldMap::from([
+                                    ("message".into(), "driver failure".into()),
+                                    ("name".into(), "error".into()),
+                                    ("code".into(), "23505".into()),
+                                ])),
+                            ),
+                        )
+                        .into()),
+                        "plain-error-shaped-object" => Err(AuthError::from_thrown(
+                            FieldMap::from([
+                                ("name".into(), "Error".into()),
+                                ("message".into(), "must not be used".into()),
+                            ])
+                            .into(),
+                        )),
                         _ => Ok(false),
                     }
                 })
@@ -316,6 +349,18 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                 "api-error" => (
                     403,
                     json!({"code":"VERIFIER_REJECTED","message":"verifier rejected"}),
+                ),
+                "native-syntax-error" => (
+                    401,
+                    json!({"message":"Something went wrong. Please try again later.","error":"JSON Parse error: Unexpected EOF","status":401}),
+                ),
+                "database-error" => (
+                    401,
+                    json!({"message":"Something went wrong. Please try again later.","error":"driver failure","status":401}),
+                ),
+                "plain-error-shaped-object" => (
+                    401,
+                    json!({"message":"Something went wrong. Please try again later.","error":"Unknown error","status":401}),
                 ),
                 _ => (
                     401,

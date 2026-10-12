@@ -487,7 +487,7 @@ async fn id_reentry<S: AuthSchema>(
             )));
         };
         assert_eq!(
-            message,
+            message.as_str(),
             "Query Error: error returned from database: (code: 1299) NOT NULL constraint failed: verifications.id"
         );
     }

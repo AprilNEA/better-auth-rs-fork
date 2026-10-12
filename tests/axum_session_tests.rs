@@ -335,24 +335,34 @@ async fn extractors_reject_expired_sessions() {
 
 #[tokio::test]
 async fn extractors_propagate_database_failure() {
+    use better_auth::integrations::axum::{CachedSession, OptionalCachedSession};
+
     let (database, auth, token) = setup().await;
     database.close().await.unwrap();
-    assert_eq!(
+    for response in [
         CurrentSession::<Schema>::from_request_parts(&mut request(&token), &auth)
             .await
             .err()
-            .unwrap()
-            .status(),
-        StatusCode::INTERNAL_SERVER_ERROR
-    );
-    assert_eq!(
+            .unwrap(),
         OptionalSession::<Schema>::from_request_parts(&mut request(&token), &auth)
             .await
             .err()
-            .unwrap()
-            .status(),
-        StatusCode::INTERNAL_SERVER_ERROR
-    );
+            .unwrap(),
+        CachedSession::<Schema>::from_request_parts(&mut request(&token), &auth)
+            .await
+            .err()
+            .unwrap(),
+        OptionalCachedSession::<Schema>::from_request_parts(&mut request(&token), &auth)
+            .await
+            .err()
+            .unwrap(),
+    ] {
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(body.is_empty());
+    }
 }
 
 #[tokio::test]

@@ -208,13 +208,13 @@ impl ProvisioningService {
             let _ = tx
                 .execute(&statement)
                 .await
-                .map_err(|err| DatabaseError::Query(err.to_string()))?;
+                .map_err(|err| DatabaseError::Query(err.to_string().into()))?;
         } else {
             let _ = self
                 .db
                 .execute(&statement)
                 .await
-                .map_err(|err| DatabaseError::Query(err.to_string()))?;
+                .map_err(|err| DatabaseError::Query(err.to_string().into()))?;
         }
 
         Ok(())

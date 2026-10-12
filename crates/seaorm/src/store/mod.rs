@@ -5,6 +5,7 @@ mod api_key_numbers;
 mod api_keys;
 mod bundled_schema;
 mod create_readback;
+mod db_error;
 mod device_code_consume;
 mod device_code_fields;
 mod device_code_transactions;
@@ -86,10 +87,11 @@ use async_trait::async_trait;
 use better_auth_core::store::{
     AuthTransaction, BoxedTransactionValue, TransactionStore, TransactionWork,
 };
-use sea_orm::{DatabaseConnection, DbErr, SqlErr, TransactionTrait};
+pub(crate) use db_error::map_db_err;
+use sea_orm::{DatabaseConnection, DbErr, TransactionTrait};
 
 use crate::config::AuthConfig;
-use crate::error::{AuthError, AuthResult, DatabaseError};
+use crate::error::{AuthError, AuthResult};
 use crate::hooks::{SeaOrmHookContext, SeaOrmHooks, current_request_hook_context};
 use crate::schema::{AuthSchema, SeaOrmAccountModel, SeaOrmSessionModel, SeaOrmUserModel};
 
@@ -771,21 +773,6 @@ where
                 Err(err)
             }
         }
-    }
-}
-
-pub(crate) fn map_db_err(err: DbErr) -> AuthError {
-    if let DbErr::Custom(message) = err {
-        return AuthError::Database(DatabaseError::Query(message));
-    }
-    match err.sql_err() {
-        Some(SqlErr::UniqueConstraintViolation(message)) => {
-            AuthError::Database(DatabaseError::UniqueConstraint(message))
-        }
-        Some(SqlErr::ForeignKeyConstraintViolation(message)) => {
-            AuthError::Database(DatabaseError::Constraint(message))
-        }
-        Some(_) | None => AuthError::Database(DatabaseError::Query(err.to_string())),
     }
 }
 

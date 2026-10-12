@@ -22,7 +22,7 @@ run_stage() {
       cargo build --workspace --locked --tests --profile test --features axum,seaorm2,redis-cache --keep-going
       cargo test --workspace --locked --features axum,seaorm2,redis-cache --no-fail-fast
       cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --ignored --test-threads=1
-      cargo test --locked -p better-auth-seaorm --lib store::plugin_records::shared_column_contract_tests:: -- --ignored --test-threads=1
+      cargo test --locked -p better-auth-seaorm --lib -- store::plugin_records::shared_column_contract_tests:: store::db_error::tests:: --ignored --test-threads=1
       ;;
     id-input)
       cargo fmt --all -- --check
@@ -56,10 +56,13 @@ run_stage() {
       local column_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/shared-column-capture.test.ts \
-        ./compat-tests/reference-server/contracts/shared-column-server-capture.test.ts || column_status=1
-      cargo clippy --locked -p better-auth-core -p better-auth-seaorm --lib -- -D warnings || column_status=1
-      cargo test --locked -p better-auth-core --lib shared_column_contract_tests:: || column_status=1
-      cargo test --locked -p better-auth-seaorm --lib shared_column_contract_tests:: -- --include-ignored --test-threads=1 || column_status=1
+        ./compat-tests/reference-server/contracts/shared-column-server-capture.test.ts \
+        ./compat-tests/reference-server/contracts/siwe-native-errors.test.ts || column_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -p better-auth --features axum,seaorm2,redis-cache --lib -- -D warnings || column_status=1
+      cargo test --locked -p better-auth-core --features axum,redis-cache --lib -- shared_column_contract_tests:: error:: api_error:: middleware::csrf:: || column_status=1
+      cargo test --locked -p better-auth-api --lib -- plugins::siwe:: plugins::device_authorization:: || column_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- shared_column_contract_tests:: store::db_error::tests:: --include-ignored --test-threads=1 || column_status=1
+      cargo test --locked --features axum,seaorm2,redis-cache --test axum_session_tests --test axum_integration_tests || column_status=1
       return "$column_status"
       ;;
     rustls) cargo check -p better-auth --locked --no-default-features --features rustls,axum,seaorm2,redis-cache ;;

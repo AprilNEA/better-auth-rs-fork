@@ -669,6 +669,7 @@ pub(crate) async fn run<S: AuthSchema>(
             (Some(expected), Err(AuthError::Database(DatabaseError::Query(message))))
                 if backend == "postgres" =>
             {
+                let message = message.as_str();
                 assert_eq!(expected.name, "error");
                 // Rust retains the SeaORM and SQLx wrappers. JavaScript error identity remains unpaired.
                 assert_eq!(
@@ -685,6 +686,7 @@ pub(crate) async fn run<S: AuthSchema>(
             (Some(expected), Err(AuthError::Database(DatabaseError::Query(message))))
                 if backend == "sqlite" =>
             {
+                let message = message.as_str();
                 assert_eq!(expected.name, "SQLiteError");
                 assert_eq!(expected.message, "row value misused");
                 assert_eq!(
@@ -701,6 +703,7 @@ pub(crate) async fn run<S: AuthSchema>(
             (Some(expected), Err(AuthError::Database(DatabaseError::Query(message))))
                 if backend == "mysql" =>
             {
+                let message = message.as_str();
                 assert_eq!(expected.name, "Error");
                 if expected
                     .message
@@ -709,7 +712,7 @@ pub(crate) async fn run<S: AuthSchema>(
                     reference_sets::compare_mysql_syntax_error(
                         &case.name,
                         &expected.message,
-                        &message,
+                        message,
                     )?;
                     None
                 } else {

@@ -282,7 +282,11 @@ impl CsrfMiddleware {
     }
 
     fn reject(error: AuthError) -> AuthResult<AuthResponse> {
-        error.to_auth_response()
+        if error.is_api_error()? {
+            error.to_auth_response()
+        } else {
+            Err(error)
+        }
     }
 }
 
@@ -355,6 +359,68 @@ mod tests {
         let body =
             serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap();
         body["message"].as_str().unwrap().to_string()
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::expect_used,
+        reason = "The callback propagation contract requires one original database error and successful native observation."
+    )]
+    async fn trusted_origin_failure_retains_the_database_error_and_native_identity() {
+        use crate::{
+            DatabaseError, FieldValue,
+            request_runtime::{TrustedValues, TrustedValuesResolver},
+        };
+        use std::sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        struct RejectOrigins {
+            error: Mutex<Option<AuthError>>,
+            calls: AtomicUsize,
+        }
+
+        #[async_trait]
+        impl TrustedValuesResolver for RejectOrigins {
+            async fn resolve(&self, _: Option<&AuthRequest>) -> AuthResult<Vec<String>> {
+                let _ = self.calls.fetch_add(1, Ordering::SeqCst);
+                Err(self
+                    .error
+                    .lock()
+                    .map_err(|_| AuthError::internal("Origin error lock poisoned"))?
+                    .take()
+                    .ok_or_else(|| AuthError::internal("Origin error was already consumed"))?)
+            }
+        }
+
+        let error = AuthError::Database(DatabaseError::Query("private origin query".into()));
+        let original: FieldValue = error
+            .raw_value()
+            .expect("Database error has a native value")
+            .clone();
+        let resolver = Arc::new(RejectOrigins {
+            error: Mutex::new(Some(error)),
+            calls: AtomicUsize::new(0),
+        });
+        let config = AuthConfig::new("test-secret-key-that-is-at-least-32-characters-long")
+            .trusted_origins(TrustedValues::Dynamic(resolver.clone()));
+        let middleware = CsrfMiddleware::new(CsrfConfig::new(), Arc::new(config));
+        let request = make_request("/sign-out", Some("https://example.test"), true, &[]);
+        let error = middleware
+            .before_request(&request)
+            .await
+            .expect_err("The origin callback failure must propagate");
+        assert!(
+            matches!(&error, AuthError::Database(DatabaseError::Query(cause))
+            if cause.as_str() == "private origin query")
+        );
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&original))
+        );
+        assert_eq!(resolver.calls.load(Ordering::SeqCst), 1);
     }
 
     // Rust-specific surface: Rust middleware implementations are library-specific behavior with no direct TS analogue.

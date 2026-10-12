@@ -25,6 +25,14 @@ pub struct ApiErrorInit {
 }
 
 /// Check an instance brand without reading the object's properties.
+pub fn is_error_value(value: &FieldValue) -> bool {
+    value
+        .as_object()
+        .and_then(|object| object.source::<ErrorObject>())
+        .is_some()
+}
+
+/// Check an API error instance brand without reading the object's properties.
 pub fn api_error_instance(value: &FieldValue, class: ApiErrorClass) -> bool {
     value
         .as_object()
@@ -136,6 +144,20 @@ pub(super) fn runtime_error(name: &'static str, message: FieldValue) -> FieldVal
         inherited_name: name,
     }))
     .into()
+}
+
+pub(super) fn database_error(properties: FieldMap) -> FieldValue {
+    // The reference Error objects keep host source-location properties nonenumerable.
+    error_object(
+        properties.into(),
+        None,
+        HashSet::from([
+            "message".into(),
+            "stack".into(),
+            "line".into(),
+            "column".into(),
+        ]),
+    )
 }
 
 /// Attach a known native instance brand without constructing or projecting its fields.

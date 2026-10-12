@@ -104,8 +104,9 @@ pub use entity::{
     MemberUserView,
 };
 pub use error::{
-    ApiErrorClass, ApiErrorInit, AuthError, AuthResult, DatabaseError, api_error_instance,
-    is_api_error_value, validate_request_body, validation_error_response,
+    ApiErrorClass, ApiErrorInit, AuthError, AuthResult, DatabaseError, DatabaseErrorCause,
+    api_error_instance, is_api_error_value, is_error_value, validate_request_body,
+    validation_error_response,
 };
 pub use hooks::{RequestHookContext, with_request_hook_context, with_request_hook_context_value};
 pub use middleware::{

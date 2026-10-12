@@ -254,7 +254,7 @@ async fn check(
                 }
                 _ => return Err(format!("{label} unexpected SQL error: {message}").into()),
             };
-            assert_eq!(message, diagnostic, "{label} diagnostic");
+            assert_eq!(message.as_str(), diagnostic, "{label} diagnostic");
         }
         Err(error) => return Err(error.into()),
     }

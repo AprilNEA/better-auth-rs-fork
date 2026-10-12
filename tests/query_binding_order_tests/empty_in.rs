@@ -83,6 +83,7 @@ async fn check(database: DatabaseConnection) -> TestResult {
                 ))
                 .into());
             };
+            let message = message.as_str();
             if backend == DbBackend::Postgres {
                 assert_eq!(
                     message,

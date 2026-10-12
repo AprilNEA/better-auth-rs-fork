@@ -296,7 +296,7 @@ pub(super) async fn jwk(mut database: DatabaseConnection, name: &str) -> TestRes
                     operation.error.as_ref().expect("captured readback error"),
                 );
                 assert_eq!(
-                    message,
+                    message.as_str(),
                     "Query Error: error returned from database: 1054 (42S22): Unknown column 'readback_jwks.id' in 'where clause'",
                     "{label} SQLx diagnostic"
                 );

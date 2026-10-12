@@ -255,7 +255,7 @@ fn assert_created(
             )));
         };
         assert_eq!(
-            message,
+            message.as_str(),
             "Query Error: error returned from database: (code: 1299) NOT NULL constraint failed: accounts.id"
         );
     }

@@ -8,7 +8,7 @@ impl AuthError {
 
     /// Move an error into a native callback value without applying HTTP error sanitization.
     /// Existing thrown values retain their identity and do not evaluate properties.
-    /// Typed errors expose their category and message; they have no JavaScript stack metadata.
+    /// Database errors retain one object and available driver properties; typed errors have no JavaScript stack metadata.
     pub fn into_thrown_value(self) -> AuthResult<FieldValue> {
         if let Self::Response(error) = self {
             return Ok(error.value);

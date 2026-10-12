@@ -1,12 +1,16 @@
 use crate::{FieldMap, FieldValue, SchemaValue};
 use thiserror::Error;
 
+mod database;
 mod http;
 mod native;
 mod native_value;
+pub use database::{DatabaseError, DatabaseErrorCause};
 #[cfg(test)]
 pub(crate) use native::brand_api_error_object;
-pub use native::{ApiErrorClass, ApiErrorInit, api_error_instance, is_api_error_value};
+pub use native::{
+    ApiErrorClass, ApiErrorInit, api_error_instance, is_api_error_value, is_error_value,
+};
 
 /// A thrown native value whose properties are excluded from Rust diagnostics.
 pub struct ApiErrorResponse {
@@ -195,6 +199,7 @@ impl AuthError {
     pub fn raw_value(&self) -> Option<&FieldValue> {
         match self {
             Self::Response(error) => Some(&error.value),
+            Self::Database(error) => Some(error.native_value()),
             _ => None,
         }
     }
@@ -242,10 +247,10 @@ impl AuthError {
 
     /// Read the current top-level message independently of the error body.
     pub fn message_value(&self) -> AuthResult<FieldValue> {
+        if let Some(value) = self.raw_value() {
+            return native::optional_property(value, "message");
+        }
         Ok(match self {
-            Self::Response(response) => {
-                return native::optional_property(&response.value, "message");
-            }
             Self::Internal(message)
             | Self::TypeError(message)
             | Self::RangeError(message)
@@ -257,8 +262,10 @@ impl AuthError {
 
     /// Read the original status value, which can be a symbolic name or any native value.
     pub fn status_value(&self) -> AuthResult<FieldValue> {
+        if let Some(value) = self.raw_value() {
+            return native::optional_property(value, "status");
+        }
         match self {
-            Self::Response(response) => native::optional_property(&response.value, "status"),
             Self::FieldInput { .. } => Ok("BAD_REQUEST".into()),
             _ => Ok(self.status_code()?.into_field_value()),
         }
@@ -266,8 +273,8 @@ impl AuthError {
 
     /// Read one current body value without applying JSON conversion.
     pub fn body_value(&self) -> AuthResult<FieldValue> {
-        if let Self::Response(response) = self {
-            return native::optional_property(&response.value, "body");
+        if let Some(value) = self.raw_value() {
+            return native::optional_property(value, "body");
         }
         let (_, code, message) = self.error_payload()?;
         let mut fields = FieldMap::new();
@@ -286,9 +293,9 @@ impl AuthError {
 
     /// Read one current header initializer without converting or copying its object.
     pub fn headers_value(&self) -> AuthResult<FieldValue> {
-        match self {
-            Self::Response(response) => native::optional_property(&response.value, "headers"),
-            _ => Ok(FieldMap::new().into()),
+        match self.raw_value() {
+            Some(value) => native::optional_property(value, "headers"),
+            None => Ok(FieldMap::new().into()),
         }
     }
 
@@ -321,6 +328,10 @@ impl AuthError {
                 response.captured_headers = Some(headers);
                 Self::Response(response)
             }
+            Self::Database(mut error) => {
+                error.capture_native_headers(headers);
+                Self::Database(error)
+            }
             other => match other
                 .to_auth_response()
                 .and_then(Self::from_returned_response)
@@ -335,16 +346,22 @@ impl AuthError {
     pub fn captured_headers_value(&self) -> Option<FieldValue> {
         match self {
             Self::Response(response) => response.captured_headers.clone(),
+            Self::Database(error) => error.captured_headers_value(),
             _ => None,
         }
     }
 
     /// Whether the error is an intentional endpoint rejection, including redirects and server API errors.
     pub fn is_api_error(&self) -> AuthResult<bool> {
-        if let Self::Response(error) = self {
-            return is_api_error_value(&error.value);
+        if let Some(value) = self.raw_value() {
+            return is_api_error_value(value);
         }
         Ok(self.is_api_error_instance(ApiErrorClass::BetterCall))
+    }
+
+    /// Check JavaScript Error inheritance without reading the object's name or message.
+    pub fn is_error_instance(&self) -> bool {
+        self.raw_value().is_none_or(is_error_value)
     }
 
     /// Check the constructor family without invoking a structural name getter.
@@ -405,13 +422,13 @@ impl AuthError {
 
     /// Status owned by this error. Dispatch can preserve a different endpoint status for HTTP output.
     pub fn status_code(&self) -> AuthResult<SchemaValue<u16>> {
+        if let Some(value) = self.raw_value() {
+            return Ok(SchemaValue::from_field(native::optional_property(
+                value,
+                "statusCode",
+            )?));
+        }
         let status = match self {
-            Self::Response(response) => {
-                return Ok(SchemaValue::from_field(native::optional_property(
-                    &response.value,
-                    "statusCode",
-                )?));
-            }
             Self::FieldInput { .. } | Self::RequestValidation { .. } => 400,
             Self::Upstream { status, .. } => *status,
             // 400
@@ -441,6 +458,7 @@ impl AuthError {
             #[cfg(feature = "redis-cache")]
             Self::Redis(_) => 500,
             Self::SchemaCheck(_)
+            | Self::Response(_)
             | Self::Config(_)
             | Self::Database(_)
             | Self::Serialization(_)
@@ -475,7 +493,7 @@ impl AuthError {
     /// to avoid leaking details.
     pub fn error_payload(&self) -> AuthResult<(SchemaValue<u16>, Option<String>, String)> {
         let status = self.status_code()?;
-        if matches!(self, Self::Response(_)) {
+        if self.raw_value().is_some() {
             let body = self.body_value()?;
             let code = native::optional_property(&body, "code")?;
             let code = if code.is_undefined() {
@@ -520,10 +538,10 @@ impl AuthError {
     /// Named `to_auth_response` to avoid collision with Axum's
     /// `IntoResponse::into_response` when the `axum` feature is enabled.
     pub fn to_auth_response(self) -> AuthResult<crate::types::AuthResponse> {
-        if let Self::Response(error) = self {
-            let mut response = crate::AuthResponse::native(None, error.value);
+        if let Some(value) = self.raw_value() {
+            let mut response = crate::AuthResponse::native(None, value.clone());
             response.set_endpoint_headers(None);
-            if let Some(headers) = error.captured_headers {
+            if let Some(headers) = self.captured_headers_value() {
                 response.capture_native_error_headers(headers);
             }
             return Ok(response);
@@ -608,28 +626,6 @@ impl AuthError {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum DatabaseError {
-    #[error("Connection error: {0}")]
-    Connection(String),
-
-    #[error("Query error: {0}")]
-    Query(String),
-
-    #[error("Migration error: {0}")]
-    Migration(String),
-
-    #[error("Constraint violation: {0}")]
-    Constraint(String),
-
-    /// A uniqueness conflict that callers may resolve by generating another value.
-    #[error("Unique constraint violation: {0}")]
-    UniqueConstraint(String),
-
-    #[error("Transaction error: {0}")]
-    Transaction(String),
-}
-
 pub type AuthResult<T> = Result<T, AuthError>;
 
 impl From<crate::types::AuthResponse> for AuthError {
@@ -689,7 +685,7 @@ impl From<crate::types::AuthResponse> for AuthError {
 #[cfg(feature = "axum")]
 impl axum::response::IntoResponse for AuthError {
     fn into_response(self) -> axum::response::Response {
-        finish_axum_response(self.to_auth_response())
+        finish_axum_response(self.to_http_response())
     }
 }
 

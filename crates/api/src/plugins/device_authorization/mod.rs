@@ -26,8 +26,8 @@ use url::Url;
 use crate::plugins::endpoint_context::EndpointContext;
 use crate::plugins::helpers::{SessionIssueError, issue_selected_user_session_optional};
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, DatabaseError, DeviceCode,
-    FieldMap, FieldValue, RequestMeta, SchemaValue, UpdateDeviceCode,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, DeviceCode, FieldMap,
+    FieldValue, RequestMeta, SchemaValue, UpdateDeviceCode,
 };
 
 pub(super) mod types;
@@ -332,7 +332,7 @@ impl DeviceAuthorizationPlugin {
             ]));
             match ctx.database.create_device_code_record(fields).await {
                 Ok(_) => {}
-                Err(AuthError::Database(DatabaseError::UniqueConstraint(_))) => continue,
+                Err(AuthError::Database(error)) if error.is_unique_constraint() => continue,
                 Err(error) => return Err(error),
             }
 

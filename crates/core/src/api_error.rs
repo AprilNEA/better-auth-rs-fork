@@ -40,7 +40,7 @@ impl HttpFailure {
     /// Convert a source failure once; a failed conversion already belongs to the host.
     pub fn into_response(self) -> AuthResult<AuthResponse> {
         match self {
-            Self::Source(error) => error.to_auth_response(),
+            Self::Source(error) => error.to_http_response(),
             Self::Conversion(error) => Err(error),
         }
     }

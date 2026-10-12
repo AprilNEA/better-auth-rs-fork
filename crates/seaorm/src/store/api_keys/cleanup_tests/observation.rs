@@ -180,7 +180,8 @@ pub(super) async fn check(
                 format!("{kind} Error: error returned from database: {message}")
             };
             assert_eq!(
-                actual, expected_message,
+                actual.as_str(),
+                expected_message,
                 "{backend}: database error boundary"
             );
         }

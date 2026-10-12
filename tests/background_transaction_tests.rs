@@ -146,7 +146,9 @@ impl PasswordHasher for Hasher {
 fn message(error: AuthError) -> String {
     match error {
         AuthError::Internal(value) => value,
-        AuthError::Database(better_auth_core::error::DatabaseError::Query(value)) => value,
+        AuthError::Database(better_auth_core::error::DatabaseError::Query(value)) => {
+            value.as_str().to_owned()
+        }
         other => other.to_string(),
     }
 }

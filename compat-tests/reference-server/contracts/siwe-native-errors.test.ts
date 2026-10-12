@@ -17,6 +17,11 @@ const cases = [
   ["invalid-signature", 401, { message: "Unauthorized: Invalid SIWE signature", status: 401 }],
   ["api-error", 403, { code: "VERIFIER_REJECTED", message: "verifier rejected" }],
   ["runtime-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
+  ["native-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
+  ["native-syntax-error", 401, { message: "Something went wrong. Please try again later.", error: "JSON Parse error: Unexpected EOF", status: 401 }],
+  ["database-error", 401, { message: "Something went wrong. Please try again later.", error: "driver failure", status: 401 }],
+  ["renamed-native-error", 401, { message: "Something went wrong. Please try again later.", error: "verifier failed", status: 401 }],
+  ["plain-error-shaped-object", 401, { message: "Something went wrong. Please try again later.", error: "Unknown error", status: 401 }],
 ] as const;
 
 for (const [mode, status, expected] of cases) {
@@ -32,7 +37,11 @@ for (const [mode, status, expected] of cases) {
           verifyMessage: async input => {
             calls.push(input.chainId);
             if (mode === "api-error") throw new APIError("FORBIDDEN", expected);
-            if (mode === "runtime-error") throw new Error("verifier failed");
+            if (mode === "runtime-error" || mode === "native-error") throw new Error("verifier failed");
+            if (mode === "native-syntax-error") JSON.parse("{");
+            if (mode === "database-error") throw Object.assign(new Error("driver failure"), { name: "error", code: "23505" });
+            if (mode === "renamed-native-error") throw Object.assign(new Error("verifier failed"), { name: "RenamedError" });
+            if (mode === "plain-error-shaped-object") throw { name: "Error", message: "must not be used" };
             return false;
           },
         })],

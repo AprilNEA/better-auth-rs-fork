@@ -34,6 +34,18 @@ The supported public path is:
 4. Manage auth migrations in your own SeaORM migrator.
 5. Build a `SeaOrmStore` from the shared `DatabaseConnection` and pass it to `BetterAuth::<YourSchema>::new(config).store(...)`.
 
+## Database errors
+
+`better_auth::error::DatabaseError` retains its connection, query, migration, constraint, unique-constraint, and transaction variants. Each variant carries `DatabaseErrorCause` instead of `String`. Construct a string cause with `DatabaseError::Query(message.into())`. Read the original diagnostic with `cause.as_str()` or `error.cause().as_str()`. Display prefixes remain unchanged. Use `is_unique_constraint()` for a uniqueness retry; other database failures must propagate.
+
+SeaORM preserves the original `DbErr` in the standard error source chain. `DatabaseErrorCause::from_source` lets custom adapters retain a typed source and optional ordered native properties. `AuthError::raw_value`, error callbacks, and `into_thrown_value` share one native Error object. Callback mutations remain visible through subsequent native reads. Error host properties `message`, `stack`, `line`, and `column` are nonenumerable; Rust diagnostics remain independent of native property mutations. String-only causes keep their existing callback diagnostic.
+
+Native database errors have no implicit API status, body, or headers. `status_code()` now retains an absent `statusCode` as `SchemaValue::Undefined` instead of returning 500. `capture_native_headers` preserves the typed database cause, source, original object, and captured header identity. HTTP handling still produces an empty 500 response for ordinary errors. Use `AuthError::is_error_instance()` or `is_error_value()` to test native Error inheritance; a plain object with `name: "Error"` does not satisfy that test.
+
+PostgreSQL native properties retain the metadata available from SQLx, including SQLSTATE, severity, detail, hint, positions, context, object names, and source location. Supported optional fields use undefined when absent. SQLx does not expose the original ErrorResponse packet length or raw localized severity. MySQL retains errno, SQLSTATE, and the driver message; SQLx does not expose mysql2's symbolic error code or interpolated SQL text. Those unavailable properties remain absent. SQLite and non-database SQLx failures retain their source and existing native diagnostic without claiming the JavaScript driver's metadata shape.
+
+Metadata retention does not establish complete driver equivalence. PostgreSQL's current unknown-literal binding can fail in a different protocol phase from pg's text parameters, changing positions and context. MySQL statement preparation differs from mysql2 interpolation. Native property shape, raw protocol fields, driver query text, and JavaScript stack metadata remain open compatibility boundaries; strict server contracts retain these differences.
+
 ## Setup
 
 Generate `src/auth_schema.rs` with the [quick-start guide](/docs/quick-start) first.

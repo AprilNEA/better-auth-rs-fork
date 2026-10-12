@@ -140,7 +140,7 @@ impl SiwePlugin {
                 if cause.is_api_error()? {
                     return Err(cause);
                 }
-                let message = if cause.raw_value().is_none() {
+                let message = if cause.is_error_instance() {
                     cause.message_value()?
                 } else {
                     "Unknown error".into()

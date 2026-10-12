@@ -275,7 +275,7 @@ async fn rust_organization_private_timestamp_alias_preserves_undefined_input() {
         matches!(
             &error,
             AuthError::Database(better_auth_core::error::DatabaseError::Query(message))
-                if message == "Query Error: error returned from database: (code: 1299) NOT NULL constraint failed: organization.updated_at"
+                if message.as_str() == "Query Error: error returned from database: (code: 1299) NOT NULL constraint failed: organization.updated_at"
         ),
         "{error}"
     );

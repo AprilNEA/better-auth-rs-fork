@@ -105,7 +105,12 @@ async fn resolve<T: AuthSchema>(
         Ok(resolution) => (resolution.data, AuthResponse::new(200)),
         Err(error) => (
             None,
-            error.to_auth_response().map_err(terminal_session_error)?,
+            if error.is_api_error().map_err(terminal_session_error)? {
+                error.to_auth_response()
+            } else {
+                error.to_http_response()
+            }
+            .map_err(terminal_session_error)?,
         ),
     };
     let _ = response.headers.insert("Cache-Control", "no-store");
