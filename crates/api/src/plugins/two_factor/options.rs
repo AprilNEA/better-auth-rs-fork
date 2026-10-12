@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use better_auth_core::{AuthError, AuthResult, FieldValue, SecretKey};
+use better_auth_core::{AuthError, AuthResult, FieldArray, FieldValue, SecretKey};
 use rand::{Rng, distributions::Alphanumeric};
 use sha2::{Digest, Sha256};
 
@@ -88,15 +88,15 @@ impl TwoFactorOtpStorage {
     }
 }
 
-/// Storage protection for the JSON array of backup codes.
+/// Storage protection for serialized backup codes.
 #[derive(Clone, Default)]
 pub enum BackupCodeStorage {
-    /// Store the serialized JSON array unchanged.
+    /// Store the JSON serialization result unchanged, including undefined.
     Plain,
     /// Encrypt using the authentication secret, matching the upstream default.
     #[default]
     Encrypted,
-    /// Encrypt and decrypt the serialized array using application callbacks.
+    /// Encrypt and decrypt serialized backup values using application callbacks.
     Custom(Arc<dyn TwoFactorCipher>),
 }
 
@@ -187,6 +187,9 @@ pub struct BackupCodeOptions {
     pub length: usize,
     /// Replace random generation with application-supplied codes.
     pub generate: Option<Arc<dyn Fn() -> Vec<String> + Send + Sync>>,
+    /// Generate native backup codes. This callback takes precedence over `generate`.
+    /// Errors propagate before encoding or persistence.
+    pub generate_native: Option<Arc<dyn Fn() -> AuthResult<FieldValue> + Send + Sync>>,
     /// Stored backup-code representation.
     pub storage: BackupCodeStorage,
     /// Override the plugin's passwordless policy for regeneration.
@@ -199,18 +202,40 @@ impl Default for BackupCodeOptions {
             amount: 10,
             length: 10,
             generate: None,
+            generate_native: None,
             storage: BackupCodeStorage::Encrypted,
             allow_passwordless: None,
         }
     }
 }
 
+pub(super) struct GeneratedBackupCodes {
+    pub(super) backup_codes: FieldValue,
+    pub(super) encrypted_backup_codes: FieldValue,
+}
+
 impl BackupCodeOptions {
-    pub(super) fn generate(&self) -> Vec<String> {
-        if let Some(generate) = &self.generate {
+    pub(super) async fn generate(&self, secret: SecretKey<'_>) -> AuthResult<GeneratedBackupCodes> {
+        let backup_codes = self.generate_codes()?;
+        let encrypted_backup_codes = self.storage.encode(&backup_codes, secret).await?;
+        Ok(GeneratedBackupCodes {
+            backup_codes,
+            encrypted_backup_codes,
+        })
+    }
+
+    fn generate_codes(&self) -> AuthResult<FieldValue> {
+        if let Some(generate) = &self.generate_native {
             return generate();
         }
-        (0..self.amount)
+        if let Some(generate) = &self.generate {
+            return Ok(generate()
+                .into_iter()
+                .map(FieldValue::from)
+                .collect::<FieldArray>()
+                .into());
+        }
+        Ok((0..self.amount)
             .map(|_| {
                 let code: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
@@ -218,8 +243,9 @@ impl BackupCodeOptions {
                     .map(char::from)
                     .collect();
                 let (prefix, suffix) = code.split_at(code.len().min(5));
-                format!("{prefix}-{suffix}")
+                FieldValue::from(format!("{prefix}-{suffix}"))
             })
-            .collect()
+            .collect::<FieldArray>()
+            .into())
     }
 }

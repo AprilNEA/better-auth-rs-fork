@@ -185,7 +185,7 @@ async fn otp_enrollment_rotates_session_and_does_not_enroll_an_authenticator() {
     let queued = request.take_response_headers().unwrap();
     let cookies: Vec<_> = queued.get_all("set-cookie").collect();
     assert_eq!(
-        serde_json::to_value(response).unwrap(),
+        response.into_field_value().json().unwrap().unwrap(),
         serde_json::json!({"method":"otp"})
     );
     assert!(
@@ -385,7 +385,12 @@ async fn failed_challenge_budget_and_account_lock_survive_new_challenges() {
     let challenge = make_challenge(&user, &ctx).await.unwrap();
     let req = challenge_request(&challenge);
     let valid = VerifyBackupCodeRequest {
-        code: enrollment.backup_codes.unwrap()[0].clone(),
+        code: enrollment
+            .backup_codes
+            .unwrap()
+            .decode::<Vec<String>>()
+            .unwrap()[0]
+            .clone(),
         disable_session: None,
         trust_device: None,
     };

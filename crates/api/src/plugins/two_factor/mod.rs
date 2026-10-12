@@ -48,6 +48,8 @@ mod backup_code_native_contract;
 #[cfg(test)]
 mod backup_encoding_native_contract;
 #[cfg(test)]
+mod backup_generation_native_contract;
+#[cfg(test)]
 mod enrollment_tests;
 #[cfg(test)]
 mod native_tests;
@@ -234,13 +236,24 @@ pub(crate) struct VerifyBackupCodeRequest {
     trust_device: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub(crate) struct EnableResponse {
     method: &'static str,
-    #[serde(rename = "totpURI", skip_serializing_if = "Option::is_none")]
     totp_uri: Option<String>,
-    #[serde(rename = "backupCodes", skip_serializing_if = "Option::is_none")]
-    backup_codes: Option<Vec<String>>,
+    backup_codes: Option<FieldValue>,
+}
+
+impl EnableResponse {
+    fn into_field_value(self) -> FieldValue {
+        let mut fields = FieldMap::from([("method".into(), self.method.into())]);
+        if let Some(uri) = self.totp_uri {
+            let _ = fields.insert("totpURI".into(), uri.into());
+        }
+        if let Some(codes) = self.backup_codes {
+            let _ = fields.insert("backupCodes".into(), codes);
+        }
+        fields.into()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -261,11 +274,20 @@ impl SessionTokenResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub(crate) struct BackupCodesResponse {
     status: bool,
-    #[serde(rename = "backupCodes")]
-    backup_codes: Vec<String>,
+    backup_codes: FieldValue,
+}
+
+impl BackupCodesResponse {
+    fn into_field_value(self) -> FieldValue {
+        FieldMap::from([
+            ("status".into(), self.status.into()),
+            ("backupCodes".into(), self.backup_codes),
+        ])
+        .into()
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -602,7 +624,7 @@ impl TwoFactorPlugin {
 
         let (response, set_cookie_headers) =
             enable_core(req, &body, &data, &self.config, ctx).await?;
-        let mut auth_response = AuthResponse::json(None, &response)?;
+        let mut auth_response = AuthResponse::native(None, response.into_field_value());
         for cookie in set_cookie_headers {
             auth_response = auth_response.with_appended_header("Set-Cookie", cookie);
         }
@@ -698,7 +720,7 @@ impl TwoFactorPlugin {
         let data = ctx.require_native_session(req).await?;
 
         let response = generate_backup_codes_core(&body, &data, &self.config, ctx).await?;
-        AuthResponse::json(None, &response)
+        Ok(AuthResponse::native(None, response.into_field_value()))
     }
 
     async fn handle_verify_backup_code(

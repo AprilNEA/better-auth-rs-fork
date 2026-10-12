@@ -1246,7 +1246,8 @@ run_stage() {
       bun --no-install test \
         ./compat-tests/reference-server/contracts/two-factor-fields.test.ts \
         ./compat-tests/reference-server/contracts/two-factor-backup-code-native-capture.test.ts \
-        ./compat-tests/reference-server/contracts/two-factor-backup-code-encoding-capture.test.ts || two_factor_status=1
+        ./compat-tests/reference-server/contracts/two-factor-backup-code-encoding-capture.test.ts \
+        ./compat-tests/reference-server/contracts/two-factor-backup-generation-capture.test.ts || two_factor_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || two_factor_status=1
       cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib two_factor || two_factor_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \

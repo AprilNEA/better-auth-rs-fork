@@ -1,0 +1,93 @@
+{
+  "version": "1.7.6",
+  "status": "successful upstream source capture; strict Rust runtime replay pending",
+  "run": "38251008623",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38251008623",
+  "commit": "a7a4148fc3d7b0ce23a8a69a15ec44f1e4fbe132",
+  "runConclusion": "success",
+  "captureTest": {
+    "name": "capture native backup generation through real enrollment and regeneration",
+    "conclusion": "success",
+    "cases": 12
+  },
+  "artifact": {
+    "path": "/private/tmp/better-auth-focused-log-38251008623/focused-check.log",
+    "bytes": 306532,
+    "sha256": "6c0af05bfe5e91e8308fe901e04b6cc2721c8fea41470a438f1416d60448076f"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/two-factor-backup-generation-capture.mjs",
+      "bytes": 8463,
+      "sha256": "bb6c1b7820deb341b5302f7b0260aab2d4ef8ee0946260ce969c80f6305b5b59"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/two-factor-backup-generation-capture.test.ts",
+      "bytes": 1014,
+      "sha256": "f7b8a9ae63c00319f230fe3c50ddc7e28fbaf92e1cada0f03f6dce62353868ff"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/verification-consumer-native-shared.mjs",
+      "bytes": 10402,
+      "sha256": "c4be4a65ac05655db5a4f1ef672a74df1d663a4017e21526439d8ef7331309db"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-runtime.mjs",
+      "bytes": 3145,
+      "sha256": "69630e525760cf34de80dbc1ae8717093481316fc426cd50dc7b84e7a179d017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/email-verification-duration-capture.mjs",
+      "bytes": 11739,
+      "sha256": "03d3f3001d5db30af7dabf494b20b6f41a4d939919b3cda75e5aaa96bd6bf805"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2919,
+      "sha256": "ee3865321448cd61b3e0cbdbb444e0711702b9f59898e5adc5f94006a377d43b"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/two-factor-backup-generation-1.7.6.json",
+    "bytes": 1026482,
+    "sha256": "05c3d5e00f5f3f55d83454d64ef0a825fe33397625582f1c2bd8d440e6cfda1e"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1089,
+      "bytes": 305264,
+      "sha256": "de94b9ffeab2266a800f4b06eb57853942b8de3d03d6e223cdfd4f1cebc4b656"
+    }
+  ],
+  "replayBoundary": "Retain the complete source observation without normalization, including native property descriptors, runtime values, callback events, original thrown identity, response identity, and full Memory state. Source replay excludes only the four explicit random string paths listed below. The frozen fixture retains those strings. Every source capture decrypts the successful enrollment ciphertext and checks the exact 32-character secret against the TOTP URI, including the URI path, ordered parameters, issuer, digits, and period. Rust replays the twelve complete endpoint runtime observations through production generation and routes. Rust independently validates the same secret relationship before pairing the two runtime random paths. JavaScript reflection and host metadata, HTTP serialization, and expanded SQL lifecycle pairing remain outside this runtime replay. Earlier frozen fixtures are unchanged.",
+  "randomPaths": [
+    "/cases/11/outcome/result/properties/1/1/value",
+    "/cases/11/after/properties/0/1/value/properties/4/1/value/properties/0/1/value/properties/1/1/value",
+    "/cases/11/runtime/outcome/result/totpURI",
+    "/cases/11/runtime/after/database/twoFactor/0/secret"
+  ],
+  "randomValidation": {
+    "case": "enable-native-object",
+    "rule": "Decrypt persisted ciphertext and decode the URI base32 secret; assert identical 32-character plaintext and the complete URI structure.",
+    "runtimePaths": [
+      "/outcome/result/totpURI",
+      "/after/database/twoFactor/0/secret"
+    ]
+  }
+}

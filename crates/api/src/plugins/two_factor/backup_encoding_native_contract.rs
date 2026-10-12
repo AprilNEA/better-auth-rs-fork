@@ -58,10 +58,31 @@ async fn capture_encoding(scenario: &Json) -> AuthResult<Json> {
     } else {
         BackupCodeStorage::Encrypted
     };
-    let result = storage.encode(&root.value, key).await;
+    let observed = observer.clone();
+    let generated = root.value.clone();
+    let options = BackupCodeOptions {
+        storage,
+        generate: Some(Arc::new(|| vec!["typed-fallback".to_owned()])),
+        generate_native: Some(Arc::new(move || {
+            observed.lock().unwrap().record("generate", []);
+            Ok(generated.clone())
+        })),
+        ..Default::default()
+    };
+    let result = options.generate(key).await;
     let mut observer = observer.lock().unwrap();
     let outcome = match result {
-        Ok(value) => json!({"returned":true,"result":observer.observe(&value)?}),
+        Ok(generated) => {
+            let same_codes = generated.backup_codes.strict_equals(&root.value);
+            let value = FieldValue::from(FieldMap::from([
+                ("backupCodes".into(), generated.backup_codes),
+                (
+                    "encryptedBackupCodes".into(),
+                    generated.encrypted_backup_codes,
+                ),
+            ]));
+            json!({"returned":true,"sameCodes":same_codes,"result":observer.observe(&value)?})
+        }
         Err(error) => {
             let error = error.into_thrown_value()?;
             json!({"returned":false,"error":{
@@ -75,22 +96,6 @@ async fn capture_encoding(scenario: &Json) -> AuthResult<Json> {
         json!({"before":before,"events":observer.events,"outcome":outcome,
         "after":observer.observe(&root.value)?}),
     )
-}
-
-fn encoder_boundary(source: &Json) -> Json {
-    let mut expected = source.clone();
-    let events = expected["events"].as_array_mut().unwrap();
-    assert_eq!(events.remove(0), json!({"phase":"generate"}));
-    if expected["outcome"]["returned"] == true {
-        assert_eq!(expected["outcome"]["sameCodes"], true);
-        assert_eq!(
-            expected["outcome"]["result"]["backupCodes"],
-            expected["before"]
-        );
-        let result = expected["outcome"]["result"]["encryptedBackupCodes"].clone();
-        expected["outcome"] = json!({"returned":true,"result":result});
-    }
-    expected
 }
 
 #[tokio::test]
@@ -112,19 +117,12 @@ async fn backup_code_encoding_matches_native_callbacks_and_undefined_boundary() 
         let actual = super::backup_code_native_contract::capture(&case["scenario"]).await?;
         failures.record(name, || assert_replay(&actual, &case["runtime"], name));
     }
-    // The source generator wrapper remains unpaired; Rust's generator returns Vec<String>.
-    // Compare only the actual native encoder boundary without fabricating a generation callback.
-    eprintln!(
-        "Dynamic generation callback and result-wrapper identity remain unpaired; the complete source observation is retained."
-    );
     let encodings = fixture["encodings"].as_array().unwrap();
     assert_eq!(encodings.len(), 4);
     for case in encodings {
         let name = case["name"].as_str().unwrap();
         let actual = capture_encoding(&case["scenario"]).await?;
-        failures.record(name, || {
-            assert_replay(&actual, &encoder_boundary(&case["runtime"]), name)
-        });
+        failures.record(name, || assert_replay(&actual, &case["runtime"], name));
     }
     failures.finish();
     Ok(())

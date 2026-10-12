@@ -71,19 +71,9 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
         ));
     }
 
-    let backup_codes = config.backup_code_options.generate();
-    let encrypted_backup_codes = config
+    let backup_codes = config
         .backup_code_options
-        .storage
-        .encode(
-            &backup_codes
-                .iter()
-                .cloned()
-                .map(FieldValue::from)
-                .collect::<Vec<_>>()
-                .into(),
-            ctx.config.encryption_secret(),
-        )
+        .generate(ctx.config.encryption_secret())
         .await?;
     let secret = generate_secret();
     let encrypted_secret = encrypt_value(ctx.config.encryption_secret(), &secret)?;
@@ -106,7 +96,7 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
 
     let mut fields = FieldMap::from([
         ("secret".into(), encrypted_secret.into()),
-        ("backupCodes".into(), encrypted_backup_codes),
+        ("backupCodes".into(), backup_codes.encrypted_backup_codes),
         ("verified".into(), config.skip_verification_on_enable.into()),
     ]);
     if let Some(existing) = existing {
@@ -134,7 +124,7 @@ pub(super) async fn enable_core<S: better_auth_core::AuthSchema>(
         EnableResponse {
             method: "totp",
             totp_uri: Some(totp_uri),
-            backup_codes: Some(backup_codes),
+            backup_codes: Some(backup_codes.backup_codes),
         },
         set_cookie_headers,
     ))
@@ -544,31 +534,21 @@ pub(super) async fn generate_backup_codes_core(
     .await?;
     let two_factor = load_two_factor_record(&data.user_property("id")?, ctx).await?;
 
-    let backup_codes = config.backup_code_options.generate();
-    let encrypted = config
+    let backup_codes = config
         .backup_code_options
-        .storage
-        .encode(
-            &backup_codes
-                .iter()
-                .cloned()
-                .map(FieldValue::from)
-                .collect::<Vec<_>>()
-                .into(),
-            ctx.config.encryption_secret(),
-        )
+        .generate(ctx.config.encryption_secret())
         .await?;
     _ = ctx
         .database
         .update_two_factor_record(
             &two_factor.id,
-            FieldMap::from([("backupCodes".into(), encrypted)]),
+            FieldMap::from([("backupCodes".into(), backup_codes.encrypted_backup_codes)]),
         )
         .await?;
 
     Ok(BackupCodesResponse {
         status: true,
-        backup_codes,
+        backup_codes: backup_codes.backup_codes,
     })
 }
 
