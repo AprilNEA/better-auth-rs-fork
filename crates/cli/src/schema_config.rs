@@ -19,6 +19,8 @@ mod plugin_display_field_tests;
 #[cfg(test)]
 mod plugin_record_policy_tests;
 #[cfg(test)]
+mod shared_column_tests;
+#[cfg(test)]
 mod shared_declaration_tests;
 #[cfg(test)]
 mod two_factor_policy_tests;
@@ -142,18 +144,6 @@ pub(crate) enum FieldType {
     Enum(Vec<String>),
 }
 
-fn native_policy_role(role: EntityRole) -> bool {
-    matches!(
-        role,
-        EntityRole::ApiKey
-            | EntityRole::Passkey
-            | EntityRole::DeviceCode
-            | EntityRole::TwoFactor
-            | EntityRole::Jwk
-            | EntityRole::WalletAddress
-    )
-}
-
 impl FieldType {
     fn rust_type(&self) -> Result<&'static str, String> {
         match self {
@@ -196,6 +186,7 @@ pub(crate) struct Entity {
 
 pub(crate) struct Field {
     pub ident: syn::Ident,
+    pub aliases: Vec<String>,
     pub logical_name: String,
     pub ty: syn::Type,
     pub column: String,
@@ -351,6 +342,7 @@ impl Entity {
                         |role| canonical_field_name(role, field.name),
                     );
                     Ok(Field {
+                        aliases: vec![field.name.to_owned(), logical_name.clone()],
                         ident: syn::parse_str(field.name)
                             .map_err(|error| format!("invalid field name: {error}"))?,
                         ty: syn::parse_str(if api_key_native_schema && field.ty == "Option<f64>" {
@@ -465,7 +457,7 @@ impl Entity {
                     continue;
                 }
                 let rust_name = name.to_snake_case();
-                let ident = syn::parse_str(&rust_name)
+                let ident: syn::Ident = syn::parse_str(&rust_name)
                     .or_else(|_| syn::parse_str(&format!("{rust_name}_")))
                     .map_err(|error| format!("invalid additional field `{name}`: {error}"))?;
                 let ty = field.storage_type(database)?;
@@ -479,6 +471,7 @@ impl Entity {
                 };
                 let column = resolve_field_name(field.field_name.as_deref(), name).to_owned();
                 entity.fields.push(Field {
+                    aliases: vec![ident.to_string(), name.clone()],
                     ident,
                     logical_name: name.clone(),
                     ty: syn::parse_str(&ty)
@@ -491,64 +484,6 @@ impl Entity {
                     unique: Some(field.unique),
                     attributes: Some(field.clone()),
                 });
-            }
-        }
-        entity.registry_columns = entity
-            .fields
-            .iter()
-            .filter_map(|field| {
-                field
-                    .registry_column
-                    .map(|name| (name, field.column.clone()))
-            })
-            .collect();
-        entity.logical_columns = entity
-            .fields
-            .iter()
-            .map(|field| (field.logical_name.clone(), field.column.clone()))
-            .collect();
-        if entity.role.is_some_and(native_policy_role) {
-            let mut columns = Vec::<Field>::new();
-            for field in entity.fields {
-                if let Some(existing) = columns
-                    .iter_mut()
-                    .find(|existing| existing.column == field.column)
-                {
-                    if existing.primary_key || field.primary_key {
-                        return Err(format!(
-                            "model `{}` maps a field to the primary key column `{}`",
-                            entity.name, field.column
-                        ));
-                    }
-                    // Upstream keeps the first physical position and the last declaration's attributes.
-                    let ident = existing.ident.clone();
-                    let reference = field.references_id(entity.registry_table);
-                    *existing = field;
-                    existing.ident = ident;
-                    existing.reference_override = Some(reference);
-                } else {
-                    columns.push(field);
-                }
-            }
-            entity.fields = columns;
-        }
-        if entity.table.is_empty() {
-            return Err(format!("model `{}` has an empty table name", entity.name));
-        }
-        let mut names = BTreeSet::new();
-        let mut columns = BTreeSet::new();
-        for field in &entity.fields {
-            if !names.insert(field.ident.to_string()) {
-                return Err(format!(
-                    "model `{}` has conflicting Rust field `{}`",
-                    entity.name, field.ident
-                ));
-            }
-            if field.column.is_empty() || !columns.insert(&field.column) {
-                return Err(format!(
-                    "model `{}` has an empty or duplicate database column `{}`",
-                    entity.name, field.column
-                ));
             }
         }
         if entity.role == Some(EntityRole::Team)
@@ -574,6 +509,79 @@ impl Entity {
                     Some("inviter_id") => 5,
                     _ => 6,
                 });
+        }
+        entity.registry_columns = entity
+            .fields
+            .iter()
+            .filter_map(|field| {
+                field
+                    .registry_column
+                    .map(|name| (name, field.column.clone()))
+            })
+            .collect();
+        entity.logical_columns = entity
+            .fields
+            .iter()
+            .map(|field| (field.logical_name.clone(), field.column.clone()))
+            .collect();
+        {
+            let mut columns = Vec::<Field>::new();
+            for field in entity.fields {
+                if let Some(existing) = columns
+                    .iter_mut()
+                    .find(|existing| existing.column == field.column)
+                {
+                    if existing.primary_key || field.primary_key {
+                        return Err(format!(
+                            "model `{}` maps a field to the primary key column `{}`",
+                            entity.name, field.column
+                        ));
+                    }
+                    if entity.role == Some(EntityRole::Session)
+                        && !entity.session_row_presence
+                        && existing
+                            .aliases
+                            .iter()
+                            .chain(&field.aliases)
+                            .any(|name| name == "active")
+                    {
+                        return Err("the independent Session active column cannot share another field's storage".into());
+                    }
+                    // Upstream keeps the first physical position and the last declaration's attributes.
+                    let ident = existing.ident.clone();
+                    let mut aliases = std::mem::take(&mut existing.aliases);
+                    aliases.extend(field.aliases.iter().cloned());
+                    aliases.sort();
+                    aliases.dedup();
+                    let reference = field.references_id(entity.registry_table);
+                    *existing = field;
+                    existing.ident = ident;
+                    existing.aliases = aliases;
+                    existing.reference_override = Some(reference);
+                } else {
+                    columns.push(field);
+                }
+            }
+            entity.fields = columns;
+        }
+        if entity.table.is_empty() {
+            return Err(format!("model `{}` has an empty table name", entity.name));
+        }
+        let mut names = BTreeSet::new();
+        let mut columns = BTreeSet::new();
+        for field in &entity.fields {
+            if !names.insert(field.ident.to_string()) {
+                return Err(format!(
+                    "model `{}` has conflicting Rust field `{}`",
+                    entity.name, field.ident
+                ));
+            }
+            if field.column.is_empty() || !columns.insert(&field.column) {
+                return Err(format!(
+                    "model `{}` has an empty or duplicate database column `{}`",
+                    entity.name, field.column
+                ));
+            }
         }
         Ok(entity)
     }

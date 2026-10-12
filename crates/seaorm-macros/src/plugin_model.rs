@@ -28,7 +28,7 @@ pub(super) fn generate(
     } else {
         quote!(#core_root::#record)
     };
-    let core = registry::core_field_names(role);
+    let bindings = field_bindings::FieldBindings::new(fields)?;
     let rename_all = serde_serialized_name(&input.attrs, "rename_all")?
         .map(|rule| {
             serde_rename_rule::RenameRule::from_rename_all_str(&rule)
@@ -54,39 +54,41 @@ pub(super) fn generate(
                 .as_ref()
                 .map_or_else(|| name.clone(), |rule| rule.apply_to_field(&name))
         });
-        let mut aliases = field_aliases::field_aliases(&name, &serialized, &field.attrs)?;
-        if role == EntityRole::ApiKey && name == "key_hash" {
-            aliases.push("key".to_owned());
-        }
-        if role == EntityRole::Passkey && name == "credential_id" {
-            aliases.push("credentialID".to_owned());
-        }
-        aliases.sort();
-        aliases.dedup();
+        let mut aliases = field_aliases::field_aliases(role, &name, &serialized, &field.attrs)?;
         aliases.retain(|alias| column_aliases.insert(alias.clone()));
         if !aliases.is_empty() {
             columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
         }
         let reference = identity::is_reference(role, field)?;
         references.push(quote!(Column::#column => #reference,));
-        let decoded = if name == "id" || reference {
-            identity::decode(field, core_root, seaorm_root)
-        } else {
-            adapter_record::decode_field(field, seaorm_root)
-        };
-        assignments.push(quote!(Column::#column => active.#ident = #seaorm_root::sea_orm::ActiveValue::Set(#decoded),));
+        let assignment = bindings.assignment(&name, role, seaorm_root, core_root)?;
+        assignments.push(quote!(Column::#column => { #assignment }));
         let stored_value = adapter_record::field_value(ident, seaorm_root);
         values.push(quote!(Column::#column => #stored_value,));
-        if !core.contains(&name.as_str()) {
-            core_columns.push(quote!(Column::#column => None,));
+        let logical = registry::core_fields(role)
+            .iter()
+            .find(|definition| {
+                bindings
+                    .get(definition.name)
+                    .is_some_and(|field| field.ident.as_ref() == Some(ident))
+            })
+            .map(|definition| registry::canonical_field_name(role, definition.name));
+        let logical = logical.map_or_else(|| quote!(None), |logical| quote!(Some(#logical)));
+        core_columns.push(quote!(Column::#column => #logical,));
+    }
+    for definition in registry::core_fields(role) {
+        let Some(field) = bindings.get(definition.name) else {
             continue;
-        }
-        let logical = registry::canonical_field_name(role, &name);
-        core_columns.push(quote!(Column::#column => Some(#logical),));
-        let logical_value = if name == "id" {
+        };
+        let ident = field
+            .ident
+            .as_ref()
+            .ok_or_else(|| syn::Error::new_spanned(field, "AuthEntity requires named fields"))?;
+        let logical = registry::canonical_field_name(role, definition.name);
+        let logical_value = if definition.name == "id" {
             quote!(#core_root::FieldValue::String(self.#ident.to_string()))
         } else {
-            stored_value
+            adapter_record::field_value(ident, seaorm_root)
         };
         raw_output.push(quote!((#logical.to_owned(), #logical_value),));
     }

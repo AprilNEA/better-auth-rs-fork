@@ -47,17 +47,14 @@ pub(super) fn generate(
             "{}",
             serde_rename_rule::RenameRule::PascalCase.apply_to_field(&rust_name)
         );
-        let mut aliases = field_aliases::field_aliases(&rust_name, &serialized, &field.attrs)?;
+        let mut aliases =
+            field_aliases::field_aliases(role, &rust_name, &serialized, &field.attrs)?;
         aliases.retain(|alias| column_aliases.insert(alias.clone()));
         if !aliases.is_empty() {
             columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
         }
-        let decoded = if rust_name == "id" || identity::is_reference(role, field)? {
-            identity::decode(field, core, seaorm)
-        } else {
-            decode_field(field, seaorm)
-        };
-        setters.push(quote!(Column::#column => active.#ident = #seaorm::sea_orm::ActiveValue::Set(#decoded),));
+        let assignment = bindings.assignment(&rust_name, role, seaorm, core)?;
+        setters.push(quote!(Column::#column => { #assignment }));
         let value = field_value(ident, seaorm);
         values.push(quote!(Column::#column => #value,));
     }
@@ -80,15 +77,11 @@ pub(super) fn generate(
     let user_id = if role == EntityRole::Account {
         let field = bindings.require("user_id")?;
         let ty = &field.ty;
-        let parse = if identity::optional_inner(ty).is_some() {
-            quote!(value.parse().map(Some))
-        } else {
-            quote!(value.parse())
-        };
+        let parse = identity::parse_user_id(field, "Invalid account user id", core, seaorm);
         quote! {
             type UserId = #ty;
             fn parse_user_id(value: &str) -> #core::AuthResult<Self::UserId> {
-                #parse.map_err(|error| #core::AuthError::bad_request(format!("Invalid account user id: {error}")))
+                #parse
             }
         }
     } else {

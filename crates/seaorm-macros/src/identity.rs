@@ -20,7 +20,7 @@ pub(super) fn string_view(ty: &syn::Type, name: &str) -> TokenStream {
 }
 
 pub(super) fn is_reference(role: EntityRole, field: &syn::Field) -> syn::Result<bool> {
-    let configured = field_bindings::FieldOptions::parse(field)?.reference;
+    let options = field_bindings::FieldOptions::parse(field)?;
     let table = match role {
         EntityRole::Session => "sessions",
         EntityRole::Account => "accounts",
@@ -30,10 +30,13 @@ pub(super) fn is_reference(role: EntityRole, field: &syn::Field) -> syn::Result<
             .find(|entity| entity.role == Some(role))
             .map_or("", |entity| entity.table_name),
     };
-    Ok(configured.unwrap_or_else(|| {
+    Ok(options.reference.unwrap_or_else(|| {
         registry::entity_foreign_keys(table)
             .iter()
-            .any(|(column, _)| field.ident.as_ref().is_some_and(|ident| ident == column))
+            .any(|(column, _)| {
+                field.ident.as_ref().is_some_and(|ident| ident == column)
+                    || options.aliases.iter().any(|alias| alias == column)
+            })
     }))
 }
 
@@ -75,6 +78,28 @@ pub(super) fn optional_inner(ty: &syn::Type) -> Option<&syn::Type> {
     }
 }
 
+pub(super) fn parse_user_id(
+    field: &syn::Field,
+    message: &str,
+    core: &TokenStream,
+    seaorm: &TokenStream,
+) -> TokenStream {
+    let inner = optional_inner(&field.ty);
+    let ty = inner.unwrap_or(&field.ty);
+    if matches!(ty, syn::Type::Path(path) if path.path.segments.last().is_some_and(|segment| matches!(segment.ident.to_string().as_str(), "String" | "Uuid" | "i16" | "i32" | "i64" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool")))
+    {
+        let parsed = if inner.is_some() {
+            quote!(value.parse().map(Some))
+        } else {
+            quote!(value.parse())
+        };
+        quote!(#parsed.map_err(|error| #core::AuthError::bad_request(format!("{}: {error}", #message))))
+    } else {
+        let decoded = adapter_record::decode_field(field, seaorm);
+        quote!({ let value = #core::FieldValue::from(value); Ok(#decoded) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,6 +120,14 @@ mod tests {
             ),
             (quote!(scope: Option<String>), false),
             (quote!(#[auth(reference)] scope: Option<String>), true),
+            (
+                quote!(#[auth(alias = "user_id")] owner: Option<String>),
+                true,
+            ),
+            (
+                quote!(#[auth(alias = "user_id", reference = false)] owner: Option<String>),
+                false,
+            ),
         ] {
             let field = syn::Field::parse_named.parse2(tokens)?;
             if is_reference(EntityRole::DeviceCode, &field)? != expected {

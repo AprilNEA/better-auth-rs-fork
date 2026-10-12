@@ -85,8 +85,8 @@ fn invalid_schema_configuration_preserves_existing_output() {
             "unknown configurable field",
         ),
         (
-            r#"{"organization":{"fields":{"name":"slug"}}}"#,
-            "duplicate database column",
+            r#"{"organization":{"fields":{"name":"id"}}}"#,
+            "maps a field to the primary key column",
         ),
         (
             r#"{"organization":{"additionalFields":{"firstName":{"type":"string"},"first_name":{"type":"string"}}}}"#,

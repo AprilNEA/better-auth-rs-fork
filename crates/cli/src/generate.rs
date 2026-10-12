@@ -309,6 +309,12 @@ fn gen_entity(entity: &Entity, generation: IdGeneration, config: &SchemaConfig) 
             let reference = field.references_id(entity.registry_table);
             quote!(#[auth(reference = #reference)])
         });
+        let aliases = field
+            .aliases
+            .iter()
+            .filter(|alias| *alias != &name.to_string())
+            .filter(|_| entity.role.is_some())
+            .map(|alias| quote!(#[auth(alias = #alias)]));
         quote! {
             #column_attr
             #serialized
@@ -316,6 +322,7 @@ fn gen_entity(entity: &Entity, generation: IdGeneration, config: &SchemaConfig) 
             #legacy_default
             #number_storage
             #reference
+            #(#aliases)*
             pub #name: #ty,
         }
     });

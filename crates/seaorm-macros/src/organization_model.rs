@@ -75,7 +75,7 @@ pub(super) fn generate(
         } else {
             serialized.clone()
         };
-        let mut aliases = field_aliases::field_aliases(&name, &serialized, &field.attrs)?;
+        let mut aliases = field_aliases::field_aliases(role, &name, &serialized, &field.attrs)?;
         aliases.retain(|alias| column_aliases.insert(alias.clone()));
         if !aliases.is_empty() {
             columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
@@ -90,12 +90,8 @@ pub(super) fn generate(
         }
         let reference = identity::is_reference(role, field)?;
         references.push(quote!(Column::#column => #reference,));
-        let decoded = if name == "id" || reference {
-            identity::decode(field, core_root, seaorm_root)
-        } else {
-            adapter_record::decode_field(field, seaorm_root)
-        };
-        assignments.push(quote!(Column::#column => active.#ident = #seaorm_root::sea_orm::ActiveValue::Set(#decoded),));
+        let assignment = bindings.assignment(&name, role, seaorm_root, core_root)?;
+        assignments.push(quote!(Column::#column => { #assignment }));
     }
     for definition in registry::core_fields(role) {
         let name = definition.name;
