@@ -1,4 +1,5 @@
 use better_auth::__private_core::__private_async_trait::async_trait;
+use better_auth::config::UserFieldFactory;
 use better_auth::seaorm::sea_orm::entity::prelude::DateTimeUtc;
 use better_auth::{
     __private_core::{
@@ -111,9 +112,7 @@ pub(crate) fn policies(failure: Arc<AtomicU8>) -> UserConfig {
                         field_name: Some("stored_revision".into()),
                         required: Some(false),
                         default_value: Some(FieldValue::from(1.5)),
-                        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
-                            || Ok(FieldValue::from(2.5)),
-                        )),
+                        on_update: Some(UserFieldFactory::new(|| Ok(FieldValue::from(2.5)))),
                         ..Default::default()
                     },
                 ),

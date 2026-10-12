@@ -40,7 +40,7 @@ impl Recorder {
 
 pub(super) fn error(error: &AuthError) -> Value {
     assert!(
-        matches!(error, AuthError::Internal(_)),
+        matches!(error, AuthError::Internal(_) | AuthError::TypeError(_)),
         "Unexpected typed error: {error:?}"
     );
     json!({"type": "rust-error", "debug": format!("{error:?}"), "display": error.to_string()})
@@ -257,7 +257,7 @@ impl SecondaryStorage for Cache {
 pub(super) fn project_reference(value: &mut Value, scenario: &str) -> TestResult {
     match value {
         Value::Object(fields) if fields.get("type").and_then(Value::as_str) == Some("error") => {
-            let message = match fields.get("injected").and_then(Value::as_str) {
+            let projected = match fields.get("injected").and_then(Value::as_str) {
                 Some(source @ ("cache" | "after" | "rollback")) => {
                     assert_eq!(fields.get("name"), Some(&json!("Error")));
                     let message = fields
@@ -272,34 +272,36 @@ pub(super) fn project_reference(value: &mut Value, scenario: &str) -> TestResult
                             _ => "refresh-transaction-rollback",
                         }
                     );
-                    message.to_owned()
+                    AuthError::internal(message)
                 }
                 None => {
                     assert_eq!(fields.get("name"), Some(&json!("TypeError")));
-                    assert!(
-                        fields
-                            .get("message")
-                            .and_then(Value::as_str)
-                            .is_some_and(|text| !text.is_empty())
-                    );
-                    match scenario {
-                        "missing-immediate" | "cancel-committed" => {
-                            "Cannot refresh sessions for a missing user"
-                        }
-                        "malformed-cache-envelope" => {
-                            "Cached user session refresh requires a session object"
-                        }
-                        "non-array-active-index" => "Cached user session index must be an array",
+                    let (source_message, projected) = match scenario {
+                        "missing-immediate" | "cancel-committed" => (
+                            "null is not an object (evaluating 'user.id')",
+                            AuthError::internal("Cannot refresh sessions for a missing user"),
+                        ),
+                        "malformed-cache-envelope" => (
+                            "undefined is not an object (evaluating 'parsed.session.expiresAt')",
+                            AuthError::type_error(
+                                "Cannot read properties of undefined (reading 'expiresAt')",
+                            ),
+                        ),
+                        "non-array-active-index" => (
+                            "(safeJSONParse(listRaw) || []).filter is not a function. (In '(safeJSONParse(listRaw) || []).filter((s) => s.expiresAt > now)', '(safeJSONParse(listRaw) || []).filter' is undefined)",
+                            AuthError::type_error("list.filter is not a function"),
+                        ),
                         _ => return Err(format!("Unexpected native error in {scenario}").into()),
-                    }
-                    .to_owned()
+                    };
+                    assert_eq!(fields.get("message"), Some(&json!(source_message)));
+                    projected
                 }
                 Some(source) => {
                     return Err(format!("Unknown injected error source: {source}").into());
                 }
             };
             // Rust retains its typed diagnostic; JavaScript error object details stay in the source fixture.
-            *value = error(&AuthError::internal(message));
+            *value = error(&projected);
         }
         Value::Object(fields) => {
             if fields

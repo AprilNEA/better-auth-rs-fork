@@ -373,7 +373,7 @@ async fn account_batches_queue_after_hooks_until_commit_and_keep_committed_after
 }
 
 #[tokio::test]
-async fn memory_account_batches_bind_serial_primary_ids_before_redeclared_field_policies()
+async fn memory_account_batches_resolve_redeclared_id_alias_before_serial_canonicalization()
 -> AuthResult<()> {
     for redeclare_id in [false, true] {
         let mut config = AuthConfig::default();
@@ -404,9 +404,10 @@ async fn memory_account_batches_bind_serial_primary_ids_before_redeclared_field_
             );
         }
         let store = base.with_runtime(Arc::new(config), Vec::new(), Default::default())?;
-        for (selector, password) in [
-            (FieldValue::from("001"), "string-selector"),
-            (FieldValue::Number(1.0), "native-selector"),
+        for (selector, password, matches) in [
+            (FieldValue::from("001"), "string-selector", !redeclare_id),
+            (FieldValue::Number(1.0), "native-selector", true),
+            (FieldValue::from("001"), "canonical-string-selector", true),
         ] {
             assert_eq!(
                 store
@@ -418,7 +419,7 @@ async fn memory_account_batches_bind_serial_primary_ids_before_redeclared_field_
                         }
                     )
                     .await?,
-                Some(1)
+                Some(u64::from(matches))
             );
             assert_eq!(
                 base.get_account("credential", "first")
@@ -427,7 +428,7 @@ async fn memory_account_batches_bind_serial_primary_ids_before_redeclared_field_
                     .password
                     .typed()?
                     .as_deref(),
-                Some(password)
+                Some(if matches { password } else { "original" })
             );
             assert_eq!(
                 base.get_account("001", "second")

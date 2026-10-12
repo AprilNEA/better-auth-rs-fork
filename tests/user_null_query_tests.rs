@@ -212,7 +212,7 @@ async fn observe<S: AuthSchema>(
         "unknown-list",
         store.list_users(unknown.clone()).await,
         trace,
-        backend == "sqlite",
+        true,
     )?;
     let count_error = observe_error(
         "unknown-count",
@@ -288,13 +288,12 @@ async fn contract() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(actual.backend, expected.backend);
         assert_eq!(actual.queries, expected.queries);
         assert_eq!(actual.errors.len(), expected.errors.len());
-        let sql = actual.backend == "sqlite";
         for (actual, expected) in actual.errors.into_iter().zip(expected.errors) {
             assert_eq!(actual.name, expected.name);
             assert_eq!(actual.events, expected.events);
             assert_eq!(
                 actual.error.kind,
-                if sql && actual.name == "unknown-list" {
+                if actual.name == "unknown-list" {
                     "Config"
                 } else {
                     "Internal"

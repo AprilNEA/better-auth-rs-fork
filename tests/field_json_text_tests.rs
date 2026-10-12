@@ -14,6 +14,7 @@ use better_auth::{
         },
     },
     AuthConfig, BetterAuth,
+    plugins::JwtPlugin,
 };
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -126,12 +127,14 @@ async fn observe<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, backend: &str) -> Au
     storage_field.field_type = UserFieldType::String;
     let reader = BetterAuth::new(config())
         .store_arc(raw.clone())
+        .plugin(JwtPlugin::new())
         .plugin(Fields(fields(storage_field)))
         .build()
         .await?;
     let events = Trace::default();
     let auth = BetterAuth::new(config())
         .store_arc(raw)
+        .plugin(JwtPlugin::new())
         .plugin(Fields(fields(field(Some(events.clone())))))
         .build()
         .await?;

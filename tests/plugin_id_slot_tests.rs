@@ -4,6 +4,8 @@
 mod jwk_fixture;
 #[path = "support/wallet_fields.rs"]
 mod wallet_fixture;
+#[path = "support/wallet_plugin.rs"]
+mod wallet_plugin;
 
 use async_trait::async_trait;
 use better_auth::seaorm::sea_orm::EntityTrait;
@@ -16,6 +18,7 @@ use better_auth::{
         user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
     },
     AuthConfig, BetterAuth,
+    plugins::JwtPlugin,
 };
 use better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -77,8 +80,8 @@ fn policies(events: &Events, before_label: bool, reject: bool) -> UserConfig {
         ..Default::default()
     };
     let id = UserFieldConfig {
-        // The adapter replaces the complete ID policy, including an alias with no matching SQL column.
-        field_name: Some("ignored_id_column".into()),
+        // Preflight requires the alias column; CRUD must replace the complete ID policy.
+        field_name: Some("note".into()),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(|_| {
                 Err(AuthError::internal("configured-id-input-called"))
@@ -129,8 +132,13 @@ async fn check(role: EntityRole, before_label: bool, reject: bool) -> AuthResult
         }
         _ => return Err(AuthError::internal("Unexpected SQL ID slot model")),
     };
-    let auth = BetterAuth::new(config)
-        .store_arc(raw)
+    let builder = BetterAuth::new(config).store_arc(raw);
+    let builder = match role {
+        EntityRole::Jwk => builder.plugin(JwtPlugin::new()),
+        EntityRole::WalletAddress => builder.plugin(wallet_plugin::wallet_plugin()),
+        _ => return Err(AuthError::internal("Unexpected SQL ID slot model")),
+    };
+    let auth = builder
         .plugin(Fields(role, policies(&events, before_label, reject)))
         .build()
         .await?;
@@ -191,7 +199,7 @@ async fn check(role: EntityRole, before_label: bool, reject: bool) -> AuthResult
             .await
             .map(|rows| {
                 rows.into_iter()
-                    .map(|row| (row.id, row.label))
+                    .map(|row| (row.id, row.label, row.note))
                     .collect::<Vec<_>>()
             }),
         EntityRole::WalletAddress => wallet_fixture::model::Entity::find()
@@ -199,7 +207,7 @@ async fn check(role: EntityRole, before_label: bool, reject: bool) -> AuthResult
             .await
             .map(|rows| {
                 rows.into_iter()
-                    .map(|row| (row.id, row.label))
+                    .map(|row| (row.id, row.label, row.note))
                     .collect::<Vec<_>>()
             }),
         _ => return Err(AuthError::internal("Unexpected SQL ID slot model")),
@@ -210,7 +218,7 @@ async fn check(role: EntityRole, before_label: bool, reject: bool) -> AuthResult
     } else {
         assert_eq!(
             stored,
-            vec![("generated-plugin-id".into(), Some("selected".into()))]
+            vec![("generated-plugin-id".into(), Some("selected".into()), None)]
         );
     }
     Ok(())

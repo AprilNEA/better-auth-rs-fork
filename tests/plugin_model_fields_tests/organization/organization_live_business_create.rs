@@ -292,14 +292,15 @@ async fn check<S: AuthSchema>(
     );
     if fails {
         if native {
-            match actual {
-                Err(AuthError::Serialization(error)) => assert!(error.is_syntax()),
-                other => {
-                    return Err(AuthError::internal(format!(
-                        "Expected native final metadata parse error, got {other:?}"
-                    )));
-                }
-            }
+            let error = actual
+                .err()
+                .ok_or_else(|| AuthError::internal("Expected final metadata parse failure"))?;
+            let raw = required(
+                error.raw_value(),
+                "Expected native final metadata parse error",
+            )?;
+            assert_eq!(raw.model_property("name")?, "SyntaxError".into());
+            assert!(!error.is_api_error()?);
         } else {
             let actual = actual?;
             assert_eq!(actual.status, 500);

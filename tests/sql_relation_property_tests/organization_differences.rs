@@ -110,10 +110,26 @@ pub(super) fn assert_error(scenario: &str, expected: &Value, error: &AuthError) 
             matches!(error, AuthError::TypeError(_)),
             "{scenario}: {error:?}"
         ),
-        Some("BetterAuthError") => assert!(
-            matches!(error, AuthError::Internal(_) | AuthError::Config(_)),
-            "{scenario}: {error:?}"
-        ),
+        Some("BetterAuthError") => {
+            let raw = error.raw_value().ok_or("Expected native BetterAuthError")?;
+            assert_eq!(
+                raw.model_property("name")?.json()?.as_ref(),
+                expected.get("name"),
+                "{scenario}"
+            );
+            assert!(!error.is_api_error()?, "{scenario}");
+            assert_eq!(
+                raw.json()?.as_ref(),
+                expected.get("properties"),
+                "{scenario}"
+            );
+            let object = raw.as_object().ok_or("Expected BetterAuthError object")?;
+            assert_eq!(
+                Some(&json!(object.enumerable_keys()?)),
+                expected.get("keys"),
+                "{scenario}"
+            );
+        }
         name => return Err(format!("Unclassified upstream error: {name:?}").into()),
     }
     Ok(())

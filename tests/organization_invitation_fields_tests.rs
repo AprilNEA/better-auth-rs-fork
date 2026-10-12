@@ -202,11 +202,28 @@ async fn failed_acceptance_compensates_invitation_updates_without_committing_mem
             )
             .await
             .unwrap_err();
-        assert!(error.to_string().contains(if teams_enabled {
+        let message = if teams_enabled {
             "Team member limit reached"
         } else {
             "member output failed"
-        }));
+        };
+        assert_eq!(error.message_value().unwrap(), FieldValue::from(message));
+        assert!(error.is_api_error().unwrap());
+        assert_eq!(
+            error.status_code().unwrap(),
+            if teams_enabled { 403 } else { 400 }
+        );
+        assert_eq!(
+            error.body_value().unwrap().json().unwrap(),
+            Some(if teams_enabled {
+                serde_json::json!({
+                    "message": message,
+                    "code": "TEAM_MEMBER_LIMIT_REACHED",
+                })
+            } else {
+                serde_json::json!({"message": message})
+            })
+        );
         let invitation = store.get_invitation_by_id(&id).await.unwrap().unwrap();
         assert_eq!(invitation.status, InvitationStatus::Pending);
         assert_eq!(

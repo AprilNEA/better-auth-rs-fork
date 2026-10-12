@@ -148,10 +148,15 @@ jobs:
         id: rust-cache
         uses: actions/cache/restore@v6.1.0
         with:
-          key: rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_CACHE_STAGE }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-${{ env.RUST_CACHE_STAGE }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          # Prefer the current family before other builds with the same environment and Cargo inputs.
           restore-keys: |
+            rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-${{ env.RUST_CACHE_STAGE }}-
             rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_CACHE_STAGE }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
-            rust-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.RUST_CACHE_STAGE }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-
+            rust-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-all-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-user-fields-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
+            rust-v1-${{ runner.os }}-${{ runner.arch }}-plugin-fields-${{ hashFiles('devenv.lock', 'devenv.nix', 'devenv.yaml') }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock', '**/.cargo/config', '**/.cargo/config.toml', '**/rust-toolchain', '**/rust-toolchain.toml') }}-
           path: |
             ~/.cargo/registry
             ~/.cargo/git

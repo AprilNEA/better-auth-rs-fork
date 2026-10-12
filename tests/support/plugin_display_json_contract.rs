@@ -12,6 +12,7 @@ use better_auth::{
         SchemaValue, UpdateApiKey, UpdatePasskey, entity::AuthUser, store::schema::EntityRole,
     },
     BetterAuth,
+    plugins::{ApiKeyPlugin, PasskeyPlugin},
 };
 use serde_json::{Value, json};
 use std::{future::Future, sync::Arc};
@@ -271,8 +272,13 @@ where
 {
     let state = policies::Shared::default();
     let build = |defaults| {
-        BetterAuth::new(config())
-            .store_arc(raw.clone())
+        let builder = BetterAuth::new(config()).store_arc(raw.clone());
+        let builder = if target == Target::ApiKeyName {
+            builder.plugin(ApiKeyPlugin::builder().build())
+        } else {
+            builder.plugin(PasskeyPlugin::new())
+        };
+        builder
             .plugin(policies::Policy {
                 target,
                 defaults,

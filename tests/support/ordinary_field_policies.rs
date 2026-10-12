@@ -4,6 +4,7 @@ use better_auth::__private_core::{
         FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
     },
 };
+use better_auth::config::UserFieldFactory;
 use serde_json::{Value, json};
 use std::sync::{
     Arc, Mutex,
@@ -78,18 +79,16 @@ pub(crate) fn policies_with_revision(
                         field_type: UserFieldType::Number,
                         field_name: Some("stored_revision".into()),
                         required: Some(false),
-                        default_value_fn: Some(
-                            better_auth_core::user_fields::UserFieldFactory::new({
-                                let events = events.clone();
-                                move || {
-                                    if let Some(events) = &events {
-                                        push(events, json!(["default", "revision"]));
-                                    }
-                                    Ok(revision[0].into())
+                        default_value_fn: Some(UserFieldFactory::new({
+                            let events = events.clone();
+                            move || {
+                                if let Some(events) = &events {
+                                    push(events, json!(["default", "revision"]));
                                 }
-                            }),
-                        ),
-                        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
+                                Ok(revision[0].into())
+                            }
+                        })),
+                        on_update: Some(UserFieldFactory::new({
                             let events = events.clone();
                             move || {
                                 if let Some(events) = &events {

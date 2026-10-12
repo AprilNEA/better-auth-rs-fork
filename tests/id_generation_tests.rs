@@ -4,7 +4,14 @@
     reason = "Contract fixtures stop on unexpected setup or assertion failures"
 )]
 
+#[path = "support/wallet_plugin.rs"]
+mod wallet_plugin;
+
 use better_auth::config::{IdGeneration, IdGenerator};
+use better_auth::plugins::{
+    DeviceAuthorizationPlugin, JwtPlugin, OrganizationPlugin, TwoFactorPlugin,
+    organization::OrganizationTeamsConfig,
+};
 use better_auth::{AuthConfig, BetterAuth};
 use better_auth_core::store::{MemoryCacheAdapter, UserStore};
 use better_auth_core::{
@@ -254,6 +261,14 @@ async fn plugin_ids_use_logical_models_and_preserve_forced_organization_ids() {
         })));
     let auth = BetterAuth::<BundledSchema>::new(config)
         .store(database().await)
+        .plugin(OrganizationPlugin::new().teams(OrganizationTeamsConfig {
+            enabled: true,
+            ..Default::default()
+        }))
+        .plugin(DeviceAuthorizationPlugin::new())
+        .plugin(TwoFactorPlugin::new())
+        .plugin(JwtPlugin::new())
+        .plugin(wallet_plugin::wallet_plugin())
         .build()
         .await
         .unwrap();

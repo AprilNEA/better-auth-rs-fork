@@ -23,7 +23,7 @@ use serde_json::{Value, json};
 
 use crate::plugins::{
     device_authorization::DeviceAuthorizationPlugin,
-    phone_number::PhoneNumberPlugin,
+    phone_number::{PhoneNumberCallbacks, PhoneNumberPlugin},
     test_helpers::{
         create_test_config, initialize_test_context,
         native_session::{NativeSessionHook, dispatch, dispatch_plugin},
@@ -447,10 +447,15 @@ async fn device_primitive_users_reach_state_guards_without_claiming_or_disclosin
 async fn phone_update_binds_native_actor_and_consumes_otp_before_user_failure() -> AuthResult<()> {
     let delivered = Arc::new(Mutex::new(Vec::new()));
     let captured = delivered.clone();
-    let plugin = PhoneNumberPlugin::new().callback_on_verification(move |event, _| {
-        captured.lock().unwrap().push(event.user);
-        async { Ok(()) }
-    });
+    let plugin = PhoneNumberPlugin::new().callbacks(
+        PhoneNumberCallbacks::<StatelessSchema>::default().on_verification(
+            move |event, endpoint| {
+                assert!(endpoint.request.is_none());
+                captured.lock().unwrap().push(event.user.clone());
+                Box::pin(async { Ok(()) })
+            },
+        ),
+    );
     for actor in [FieldValue::Bool(true), FieldValue::Bool(false)] {
         let fixture = Fixture::new(&[&plugin], true).await?;
         let _ = fixture
@@ -729,9 +734,17 @@ async fn consumers_read_real_many_relationships_without_a_typed_user_gate() -> A
         };
         fixture.device(None).await?;
         let req = request("/device/approve", json!({"userCode":"ABCD2345"}));
-        let response = device.on_request(&req, &ctx).await?.unwrap();
-        assert_eq!(response.status, 400);
-        assert_eq!(body(&response)["error"], "invalid_request");
+        let error = device.on_request(&req, &ctx).await.unwrap_err();
+        assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+        assert_eq!(error.status_value()?, "BAD_REQUEST".into());
+        assert_eq!(error.status_code()?, 400);
+        assert_eq!(
+            error.body_value()?.json()?,
+            Some(json!({
+                "error": "invalid_request",
+                "error_description": "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying",
+            }))
+        );
         let _ = ctx
             .database
             .create_verification(CreateVerification {
