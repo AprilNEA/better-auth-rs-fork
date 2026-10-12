@@ -109,7 +109,7 @@ impl Harness {
 }
 
 #[test]
-fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult<()> {
+fn own_property_parser_outcomes_match_captured_function_defaults() {
     let fixture = fixture("input");
     let mut paired = 0;
     let mut inherited = 0;
@@ -135,7 +135,8 @@ fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult
                         },
                     ))
                 })
-                .collect::<AuthResult<FieldMap>>()?;
+                .collect::<AuthResult<FieldMap>>()
+                .unwrap();
             assert_eq!(
                 json!(input.keys().collect::<Vec<_>>()),
                 expected["inputOwnKeys"]
@@ -170,28 +171,28 @@ fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult
                         );
                     }
                     assert_eq!(
-                        observe(&fields.into(), &harness.default, &harness.returned)?,
+                        observe(&fields.into(), &harness.default, &harness.returned).unwrap(),
                         expected["result"]
                     );
                 }
                 Err(error @ AuthError::FieldInput { .. }) => {
                     assert_eq!(
-                        error.body_value()?.json()?,
+                        error.body_value().unwrap().json().unwrap(),
                         Some(expected["error"]["properties"]["body"].clone())
                     );
                     assert_eq!(
-                        error.status_value()?.json()?,
+                        error.status_value().unwrap().json().unwrap(),
                         Some(expected["error"]["properties"]["status"].clone())
                     );
                     assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
                     assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
-                    assert_eq!(error.status_code()?, 400);
+                    assert_eq!(error.status_code().unwrap(), 400);
                     assert_eq!(expected["error"]["properties"]["statusCode"], 400);
                 }
                 Err(error) => {
                     assert!(matches!(error, AuthError::Internal(_)));
                     assert_eq!(
-                        error.instrumentation_message()?,
+                        error.instrumentation_message().unwrap(),
                         expected["error"]["message"]
                     );
                     assert_eq!(expected["error"]["name"], "Error");
@@ -203,11 +204,10 @@ fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult
     }
     assert_eq!(paired, 56);
     assert_eq!(inherited, 8);
-    Ok(())
 }
 
 #[test]
-fn function_handles_preserve_identity_and_require_explicit_invocation() -> AuthResult<()> {
+fn function_handles_preserve_identity_and_require_explicit_invocation() {
     let harness = Harness::new("function");
     let alias = FieldValue::Function(harness.factory.clone().into());
     let distinct = Harness::new("function");
@@ -218,26 +218,35 @@ fn function_handles_preserve_identity_and_require_explicit_invocation() -> AuthR
     assert!(!alias.strict_equals(&harness.returned));
     assert!(alias.is_truthy());
     assert!(!alias.is_undefined());
-    assert!(better_auth_core::query::field_number(&alias)?.is_nan());
+    assert!(
+        better_auth_core::query::field_number(&alias)
+            .unwrap()
+            .is_nan()
+    );
     assert_eq!(
         better_auth_core::utils::symmetric::decrypt_field("function-type-diagnostic", &alias)
             .unwrap_err()
-            .instrumentation_message()?,
+            .instrumentation_message()
+            .unwrap(),
         "hex string expected, got function"
     );
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 0);
-    let FieldValue::Function(function) = alias else {
-        return Err(AuthError::internal("Expected callable default"));
-    };
-    let returned = function.call()?;
+    let function = match alias {
+        FieldValue::Function(function) => Some(function),
+        _ => None,
+    }
+    .unwrap();
+    let returned = function.call().unwrap();
     assert!(returned.strict_equals(&harness.returned));
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 1);
     assert_eq!(harness.calls.returned.load(Ordering::SeqCst), 0);
-    let FieldValue::Function(function) = returned else {
-        return Err(AuthError::internal("Expected callable factory result"));
-    };
+    let function = match returned {
+        FieldValue::Function(function) => Some(function),
+        _ => None,
+    }
+    .unwrap();
     assert_eq!(
-        function.call()?,
+        function.call().unwrap(),
         FieldValue::from("returned-function-value")
     );
     assert_eq!(harness.calls.returned.load(Ordering::SeqCst), 1);
@@ -246,21 +255,22 @@ fn function_handles_preserve_identity_and_require_explicit_invocation() -> AuthR
     let declaration = fields.fields_mut().get_mut("protectedValue").unwrap();
     declaration.default_value_fn = None;
     declaration.default_value = Some(harness.default.clone());
-    let supplied = fields.parse_input(
-        &FieldMap::from([("protectedValue".into(), FieldValue::Undefined)]),
-        true,
-    )?;
+    let supplied = fields
+        .parse_input(
+            &FieldMap::from([("protectedValue".into(), FieldValue::Undefined)]),
+            true,
+        )
+        .unwrap();
     assert!(supplied["protectedValue"].strict_equals(&harness.default));
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 1);
-    let missing = fields.parse_input(&FieldMap::new(), true)?;
+    let missing = fields.parse_input(&FieldMap::new(), true).unwrap();
     assert!(missing["protectedValue"].strict_equals(&harness.returned));
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 2);
     assert_eq!(harness.calls.returned.load(Ordering::SeqCst), 1);
-    Ok(())
 }
 
 #[test]
-fn json_and_recursive_clone_boundaries_preserve_captured_function_behavior() -> AuthResult<()> {
+fn json_and_recursive_clone_boundaries_preserve_captured_function_behavior() {
     let fixture = fixture("memory");
     let case = fixture["cases"]
         .as_array()
@@ -273,54 +283,60 @@ fn json_and_recursive_clone_boundaries_preserve_captured_function_behavior() -> 
     let array = FieldValue::from(vec![harness.default.clone()]);
     let root = harness
         .default
-        .stringify()?
+        .stringify()
+        .unwrap()
         .map(FieldValue::from)
         .unwrap_or_default();
     assert_eq!(
         json!({
-            "object": object.stringify()?.unwrap(),
-            "array": array.stringify()?.unwrap(),
-            "root": observe(&root, &harness.default, &harness.returned)?,
+            "object": object.stringify().unwrap().unwrap(),
+            "array": array.stringify().unwrap().unwrap(),
+            "root": observe(&root, &harness.default, &harness.returned).unwrap(),
         }),
         operation(case, "direct:json-only")["result"]
     );
-    assert_eq!(object.json()?, Some(json!({})));
-    assert_eq!(array.json()?, Some(json!([null])));
-    assert_eq!(harness.default.json()?, None);
+    assert_eq!(object.json().unwrap(), Some(json!({})));
+    assert_eq!(array.json().unwrap(), Some(json!([null])));
+    assert_eq!(harness.default.json().unwrap(), None);
     let view = UserView::try_from(FieldMap::from([
         ("value".into(), harness.default.clone()),
         ("array".into(), array.clone()),
-    ]))?;
-    assert_eq!(serde_json::to_value(view)?, json!({"array": [null]}));
+    ]))
+    .unwrap();
+    assert_eq!(
+        serde_json::to_value(view).unwrap(),
+        json!({"array": [null]})
+    );
     let nested = FieldValue::from(FieldMap::from([("nested".into(), array.clone())]));
     for value in [&harness.default, &object, &array, &nested] {
         let result = StructuredCloneContext::new().clone_value(value);
         assert!(matches!(result, Err(AuthError::DataClone)));
         let error = result.unwrap_err();
         assert_eq!(
-            error.instrumentation_message()?,
+            error.instrumentation_message().unwrap(),
             operation(case, "direct:public-output")["error"]["message"]
         );
     }
     assert!(matches!(
-        StructuredCloneContext::new().clone_map(&object.as_object().unwrap().snapshot_fields()?),
+        StructuredCloneContext::new()
+            .clone_map(&object.as_object().unwrap().snapshot_fields().unwrap()),
         Err(AuthError::DataClone)
     ));
     assert!(
         object
             .as_object()
             .unwrap()
-            .get("value")?
+            .get("value")
+            .unwrap()
             .unwrap()
             .strict_equals(&harness.default)
     );
     assert_eq!(harness.calls.factory.load(Ordering::SeqCst), 0);
     assert_eq!(harness.calls.returned.load(Ordering::SeqCst), 0);
-    Ok(())
 }
 
 #[test]
-fn synthetic_visibility_and_default_calls_match_captured_rows() -> AuthResult<()> {
+fn synthetic_visibility_and_default_calls_match_captured_rows() {
     let fixture = fixture("memory");
     for name in ["raw-string", "hidden-function"] {
         let case = fixture["cases"]
@@ -358,7 +374,8 @@ fn synthetic_visibility_and_default_calls_match_captured_rows() -> AuthResult<()
                 user("synthetic-user", extra),
                 &harness.fields,
                 &harness.fields,
-            )?;
+            )
+            .unwrap();
             let returned = expected["events"]
                 .as_array()
                 .unwrap()
@@ -366,7 +383,7 @@ fn synthetic_visibility_and_default_calls_match_captured_rows() -> AuthResult<()
                 .find(|event| event["phase"] == "synthetic:return")
                 .unwrap();
             assert_eq!(
-                observe(&output.clone().into(), &harness.default, &harness.returned)?,
+                observe(&output.clone().into(), &harness.default, &harness.returned).unwrap(),
                 returned["user"]
             );
             assert_eq!(
@@ -381,11 +398,12 @@ fn synthetic_visibility_and_default_calls_match_captured_rows() -> AuthResult<()
                 Ok(fields) => {
                     let value = FieldValue::from(fields);
                     let json = FieldValue::from(FieldMap::from([("user".into(), value.clone())]))
-                        .stringify()?
+                        .stringify()
+                        .unwrap()
                         .unwrap();
                     assert_eq!(
                         json!({
-                            "user": observe(&value, &harness.default, &harness.returned)?,
+                            "user": observe(&value, &harness.default, &harness.returned).unwrap(),
                             "json": json,
                         }),
                         expected["result"]
@@ -395,5 +413,4 @@ fn synthetic_visibility_and_default_calls_match_captured_rows() -> AuthResult<()
             }
         }
     }
-    Ok(())
 }

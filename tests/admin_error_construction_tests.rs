@@ -41,7 +41,7 @@ struct Case {
     expected_body: Option<Value>,
 }
 
-fn config() -> AuthConfig {
+fn config() -> Result<AuthConfig> {
     let mut config = AuthConfig::new(SECRET)
         .base_url(ORIGIN)
         .disable_session_refresh(true)
@@ -51,18 +51,11 @@ fn config() -> AuthConfig {
         });
     {
         let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-            #[allow(
-                clippy::panic,
-                clippy::panic_in_result_fn,
-                reason = "The fixture modifies its existing authored logger options."
-            )]
-            {
-                panic!("fixture requires authored logger options");
-            }
+            return Err(AuthError::internal("fixture requires authored logger options").into());
         };
         logger_options.disabled = Some(true);
     }
-    config
+    Ok(config)
 }
 
 async fn snapshot<S: AuthSchema>(auth: &BetterAuth<S>) -> Result<Value> {
@@ -80,7 +73,7 @@ async fn snapshot<S: AuthSchema>(auth: &BetterAuth<S>) -> Result<Value> {
 }
 
 async fn check<S: AuthSchema>(store: impl AuthStore<S> + 'static, storage: Storage) -> Result<()> {
-    let auth: BetterAuth<S> = AuthBuilder::new(config())
+    let auth: BetterAuth<S> = AuthBuilder::new(config()?)
         .store(store)
         .rate_limit(RateLimitConfig::new().enabled(false))
         .plugin(AdminPlugin::new())
@@ -230,7 +223,7 @@ async fn check<S: AuthSchema>(store: impl AuthStore<S> + 'static, storage: Stora
 
 #[tokio::test]
 async fn memory_admin_errors_preserve_constructor_provenance_and_storage() -> Result<()> {
-    let store = EphemeralStore::new(Arc::new(config()));
+    let store = EphemeralStore::new(Arc::new(config()?));
     check::<StatelessSchema>(store.clone(), Storage::Memory(Box::new(store))).await
 }
 
@@ -245,7 +238,7 @@ async fn sqlite_admin_errors_preserve_constructor_provenance_and_storage() -> Re
     let database = Database::connect("sqlite::memory:").await?;
     migrator::run_migrations(&database).await?;
     check(
-        SeaOrmStore::<BundledSchema>::new(config(), database.clone()),
+        SeaOrmStore::<BundledSchema>::new(config()?, database.clone()),
         Storage::Sqlite(database),
     )
     .await

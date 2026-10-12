@@ -270,14 +270,9 @@ async fn http_json_router_preserves_catch_headers_and_response_hook_order() -> A
             {
                 let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
                 else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    {
-                        panic!("fixture requires authored logger options");
-                    }
+                    return Err(AuthError::internal(
+                        "fixture requires authored logger options",
+                    ));
                 };
                 logger_options.disabled = Some(true);
             }
@@ -401,14 +396,9 @@ async fn structural_api_error_reaches_router_callback_without_losing_owned_heade
     let mut config = AuthConfig::new("raw-router-contract-at-least-32-characters").base_url(ORIGIN);
     {
         let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-            #[allow(
-                clippy::panic,
-                clippy::panic_in_result_fn,
-                reason = "The fixture modifies its existing authored logger options."
-            )]
-            {
-                panic!("fixture requires authored logger options");
-            }
+            return Err(AuthError::internal(
+                "fixture requires authored logger options",
+            ));
         };
         logger_options.disabled = Some(true);
     }

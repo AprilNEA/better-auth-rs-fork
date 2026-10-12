@@ -304,14 +304,9 @@ async fn check(input: Option<Value>, http: bool, api_key: bool) -> AuthResult<()
     config.base_url = ORIGIN.into();
     {
         let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
-            #[allow(
-                clippy::panic,
-                clippy::panic_in_result_fn,
-                reason = "The fixture modifies its existing authored logger options."
-            )]
-            {
-                panic!("fixture requires authored logger options");
-            }
+            return Err(AuthError::internal(
+                "fixture requires authored logger options",
+            ));
         };
         logger_options.disabled = Some(true);
     }

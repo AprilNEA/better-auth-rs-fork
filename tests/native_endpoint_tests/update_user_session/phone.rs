@@ -130,14 +130,9 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
             {
                 let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
                 else {
-                    #[allow(
-                        clippy::panic,
-                        clippy::panic_in_result_fn,
-                        reason = "The fixture modifies its existing authored logger options."
-                    )]
-                    {
-                        panic!("fixture requires authored logger options");
-                    }
+                    return Err(AuthError::internal(
+                        "fixture requires authored logger options",
+                    ));
                 };
                 logger_options.disabled = Some(true);
             }

@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::CookieCacheVersion;
 use crate::field_value::{FieldObject, FieldObjectSource};
-use crate::{HttpMethod, SessionView};
+use crate::{FromFieldMap, HttpMethod, SessionView};
 use std::sync::{Arc, Mutex};
 
 type Events = Arc<Mutex<Vec<String>>>;
