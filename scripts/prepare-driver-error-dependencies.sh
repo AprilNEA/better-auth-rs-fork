@@ -98,8 +98,12 @@ dependency_manifests=(
 )
 for dependency_index in "${!dependency_manifests[@]}"; do
   dependency_manifest="${dependency_manifests[$dependency_index]}"
+  # Migration permits the stable CLI, whose SeaQuery requirement conflicts with rc.37.
+  cargo update --manifest-path "$dependency_manifest" -p sea-orm-cli --precise 2.0.0-rc.37
+  cargo update --manifest-path "$dependency_manifest" -p sea-orm-macros --precise 2.0.0-rc.37
   # SeaORM rc.37 pins SeaQuery rc.31 and sea-query-sqlx rc.14 exactly.
   cargo update --manifest-path "$dependency_manifest" -p sea-orm --precise 2.0.0-rc.37
+  cargo update --manifest-path "$dependency_manifest" -p sea-schema --precise 0.17.0-rc.17
   cargo update --manifest-path "$dependency_manifest" -p sqlx --precise 0.8.6
   cargo metadata --manifest-path "$dependency_manifest" --locked --all-features --format-version 1 \
     > "$dependency_output/graphs/$dependency_index.json"
@@ -115,7 +119,10 @@ root = Path.cwd().resolve()
 output = Path(sys.argv[1])
 expected = {
     "sea-orm": "2.0.0-rc.37",
+    "sea-orm-cli": "2.0.0-rc.37",
+    "sea-orm-macros": "2.0.0-rc.37",
     "sea-orm-migration": "2.0.0-rc.37",
+    "sea-schema": "0.17.0-rc.17",
     "sea-query": "1.0.0-rc.31",
     "sea-query-sqlx": "0.8.0-rc.14",
     "sqlx": "0.8.6",
