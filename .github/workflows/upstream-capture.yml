@@ -12,9 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - contract: background-success-values
-            regressions: []
-          - contract: email-otp-override-values
+          - contract: api-key-usage-success
             regressions: []
     runs-on: ubuntu-latest
     timeout-minutes: 10
