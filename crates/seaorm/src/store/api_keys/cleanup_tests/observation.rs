@@ -103,10 +103,6 @@ pub(super) async fn stored(database: &DatabaseConnection) -> AuthResult<JsonValu
     json_observation(JsonValue::Object(tables))
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions compare complete outcomes while database observation errors propagate through Result."
-)]
 pub(super) async fn check(
     database: &DatabaseConnection,
     events: &Trace,
@@ -153,10 +149,11 @@ pub(super) async fn check(
         Err(AuthError::Database(better_auth_core::error::DatabaseError::Query(actual))) => {
             let error = &expected["error"];
             let message = required(error["message"].as_str())?;
-            let raw = &error["raw"]["root"];
+            let raw = required(required(error.get("raw"))?.get("root"))?;
+            let raw_error = required(raw.get("error"))?;
             assert_eq!(raw["type"], "error");
-            assert_eq!(raw["error"]["message"], message);
-            assert!(raw["error"]["stack"].is_string());
+            assert_eq!(required(raw_error.get("message"))?, message);
+            assert!(required(raw_error.get("stack"))?.is_string());
             let kind = if deletion || backend == "mysql" {
                 "Execution"
             } else {
@@ -166,9 +163,11 @@ pub(super) async fn check(
                 assert_eq!(error["name"], "Error");
                 let properties = required(raw["properties"].as_array())?;
                 let property = |name: &str| -> AuthResult<&JsonValue> {
-                    Ok(
-                        &required(properties.iter().find(|property| property[0] == name))?[1]["value"],
-                    )
+                    let entry = required(properties.iter().find(|property| {
+                        property.get(0).and_then(JsonValue::as_str) == Some(name)
+                    }))?;
+                    let descriptor = required(entry.get(1))?;
+                    required(descriptor.get("value"))
                 };
                 format!(
                     "{kind} Error: error returned from database: {} ({}): {message}",
@@ -190,10 +189,6 @@ pub(super) async fn check(
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The contract requires the captured foreign key setting before executing the original migration."
-)]
 pub(super) async fn migrate(
     database: &DatabaseConnection,
     case: &JsonValue,
@@ -201,7 +196,8 @@ pub(super) async fn migrate(
 ) -> AuthResult<()> {
     let backend = database.get_database_backend();
     let sql = if backend == DbBackend::Sqlite {
-        let connection = if case["scenario"]["name"] == "mapped-serial-reference-valid" {
+        let scenario = required(case.get("scenario"))?;
+        let connection = if required(scenario.get("name"))? == "mapped-serial-reference-valid" {
             case
         } else {
             required(
@@ -210,13 +206,15 @@ pub(super) async fn migrate(
                     .find(|connection| connection["scenario"] == case["scenario"]),
             )?
         };
-        let foreign_keys = if connection.get("environment").is_some() {
-            &connection["environment"]["foreignKeys"]
+        let foreign_keys = if let Some(environment) = connection.get("environment") {
+            required(environment.get("foreignKeys"))?
         } else {
             &connection["foreignKeys"]
         };
-        assert_eq!(required(foreign_keys.as_array())?.len(), 1);
-        let enforcement = required(foreign_keys[0]["foreign_keys"].as_u64())?;
+        let foreign_key_rows = required(foreign_keys.as_array())?;
+        assert_eq!(foreign_key_rows.len(), 1);
+        let setting = required(foreign_key_rows.first())?;
+        let enforcement = required(required(setting.get("foreign_keys"))?.as_u64())?;
         assert!(enforcement <= 1);
         let _ = database
             .execute_unprepared(&format!("PRAGMA foreign_keys = {enforcement}"))
@@ -227,13 +225,16 @@ pub(super) async fn migrate(
             foreign_keys,
             "SQLite foreign key enforcement",
         );
-        required(if connection.get("migration").is_some() {
-            connection["migration"]["initialSql"].as_str()
+        let migration = if let Some(migration) = connection.get("migration") {
+            migration
         } else {
-            connection["initialSql"].as_str()
-        })?
+            connection
+        };
+        required(required(migration.get("initialSql"))?.as_str())?
     } else {
-        let environment = &baseline["cases"][0]["environment"];
+        let baseline_cases = required(required(baseline.get("cases"))?.as_array())?;
+        let baseline_case = required(baseline_cases.first())?;
+        let environment = required(baseline_case.get("environment"))?;
         let (query, expected) = if backend == DbBackend::Postgres {
             (
                 "SHOW session_replication_role",
@@ -250,7 +251,9 @@ pub(super) async fn migrate(
             expected,
             "Foreign key environment",
         );
-        required(case["catalog"]["migration"]["initialSql"].as_str())?
+        let catalog = required(case.get("catalog"))?;
+        let migration = required(catalog.get("migration"))?;
+        required(required(migration.get("initialSql"))?.as_str())?
     };
     let _ = database.execute_unprepared(sql).await.map_err(map_db_err)?;
     assert_eq!(

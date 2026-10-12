@@ -109,7 +109,8 @@ async fn replay<M: crate::SeaOrmPluginModel<Record = ApiKey>>(
     let store = configured::<M>(database.clone(), &case["scenario"], &events)?;
     if let Some(owners) = case.get("ownerSetup") {
         for expected in required(owners.as_array())? {
-            let fields = values::revive(&expected["input"]["data"])?.enumerable_fields()?;
+            let input = required(expected.get("input"))?;
+            let fields = values::revive(required(input.get("data"))?)?.enumerable_fields()?;
             let before = observation::stored(&database).await?;
             let result = store
                 .create_user_fields_optional(fields)
@@ -130,7 +131,8 @@ async fn replay<M: crate::SeaOrmPluginModel<Record = ApiKey>>(
     let setup = required(case["setup"].as_array())?;
     assert_eq!(setup.len(), 3);
     for expected in setup {
-        let fields = values::revive(&expected["input"]["data"])?.enumerable_fields()?;
+        let input = required(expected.get("input"))?;
+        let fields = values::revive(required(input.get("data"))?)?.enumerable_fields()?;
         let before = observation::stored(&database).await?;
         let result = store
             .create_api_key_record(fields)
@@ -171,21 +173,30 @@ async fn replay<M: crate::SeaOrmPluginModel<Record = ApiKey>>(
 async fn contract(database: &DatabaseConnection, backend: &str) -> AuthResult<()> {
     let captured = fixture(backend, false)?;
     let baseline = fixture(backend, true)?;
-    assert_eq!(captured["version"], "1.7.6");
-    assert_eq!(captured["backend"], backend);
-    assert_eq!(baseline["version"], captured["version"]);
-    assert_eq!(baseline["backend"], captured["backend"]);
-    assert_eq!(required(baseline["cases"].as_array())?.len(), 1);
+    assert_eq!(required(captured.get("version"))?, "1.7.6");
+    assert_eq!(required(captured.get("backend"))?, backend);
     assert_eq!(
-        baseline["cases"][0]["scenario"]["name"],
+        required(baseline.get("version"))?,
+        required(captured.get("version"))?
+    );
+    assert_eq!(
+        required(baseline.get("backend"))?,
+        required(captured.get("backend"))?
+    );
+    let baseline_cases = required(required(baseline.get("cases"))?.as_array())?;
+    assert_eq!(baseline_cases.len(), 1);
+    let baseline_case = required(baseline_cases.first())?;
+    let baseline_scenario = required(baseline_case.get("scenario"))?;
+    assert_eq!(
+        required(baseline_scenario.get("name"))?,
         "mapped-serial-reference-valid"
     );
-    let cases = required(captured["cases"].as_array())?;
+    let cases = required(required(captured.get("cases"))?.as_array())?;
     assert_eq!(
         cases
             .iter()
-            .map(|case| case["scenario"]["name"].clone())
-            .collect::<Vec<_>>(),
+            .map(|case| required(required(case.get("scenario"))?.get("name")).cloned())
+            .collect::<AuthResult<Vec<_>>>()?,
         [
             json!("mapped-date"),
             json!("mapped-json"),
@@ -198,7 +209,8 @@ async fn contract(database: &DatabaseConnection, backend: &str) -> AuthResult<()
         };
         for case in required(capture["cases"].as_array())? {
             observation::migrate(database, case, &baseline).await?;
-            let result = match required(case["scenario"]["name"].as_str())? {
+            let scenario = required(case.get("scenario"))?;
+            let result = match required(required(scenario.get("name"))?.as_str())? {
                 "mapped-date" => {
                     replay::<models::date::Model>(database.clone(), case, &current, backend).await
                 }

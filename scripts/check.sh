@@ -25,8 +25,10 @@ run_stage() {
       ;;
     sql-cleanup)
       cargo fmt --all -- --check
-      cargo clippy --locked -p better-auth-seaorm --tests -- -D warnings
-      cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --include-ignored --test-threads=1
+      local cleanup_status=0
+      cargo clippy --locked -p better-auth-seaorm --tests -- -D warnings || cleanup_status=1
+      cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --include-ignored --test-threads=1 || cleanup_status=1
+      return "$cleanup_status"
       ;;
     rustls) cargo check -p better-auth --locked --no-default-features --features rustls,axum,seaorm2,redis-cache ;;
     rustdoc) RUSTDOCFLAGS="-D warnings" cargo doc --workspace --locked --no-deps --features axum,seaorm2,redis-cache ;;
