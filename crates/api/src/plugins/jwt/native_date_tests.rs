@@ -133,8 +133,8 @@ fn selection_defers_failed_coercion_until_both_methods_return() -> AuthResult<()
             .collect::<AuthResult<Vec<_>>>()?;
         let error = keys::latest(
             rows.into(),
-            algorithm,
-            "EdDSA",
+            algorithm.map(FieldValue::from),
+            "EdDSA".into(),
             (Utc::now().timestamp_millis() as f64).into(),
         )
         .err()

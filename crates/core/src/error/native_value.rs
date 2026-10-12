@@ -2,6 +2,11 @@ use super::{ApiErrorClass, ApiErrorInit, AuthError, AuthResult, native};
 use crate::FieldValue;
 
 impl AuthError {
+    /// Preserve UTF-16 message code units in a native TypeError without narrowing to UTF-8.
+    pub fn type_error_native(message: impl Into<crate::Utf16String>) -> Self {
+        Self::from_thrown(native::runtime_error("TypeError", message.into().into()))
+    }
+
     pub(crate) fn syntax_error(message: FieldValue) -> Self {
         Self::from_thrown(native::runtime_error("SyntaxError", message))
     }
@@ -39,5 +44,26 @@ impl AuthError {
             _ => "Error",
         };
         Ok(native::runtime_error(name, self.message_value()?))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_type_error_retains_surrogates_brand_and_hidden_message() -> AuthResult<()> {
+        let message = crate::Utf16String::from_units(vec![0x61, 0xd800, 0x62]);
+        let error = AuthError::type_error_native(message.clone());
+        let original = error
+            .raw_value()
+            .cloned()
+            .ok_or_else(|| AuthError::internal("Missing native error"))?;
+        assert_eq!(error.message_value()?.display_utf16()?, message);
+        assert_eq!(original.model_property("name")?, "TypeError".into());
+        assert!(super::super::native::is_error_value(&original));
+        assert!(!original.enumerable_fields()?.contains_key("message"));
+        assert!(error.into_thrown_value()?.strict_equals(&original));
+        Ok(())
     }
 }

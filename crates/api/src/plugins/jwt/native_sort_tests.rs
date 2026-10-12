@@ -87,12 +87,15 @@ async fn jwk_native_sort_replays_real_keyring_reads_and_complete_native_graphs()
                 let result = observed.read_keyring("custom", endpoint.body.clone());
                 Box::pin(async move { result })
             });
-        let keyring = adapter::Keyring::new(
-            store.as_ref(),
-            (case["lane"] == "custom").then_some(&callbacks),
-            &endpoint,
-        );
-        let result = keyring.latest(case["algorithm"].as_str(), "EdDSA").await;
+        let mut fields = FieldMap::new();
+        if case["lane"] == "custom" {
+            let _ = fields.insert("adapter".into(), callbacks.to_native());
+        }
+        let options = overrides::NativeOptions(fields.into());
+        let keyring = adapter::Keyring::new(store.as_ref(), &options, &endpoint);
+        let result = keyring
+            .latest(case["algorithm"].as_str().map(FieldValue::from))
+            .await;
         assert_case(&harness.finish(before, result)?, case);
     }
     Ok(())

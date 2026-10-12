@@ -280,6 +280,15 @@ test("invalid expiration stringification preserves the second conversion failure
   expect(events).toStrictEqual(["toString", "toString"]);
 });
 
+test("JWT relative expiration preserves Math.round negative zero", () => {
+  expect(Object.is(toExpJWT("-0.1 seconds", -0), -0)).toBe(true);
+});
+
+test("JWT relative expiration retains intermediate millisecond overflow", () => {
+  const duration = `1${"0".repeat(306)} seconds`;
+  expect(toExpJWT(duration, 0)).toBe(Number.POSITIVE_INFINITY);
+});
+
 for (const mode of ["zero", "nan", "string-zero", "object", "negative", "failure"]) {
   test(`JWK rotation preserves truthiness, repeated reads and native multiplication: ${mode}`, async () => {
     const events: string[] = [];

@@ -135,66 +135,107 @@ impl JwtPlugin {
         options: Option<&JwtSigningOptions>,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<FieldValue> {
+        let native = overrides::NativeOptions::registered(&self.config, endpoint.auth)?;
+        self.sign_native_options(fields, options, &native, endpoint)
+            .await
+    }
+
+    pub(super) async fn sign_native_options<S: AuthSchema>(
+        &self,
+        fields: FieldValue,
+        selection: Option<&JwtSigningOptions>,
+        options: &overrides::NativeOptions,
+        endpoint: &EndpointContext<'_, S>,
+    ) -> AuthResult<FieldValue> {
         let now = endpoint.auth.now().timestamp();
-        let config = &endpoint.auth.config;
-        let defaults = self.default_claims(&fields, config, now)?;
-        if let Some(callback) = &self.config.custom_sign {
+        let defaults = Self::default_claims(&fields, options, &endpoint.auth.config, now)?;
+        if options.property("jwt", "sign")?.is_truthy() {
             let mut payload = FieldMap::new();
             keys::spread(&mut payload, fields)?;
             payload.extend(defaults);
-            let header = options
+            let receiver = options.0.model_property("jwt")?;
+            let callback = receiver.model_property("sign")?;
+            let header = selection
                 .map(|options| FieldMap::from_json(options.header.clone()).map(FieldValue::from))
                 .transpose()?
                 .unwrap_or_default();
             let selection = FieldMap::from([
                 (
                     "signingKeyId".into(),
-                    options
+                    selection
                         .and_then(|options| options.key_id.as_ref())
                         .map(|id| id.clone().into())
                         .unwrap_or_default(),
                 ),
                 (
                     "signingAlgorithm".into(),
-                    options
+                    selection
                         .and_then(|options| options.algorithm)
                         .map(|algorithm| algorithm.name().into())
                         .unwrap_or_default(),
                 ),
             ]);
-            return callback(payload.into(), header, selection.into()).await;
+            return match callback {
+                FieldValue::Function(callback) => {
+                    callback
+                        .call_awaited_with(&receiver, &[payload.into(), header, selection.into()])
+                        .await
+                }
+                _ => Err(AuthError::type_error("options.jwt.sign is not a function")),
+            };
         }
         let empty = JwtSigningOptions::default();
-        let options = options.unwrap_or(&empty);
-        let key = self.resolve_local_signing_key(options, endpoint).await?;
+        let selection = selection.unwrap_or(&empty);
+        let key = self.resolve_key(selection, options, endpoint).await?;
         let mut payload = better_auth_core::StructuredCloneContext::new()
             .clone_value(&fields)?
             .enumerable_fields()?;
         claims::prepare_local_claims(&mut payload, &fields, &defaults)?;
-        Ok(key.sign(payload, options)?.into())
+        Ok(key.sign(payload, selection)?.into())
     }
 
     pub(super) async fn resolve_local_signing_key<S: AuthSchema>(
         &self,
-        options: &JwtSigningOptions,
+        selection: &JwtSigningOptions,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<ResolvedSigningKey> {
-        let config = &endpoint.auth.config;
-        let primary = self.config.primary_algorithm();
-        let mut selected = if let Some(id) = &options.key_id {
-            let key = self.read_key(id, endpoint).await?;
+        let options = overrides::NativeOptions::registered(&self.config, endpoint.auth)?;
+        self.resolve_key(selection, &options, endpoint).await
+    }
+
+    async fn resolve_key<S: AuthSchema>(
+        &self,
+        selection: &JwtSigningOptions,
+        options: &overrides::NativeOptions,
+        endpoint: &EndpointContext<'_, S>,
+    ) -> AuthResult<ResolvedSigningKey> {
+        if options.property("jwt", "sign")?.is_truthy() {
+            return Err(AuthError::type_error(
+                "Cannot destructure property 'alg' of null",
+            ));
+        }
+        let mut selected = if let Some(id) = &selection.key_id {
+            let key = self.read_key(id, options, endpoint).await?;
             if !key.is_truthy() {
                 return Err(AuthError::better_auth(format!(
                     "signJWT: signingKeyId \"{id}\" not found in JWKS. The key must be provisioned before it can be referenced."
                 )));
             }
-            if let Some(expected) = options.algorithm {
-                let alg = keys::algorithm(&key, primary.name().into())?;
+            if let Some(expected) = selection.algorithm {
+                let primary = options.primary_algorithm()?;
+                let alg = keys::algorithm(&key, primary.clone())?;
                 if !alg.strict_equals(&expected.name().into()) {
-                    let actual = keys::algorithm(
-                        &key,
-                        format!("unset (inherits keyPairConfig.alg \"{}\")", primary.name()).into(),
-                    )?;
+                    let actual = key.model_property("alg")?;
+                    let actual = if actual.is_null() || actual.is_undefined() {
+                        let mut message = "unset (inherits keyPairConfig.alg \""
+                            .encode_utf16()
+                            .collect::<Vec<_>>();
+                        message.extend_from_slice(primary.display_utf16()?.as_utf16());
+                        message.extend("\")".encode_utf16());
+                        better_auth_core::Utf16String::from_units(message).into()
+                    } else {
+                        actual
+                    };
                     let mut message = format!("signJWT: signingKeyId \"{id}\" has alg \"")
                         .encode_utf16()
                         .collect::<Vec<_>>();
@@ -212,67 +253,105 @@ impl JwtPlugin {
                 }
             }
             key
-        } else {
-            let preferred = self
-                .read_latest_key(Some(options.algorithm.unwrap_or(primary).name()), endpoint)
+        } else if let Some(algorithm) = selection.algorithm {
+            let mut key = self
+                .read_latest_key(Some(algorithm.name().into()), options, endpoint)
                 .await?;
-            if !(preferred.is_null() || preferred.is_undefined()) || options.algorithm.is_some() {
-                preferred
+            if !key.is_truthy() {
+                let primary = options.primary_algorithm()?;
+                let configurations = options.property("jwks", "keyPairConfigs")?;
+                let expected: FieldValue = algorithm.name().into();
+                let preconfigured = if configurations.is_null() || configurations.is_undefined() {
+                    FieldValue::Undefined
+                } else {
+                    configurations.find_method(
+                        &better_auth_core::FieldFunction::contextual(move |_, arguments| {
+                            Ok(arguments
+                                .first()
+                                .unwrap_or(&FieldValue::Undefined)
+                                .model_property("alg")?
+                                .strict_equals(&expected)
+                                .into())
+                        }),
+                        "options.jwks.keyPairConfigs",
+                    )?
+                };
+                if preconfigured.is_truthy() || primary.strict_equals(&algorithm.name().into()) {
+                    let parameters = options.with_key_pair(preconfigured)?;
+                    key = self.create_key_native(&parameters, endpoint).await?;
+                } else {
+                    let configurations = options.property("jwks", "keyPairConfigs")?;
+                    let advertised = if configurations.is_null() || configurations.is_undefined() {
+                        FieldValue::Undefined
+                    } else {
+                        configurations
+                            .map_method(
+                                &better_auth_core::FieldFunction::contextual(|_, arguments| {
+                                    arguments
+                                        .first()
+                                        .unwrap_or(&FieldValue::Undefined)
+                                        .model_property("alg")
+                                }),
+                                "options.jwks.keyPairConfigs",
+                                None,
+                            )?
+                            .join_method(&", ".into(), "options.jwks.keyPairConfigs.map(...)")?
+                    };
+                    let advertised = if advertised.is_truthy() {
+                        advertised
+                    } else {
+                        "none".into()
+                    };
+                    let mut message = format!("signJWT: no key with alg \"{}\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"", algorithm.name()).encode_utf16().collect::<Vec<_>>();
+                    message.extend_from_slice(primary.display_utf16()?.as_utf16());
+                    message.extend(
+                        "\"; additional algs configured via keyPairConfigs: ".encode_utf16(),
+                    );
+                    message.extend_from_slice(advertised.display_utf16()?.as_utf16());
+                    message.extend(format!(". Add \"{}\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().", algorithm.name()).encode_utf16());
+                    return Err(AuthError::better_auth_native(
+                        better_auth_core::Utf16String::from_units(message),
+                    ));
+                }
+            }
+            key
+        } else {
+            let primary = options.primary_algorithm()?;
+            let preferred = self
+                .read_latest_key(Some(primary), options, endpoint)
+                .await?;
+            if preferred.is_null() || preferred.is_undefined() {
+                self.read_latest_key(None, options, endpoint).await?
             } else {
-                self.read_latest_key(None, endpoint).await?
+                preferred
             }
         };
-        if !selected.is_truthy()
-            && let Some(algorithm) = options.algorithm
-        {
-            let parameters = self
-                .config
-                .key_pair_configs
-                .iter()
-                .find(|config| config.algorithm == algorithm)
-                .copied()
-                .or_else(|| {
-                    (algorithm == primary).then_some(JwtKeyPairConfig {
-                        algorithm,
-                        modulus_length: self.config.modulus_length,
-                    })
-                })
-                .ok_or_else(|| {
-                    let advertised = self
-                        .config
-                        .key_pair_configs
-                        .iter()
-                        .map(|config| config.algorithm.name())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let advertised = if advertised.is_empty() { "none" } else { &advertised };
-                    AuthError::better_auth(format!(
-                        "signJWT: no key with alg \"{}\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"{}\"; additional algs configured via keyPairConfigs: {advertised}. Add \"{}\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().",
-                        algorithm.name(), primary.name(), algorithm.name()
-                    ))
-                })?;
-            selected = self.create_key_pair_value(parameters, endpoint).await?;
-        }
-        let key = if !selected.is_truthy() || keys::expires_before(&selected)? {
-            if options.key_id.is_some() || options.algorithm.is_some() {
+        if !selected.is_truthy() || keys::expires_before(&selected)? {
+            if selection.key_id.is_some() || selection.algorithm.is_some() {
                 return Err(AuthError::better_auth(
                     "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.",
                 ));
             }
-            self.create_key(endpoint).await?
+            selected = self.create_key_native(options, endpoint).await?;
+        }
+        let private = if options
+            .property("jwks", "disablePrivateKeyEncryption")?
+            .is_truthy()
+        {
+            selected.model_property("privateKey")?
         } else {
-            selected
-        };
-        let private = if self.config.disable_private_key_encryption {
-            key.model_property("privateKey")?
-        } else {
-            let ciphertext = keys::parse_json(&key.model_property("privateKey")?)?;
+            let ciphertext = keys::parse_json(&selected.model_property("privateKey")?)?;
             crate::plugins::symmetric::decrypt_field(
-                config.encryption_secret(),
+                endpoint.auth.config.encryption_secret(),
                 &ciphertext,
             ).map_err(|_| AuthError::better_auth("Failed to decrypt private key. Make sure the secret currently in use is the same as the one used to encrypt the private key. If you are using a different secret, either clean up your JWKS or disable private key encryption."))?.into()
         };
-        let algorithm = keys::algorithm(&key, primary.name().into())?;
+        let algorithm = selected.model_property("alg")?;
+        let algorithm = if algorithm.is_null() || algorithm.is_undefined() {
+            options.primary_algorithm()?
+        } else {
+            algorithm
+        };
         let (algorithm, private) = keys::import(keys::parse_json(&private)?, &algorithm)?;
         let signer: Box<dyn JwsSigner> = match algorithm.as_str() {
             "EdDSA" => Box::new(jws::EdDSA.signer_from_jwk(&private).map_err(jose_error)?),
@@ -288,47 +367,41 @@ impl JwtPlugin {
         };
         Ok(ResolvedSigningKey {
             algorithm,
-            key_id: key.model_property("id")?,
+            key_id: selected.model_property("id")?,
             signer,
         })
     }
 
     fn default_claims(
-        &self,
         payload: &FieldValue,
+        options: &overrides::NativeOptions,
         config: &better_auth_core::AuthConfig,
         now: i64,
     ) -> AuthResult<FieldMap> {
         let issued = payload.model_property("iat")?;
-        let mut expiry = payload.model_property("exp")?;
-        let default_expiry =
-            claims::default_expiration(&self.config.expiration_time, &issued, now)?;
-        if expiry.is_null() || expiry.is_undefined() {
-            expiry = default_expiry;
-        }
+        let expiry = payload.model_property("exp")?;
+        let expiration =
+            overrides::nullish(options.property("jwt", "expirationTime")?, || "15m".into());
+        let default_expiry = claims::default_expiration(&expiration, &issued, now)?;
+        let expiry = overrides::nullish(expiry, || default_expiry);
         let not_before = payload.model_property("nbf")?;
-        let mut issuer = payload.model_property("iss")?;
-        if issuer.is_null() || issuer.is_undefined() {
-            issuer = self
-                .config
-                .issuer
-                .as_deref()
-                .unwrap_or_else(|| config.base_url.as_static().unwrap_or(""))
-                .into();
-        }
-        let mut audience = payload.model_property("aud")?;
-        if audience.is_null() || audience.is_undefined() {
-            audience = match &self.config.audience {
-                Some(audience) => FieldValue::from_json(serde_json::to_value(audience)?)?,
-                None => config.base_url.as_static().unwrap_or("").into(),
-            };
-        }
+        let issuer = payload.model_property("iss")?;
+        let default_issuer = overrides::nullish(options.property("jwt", "issuer")?, || {
+            config.base_url.as_static().unwrap_or("").into()
+        });
+        let audience = payload.model_property("aud")?;
+        let default_audience = overrides::nullish(options.property("jwt", "audience")?, || {
+            config.base_url.as_static().unwrap_or("").into()
+        });
         Ok(FieldMap::from([
             ("iat".into(), issued),
             ("exp".into(), expiry),
             ("nbf".into(), not_before),
-            ("iss".into(), issuer),
-            ("aud".into(), audience),
+            ("iss".into(), overrides::nullish(issuer, || default_issuer)),
+            (
+                "aud".into(),
+                overrides::nullish(audience, || default_audience),
+            ),
         ]))
     }
 }

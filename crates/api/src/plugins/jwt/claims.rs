@@ -2,20 +2,41 @@ use super::*;
 use better_auth_core::utils::jwt::numeric_date;
 
 pub(super) fn default_expiration(
-    expiration: &JwtExpiration,
+    expiration: &FieldValue,
     issued: &FieldValue,
     now: i64,
 ) -> AuthResult<FieldValue> {
-    let seconds = FieldValue::from_json(expiration.claim(0.0))?;
-    if matches!(expiration, JwtExpiration::At(_)) {
-        return Ok(seconds);
+    if expiration.is_number() {
+        return Ok(expiration.clone());
     }
+    if expiration.as_date().is_some() {
+        let time = expiration.get_time_method("expirationTime")?;
+        return Ok((better_auth_core::query::field_number(&time)? / 1_000.0)
+            .floor()
+            .into());
+    }
+    let input = expiration.display_utf16()?;
+    let seconds = input
+        .to_utf8()
+        .ok()
+        .and_then(|input| super::overrides::input::relative_seconds(&input).ok());
+    let Some(seconds) = seconds else {
+        let shown = expiration.display_utf16()?;
+        let mut message = "Invalid time string format: \""
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        message.extend_from_slice(shown.as_utf16());
+        message.extend("\". Use formats like \"7d\", \"30m\", \"1 hour\", etc.".encode_utf16());
+        return Err(AuthError::type_error_native(
+            better_auth_core::Utf16String::from_units(message),
+        ));
+    };
     let issued = if issued.is_null() || issued.is_undefined() {
         now.into()
     } else {
         issued.clone()
     };
-    better_auth_core::query::field_add(&issued, &seconds)
+    better_auth_core::query::field_add(&issued, &seconds.into())
 }
 
 pub(super) fn prepare_local_claims(

@@ -3,7 +3,7 @@
 use crate::plugins::endpoint_context::EndpointContext;
 use better_auth_core::{
     AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
-    AuthRoute, AuthSchema, CreateJwk, FieldMap, FieldValue, HttpMethod,
+    AuthRoute, AuthSchema, FieldMap, FieldValue, HttpMethod,
 };
 use chrono::{Duration, Utc};
 use josekit::{
@@ -17,6 +17,7 @@ mod cache;
 mod callbacks;
 mod claims;
 mod jose;
+mod key_generation;
 mod keys;
 mod native;
 mod options;
@@ -320,97 +321,6 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
 }
 
 impl JwtPlugin {
-    async fn create_key<S: AuthSchema>(
-        &self,
-        endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<FieldValue> {
-        self.create_key_pair_value(
-            JwtKeyPairConfig {
-                algorithm: self.config.primary_algorithm(),
-                modulus_length: self.config.modulus_length,
-            },
-            endpoint,
-        )
-        .await
-    }
-
-    /// Provision a local key with explicit parameters.
-    pub async fn create_key_pair<S: AuthSchema>(
-        &self,
-        parameters: JwtKeyPairConfig,
-        ctx: &AuthContext<S>,
-    ) -> AuthResult<Option<better_auth_core::Jwk>> {
-        ctx.with_native_context(Default::default(), |resolved| async move {
-            let mut endpoint =
-                EndpointContext::new(None, better_auth_core::FieldValue::Null, &resolved);
-            endpoint.path = Some("virtual:");
-            self.create_key_pair_in_endpoint(parameters, &endpoint)
-                .await
-        })
-        .await
-    }
-
-    /// Provision a key with the supplied endpoint context and active transaction.
-    pub async fn create_key_pair_in_endpoint<S: AuthSchema>(
-        &self,
-        parameters: JwtKeyPairConfig,
-        endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<Option<better_auth_core::Jwk>> {
-        use better_auth_core::FromFieldMap as _;
-        let value = self.create_key_pair_value(parameters, endpoint).await?;
-        if value.is_null() || value.is_undefined() {
-            return Ok(None);
-        }
-        better_auth_core::Jwk::from_field_values(value.enumerable_fields()?).map(Some)
-    }
-
-    async fn create_key_pair_value<S: AuthSchema>(
-        &self,
-        parameters: JwtKeyPairConfig,
-        endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<FieldValue> {
-        if matches!(
-            parameters.algorithm,
-            JwtAlgorithm::Rs256 | JwtAlgorithm::Ps256
-        ) && parameters.modulus_length < 2048
-        {
-            return Err(AuthError::config(
-                "RSA modulus_length must be at least 2048",
-            ));
-        }
-        let mut key = parameters
-            .algorithm
-            .generate(parameters.modulus_length)
-            .map_err(jose_error)?;
-        key.set_parameter("use", None).map_err(jose_error)?;
-        let public_key = key.to_public_key().map_err(jose_error)?.to_string();
-        let private_key = if self.config.disable_private_key_encryption {
-            key.to_string()
-        } else {
-            serde_json::to_string(&super::symmetric::encrypt(
-                endpoint.auth.config.encryption_secret(),
-                &key.to_string(),
-            )?)?
-        };
-        self.persist_key(
-            CreateJwk {
-                additional_fields: Default::default(),
-                public_key,
-                private_key,
-                created_at: Utc::now().into(),
-                expires_at: self
-                    .config
-                    .rotation_interval
-                    .filter(|interval| !interval.is_zero())
-                    .map(|interval| (Utc::now() + interval).into()),
-                alg: parameters.algorithm.name().to_owned(),
-                crv: parameters.algorithm.curve().map(str::to_owned),
-            },
-            endpoint,
-        )
-        .await
-    }
-
     async fn jwks<S: AuthSchema>(
         &self,
         endpoint: &EndpointContext<'_, S>,
@@ -509,3 +419,6 @@ mod tests;
 
 #[cfg(test)]
 mod callback_contract_tests;
+
+#[cfg(test)]
+mod native_options_tests;

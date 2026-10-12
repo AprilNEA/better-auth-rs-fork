@@ -65,27 +65,6 @@ impl From<i64> for JwtExpiration {
     }
 }
 
-impl JwtExpiration {
-    pub(super) fn claim(&self, issued: f64) -> Value {
-        match self {
-            Self::At(value) => Value::Number(value.clone()),
-            Self::After(duration) => {
-                let seconds =
-                    duration.num_seconds() as f64 + f64::from(duration.subsec_nanos()) / 1e9;
-                let expires = issued + (seconds + 0.5).floor();
-                // Preserve integer NumericDates for typed JWT consumers, as JSON.stringify does.
-                if expires.fract() == 0.0
-                    && (i64::MIN as f64..-(i64::MIN as f64)).contains(&expires)
-                {
-                    Value::from(expires as i64)
-                } else {
-                    Value::from(expires)
-                }
-            }
-        }
-    }
-}
-
 /// An asynchronous application callback result.
 pub type JwtCallbackFuture<T> = Pin<Box<dyn Future<Output = AuthResult<T>> + Send>>;
 /// Define claims from the complete authenticated session and user object.

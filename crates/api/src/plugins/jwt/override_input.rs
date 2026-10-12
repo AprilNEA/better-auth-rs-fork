@@ -10,7 +10,12 @@ pub(super) fn expiration<'de, D: Deserializer<'de>>(
             Value::Number(value) => Ok(JwtExpiration::At(value)),
             Value::String(value) => relative_seconds(&value)
                 .and_then(|seconds| {
-                    Duration::try_seconds(seconds)
+                    if !seconds.is_finite()
+                        || !(i64::MIN as f64..i64::MAX as f64).contains(&seconds)
+                    {
+                        return Err("JWT lifetime is out of range".into());
+                    }
+                    Duration::try_seconds(seconds as i64)
                         .ok_or_else(|| "JWT lifetime is out of range".into())
                 })
                 .map(JwtExpiration::After)
@@ -37,7 +42,7 @@ pub(super) fn duration<'de, D: Deserializer<'de>>(input: D) -> Result<Option<Dur
         .transpose()
 }
 
-fn relative_seconds(value: &str) -> Result<i64, String> {
+pub(in crate::plugins::jwt) fn relative_seconds(value: &str) -> Result<f64, String> {
     static PERIOD: LazyLock<Result<regex::Regex, regex::Error>> = LazyLock::new(|| {
         regex::Regex::new(
             r"(?i)^(\+|\-)? ?([0-9]+|[0-9]+\.[0-9]+) ?(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)(?: (ago|from now))?(?:\r\n|[\n\r\u{2028}\u{2029}])?$",
@@ -79,14 +84,20 @@ fn relative_seconds(value: &str) -> Result<i64, String> {
     };
     let negative = captures.get(1).is_some_and(|value| value.as_str() == "-")
         || captures.get(4).is_some_and(|value| value.as_str() == "ago");
-    let seconds = (if negative {
-        -amount * scale
+    let milliseconds = amount * (scale * 1_000.0);
+    let seconds = if negative {
+        -milliseconds / 1_000.0
     } else {
-        amount * scale
-    } + 0.5)
-        .floor();
-    if !seconds.is_finite() || !(i64::MIN as f64..i64::MAX as f64).contains(&seconds) {
-        return Err(invalid());
-    }
-    Ok(seconds as i64)
+        milliseconds / 1_000.0
+    };
+    Ok(if (-0.5..0.0).contains(&seconds) {
+        -0.0
+    } else {
+        let integral = seconds.floor();
+        if seconds - integral < 0.5 {
+            integral
+        } else {
+            integral + 1.0
+        }
+    })
 }

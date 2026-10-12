@@ -1,7 +1,8 @@
 use super::JwtPlugin;
 use crate::plugins::endpoint_context::{EndpointContext, WithCallbacks};
 use better_auth_core::{
-    AuthPlugin, AuthRecordFields, AuthResult, AuthSchema, CreateJwk, FieldValue, Jwk,
+    AuthPlugin, AuthRecordFields, AuthResult, AuthSchema, CreateJwk, FieldFunction, FieldMap,
+    FieldValue, Jwk,
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 
@@ -9,7 +10,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 pub type JwtAdapterFuture<'a, T> = Pin<Box<dyn Future<Output = AuthResult<T>> + Send + 'a>>;
 type Get<S> =
     dyn for<'a> Fn(&'a EndpointContext<'_, S>) -> JwtAdapterFuture<'a, FieldValue> + Send + Sync;
-type Create<S> = dyn for<'a> Fn(CreateJwk, &'a EndpointContext<'_, S>) -> JwtAdapterFuture<'a, FieldValue>
+type Create<S> = dyn for<'a> Fn(FieldValue, &'a EndpointContext<'_, S>) -> JwtAdapterFuture<'a, FieldValue>
     + Send
     + Sync;
 
@@ -84,9 +85,24 @@ impl<S: AuthSchema> JwtCallbacks<S> {
     }
 
     /// Persist generated material and retain the native logical adapter readback.
-    pub fn create_jwk_native<F>(mut self, callback: F) -> Self
+    pub fn create_jwk_native<F>(self, callback: F) -> Self
     where
         F: for<'a> Fn(CreateJwk, &'a EndpointContext<'_, S>) -> JwtAdapterFuture<'a, FieldValue>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.create_jwk_value(move |data, endpoint| {
+            let data = typed_create(data);
+            let callback = data.map(|data| callback(data, endpoint));
+            Box::pin(async move { callback?.await })
+        })
+    }
+
+    /// Persist generated key material without narrowing dynamic fields before the callback.
+    pub fn create_jwk_value<F>(mut self, callback: F) -> Self
+    where
+        F: for<'a> Fn(FieldValue, &'a EndpointContext<'_, S>) -> JwtAdapterFuture<'a, FieldValue>
             + Send
             + Sync
             + 'static,
@@ -94,6 +110,46 @@ impl<S: AuthSchema> JwtCallbacks<S> {
         self.create = Some(Arc::new(callback));
         self
     }
+
+    pub(super) fn to_native(&self) -> FieldValue {
+        let mut fields = FieldMap::new();
+        if let Some(callback) = &self.get {
+            let _ = fields.insert(
+                "getJwks".into(),
+                FieldFunction::bound(AdapterBinding::Get(callback.clone())).into(),
+            );
+        }
+        if let Some(callback) = &self.create {
+            let _ = fields.insert(
+                "createJwk".into(),
+                FieldFunction::bound(AdapterBinding::Create(callback.clone())).into(),
+            );
+        }
+        fields.into()
+    }
+
+    pub(super) fn into_native(self) -> FieldValue {
+        self.to_native()
+    }
+}
+
+pub(super) enum AdapterBinding<S: AuthSchema> {
+    Get(Arc<Get<S>>),
+    Create(Arc<Create<S>>),
+}
+
+fn typed_create(data: FieldValue) -> AuthResult<CreateJwk> {
+    let mut fields = data.enumerable_fields()?;
+    let mut take = |name: &str| fields.remove(name).unwrap_or_default();
+    Ok(CreateJwk {
+        alg: take("alg").decode()?,
+        crv: take("crv").decode()?,
+        public_key: take("publicKey").decode()?,
+        private_key: take("privateKey").decode()?,
+        created_at: take("createdAt").decode()?,
+        expires_at: take("expiresAt").decode()?,
+        additional_fields: fields,
+    })
 }
 
 impl JwtPlugin {

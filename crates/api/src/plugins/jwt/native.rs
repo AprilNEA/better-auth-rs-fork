@@ -70,8 +70,7 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
 
     /// Sign native application claims and retain the custom signer's return value.
     pub async fn sign_value(&self, payload: FieldValue) -> AuthResult<FieldValue> {
-        self.sign_native(payload, None, None, self.plugin.config.clone(), None)
-            .await
+        self.sign_native(payload, None, None).await
     }
 
     /// Sign native claims with explicit key selection and protected headers.
@@ -80,14 +79,7 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         payload: FieldValue,
         options: &JwtSigningOptions,
     ) -> AuthResult<FieldValue> {
-        self.sign_native(
-            payload,
-            Some(options),
-            None,
-            self.plugin.config.clone(),
-            None,
-        )
-        .await
+        self.sign_native(payload, Some(options), None).await
     }
 
     /// Replace supplied option groups for one call, preserving omitted groups and instance defaults.
@@ -96,18 +88,22 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         payload: Map<String, Value>,
         overrides: JwtCallOverrides<S>,
     ) -> AuthResult<String> {
-        let mut config = self.plugin.config.clone();
-        let mut override_context = self.context.clone();
-        let options = overrides.apply(&mut config, &mut override_context);
         self.sign_native(
             FieldMap::from_json(payload)?.into(),
             None,
-            Some(options),
-            config,
-            Some(override_context),
+            Some(overrides.into_native()?),
         )
         .await?
         .decode()
+    }
+
+    /// Replace option groups without serializing nested values, accessors, or callbacks.
+    pub async fn sign_value_with_overrides(
+        &self,
+        payload: FieldValue,
+        overrides: FieldValue,
+    ) -> AuthResult<FieldValue> {
+        self.sign_native(payload, None, Some(overrides)).await
     }
 
     /// Sign application claims with explicit key selection and protected headers.
@@ -125,16 +121,11 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
         &self,
         payload: FieldValue,
         options: Option<&JwtSigningOptions>,
-        overrides: Option<Value>,
-        config: JwtPluginConfig,
-        override_context: Option<AuthContext<S>>,
+        overrides: Option<FieldValue>,
     ) -> AuthResult<FieldValue> {
         let mut body = FieldMap::from([("payload".into(), payload)]);
-        if let Some(overrides) = &overrides {
-            let _ = body.insert(
-                "overrideOptions".into(),
-                FieldValue::from_json(overrides.clone())?,
-            );
+        if let Some(overrides) = overrides {
+            let _ = body.insert("overrideOptions".into(), overrides);
         }
         let route =
             AuthRoute::server_only(HttpMethod::Post, "signJWT").body_validator(validate_sign);
@@ -149,50 +140,24 @@ impl<'a, S: AuthSchema> JwtApi<'a, S> {
                     let input = request.validated_body::<SignInput>().ok_or_else(|| {
                         AuthError::internal("Missing validated JWT signing input")
                     })?;
-                    let override_options = input
-                        .override_options
-                        .as_ref()
-                        .map(FieldValue::json)
-                        .transpose()?
-                        .flatten();
-                    let mut context = (*resolved).clone();
-                    let mut effective_config = self.plugin.config.clone();
-                    if let Some(value) = &override_options {
-                        let updated =
-                            super::overrides::from_input::<S>(value, &config, overrides.as_ref())?;
-                        let _ = updated.apply(&mut effective_config, &mut context);
-                    }
-                    if override_options
-                        .as_ref()
-                        .is_some_and(|value| value.get("adapter").is_some())
-                    {
-                        let callbacks = override_context
-                            .as_ref()
-                            .filter(|_| {
-                                overrides
-                                    .as_ref()
-                                    .is_some_and(|value| value.get("adapter").is_some())
-                            })
-                            .and_then(|context| {
-                                context
-                                    .extensions
-                                    .get::<std::sync::Arc<super::JwtCallbacks<S>>>()
-                            })
-                            .cloned()
-                            .unwrap_or_else(|| {
-                                std::sync::Arc::new(super::JwtCallbacks::<S>::default())
-                            });
-                        context.extensions.insert(callbacks);
-                    }
+                    let defaults = super::overrides::NativeOptions::registered(
+                        &self.plugin.config,
+                        &resolved,
+                    )?;
+                    let effective = match &input.override_options {
+                        Some(overrides) => defaults.merge(overrides)?,
+                        None => defaults,
+                    };
                     let mut endpoint = EndpointContext::native(
                         Some(&request),
                         request.original_request(),
                         request.input_field_value()?,
-                        &context,
+                        &resolved,
                     );
                     endpoint.transaction = self.transaction;
-                    let token = JwtPlugin::with_config(effective_config)
-                        .sign_value_in_endpoint(input.payload.clone(), options, &endpoint)
+                    let token = self
+                        .plugin
+                        .sign_native_options(input.payload.clone(), options, &effective, &endpoint)
                         .await?;
                     Ok(AuthResponse::native(
                         None,

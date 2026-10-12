@@ -308,8 +308,8 @@ async fn selection_filters_native_algorithm_before_dates_and_defers_single_row_c
     assert!(
         keys::latest(
             rows.into(),
-            Some("EdDSA"),
-            "EdDSA",
+            Some("EdDSA".into()),
+            "EdDSA".into(),
             (Utc::now().timestamp_millis() as f64).into()
         )
         .is_err()

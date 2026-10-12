@@ -39,8 +39,8 @@ pub(super) fn find(keys: &FieldValue, id: FieldValue) -> AuthResult<FieldValue> 
 
 pub(super) fn latest(
     keys: FieldValue,
-    algorithm: Option<&str>,
-    default_algorithm: &str,
+    algorithm: Option<FieldValue>,
+    default_algorithm: FieldValue,
     now: FieldValue,
 ) -> AuthResult<FieldValue> {
     if if algorithm.is_some() {
@@ -51,8 +51,6 @@ pub(super) fn latest(
         return Ok(FieldValue::Undefined);
     }
     let candidates = if let Some(expected) = algorithm {
-        let expected: FieldValue = expected.into();
-        let default_algorithm: FieldValue = default_algorithm.into();
         keys.filter_method(
             &FieldFunction::contextual(move |_, arguments| {
                 let key = arguments.first().unwrap_or(&FieldValue::Undefined);
