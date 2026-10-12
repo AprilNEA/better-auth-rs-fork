@@ -1,7 +1,11 @@
 use crate::{AuthError, AuthResult, FieldDate, FieldMap, FieldValue, Utf16String};
 use serde_json::value::RawValue;
 use std::borrow::Cow;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
+
+#[cfg(test)]
+#[path = "native_revival_tests.rs"]
+mod native_revival_tests;
 
 pub(crate) fn parse_field_json(text: &str) -> AuthResult<FieldValue> {
     let value: &RawValue = serde_json::from_str(text)?;
@@ -74,65 +78,91 @@ pub fn safe_parse_field(value: &FieldValue) -> AuthResult<FieldValue> {
         FieldValue::String(_) | FieldValue::Utf16String(_) => parse_native_json(value),
         value => Ok(value.clone()),
     };
-    match parsed {
-        Ok(value) => revive(value, &|text| {
+    match parsed.and_then(|value| {
+        revive(value, |text| {
             super::parse_json_date(text).map(FieldDate::from)
-        }),
+        })
+    }) {
+        Ok(value) => Ok(value),
         Err(error) => {
+            let argument = FieldMap::from([("error".into(), error.into_thrown_value()?)]).into();
             crate::observability::logger::current().error(
                 "Error parsing JSON",
-                &[crate::observability::LogArgument::Error(&error)],
+                &[crate::observability::LogArgument::Native(&argument)],
             );
             Ok(FieldValue::Null)
         }
     }
 }
 
-fn revive(
-    value: FieldValue,
-    parse_date: &impl Fn(&str) -> Option<FieldDate>,
-) -> AuthResult<FieldValue> {
-    revive_with_active(value, parse_date, &mut std::collections::HashSet::new())
+fn revive(value: FieldValue, parse_date: fn(&str) -> Option<FieldDate>) -> AuthResult<FieldValue> {
+    Arc::new(DateReviver {
+        parse_date,
+        active: Mutex::new(std::collections::HashSet::new()),
+    })
+    .value(value)
 }
 
-fn revive_with_active(
-    value: FieldValue,
-    parse_date: &impl Fn(&str) -> Option<FieldDate>,
-    active: &mut std::collections::HashSet<crate::field_value::ContainerIdentity>,
-) -> AuthResult<FieldValue> {
-    Ok(match value {
-        FieldValue::String(text) => parse_date(&text).map_or_else(|| text.into(), Into::into),
-        FieldValue::Array(values) => {
-            let identity = crate::field_value::ContainerIdentity::Array(values.identity());
-            if !active.insert(identity) {
-                return Err(AuthError::internal(
-                    "JSON date revival of cyclic field arrays is not supported",
-                ));
+struct DateReviver {
+    parse_date: fn(&str) -> Option<FieldDate>,
+    active: Mutex<std::collections::HashSet<crate::field_value::ContainerIdentity>>,
+}
+
+impl DateReviver {
+    fn value(self: &Arc<Self>, value: FieldValue) -> AuthResult<FieldValue> {
+        let identity = match &value {
+            FieldValue::String(text) => {
+                return Ok((self.parse_date)(text).map_or(value, Into::into));
             }
-            let copied = values
-                .iter()?
-                .map(|value| revive_with_active(value?, parse_date, active))
-                .collect::<AuthResult<Vec<_>>>()?;
-            let _ = active.remove(&identity);
-            copied.into()
-        }
-        FieldValue::Object(values) => {
-            let identity = crate::field_value::ContainerIdentity::Object(values.identity());
-            if !active.insert(identity) {
-                return Err(AuthError::internal(
-                    "JSON date revival of cyclic field objects is not supported",
-                ));
+            FieldValue::Array(array) => {
+                crate::field_value::ContainerIdentity::Array(array.identity())
             }
-            let fields = values
-                .snapshot_fields()?
-                .into_iter()
-                .map(|(key, value)| Ok((key, revive_with_active(value, parse_date, active)?)))
-                .collect::<AuthResult<FieldMap>>()?;
-            let _ = active.remove(&identity);
-            fields.into()
+            FieldValue::Object(object) => {
+                crate::field_value::ContainerIdentity::Object(object.identity())
+            }
+            _ => return Ok(value),
+        };
+        if !self
+            .active
+            .lock()
+            .map_err(|_| AuthError::internal("JSON date revival lock is poisoned"))?
+            .insert(identity)
+        {
+            return Err(AuthError::internal(
+                "JSON date revival of cyclic fields is not supported",
+            ));
         }
-        value => value,
-    })
+        let result = self.container(value);
+        let _ = self
+            .active
+            .lock()
+            .map_err(|_| AuthError::internal("JSON date revival lock is poisoned"))?
+            .remove(&identity);
+        result
+    }
+
+    fn container(self: &Arc<Self>, value: FieldValue) -> AuthResult<FieldValue> {
+        match &value {
+            FieldValue::Array(_) => {
+                let reviver = self.clone();
+                value.map_method(
+                    &crate::FieldFunction::contextual(move |_, arguments| {
+                        reviver.value(arguments.first().unwrap_or(&FieldValue::Undefined).clone())
+                    }),
+                    "value",
+                )
+            }
+            FieldValue::Object(object) => {
+                let mut fields = FieldMap::new();
+                for key in object.enumerable_keys()? {
+                    let revived = self.value(value.model_property(&key)?)?;
+                    let _ = fields.insert(key, revived);
+                }
+                Ok(fields.into())
+            }
+            _ => Ok(value),
+        }
+    }
 }
 
 #[expect(
@@ -182,7 +212,7 @@ pub fn parse_client_json(value: FieldValue) -> AuthResult<FieldValue> {
             "[better-json] Potential prototype pollution attempt detected",
         ));
     }
-    revive(FieldValue::parse_json(text)?, &client_date)
+    revive(FieldValue::parse_json(text)?, client_date)
 }
 
 fn client_date(text: &str) -> Option<FieldDate> {

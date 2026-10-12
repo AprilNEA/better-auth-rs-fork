@@ -1,4 +1,4 @@
-use super::{ArrayIdentity, FieldArray, FieldValue};
+use super::{ArrayIdentity, FieldArray, FieldFunction, FieldValue};
 use crate::{AuthError, AuthResult};
 use std::collections::HashSet;
 
@@ -50,15 +50,7 @@ impl FieldValue {
 
     /// Invoke `join(separator)` without converting a custom method's native result.
     pub fn join_method(&self, separator: &Self, expression: &str) -> AuthResult<Self> {
-        if self.is_null() || self.is_undefined() {
-            return self.model_property("join");
-        }
-        let method = self
-            .property_source()
-            .map(|source| source.get_with_receiver("join", self))
-            .transpose()?
-            .flatten();
-        match (self, method) {
+        match (self, self.method_property("join")?) {
             (_, Some(Self::Function(method))) => {
                 method.call_with(self, std::slice::from_ref(separator))
             }
@@ -69,6 +61,152 @@ impl FieldValue {
                 "{expression}.join is not a function"
             ))),
         }
+    }
+
+    /// Invoke `includes(expected)` and retain a custom method's native result.
+    pub fn includes_method(&self, expected: &Self, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("includes")?) {
+            (_, Some(Self::Function(method))) => {
+                method.call_with(self, std::slice::from_ref(expected))
+            }
+            (Self::Array(values), None) => Ok(values.includes(expected)?.into()),
+            (Self::String(_) | Self::Utf16String(_), None) => {
+                let units = self.display_utf16()?;
+                let needle = expected.display_utf16()?;
+                Ok((needle.as_utf16().is_empty()
+                    || units
+                        .as_utf16()
+                        .windows(needle.as_utf16().len())
+                        .any(|part| part == needle.as_utf16()))
+                .into())
+            }
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.includes is not a function"
+            ))),
+        }
+    }
+
+    /// Invoke `filter(predicate)` without narrowing a custom method's return value.
+    pub fn filter_method(&self, predicate: &FieldFunction, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("filter")?) {
+            (_, Some(Self::Function(method))) => {
+                method.call_with(self, &[predicate.clone().into()])
+            }
+            (Self::Array(values), None) => Ok(values
+                .filter_with_index(|value, index| {
+                    Ok(predicate
+                        .call_with(
+                            &Self::Undefined,
+                            &[value.clone(), index.into(), self.clone()],
+                        )?
+                        .is_truthy())
+                })?
+                .into()),
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.filter is not a function"
+            ))),
+        }
+    }
+
+    pub(crate) fn map_method(
+        &self,
+        callback: &FieldFunction,
+        expression: &str,
+    ) -> AuthResult<Self> {
+        match (self, self.method_property("map")?) {
+            (_, Some(Self::Function(method))) => method.call_with(self, &[callback.clone().into()]),
+            (Self::Array(values), None) => Ok(values
+                .map_with_index(|value, index| {
+                    callback.call_with(&Self::Undefined, &[value, index.into(), self.clone()])
+                })?
+                .into()),
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.map is not a function"
+            ))),
+        }
+    }
+
+    pub(crate) fn concat_method(&self, arguments: &[Self], expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("concat")?) {
+            (_, Some(Self::Function(method))) => method.call_with(self, arguments),
+            (Self::Array(values), None) => Ok(values.concat(arguments)?.into()),
+            (Self::String(_) | Self::Utf16String(_), None) => {
+                let mut units = self.display_utf16()?.as_utf16().to_vec();
+                for value in arguments {
+                    units.extend_from_slice(value.display_utf16()?.as_utf16());
+                }
+                Ok(crate::Utf16String::from_units(units).into())
+            }
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.concat is not a function"
+            ))),
+        }
+    }
+
+    pub(crate) fn sort_method(
+        &self,
+        comparator: &FieldFunction,
+        expression: &str,
+    ) -> AuthResult<Self> {
+        match (self, self.method_property("sort")?) {
+            (_, Some(Self::Function(method))) => {
+                method.call_with(self, &[comparator.clone().into()])
+            }
+            (Self::Array(values), None) => {
+                values.sort_by(|left, right| {
+                    let compared =
+                        comparator.call_with(&Self::Undefined, &[left.clone(), right.clone()])?;
+                    Ok(crate::query::field_number(&compared)?
+                        .partial_cmp(&0.0)
+                        .unwrap_or(std::cmp::Ordering::Equal))
+                })?;
+                Ok(self.clone())
+            }
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.sort is not a function"
+            ))),
+        }
+    }
+
+    pub(crate) fn at_method(&self, index: &Self, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("at")?) {
+            (_, Some(Self::Function(method))) => {
+                method.call_with(self, std::slice::from_ref(index))
+            }
+            (Self::Array(_) | Self::String(_) | Self::Utf16String(_), None) => {
+                let length = crate::query::field_number(&self.model_property("length")?)?;
+                let index = crate::query::field_number(index)?;
+                let index = if index.is_nan() { 0.0 } else { index.trunc() };
+                let index = if index < 0.0 { length + index } else { index };
+                if index < 0.0 || index >= length {
+                    return Ok(Self::Undefined);
+                }
+                self.model_property(&crate::schema_value::number_string(index))
+            }
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.at is not a function"
+            ))),
+        }
+    }
+
+    pub(crate) fn get_time_method(&self, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("getTime")?) {
+            (_, Some(Self::Function(method))) => method.call_with(self, &[]),
+            (Self::Date(date), None) => Ok(date.milliseconds().into()),
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.getTime is not a function"
+            ))),
+        }
+    }
+
+    fn method_property(&self, name: &str) -> AuthResult<Option<Self>> {
+        if self.is_null() || self.is_undefined() {
+            return self.model_property(name).map(Some);
+        }
+        self.property_source()
+            .map(|source| source.get_with_receiver(name, self))
+            .transpose()
+            .map(Option::flatten)
     }
 
     /// Call the receiver's `toString` method without applying ToPrimitive fallback.
@@ -220,3 +358,7 @@ impl FieldValue {
 #[cfg(test)]
 #[path = "primitive_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "collection_method_tests.rs"]
+mod collection_tests;

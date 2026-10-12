@@ -37,6 +37,16 @@ impl FieldValue {
                 return Ok(array.get(index as usize)?.unwrap_or_default());
             }
         }
+        if let Some(units) = crate::query::field_string_units(self) {
+            return Ok(if name == "length" {
+                units.len().into()
+            } else {
+                crate::utils::json::array_index(name)
+                    .and_then(|index| units.get(index as usize))
+                    .map(|unit| crate::Utf16String::from_units(vec![*unit]).into())
+                    .unwrap_or_default()
+            });
+        }
         match self.property_source() {
             Some(source) => Ok(source.get_with_receiver(name, self)?.unwrap_or_default()),
             None => Ok(Self::Undefined),

@@ -1,4 +1,7 @@
-use super::{SecondaryStore, cache, sessions::active_sessions_key};
+use super::{
+    SecondaryStore, cache,
+    sessions::{active_sessions_key, references},
+};
 use crate::store::{AuthTransaction, UserStore};
 use crate::types::{CreateUser, ListUsersParams, UpdateUser};
 use crate::wire::UserView;
@@ -7,16 +10,6 @@ use async_trait::async_trait;
 
 #[cfg(test)]
 mod tests;
-
-fn cached_expiration(value: FieldValue) -> SchemaValue<FieldDate> {
-    SchemaValue::from_field(match value {
-        FieldValue::String(text) => match crate::utils::json::parse_json_date(&text) {
-            Some(date) => FieldDate::from(date).into(),
-            None => FieldValue::String(text),
-        },
-        value => value,
-    })
-}
 
 impl<S: AuthSchema> SecondaryStore<S> {
     pub(super) async fn queue_user_session_refresh(
@@ -54,43 +47,36 @@ impl<S: AuthSchema> SecondaryStore<S> {
             self.inner.supports_native_json(),
         )
         .await?;
-        let references = cache::decode(
-            self.secondary()?
-                .get_native(&active_sessions_key(&user.id.field_value())?)
-                .await?,
-        )?
-        .unwrap_or_default();
-        if !references.is_truthy() {
+        let raw = self
+            .secondary()?
+            .get_native(&active_sessions_key(&user.id.field_value())?)
+            .await?;
+        if !raw.as_ref().is_some_and(FieldValue::is_truthy) {
             return Ok(());
         }
         let now = self.now();
-        let references = references
-            .as_array()
-            .ok_or_else(|| AuthError::internal("Cached user session index must be an array"))?;
-        let mut tokens = Vec::new();
-        for reference in references.iter()? {
-            let reference = reference?;
-            if reference.is_null() {
-                return Err(AuthError::internal(
-                    "Cached user session index entry cannot be null",
-                ));
+        let references = cache::decode(raw)?.unwrap_or_else(references::empty);
+        let references = references::filter(&references, move |reference| {
+            Ok(
+                crate::query::field_number(&reference.model_property("expiresAt")?)?
+                    > now.timestamp_millis() as f64,
+            )
+        })?;
+        let unsupported_map = |method| match method {
+            FieldValue::Function(_) => {
+                AuthError::config("Native async session-refresh map callbacks are not supported")
             }
-            let fields = reference.as_object();
-            let expires = fields
-                .map(|fields| fields.get("expiresAt"))
-                .transpose()?
-                .flatten()
-                .unwrap_or_default();
-            if cached_expiration(expires).is_after(now)? {
-                tokens.push(
-                    fields
-                        .map(|fields| fields.get("token"))
-                        .transpose()?
-                        .flatten()
-                        .unwrap_or_default(),
-                );
+            _ => AuthError::type_error("validSessions.map is not a function"),
+        };
+        let references = match &references {
+            FieldValue::Array(array) => {
+                if let Some(method) = array.properties().get_with_receiver("map", &references)? {
+                    return Err(unsupported_map(method));
+                }
+                array
             }
-        }
+            value => return Err(unsupported_map(value.model_property("map")?)),
+        };
         let mut fields = FieldMap::from(user);
         let mut ordered = FieldMap::new();
         let configured = self.config.user.user_field_schema_with_plugins(
@@ -114,10 +100,11 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let user = FieldValue::from(ordered);
         crate::request_runtime::concurrent::all(
             "User session refresh task",
-            tokens.into_iter().map(|token| {
+            references.snapshot()?.into_iter().map(|reference| {
                 let runtime = self.clone();
                 let user = user.clone();
                 async move {
+                    let token = reference.model_property("token")?;
                     runtime
                         .refresh_cached_user_session(&token, &user, now)
                         .await
@@ -137,23 +124,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let Some(cached) = cache::decode(self.secondary()?.get_native(token).await?)? else {
             return Ok(());
         };
-        let session = cached
-            .as_object()
-            .map(|cached| cached.get("session"))
-            .transpose()?
-            .flatten()
-            .ok_or_else(|| {
-                AuthError::internal("Cached user session refresh requires a session object")
-            })?;
-        let expires = session
-            .as_object()
-            .map(|session| session.get("expiresAt"))
-            .transpose()?
-            .flatten()
-            .unwrap_or_default();
-        let seconds = cached_expiration(expires).cache_ttl(now)?;
+        let expires = cached
+            .model_property("session")?
+            .model_property("expiresAt")?;
+        let seconds = SchemaValue::<FieldDate>::from_field(expires).cache_ttl(now)?;
         let envelope = FieldValue::from(FieldMap::from([
-            ("session".into(), session.clone()),
+            ("session".into(), cached.model_property("session")?),
             ("user".into(), user.clone()),
         ]));
         self.secondary()?

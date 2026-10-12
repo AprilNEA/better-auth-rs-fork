@@ -3,7 +3,7 @@ use crate::store::database_hooks::{DatabaseHookContext, DatabaseHookControl, Dat
 use crate::store::{
     EphemeralStore, MemoryCacheAdapter, SecondaryStorage, SessionStore, StatelessSchema, UserStore,
 };
-use crate::{AuthConfig, FieldMap};
+use crate::{AuthConfig, AuthError, FieldMap};
 use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::{Value, json};

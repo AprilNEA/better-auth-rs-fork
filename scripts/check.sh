@@ -580,10 +580,12 @@ run_stage() {
       local cache_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/api-key-cache-batch.test.ts \
-        ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts || cache_status=1
+        ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-user-refresh.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-user-refresh-values.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        request_runtime::concurrent:: utils::json::runtime:: field_value:: schema_value:: wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: utils::json::runtime:: field_value:: schema_value:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: || cache_status=1
       return "$cache_status"

@@ -8,6 +8,9 @@ use crate::user_fields::{UserFieldConfig, UserFieldType};
 use crate::{AuthConfig, AuthResult, FieldDate, FieldMap, FieldValue, SchemaValue};
 use std::sync::Arc;
 
+#[path = "session_records.rs"]
+mod session_records;
+
 const NOW: i64 = 4_102_444_800_000;
 const EXPIRY: i64 = NOW + 3_600_000;
 const DATE_TEXT: &str = "2100-01-01T00:00:00.000Z";

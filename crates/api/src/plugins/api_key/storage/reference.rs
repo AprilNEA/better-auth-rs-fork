@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, Weak};
 
 use better_auth_core::{
-    ApiKey, AuthError, AuthResult, FieldValue, Utf16String,
+    ApiKey, AuthError, AuthResult, FieldFunction, FieldValue, Utf16String,
     query::{field_number, field_string_units},
     store::SecondaryStorage,
 };
@@ -35,33 +35,7 @@ pub(in crate::plugins::api_key) fn property(
     value: &FieldValue,
     name: &str,
 ) -> AuthResult<FieldValue> {
-    Ok(match value {
-        FieldValue::Null | FieldValue::Undefined => {
-            let kind = if value.is_null() { "null" } else { "undefined" };
-            return Err(AuthError::internal(format!(
-                "Cannot read properties of {kind} (reading '{name}')"
-            )));
-        }
-        FieldValue::Array(values) if name == "length" => (values.len()? as f64).into(),
-        FieldValue::Array(values) => name
-            .parse::<usize>()
-            .ok()
-            .map(|index| values.get(index))
-            .transpose()?
-            .flatten()
-            .unwrap_or_default(),
-        FieldValue::Object(fields) => fields.get(name)?.unwrap_or_default(),
-        value => match field_string_units(value) {
-            Some(units) if name == "length" => (units.len() as f64).into(),
-            Some(units) => name
-                .parse::<usize>()
-                .ok()
-                .and_then(|index| units.get(index))
-                .map(|unit| Utf16String::from_units(vec![*unit]).into())
-                .unwrap_or_default(),
-            None => FieldValue::Undefined,
-        },
-    })
+    value.model_property(name)
 }
 
 pub(super) fn has_entries(value: &FieldValue) -> AuthResult<bool> {
@@ -97,27 +71,26 @@ pub(super) fn items(value: &FieldValue) -> AuthResult<Items> {
 }
 
 fn next(value: FieldValue, id: &FieldValue, insert: bool) -> AuthResult<FieldValue> {
-    if let FieldValue::Array(values) = &value {
-        if insert && values.includes(id)? {
-            return Ok(value);
-        }
-        return if insert {
-            let mut values = values.snapshot()?;
-            values.push(id.clone());
-            Ok(values.into())
-        } else {
-            Ok(values.filter(|value| Ok(!value.strict_equals(id)))?.into())
-        };
+    if !insert {
+        let id = id.clone();
+        let predicate = FieldFunction::contextual(move |_, arguments| {
+            Ok((!arguments
+                .first()
+                .unwrap_or(&FieldValue::Undefined)
+                .strict_equals(&id))
+            .into())
+        });
+        return value.filter_method(&predicate, "ids");
     }
-    if insert && let Some(units) = field_string_units(&value) {
-        let needle = id.display_utf16()?;
-        if needle.as_utf16().is_empty()
-            || units
-                .windows(needle.as_utf16().len())
-                .any(|part| part == needle.as_utf16())
-        {
-            return Ok(value);
-        }
+    if value.includes_method(id, "ids")?.is_truthy() {
+        return Ok(value);
+    }
+    if let FieldValue::Array(values) = &value {
+        let mut values = values.snapshot()?;
+        values.push(id.clone());
+        return Ok(values.into());
+    }
+    if let Some(units) = field_string_units(&value) {
         // String iteration yields code points; indexed reads yield UTF-16 code units.
         let mut values = char::decode_utf16(units.iter().copied())
             .map(|value| match value {
@@ -128,11 +101,7 @@ fn next(value: FieldValue, id: &FieldValue, insert: bool) -> AuthResult<FieldVal
         values.push(id.clone());
         return Ok(values.into());
     }
-    let method = if insert { "includes" } else { "filter" };
-    let _ = property(&value, method)?;
-    Err(AuthError::internal(format!(
-        "ids.{method} is not a function"
-    )))
+    Err(AuthError::type_error("ids is not iterable"))
 }
 
 pub(super) fn stringify(value: &FieldValue) -> AuthResult<String> {

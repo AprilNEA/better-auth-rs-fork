@@ -1,20 +1,5 @@
-use super::{AuthError, AuthResult, AuthSchema, FieldValue, SecondaryStore, active_sessions_key};
+use super::{AuthResult, AuthSchema, FieldValue, SecondaryStore, active_sessions_key, references};
 use crate::utils::json::safe_parse_field;
-
-fn property(value: &FieldValue, name: &str) -> AuthResult<FieldValue> {
-    if value.is_null() || value.is_undefined() {
-        return Err(AuthError::internal(format!(
-            "Cannot read properties of {} (reading '{name}')",
-            if value.is_null() { "null" } else { "undefined" }
-        )));
-    }
-    Ok(value
-        .as_object()
-        .map(|fields| fields.get(name))
-        .transpose()?
-        .flatten()
-        .unwrap_or_default())
-}
 
 impl<S: AuthSchema> SecondaryStore<S> {
     pub(super) async fn delete_runtime_session(&self, token: &FieldValue) -> AuthResult<()> {
@@ -27,70 +12,57 @@ impl<S: AuthSchema> SecondaryStore<S> {
             .filter(FieldValue::is_truthy)
         {
             let cached = safe_parse_field(&cached)?;
-            let session = cached
-                .as_object()
-                .map(|fields| fields.get("session"))
-                .transpose()?
-                .flatten()
-                .unwrap_or_default();
+            let session = if cached.is_null() || cached.is_undefined() {
+                FieldValue::Undefined
+            } else {
+                cached.model_property("session")?
+            };
             if !session.is_truthy() {
                 self.config
                     .logger()
                     .error("Session not found in secondary storage", &[]);
                 return Ok(());
             }
-            let key = active_sessions_key(&property(&session, "userId")?)?;
+            let user_id = session.model_property("userId")?;
+            let key = active_sessions_key(&user_id)?;
             if let Some(current) = storage
                 .get_native(&key)
                 .await?
                 .filter(FieldValue::is_truthy)
             {
                 let current = safe_parse_field(&current)?;
-                let empty = crate::FieldArray::new();
                 let list = if current.is_truthy() {
                     current
-                        .as_array()
-                        .ok_or_else(|| AuthError::internal("list.filter is not a function"))?
                 } else {
-                    &empty
+                    references::empty()
                 };
                 let now = self.now();
-                let mut filtered = Vec::new();
-                for session in list.iter()? {
-                    let session = session?;
-                    let expires_at = crate::query::field_number(&property(&session, "expiresAt")?)?;
-                    if expires_at > now.timestamp_millis() as f64
-                        && !property(&session, "token")?.strict_equals(token)
-                    {
-                        filtered.push((session.clone(), expires_at));
-                    }
-                }
-                // The filter excludes NaN; retained values have stable numeric conversions during sorting.
-                filtered.sort_by(|(_, left), (_, right)| left.total_cmp(right));
-                let furthest = filtered
-                    .last()
-                    .map(|(session, _)| property(session, "expiresAt"))
-                    .transpose()?
-                    .unwrap_or_default();
-                if !filtered.is_empty()
+                let filter_token = token.clone();
+                let filtered = references::filter(&list, move |session| {
+                    let expires_at =
+                        crate::query::field_number(&session.model_property("expiresAt")?)?;
+                    Ok(expires_at > now.timestamp_millis() as f64
+                        && !session
+                            .model_property("token")?
+                            .strict_equals(&filter_token))
+                })?;
+                let sorted = references::sort(&filtered)?;
+                let furthest = references::last_expiration(&sorted)?;
+                if crate::query::field_number(&filtered.model_property("length")?)? > 0.0
                     && furthest.is_truthy()
                     && crate::query::field_number(&furthest)? > self.now().timestamp_millis() as f64
                 {
-                    let furthest = furthest.clone();
-                    let value = FieldValue::from(
-                        filtered
-                            .into_iter()
-                            .map(|(session, _)| session)
-                            .collect::<Vec<_>>(),
-                    );
-                    let value = value.stringify()?.ok_or_else(|| {
-                        AuthError::internal("Session reference array cannot be undefined")
-                    })?;
-                    let ttl = crate::SchemaValue::<crate::FieldDate>::from_field(furthest)
-                        .cache_ttl(now)?;
-                    storage.set_native(&key, &value, Some(ttl)).await?;
+                    self.write_references(
+                        &active_sessions_key(&user_id)?,
+                        &filtered,
+                        furthest,
+                        now,
+                    )
+                    .await?;
                 } else {
-                    storage.delete_native(&key).await?;
+                    storage
+                        .delete_native(&active_sessions_key(&user_id)?)
+                        .await?;
                 }
             } else {
                 self.config

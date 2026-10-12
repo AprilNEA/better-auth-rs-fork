@@ -22,7 +22,7 @@ pub(super) fn parse(value: Option<FieldValue>) -> AuthResult<Option<FieldValue>>
         .map(|value| value.filter(FieldValue::is_truthy))
 }
 
-pub(super) fn object(value: &FieldValue) -> AuthResult<FieldMap> {
+fn object(value: &FieldValue) -> AuthResult<FieldMap> {
     value
         .as_object()
         .ok_or_else(|| AuthError::internal("Secondary storage record must be an object"))?
@@ -45,25 +45,29 @@ fn revive_dates(fields: &mut FieldMap) {
     }
 }
 
-fn convert_dates(fields: &mut FieldMap, dates: &[&str]) -> AuthResult<()> {
+pub(super) fn dated_fields(
+    source: impl Fn() -> AuthResult<FieldValue>,
+    dates: &[&str],
+) -> AuthResult<FieldMap> {
+    let mut fields = source()?.enumerable_fields()?;
     for name in dates {
-        let date = crate::query::field_date(fields.get(*name).unwrap_or(&FieldValue::Undefined))?;
+        let date = crate::query::field_date(&source()?.model_property(name)?)?;
         let _ = fields.insert((*name).into(), date.into());
     }
-    Ok(())
+    Ok(fields)
 }
 
-pub(super) fn session(mut fields: FieldMap, dates: &[&str]) -> AuthResult<crate::SessionView> {
-    convert_dates(&mut fields, dates)?;
+pub(super) fn session(fields: FieldMap) -> AuthResult<crate::SessionView> {
     let mut session = crate::SessionView::from_field_values(fields)?;
     session.active = true;
     Ok(session)
 }
 
-pub(super) fn user(value: &FieldValue) -> AuthResult<crate::UserView> {
-    let mut fields = object(value)?;
-    convert_dates(&mut fields, &["createdAt", "updatedAt"])?;
-    crate::UserView::from_field_values(fields)
+pub(super) fn user(cached: &FieldValue) -> AuthResult<crate::UserView> {
+    crate::UserView::from_field_values(dated_fields(
+        || cached.model_property("user"),
+        &["createdAt", "updatedAt"],
+    )?)
 }
 
 pub(super) fn verification(value: &FieldValue) -> AuthResult<crate::VerificationView> {

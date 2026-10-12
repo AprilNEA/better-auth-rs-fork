@@ -12,6 +12,8 @@ use std::{
     sync::Arc,
 };
 
+mod methods;
+
 /// A stable array handle. Live arrays read each index from their current source.
 /// Use `snapshot` only when an independent list of shallow values is required.
 /// `PartialEq` compares owned arrays structurally and live arrays by identity.
@@ -50,6 +52,11 @@ pub(crate) trait FieldArraySource: Send + Sync {
     fn set_length(&self, _length: usize) -> AuthResult<()> {
         Err(AuthError::type_error(
             "The live array source does not support length assignment",
+        ))
+    }
+    fn delete(&self, _index: usize) -> AuthResult<()> {
+        Err(AuthError::type_error(
+            "The live array source does not support index deletion",
         ))
     }
     fn clone_seed(&self) -> AuthResult<Option<ArrayCloneSeed>> {
@@ -147,6 +154,18 @@ impl FieldArray {
                 Ok(())
             }
             ArrayStorage::Live(source) => source.set_length(length),
+        }
+    }
+
+    pub(crate) fn delete(&self, index: usize) -> AuthResult<()> {
+        match &self.storage {
+            ArrayStorage::Owned(values) => {
+                if let Some(values) = values.lock().as_mut() {
+                    let _ = values.entries.remove(&index);
+                }
+                Ok(())
+            }
+            ArrayStorage::Live(source) => source.delete(index),
         }
     }
 
@@ -248,11 +267,18 @@ impl FieldArray {
         &self,
         mut transform: impl FnMut(FieldValue) -> AuthResult<FieldValue>,
     ) -> AuthResult<Self> {
+        self.map_with_index(|value, _| transform(value))
+    }
+
+    pub(crate) fn map_with_index(
+        &self,
+        mut transform: impl FnMut(FieldValue, usize) -> AuthResult<FieldValue>,
+    ) -> AuthResult<Self> {
         let length = self.len()?;
         let mut entries = BTreeMap::new();
         for index in 0..length {
             if let Some(value) = self.get(index)? {
-                let _ = entries.insert(index, transform(value)?);
+                let _ = entries.insert(index, transform(value, index)?);
             }
         }
         Ok(Self {
@@ -269,11 +295,18 @@ impl FieldArray {
         &self,
         mut predicate: impl FnMut(&FieldValue) -> AuthResult<bool>,
     ) -> AuthResult<Self> {
+        self.filter_with_index(|value, _| predicate(value))
+    }
+
+    pub(crate) fn filter_with_index(
+        &self,
+        mut predicate: impl FnMut(&FieldValue, usize) -> AuthResult<bool>,
+    ) -> AuthResult<Self> {
         let length = self.len()?;
         let mut values = Vec::new();
         for index in 0..length {
             if let Some(value) = self.get(index)?
-                && predicate(&value)?
+                && predicate(&value, index)?
             {
                 values.push(value);
             }

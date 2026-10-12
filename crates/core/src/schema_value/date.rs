@@ -3,7 +3,7 @@ use crate::{AuthError, AuthResult, FieldDate, FieldValue};
 use chrono::{DateTime, Utc};
 
 impl SchemaValue<FieldDate> {
-    /// Read the Date object's timestamp at a getTime operation.
+    /// Read the Date timestamp without invoking named property methods.
     pub fn date_milliseconds(&self) -> AuthResult<f64> {
         match self {
             Self::Typed(date) => Ok(date.milliseconds()),
@@ -41,12 +41,10 @@ impl SchemaValue<FieldDate> {
     /// Compute create-cache TTL. Upstream accepts a number or calls the Date object's getTime method.
     /// Preserve NaN and infinity; each caller applies its upstream write condition.
     pub fn cache_ttl(&self, now: DateTime<Utc>) -> AuthResult<f64> {
-        let millis = match self {
-            Self::Typed(date) => date.milliseconds(),
-            Self::Dynamic(FieldValue::Number(value)) => *value,
-            Self::Dynamic(_) | Self::Undefined => {
-                return Err(AuthError::internal("expiresAt.getTime is not a function"));
-            }
+        let expires = self.field_value();
+        let millis = match expires {
+            FieldValue::Number(value) => value,
+            value => crate::query::field_number(&value.get_time_method("expiresAt")?)?,
         };
         let seconds = ((millis - now.timestamp_millis() as f64) / 1_000.0).floor();
         Ok(if seconds < 0.0 { 0.0 } else { seconds })

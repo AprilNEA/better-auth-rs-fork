@@ -167,6 +167,16 @@ pub(crate) fn sort<T>(
     value: impl Fn(&T) -> AuthResult<FieldValue>,
 ) -> AuthResult<()> {
     let comparator = Comparator::default();
+    sort_by(values, |left, right| {
+        let order = comparator.compare(&value(left)?, &value(right)?)?;
+        Ok(if descending { order.reverse() } else { order })
+    })
+}
+
+pub(crate) fn sort_by<T>(
+    values: &mut [T],
+    compare: impl Fn(&T, &T) -> AuthResult<Ordering>,
+) -> AuthResult<()> {
     // JSC uses binary insertion; mixed values need not form a total order, so comparison order matters.
     // ponytail: O(n²) moves; JSC's Powersort merging for longer mixed-value runs still needs pairing.
     #[expect(
@@ -178,8 +188,7 @@ pub(crate) fn sort<T>(
         let mut right = index;
         while left < right {
             let middle = left + (right - left) / 2;
-            let order = comparator.compare(&value(&values[index])?, &value(&values[middle])?)?;
-            let order = if descending { order.reverse() } else { order };
+            let order = compare(&values[index], &values[middle])?;
             if order.is_lt() {
                 right = middle;
             } else {
