@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeSync } from "node:fs";
-import { APIError } from "@better-auth/core/error";
+import { APIError } from "better-call/error";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
