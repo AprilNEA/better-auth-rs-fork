@@ -3,7 +3,6 @@ use better_auth::{
     AuthConfig, AuthError,
     config::{CookieCacheConfig, CookieCacheStrategy, CookieCacheVersion, UserFieldConfig},
 };
-use better_auth_core::FieldValue;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
@@ -45,7 +44,13 @@ impl CookieVersionFixture {
                 let state = state.clone();
                 async move {
                     let mut state = state.lock().unwrap();
-                    state.events.push(json!({ "sessionId": data.session.id, "userId": data.user_field("id")?.json()?, "name": data.user_field("name")?.json()?, "hiddenSession": data.session.additional_fields.get("internalNote").map(FieldValue::json).transpose()?.flatten(), "hiddenUser": data.user_field("secretNote")?.json()? }));
+                    state.events.push(json!({
+                        "sessionId": data.session_property("id")?.json()?,
+                        "userId": data.user_field("id")?.json()?,
+                        "name": data.user_field("name")?.json()?,
+                        "hiddenSession": data.session_property("internalNote")?.json()?,
+                        "hiddenUser": data.user_field("secretNote")?.json()?,
+                    }));
                     if state.fail {
                         return Err(AuthError::internal("Cookie version failed"));
                     }
