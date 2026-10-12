@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createSecondaryNativeObserver } from "./secondary-native-shared.mjs";
 import { createProtectedFunctionObserver } from "./protected-function-shared.mjs";
+import { createSecondaryRuntimeObserver } from "./secondary-native-runtime.mjs";
 
 const primitive = value => ({ kind: "primitive", value });
 const boxed = (value, alternate) => ({ kind: "boxed", value, ...(alternate === undefined ? {} : { alternate }) });
@@ -54,9 +55,10 @@ export const jwkSortScenarios = [
   { name: "filter-before-sort", values: boxes([4, 1, 3, 2]), keyring: true },
 ];
 
-export function createNativeSortHarness(consumer, scenario) {
+export function createNativeSortHarness(consumer, scenario, access = "getters") {
   const native = createSecondaryNativeObserver();
   const protectedValues = createProtectedFunctionObserver();
+  const runtime = access === "data" ? createSecondaryRuntimeObserver() : undefined;
   const events = [];
   const counts = {};
   const rows = [];
@@ -73,6 +75,7 @@ export function createNativeSortHarness(consumer, scenario) {
     if (scenario.mutate?.phase === phase && scenario.mutate.at === count) {
       const cell = cells[scenario.mutate.target];
       cell.value = makeValue(boxed(scenario.mutate.value), `${cell.id}:replacement`);
+      if (access === "data" && consumer !== "jwk") rows[scenario.mutate.target][field] = cell.value;
       events.push({ phase: "mutation", target: cell.id, replacement: scenario.mutate.value });
     }
     if (scenario.fail?.phase === phase && scenario.fail.at === count) throw original;
@@ -139,14 +142,20 @@ export function createNativeSortHarness(consumer, scenario) {
       methodCells.set(cell.time, cell);
       cell.expiry = scenario.keyring && index === 1 ? new Date(0) : null;
       cell.algorithm = scenario.keyring && index === 2 ? "RS256" : index % 2 === 0 ? "EdDSA" : null;
-      Object.defineProperties(row, {
-        alg: { get: readAlgorithm, enumerable: true, configurable: true },
-        expiresAt: { get: readExpiry, enumerable: true, configurable: true },
-      });
+      if (access === "data") {
+        row.alg = cell.algorithm;
+        row.expiresAt = cell.expiry;
+      } else {
+        Object.defineProperties(row, {
+          alg: { get: readAlgorithm, enumerable: true, configurable: true },
+          expiresAt: { get: readExpiry, enumerable: true, configurable: true },
+        });
+      }
     }
     rowCells.set(row, cell);
     if (consumer === "jwk" || spec.kind !== "missing") {
-      Object.defineProperty(row, field, { get: readSortField, enumerable: true, configurable: true });
+      if (access === "data") row[field] = consumer === "jwk" ? cell.time : cell.value;
+      else Object.defineProperty(row, field, { get: readSortField, enumerable: true, configurable: true });
     }
     cells.push(cell);
     rows.push(row);
@@ -158,6 +167,7 @@ export function createNativeSortHarness(consumer, scenario) {
 
   async function capture(operation) {
     const before = snapshot();
+    const runtimeBefore = runtime?.value({ rows, cells });
     const originalOrder = [...rows];
     let result;
     let outcome;
@@ -170,13 +180,32 @@ export function createNativeSortHarness(consumer, scenario) {
     }
     assert.equal(rows.length, originalOrder.length);
     for (const [index, row] of rows.entries()) assert.equal(row, originalOrder[index], "Sorting copies must preserve stored record order");
-    return {
+    const captured = {
       before, outcome, after: snapshot(result, outcome.returned), events, counts,
       functions: native.functions,
     };
+    if (runtime) {
+      const returnedRows = outcome.returned ? consumer === "jwk" ? result === undefined ? [] : [result] : result : [];
+      captured.runtime = {
+        before: runtimeBefore,
+        outcome: { ...outcome, ...(outcome.returned ? { result: runtime.value(result) } : {}) },
+        after: runtime.value({ rows, cells }), events, counts,
+        identities: returnedRows.map(row => ({
+          storedRecord: rows.indexOf(row),
+          valueCells: cells.flatMap((cell, index) => row[field] !== null && typeof row[field] === "object"
+            && row[field] === (consumer === "jwk" ? cell.time : cell.value) ? [index] : []),
+        })),
+        functions: runtime.functionIds,
+      };
+    }
+    return captured;
   }
 
-  return { rows, cells, events, capture, record: event, observe: protectedValues.observe };
+  return {
+    rows, cells, events, capture, record: event, observe: protectedValues.observe,
+    outputValue: value => runtime ? runtime.value(value)
+      : value !== null && typeof value === "object" ? "native-object" : protectedValues.observe(value),
+  };
 }
 
 export function assertNativeSortObservation(observed) {

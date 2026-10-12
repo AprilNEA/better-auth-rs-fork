@@ -16,8 +16,8 @@ function source(path) {
   return { path, sha256: createHash("sha256").update(readFileSync(new URL(path, import.meta.url))).digest("hex") };
 }
 
-async function captureMemory(scenario, direction) {
-  const harness = createNativeSortHarness("memory", scenario);
+export async function captureMemory(scenario, direction, access) {
+  const harness = createNativeSortHarness("memory", scenario, access);
   const memory = { user: harness.rows, session: [], account: [], verification: [] };
   const { adapter } = await betterAuth({
     database: memoryAdapter(memory), baseURL: "http://native-sort-consumers.test",
@@ -28,7 +28,7 @@ async function captureMemory(scenario, direction) {
         name: {
           type: "string", required: false,
           transform: { output(value) {
-            harness.record("output", { value: value !== null && typeof value === "object" ? "native-object" : harness.observe(value) });
+            harness.record("output", { value: harness.outputValue(value) });
             return value;
           } },
         },
@@ -44,14 +44,14 @@ async function captureMemory(scenario, direction) {
   return { consumer: "memory", scenario: scenario.name, direction, ...captured };
 }
 
-async function captureApiKey(module, scenario, direction) {
-  const harness = createNativeSortHarness("api-key", scenario);
+export async function captureApiKey(module, scenario, direction, access) {
+  const harness = createNativeSortHarness("api-key", scenario, access);
   const captured = await harness.capture(() => module.applySortingAndPagination(harness.rows, "name", direction));
   return { consumer: "api-key", scenario: scenario.name, direction, ...captured };
 }
 
-async function captureJwk(scenario, lane, algorithm) {
-  const harness = createNativeSortHarness("jwk", scenario);
+export async function captureJwk(scenario, lane, algorithm, access) {
+  const harness = createNativeSortHarness("jwk", scenario, access);
   const ctx = { marker: "sort-context" };
   const baseAdapter = { async findMany(...args) {
     harness.record("adapter-read", { arguments: harness.observe(args), sameReceiver: this === baseAdapter });
