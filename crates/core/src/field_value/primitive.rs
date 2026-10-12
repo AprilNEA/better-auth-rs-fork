@@ -108,7 +108,37 @@ impl FieldValue {
         }
     }
 
-    pub(crate) fn map_method(
+    /// Invoke `find(predicate)`, visiting holes and preserving the selected value's identity.
+    pub fn find_method(&self, predicate: &FieldFunction, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("find")?) {
+            (_, Some(Self::Function(method))) => {
+                method.call_with(self, &[predicate.clone().into()])
+            }
+            (Self::Array(values), None) => {
+                let length = values.len()?;
+                for index in 0..length {
+                    let value = values.get(index)?.unwrap_or_default();
+                    if predicate
+                        .call_with(
+                            &Self::Undefined,
+                            &[value.clone(), index.into(), self.clone()],
+                        )?
+                        .is_truthy()
+                    {
+                        return Ok(value);
+                    }
+                }
+                Ok(Self::Undefined)
+            }
+            _ => Err(AuthError::type_error(format!(
+                "{expression}.find is not a function"
+            ))),
+        }
+    }
+
+    /// Invoke `map(callback)` and preserve sparse arrays and custom method results.
+    /// `argument_expression` supplies source context for a missing method's error.
+    pub fn map_method(
         &self,
         callback: &FieldFunction,
         expression: &str,

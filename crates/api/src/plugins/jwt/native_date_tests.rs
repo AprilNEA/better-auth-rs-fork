@@ -127,9 +127,18 @@ fn selection_defers_failed_coercion_until_both_methods_return() -> AuthResult<()
             returned_number("newer", 2.0, Some(failure.clone()), &events),
             &events,
         ));
-        let error = keys::latest(vec![older, newer], algorithm, "EdDSA")
-            .err()
-            .expect("Native time conversion must fail");
+        let rows = [older, newer]
+            .iter()
+            .map(|key| better_auth_core::AuthRecordFields::field_values(key).map(FieldValue::from))
+            .collect::<AuthResult<Vec<_>>>()?;
+        let error = keys::latest(
+            rows.into(),
+            algorithm,
+            "EdDSA",
+            (Utc::now().timestamp_millis() as f64).into(),
+        )
+        .err()
+        .expect("Native time conversion must fail");
         assert_eq!(error.message_value()?, "JWK time conversion failed".into());
         assert!(error.into_thrown_value()?.strict_equals(&failure));
         assert_subtraction(&events, true);

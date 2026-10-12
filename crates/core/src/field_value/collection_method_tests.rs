@@ -7,6 +7,8 @@ use super::*;
 use crate::{FieldMap, Utf16String};
 use std::sync::{Arc, Mutex};
 
+#[path = "collection_method_tests/find.rs"]
+mod find;
 #[path = "collection_method_tests/sort.rs"]
 mod sort;
 
@@ -87,7 +89,8 @@ fn own_noncallable_collection_methods_suppress_array_builtins() -> AuthResult<()
     ] {
         let array: FieldValue = vec!["key".into()].into();
         array.set_model_property("includes", method.clone())?;
-        array.set_model_property("filter", method)?;
+        array.set_model_property("filter", method.clone())?;
+        array.set_model_property("find", method)?;
         assert!(matches!(
             array.includes_method(&"key".into(), "ids"),
             Err(AuthError::TypeError(message)) if message == "ids.includes is not a function"
@@ -95,6 +98,10 @@ fn own_noncallable_collection_methods_suppress_array_builtins() -> AuthResult<()
         assert!(matches!(
             array.filter_method(&predicate, "ids"),
             Err(AuthError::TypeError(message)) if message == "ids.filter is not a function"
+        ));
+        assert!(matches!(
+            array.find_method(&predicate, "ids"),
+            Err(AuthError::TypeError(message)) if message == "ids.find is not a function"
         ));
     }
     Ok(())
@@ -202,7 +209,7 @@ fn builtin_concat_preserves_sparse_arrays_and_does_not_spread_other_values() -> 
 
 #[test]
 fn custom_native_methods_receive_original_arguments_and_return_native_values() -> AuthResult<()> {
-    for name in ["map", "concat", "sort", "at", "getTime"] {
+    for name in ["map", "find", "concat", "sort", "at", "getTime"] {
         let value: FieldValue = crate::FieldDate::from_milliseconds(0.0).into();
         let result: FieldValue = FieldMap::from([("method".into(), name.into())]).into();
         let returned = result.clone();
@@ -220,7 +227,7 @@ fn custom_native_methods_receive_original_arguments_and_return_native_values() -
             .into(),
         )?;
         let argument: FieldValue = match name {
-            "map" | "sort" => FieldFunction::contextual(|_, _| {
+            "map" | "find" | "sort" => FieldFunction::contextual(|_, _| {
                 Err(AuthError::internal(
                     "Custom methods need not invoke callbacks",
                 ))
@@ -230,6 +237,7 @@ fn custom_native_methods_receive_original_arguments_and_return_native_values() -
         };
         let actual = match (&argument, name) {
             (FieldValue::Function(callback), "map") => value.map_method(callback, "value", None)?,
+            (FieldValue::Function(callback), "find") => value.find_method(callback, "value")?,
             (FieldValue::Function(callback), "sort") => value.sort_method(callback, "value")?,
             (_, "concat") => value.concat_method(std::slice::from_ref(&argument), "value")?,
             (_, "getTime") => value.get_time_method("value")?,

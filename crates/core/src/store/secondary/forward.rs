@@ -1030,6 +1030,15 @@ impl<S: AuthSchema> OrganizationRoleStore for SecondaryStore<S> {
 
 #[async_trait]
 impl<S: AuthSchema> JwksStore for SecondaryStore<S> {
+    async fn get_jwk_value(
+        &self,
+        id: &crate::SchemaValue<String>,
+    ) -> AuthResult<crate::FieldValue> {
+        self.inner.get_jwk_value(id).await
+    }
+    async fn list_jwk_values(&self) -> AuthResult<crate::FieldValue> {
+        self.inner.list_jwk_values().await
+    }
     async fn create_jwk_record(
         &self,
         input: crate::FieldMap,

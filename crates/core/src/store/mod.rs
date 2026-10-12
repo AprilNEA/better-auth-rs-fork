@@ -2573,19 +2573,45 @@ pub trait JwksStore: Send + Sync {
     async fn delete_jwk_record(&self, id: &crate::SchemaValue<String>) -> AuthResult<()>;
     /// List complete key fields with the adapter's default limit and order.
     async fn list_jwk_records(&self) -> AuthResult<Vec<crate::FieldMap>>;
+    /// Read a logical key value after adapter output projection.
+    /// Native adapters may retain an original record handle instead of materializing fields.
+    async fn get_jwk_value(
+        &self,
+        id: &crate::SchemaValue<String>,
+    ) -> AuthResult<crate::FieldValue> {
+        Ok(self
+            .get_jwk_record(id)
+            .await?
+            .map(crate::FieldValue::from)
+            .unwrap_or_default())
+    }
+    /// Read the logical keyring after adapter output projection.
+    /// Native adapters may retain array and record handles, including property accessors.
+    async fn list_jwk_values(&self) -> AuthResult<crate::FieldValue> {
+        Ok(self
+            .list_jwk_records()
+            .await?
+            .into_iter()
+            .map(crate::FieldValue::from)
+            .collect::<Vec<_>>()
+            .into())
+    }
     /// Read one signing key by its ID without applying a find-many limit.
     async fn get_jwk(&self, id: &str) -> AuthResult<Option<crate::Jwk>> {
-        self.get_jwk_record(&id.into())
-            .await?
-            .map(crate::FromFieldMap::from_field_values)
-            .transpose()
+        let value = self.get_jwk_value(&id.into()).await?;
+        if value.is_null() || value.is_undefined() {
+            return Ok(None);
+        }
+        crate::FromFieldMap::from_field_values(value.enumerable_fields()?).map(Some)
     }
     /// List public and private key records, including expired keys retained for verification.
     async fn list_jwks(&self) -> AuthResult<Vec<crate::Jwk>> {
-        self.list_jwk_records()
+        self.list_jwk_values()
             .await?
-            .into_iter()
-            .map(crate::FromFieldMap::from_field_values)
+            .as_array()
+            .ok_or_else(|| AuthError::type_error("The typed JWK list requires an array"))?
+            .iter()?
+            .map(|value| crate::FromFieldMap::from_field_values(value?.enumerable_fields()?))
             .collect()
     }
     /// Persist a generated signing key.

@@ -8,7 +8,7 @@ use super::*;
 
 #[allow(
     dead_code,
-    reason = "Only the core Memory consumer replays the accessor lane."
+    reason = "The shared harness also compiles in targets that do not replay getter cases."
 )]
 pub(crate) fn cases(consumer: &str) -> impl Iterator<Item = &'static Json> + '_ {
     static FIXTURE: OnceLock<Json> = OnceLock::new();
@@ -26,7 +26,7 @@ pub(crate) fn cases(consumer: &str) -> impl Iterator<Item = &'static Json> + '_ 
 
 struct GetterRow {
     properties: FieldObject,
-    getter: FieldFunction,
+    getters: FieldMap,
 }
 
 impl FieldObjectSource for GetterRow {
@@ -49,10 +49,9 @@ impl FieldObjectSource for GetterRow {
         name: &str,
         receiver: &FieldValue,
     ) -> AuthResult<Option<FieldValue>> {
-        if name == "name" {
-            self.getter.call_with(receiver, &[]).map(Some)
-        } else {
-            self.properties.get(name)
+        match self.getters.get(name) {
+            Some(FieldValue::Function(getter)) => getter.call_with(receiver, &[]).map(Some),
+            _ => self.properties.get(name),
         }
     }
 
@@ -79,11 +78,13 @@ impl FieldObjectSource for GetterRow {
     }
 }
 
-pub(super) fn row(mut properties: FieldMap, getter: FieldFunction) -> FieldValue {
-    let _ = properties.insert("name".into(), FieldValue::Undefined);
+pub(super) fn row(mut properties: FieldMap, getters: FieldMap) -> FieldValue {
+    for name in getters.keys() {
+        let _ = properties.insert(name.clone(), FieldValue::Undefined);
+    }
     FieldObject::from_source(Arc::new(GetterRow {
         properties: properties.into(),
-        getter,
+        getters,
     }))
     .into()
 }
@@ -143,10 +144,15 @@ impl Graph<'_> {
                 FieldValue::Date(date) => date.properties().own_property_descriptor(name)?.unwrap(),
                 _ => unreachable!(),
             };
-            let accessor =
-                name == "name" && self.state.rows.iter().any(|row| row.strict_equals(value));
-            let property = if accessor {
-                let getter: FieldValue = self.state.getter.clone().unwrap().into();
+            let accessor = self
+                .state
+                .rows
+                .iter()
+                .any(|row| row.strict_equals(value))
+                .then(|| self.state.accessor(name))
+                .flatten();
+            let property = if let Some(getter) = accessor {
+                let getter: FieldValue = getter.into();
                 json!({"enumerable": descriptor.enumerable, "get": self.value(&getter)?, "set": self.value(&FieldValue::Undefined)?})
             } else {
                 json!({"enumerable": descriptor.enumerable, "value": self.value(&value.model_property(name)?)?})

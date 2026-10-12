@@ -80,9 +80,39 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
         );
         endpoint.transaction = context.transaction;
         endpoint.session = context.request.native_session_snapshot()?;
-        let keys = match self.plugin.read_keys(&endpoint).await {
-            Ok(Some(keys)) => keys,
-            Ok(None) => return Ok(None),
+        let payload = async {
+            let keys = self.plugin.read_keys(&endpoint).await?;
+            if keys.is_null() || keys.is_undefined() || !keys.model_property("length")?.is_truthy()
+            {
+                return Ok(None);
+            }
+            let key = keys::find(&keys, header.field("kid")?)?;
+            if !key.is_truthy() {
+                return Ok(None);
+            }
+            let mut algorithm = key.model_property("alg")?;
+            if algorithm.is_null() || algorithm.is_undefined() {
+                algorithm = match self.plugin.config.algorithm {
+                    Some(algorithm) => algorithm.name().into(),
+                    None => header.field("alg")?,
+                };
+            }
+            if !algorithm.is_truthy() {
+                return Ok(None);
+            }
+            let public = keys::parse_json(&key.model_property("publicKey")?)?;
+            verification::verify_local(
+                token,
+                public,
+                &algorithm,
+                Some(&issuer(&runtime)),
+                Some(&[AUDIENCE]),
+                15,
+            )
+        }
+        .await;
+        let payload = match payload {
+            Ok(payload) => payload,
             Err(error) => {
                 better_auth_core::observability::logger::current().debug(
                     "Cookie-cache JWT verification failed",
@@ -91,15 +121,6 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
                 return Ok(None);
             }
         };
-        let payload = verification::verify_local(
-            token,
-            &header,
-            &keys,
-            self.plugin.config.algorithm,
-            Some(&issuer(&runtime)),
-            Some(&[AUDIENCE]),
-            15,
-        );
         Ok(payload.filter(|payload| {
             payload.get("sub").is_some_and(|sub| {
                 sub.is_string() && Some(sub) == payload.get("user").and_then(|user| user.get("id"))

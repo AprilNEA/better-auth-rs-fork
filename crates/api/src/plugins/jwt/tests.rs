@@ -670,7 +670,7 @@ async fn nullable_key_readback_preserves_write_and_endpoint_consumption_order() 
                 };
                 let result = plugin.sign_with_options(Map::new(), &options, &ctx).await;
                 if operation == "sign" {
-                    assert!(matches!(result, Err(AuthError::Internal(message))
+                    assert!(matches!(result, Err(AuthError::TypeError(message))
                         if message == "Cannot read properties of null (reading 'privateKey')"));
                     assert_eq!(*events.lock().unwrap(), ["read", "read", "write-null"]);
                 } else {

@@ -301,7 +301,19 @@ async fn selection_filters_native_algorithm_before_dates_and_defers_single_row_c
     );
     let mut second = selected.clone();
     second.created_at = better_auth_core::FieldDate::from(Utc::now()).into();
-    assert!(keys::latest(vec![selected, second], Some("EdDSA"), "EdDSA").is_err());
+    let rows = [selected, second]
+        .iter()
+        .map(|key| better_auth_core::AuthRecordFields::field_values(key).map(FieldValue::from))
+        .collect::<AuthResult<Vec<_>>>()?;
+    assert!(
+        keys::latest(
+            rows.into(),
+            Some("EdDSA"),
+            "EdDSA",
+            (Utc::now().timestamp_millis() as f64).into()
+        )
+        .is_err()
+    );
     Ok(())
 }
 

@@ -552,6 +552,15 @@ mod tests;
 
 #[async_trait]
 impl crate::store::JwksStore for EphemeralTransaction {
+    async fn get_jwk_value(
+        &self,
+        id: &crate::SchemaValue<String>,
+    ) -> AuthResult<crate::FieldValue> {
+        self.store.get_jwk_value(id).await
+    }
+    async fn list_jwk_values(&self) -> AuthResult<crate::FieldValue> {
+        self.store.list_jwk_values().await
+    }
     async fn create_jwk_record(
         &self,
         input: crate::FieldMap,

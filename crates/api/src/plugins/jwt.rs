@@ -303,8 +303,8 @@ impl JwtPlugin {
     async fn create_key<S: AuthSchema>(
         &self,
         endpoint: &EndpointContext<'_, S>,
-    ) -> AuthResult<Option<better_auth_core::Jwk>> {
-        self.create_key_pair_in_endpoint(
+    ) -> AuthResult<FieldValue> {
+        self.create_key_pair_value(
             JwtKeyPairConfig {
                 algorithm: self.config.primary_algorithm(),
                 modulus_length: self.config.modulus_length,
@@ -336,6 +336,19 @@ impl JwtPlugin {
         parameters: JwtKeyPairConfig,
         endpoint: &EndpointContext<'_, S>,
     ) -> AuthResult<Option<better_auth_core::Jwk>> {
+        use better_auth_core::FromFieldMap as _;
+        let value = self.create_key_pair_value(parameters, endpoint).await?;
+        if value.is_null() || value.is_undefined() {
+            return Ok(None);
+        }
+        better_auth_core::Jwk::from_field_values(value.enumerable_fields()?).map(Some)
+    }
+
+    async fn create_key_pair_value<S: AuthSchema>(
+        &self,
+        parameters: JwtKeyPairConfig,
+        endpoint: &EndpointContext<'_, S>,
+    ) -> AuthResult<FieldValue> {
         if matches!(
             parameters.algorithm,
             JwtAlgorithm::Rs256 | JwtAlgorithm::Ps256
@@ -388,54 +401,66 @@ impl JwtPlugin {
             return Ok(response);
         }
         let mut keys = self.read_keys(endpoint).await?;
-        if keys.as_ref().is_none_or(Vec::is_empty) {
+        if !keys.is_truthy() || keys.model_property("length")?.strict_equals(&0.into()) {
             let _ = self.create_key(endpoint).await?;
             keys = self.read_keys(endpoint).await?;
         }
-        let keys = keys.filter(|keys| !keys.is_empty()).ok_or_else(|| {
-            AuthError::internal("No key sets found. Make sure you have a key in your database.")
-        })?;
-        let mut live_keys = Vec::new();
+        if keys.is_null() || keys.is_undefined() || !keys.model_property("length")?.is_truthy() {
+            return Err(AuthError::internal(
+                "No key sets found. Make sure you have a key in your database.",
+            ));
+        }
         let now = Utc::now().timestamp_millis() as f64;
-        for key in keys {
-            let expiry = key.expires_at.field_value();
-            if expiry.is_truthy() {
-                let expiry = better_auth_core::query::field_add(
-                    &expiry.get_time_method("key.expiresAt")?,
-                    &(self.config.grace_period.num_milliseconds() as f64).into(),
-                )?;
-                let live = better_auth_core::query::field_compare(&expiry, &now.into())?
-                    == Some(std::cmp::Ordering::Greater);
-                if !live {
-                    continue;
+        let grace = self.config.grace_period.num_milliseconds() as f64;
+        let live_keys = keys.filter_method(
+            &better_auth_core::FieldFunction::contextual(move |_, arguments| {
+                let key = arguments.first().unwrap_or(&FieldValue::Undefined);
+                if key.model_property("expiresAt")?.is_truthy() {
+                    let expiry = better_auth_core::query::field_add(
+                        &key.model_property("expiresAt")?
+                            .get_time_method("key.expiresAt")?,
+                        &grace.into(),
+                    )?;
+                    return Ok(
+                        (better_auth_core::query::field_compare(&expiry, &now.into())?
+                            == Some(std::cmp::Ordering::Greater))
+                        .into(),
+                    );
                 }
-            }
-            live_keys.push(key);
-        }
-        let mut public = Vec::with_capacity(live_keys.len());
-        for key in live_keys {
-            let curve = key.crv.field_value();
-            let mut value = FieldMap::from([
-                (
-                    "alg".into(),
-                    keys::algorithm(&key, self.config.primary_algorithm().name().into()),
-                ),
-                (
-                    "crv".into(),
-                    if curve.is_null() {
-                        FieldValue::Undefined
-                    } else {
-                        curve
-                    },
-                ),
-            ]);
-            keys::spread(&mut value, keys::parse_json(&key.public_key.field_value())?)?;
-            let _ = value.insert("kid".into(), key.id.field_value());
-            public.push(FieldValue::from(value));
-        }
+                Ok(true.into())
+            }),
+            "keySets",
+        )?;
+        let default_algorithm: FieldValue = self.config.primary_algorithm().name().into();
+        let public = live_keys.map_method(
+            &better_auth_core::FieldFunction::contextual(move |_, arguments| {
+                let key = arguments.first().unwrap_or(&FieldValue::Undefined);
+                let algorithm = keys::algorithm(key, default_algorithm.clone())?;
+                let curve = key.model_property("crv")?;
+                let mut value = FieldMap::from([
+                    ("alg".into(), algorithm),
+                    (
+                        "crv".into(),
+                        if curve.is_null() {
+                            FieldValue::Undefined
+                        } else {
+                            curve
+                        },
+                    ),
+                ]);
+                keys::spread(
+                    &mut value,
+                    keys::parse_json(&key.model_property("publicKey")?)?,
+                )?;
+                let _ = value.insert("kid".into(), key.model_property("id")?);
+                Ok(FieldValue::from(value))
+            }),
+            "keys",
+            None,
+        )?;
         Ok(AuthResponse::native(
             None,
-            FieldMap::from([("keys".into(), public.into())]).into(),
+            FieldMap::from([("keys".into(), public)]).into(),
         ))
     }
 }
@@ -453,6 +478,8 @@ fn jose_error(error: josekit::JoseError) -> AuthError {
 
 #[cfg(test)]
 mod native_sort_tests;
+#[cfg(test)]
+mod native_test_support;
 #[cfg(test)]
 mod native_tests;
 #[cfg(test)]

@@ -1,0 +1,38 @@
+{
+  "upstreamVersion": "1.7.6",
+  "sources": [
+    {
+      "fixture": "native-sort-consumers-1.7.6.json.gz",
+      "decodedSha256": "83f31ad131f2f078ae073adb321dde3e3b778d662202ad8bc004ac87bcaf6769",
+      "cases": 39
+    },
+    {
+      "fixture": "native-sort-data-1.7.6.json.gz",
+      "decodedSha256": "292f90ab136a910c40a60b880aba21d435f0d9661b8d322504d0318236dc3681",
+      "cases": 31
+    }
+  ],
+  "runtimeFixture": "native-sort-jwk-runtime-1.7.6.json",
+  "runtimeSha256": "b48f972ca903729471e9fd6d23b1c596c78802a2ffe673b20c885a5a50ed89cf",
+  "cases": 70,
+  "extraction": "Static extraction from successful frozen source observations. No scenario was executed or sampled again.",
+  "sourceConsumption": {
+    "path": "compat-tests/reference-server/node_modules/better-auth/dist/plugins/jwt/adapter.mjs",
+    "getLatestKey": "Capture now before the adapter read. Apply the expiration filter, then sort, then read index 0.",
+    "getLatestKeyByAlg": "Read candidates, return Undefined for falsey candidates, capture now, apply the complete algorithm filter, then the complete expiration filter, then sort and read index 0.",
+    "getKeyById": "The custom adapter uses optional-chain find. The default adapter normalizes only nullish findOne results with ?? void 0."
+  },
+  "mapping": [
+    "Retain all JWK cases, adapter event arguments, event order, counts, outcomes, full stored and returned graphs, property order, accessor function identity, native method receiver identity, and row aliases.",
+    "The data lane retains the existing full runtime graph and identity observations.",
+    "The getter lane uses the established native-sort-getter-runtime graph projection: function identity leaves, ordinary identity renumbering, key order, enumerability, accessor identities, Date values, and all ordinary references.",
+    "Exclude only events[0].sameReceiver from the runtime adapter event. JavaScript adapter callback this is an unpaired source observation. Rust adapter binding and endpoint context identity have separate assertions and do not establish JavaScript this equivalence.",
+    "Compare every runtime key and nested key order with the shared strict observation replay assertion."
+  ],
+  "unpairedSourceObservations": [
+    "JavaScript adapter callback this: events[0].sameReceiver on default findMany and custom getJwks in both lanes.",
+    "JavaScript writable and configurable property flags in getter descriptor graphs.",
+    "JavaScript function own reflection properties, source text, and String(function)."
+  ],
+  "sourcePreservation": "Both frozen source fixtures remain byte-for-byte unchanged. Source replay continues to compare their complete documents."
+}

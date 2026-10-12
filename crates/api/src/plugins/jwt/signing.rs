@@ -54,12 +54,7 @@ impl JwtPlugin {
                         "Cannot read properties of undefined (reading 'id')",
                     ));
                 }
-                value => value
-                    .as_object()
-                    .map(|fields| fields.get("id"))
-                    .transpose()?
-                    .flatten()
-                    .unwrap_or_default(),
+                value => value.model_property("id")?,
             },
         };
         let _ = payload.insert("sub".into(), subject);
@@ -142,37 +137,41 @@ impl JwtPlugin {
         let config = &endpoint.auth.config;
         let primary = self.config.primary_algorithm();
         let mut selected = if let Some(id) = &options.key_id {
-            let key = self.read_key(id, endpoint).await?.ok_or_else(|| AuthError::config(format!("signJWT: signingKeyId \"{id}\" not found in JWKS. The key must be provisioned before it can be referenced.")))?;
+            let key = self.read_key(id, endpoint).await?;
+            if !key.is_truthy() {
+                return Err(AuthError::config(format!(
+                    "signJWT: signingKeyId \"{id}\" not found in JWKS. The key must be provisioned before it can be referenced."
+                )));
+            }
             if let Some(expected) = options.algorithm {
-                let alg = keys::algorithm(&key, primary.name().into());
+                let alg = keys::algorithm(&key, primary.name().into())?;
                 if !alg.strict_equals(&expected.name().into()) {
+                    let actual = keys::algorithm(
+                        &key,
+                        format!("unset (inherits keyPairConfig.alg \"{}\")", primary.name()).into(),
+                    )?;
                     return Err(AuthError::config(format!(
                         "signJWT: signingKeyId \"{id}\" has alg \"{}\" but signingAlgorithm was set to \"{}\".",
-                        alg.display_utf16()?
+                        actual
+                            .display_utf16()?
                             .to_utf8()
                             .map_err(|error| AuthError::internal(error.to_string()))?,
                         expected.name()
                     )));
                 }
             }
-            Some(key)
+            key
         } else {
-            let preferred = keys::latest(
-                self.read_keys(endpoint).await?.unwrap_or_default(),
-                Some(options.algorithm.unwrap_or(primary).name()),
-                primary.name(),
-            )?;
-            if preferred.is_some() || options.algorithm.is_some() {
+            let preferred = self
+                .read_latest_key(Some(options.algorithm.unwrap_or(primary).name()), endpoint)
+                .await?;
+            if !(preferred.is_null() || preferred.is_undefined()) || options.algorithm.is_some() {
                 preferred
             } else {
-                keys::latest(
-                    self.read_keys(endpoint).await?.unwrap_or_default(),
-                    None,
-                    primary.name(),
-                )?
+                self.read_latest_key(None, endpoint).await?
             }
         };
-        if selected.is_none()
+        if !selected.is_truthy()
             && let Some(algorithm) = options.algorithm
         {
             let parameters = self
@@ -188,34 +187,28 @@ impl JwtPlugin {
                     })
                 })
                 .ok_or_else(|| AuthError::config("Requested JWT algorithm is not configured"))?;
-            selected = self
-                .create_key_pair_in_endpoint(parameters, endpoint)
-                .await?;
+            selected = self.create_key_pair_value(parameters, endpoint).await?;
         }
-        let key = match selected {
-            Some(key) if !keys::expires_before(&key, Utc::now().timestamp_millis())? => Some(key),
-            _ => {
-                if options.key_id.is_some() || options.algorithm.is_some() {
-                    return Err(AuthError::config(
-                        "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.",
-                    ));
-                }
-                self.create_key(endpoint).await?
+        let key = if !selected.is_truthy() || keys::expires_before(&selected)? {
+            if options.key_id.is_some() || options.algorithm.is_some() {
+                return Err(AuthError::config(
+                    "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.",
+                ));
             }
-        };
-        let key = key.ok_or_else(|| {
-            AuthError::internal("Cannot read properties of null (reading 'privateKey')")
-        })?;
-        let private = if self.config.disable_private_key_encryption {
-            key.private_key.field_value()
+            self.create_key(endpoint).await?
         } else {
-            let ciphertext = keys::parse_json(&key.private_key.field_value())?;
+            selected
+        };
+        let private = if self.config.disable_private_key_encryption {
+            key.model_property("privateKey")?
+        } else {
+            let ciphertext = keys::parse_json(&key.model_property("privateKey")?)?;
             crate::plugins::symmetric::decrypt_field(
                 config.encryption_secret(),
                 &ciphertext,
             ).map_err(|_| AuthError::config("Failed to decrypt private key. Make sure the secret currently in use is the same as the one used to encrypt the private key. If you are using a different secret, either clean up your JWKS or disable private key encryption."))?.into()
         };
-        let algorithm = keys::algorithm(&key, primary.name().into());
+        let algorithm = keys::algorithm(&key, primary.name().into())?;
         let (algorithm, private) = keys::import(keys::parse_json(&private)?, &algorithm)?;
         let signer: Box<dyn JwsSigner> = match algorithm.as_str() {
             "EdDSA" => Box::new(jws::EdDSA.signer_from_jwk(&private).map_err(jose_error)?),
@@ -231,7 +224,7 @@ impl JwtPlugin {
         };
         Ok(ResolvedSigningKey {
             algorithm,
-            key_id: key.id.field_value(),
+            key_id: key.model_property("id")?,
             signer,
         })
     }
@@ -272,3 +265,7 @@ impl JwtPlugin {
         Ok(defaults)
     }
 }
+
+#[cfg(test)]
+#[path = "native_keyring_tests.rs"]
+mod native_tests;

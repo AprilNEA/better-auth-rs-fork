@@ -39,9 +39,33 @@ impl JwtPlugin {
         let Some(header) = raw_header(token).filter(Header::has_key_id) else {
             return Ok(None);
         };
-        let keys = match self.read_keys(endpoint).await {
-            Ok(Some(keys)) => keys,
-            Ok(None) => return Ok(None),
+        let verified = async {
+            let keys = self.read_keys(endpoint).await?;
+            if !keys.is_truthy() || keys.model_property("length")?.strict_equals(&0.into()) {
+                return Ok(None);
+            }
+            let key = keys::find(&keys, header.field("kid")?)?;
+            if !key.is_truthy() {
+                return Ok(None);
+            }
+            let public = keys::parse_json(&key.model_property("publicKey")?)?;
+            let algorithm = keys::algorithm(&key, self.config.primary_algorithm().name().into())?;
+            let ctx = endpoint.auth;
+            let issuer = issuer
+                .filter(|issuer| !issuer.is_empty())
+                .or(self.config.issuer.as_deref())
+                .or(ctx.config.base_url.as_static());
+            let audience = self
+                .config
+                .audience
+                .as_ref()
+                .map(JwtAudience::recipients)
+                .or_else(|| ctx.config.base_url.as_static().map(|base| vec![base]));
+            verify_local(token, public, &algorithm, issuer, audience.as_deref(), 0)
+        }
+        .await;
+        let verified = match verified {
+            Ok(verified) => verified,
             Err(error) => {
                 better_auth_core::observability::logger::current().debug(
                     "JWT verification failed",
@@ -50,26 +74,6 @@ impl JwtPlugin {
                 return Ok(None);
             }
         };
-        let ctx = endpoint.auth;
-        let issuer = issuer
-            .filter(|issuer| !issuer.is_empty())
-            .or(self.config.issuer.as_deref())
-            .or(ctx.config.base_url.as_static());
-        let audience = self
-            .config
-            .audience
-            .as_ref()
-            .map(JwtAudience::recipients)
-            .or_else(|| ctx.config.base_url.as_static().map(|base| vec![base]));
-        let verified = verify_local(
-            token,
-            &header,
-            &keys,
-            Some(self.config.primary_algorithm()),
-            issuer,
-            audience.as_deref(),
-            0,
-        );
         Ok(verified.filter(|payload| {
             ["sub", "aud"].iter().all(|claim| {
                 payload
@@ -156,37 +160,36 @@ pub(super) fn raw_header(token: &str) -> Option<Header> {
 
 pub(super) fn verify_local(
     token: &str,
-    header: &Header,
-    keys: &[better_auth_core::Jwk],
-    default_algorithm: Option<JwtAlgorithm>,
+    public: FieldValue,
+    algorithm: &FieldValue,
+    issuer: Option<&str>,
+    audience: Option<&[&str]>,
+    tolerance: i64,
+) -> AuthResult<Option<Map<String, Value>>> {
+    let (algorithm, public) = keys::import(public, algorithm)?;
+    Ok(verify_imported(
+        token, &public, &algorithm, issuer, audience, tolerance,
+    ))
+}
+
+fn verify_imported(
+    token: &str,
+    public: &Jwk,
+    algorithm: &str,
     issuer: Option<&str>,
     audience: Option<&[&str]>,
     tolerance: i64,
 ) -> Option<Map<String, Value>> {
-    let kid = header.field("kid").ok()?;
-    let key = keys
-        .iter()
-        .find(|key| key.id.field_value().strict_equals(&kid))?;
-    let fallback = match default_algorithm {
-        Some(algorithm) => algorithm.name().into(),
-        None => header.field("alg").ok()?,
-    };
-    let algorithm = keys::algorithm(key, fallback);
-    let (algorithm, public) = keys::import(
-        keys::parse_json(&key.public_key.field_value()).ok()?,
-        &algorithm,
-    )
-    .ok()?;
     // WebCrypto requires a public key for verification; josekit also accepts private JWK material.
     if public.parameter("d").is_some() {
         return None;
     }
-    let verifier: Box<dyn JwsVerifier> = match algorithm.as_str() {
-        "EdDSA" => Box::new(jws::EdDSA.verifier_from_jwk(&public).ok()?),
-        "RS256" => Box::new(jws::RS256.verifier_from_jwk(&public).ok()?),
-        "ES256" => Box::new(jws::ES256.verifier_from_jwk(&public).ok()?),
-        "ES512" => Box::new(jws::ES512.verifier_from_jwk(&public).ok()?),
-        "PS256" => Box::new(jws::PS256.verifier_from_jwk(&public).ok()?),
+    let verifier: Box<dyn JwsVerifier> = match algorithm {
+        "EdDSA" => Box::new(jws::EdDSA.verifier_from_jwk(public).ok()?),
+        "RS256" => Box::new(jws::RS256.verifier_from_jwk(public).ok()?),
+        "ES256" => Box::new(jws::ES256.verifier_from_jwk(public).ok()?),
+        "ES512" => Box::new(jws::ES512.verifier_from_jwk(public).ok()?),
+        "PS256" => Box::new(jws::PS256.verifier_from_jwk(public).ok()?),
         _ => return None,
     };
     let protected = jose::header(token)?;
@@ -228,3 +231,7 @@ pub(super) fn verify_local(
     }
     Some(claims)
 }
+
+#[cfg(test)]
+#[path = "verification_native_tests.rs"]
+mod native_tests;

@@ -1,62 +1,105 @@
 use super::*;
 pub(super) use better_auth_core::utils::json::parse_native_json as parse_json;
-use better_auth_core::{FieldMap, FieldValue};
+use better_auth_core::{FieldFunction, FieldMap, FieldValue};
 
-pub(super) fn algorithm(key: &better_auth_core::Jwk, fallback: FieldValue) -> FieldValue {
-    let value = key.alg.field_value();
-    if value.is_null() || value.is_undefined() {
+pub(super) fn algorithm(key: &FieldValue, fallback: FieldValue) -> AuthResult<FieldValue> {
+    let value = key.model_property("alg")?;
+    Ok(if value.is_null() || value.is_undefined() {
         fallback
     } else {
         value
-    }
+    })
 }
 
-pub(super) fn expires_before(key: &better_auth_core::Jwk, now: i64) -> AuthResult<bool> {
-    let expiry = key.expires_at.field_value();
-    Ok(expiry.is_truthy()
-        && better_auth_core::query::field_compare(&expiry, &(now as f64).into())?
-            == Some(std::cmp::Ordering::Less))
+pub(super) fn expires_before(key: &FieldValue) -> AuthResult<bool> {
+    if !key.model_property("expiresAt")?.is_truthy() {
+        return Ok(false);
+    }
+    let expiry = key.model_property("expiresAt")?;
+    let now = Utc::now().timestamp_millis() as f64;
+    Ok(
+        better_auth_core::query::field_compare(&expiry, &now.into())?
+            == Some(std::cmp::Ordering::Less),
+    )
+}
+
+pub(super) fn find(keys: &FieldValue, id: FieldValue) -> AuthResult<FieldValue> {
+    keys.find_method(
+        &FieldFunction::contextual(move |_, arguments| {
+            Ok(arguments
+                .first()
+                .unwrap_or(&FieldValue::Undefined)
+                .model_property("id")?
+                .strict_equals(&id)
+                .into())
+        }),
+        "keys",
+    )
 }
 
 pub(super) fn latest(
-    keys: Vec<better_auth_core::Jwk>,
+    keys: FieldValue,
     algorithm: Option<&str>,
     default_algorithm: &str,
-) -> AuthResult<Option<better_auth_core::Jwk>> {
-    let now = FieldValue::from(Utc::now().timestamp_millis() as f64);
-    let mut candidates = Vec::new();
-    for key in keys {
-        if let Some(expected) = algorithm {
-            let alg = key.alg.field_value();
-            if !alg.strict_equals(&expected.into())
-                && !((alg.is_null() || alg.is_undefined()) && default_algorithm == expected)
-            {
-                continue;
-            }
-        }
-        let expiry = key.expires_at.field_value();
-        if !expiry.is_truthy()
-            || better_auth_core::query::field_compare(&expiry, &now)?
-                == Some(std::cmp::Ordering::Greater)
-        {
-            candidates.push(key);
-        }
+    now: FieldValue,
+) -> AuthResult<FieldValue> {
+    if if algorithm.is_some() {
+        !keys.is_truthy()
+    } else {
+        keys.is_null() || keys.is_undefined()
+    } {
+        return Ok(FieldValue::Undefined);
     }
-    better_auth_core::query::sort_by(&mut candidates, |left, right| {
-        let right = right
-            .created_at
-            .field_value()
-            .get_time_method("b.createdAt")?;
-        let left = left
-            .created_at
-            .field_value()
-            .get_time_method("a.createdAt")?;
-        Ok((better_auth_core::query::field_number(&right)?
-            - better_auth_core::query::field_number(&left)?)
-        .partial_cmp(&0.0)
-        .unwrap_or(std::cmp::Ordering::Equal))
-    })?;
-    Ok(candidates.into_iter().next())
+    let candidates = if let Some(expected) = algorithm {
+        let expected: FieldValue = expected.into();
+        let default_algorithm: FieldValue = default_algorithm.into();
+        keys.filter_method(
+            &FieldFunction::contextual(move |_, arguments| {
+                let key = arguments.first().unwrap_or(&FieldValue::Undefined);
+                if key.model_property("alg")?.strict_equals(&expected) {
+                    return Ok(true.into());
+                }
+                let alg = key.model_property("alg")?;
+                Ok(((alg.is_null() || alg.is_undefined())
+                    && default_algorithm.strict_equals(&expected))
+                .into())
+            }),
+            "candidates",
+        )?
+    } else {
+        keys
+    };
+    let live = candidates.filter_method(
+        &FieldFunction::contextual(move |_, arguments| {
+            let key = arguments.first().unwrap_or(&FieldValue::Undefined);
+            Ok((!key.model_property("expiresAt")?.is_truthy()
+                || better_auth_core::query::field_compare(
+                    &key.model_property("expiresAt")?,
+                    &now,
+                )? == Some(std::cmp::Ordering::Greater))
+            .into())
+        }),
+        "candidates",
+    )?;
+    live.sort_method(
+        &FieldFunction::contextual(|_, arguments| {
+            let right = arguments
+                .get(1)
+                .unwrap_or(&FieldValue::Undefined)
+                .model_property("createdAt")?
+                .get_time_method("b.createdAt")?;
+            let left = arguments
+                .first()
+                .unwrap_or(&FieldValue::Undefined)
+                .model_property("createdAt")?
+                .get_time_method("a.createdAt")?;
+            Ok((better_auth_core::query::field_number(&right)?
+                - better_auth_core::query::field_number(&left)?)
+            .into())
+        }),
+        "candidates",
+    )?
+    .model_property("0")
 }
 
 pub(super) fn spread(fields: &mut FieldMap, value: FieldValue) -> AuthResult<()> {

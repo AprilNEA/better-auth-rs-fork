@@ -44,6 +44,23 @@ pub(crate) fn cases(consumer: &str) -> impl Iterator<Item = &'static Json> + '_ 
         .filter(move |case| case["consumer"] == consumer)
 }
 
+#[allow(
+    dead_code,
+    reason = "Only the JWT consumer replays native keyring entry points."
+)]
+pub(crate) fn jwk_cases() -> impl Iterator<Item = &'static Json> {
+    static FIXTURE: OnceLock<Json> = OnceLock::new();
+    FIXTURE.get_or_init(|| {
+        serde_json::from_str(include_str!(
+            "../fixtures/native-sort-jwk-runtime-1.7.6.json"
+        ))
+        .expect("The frozen native JWK observations must decode")
+    })["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+}
+
 struct Conversion {
     receiver: FieldValue,
     id: String,
@@ -74,9 +91,18 @@ struct State {
     methods: Option<[FieldValue; 3]>,
     original: FieldValue,
     getter: Option<FieldFunction>,
+    jwk_getters: Option<[FieldFunction; 2]>,
 }
 
 impl State {
+    fn accessor(&self, name: &str) -> Option<FieldFunction> {
+        match (self.consumer.as_str(), name) {
+            ("jwk", "alg") => self.jwk_getters.as_ref().map(|getters| getters[0].clone()),
+            ("jwk", "expiresAt") => self.jwk_getters.as_ref().map(|getters| getters[1].clone()),
+            ("jwk", "createdAt") | ("memory" | "api-key", "name") => self.getter.clone(),
+            _ => None,
+        }
+    }
     fn event(
         &mut self,
         phase: &str,
@@ -160,13 +186,23 @@ impl State {
             arguments.is_empty(),
             "Source sorting methods receive no arguments"
         );
-        if name == "readSortField" {
+        if matches!(name, "readSortField" | "readAlgorithm" | "readExpiry") {
             let index = self
                 .rows
                 .iter()
                 .position(|row| row.strict_equals(receiver))
                 .unwrap();
             let id = self.cells[index].model_property("id")?;
+            if matches!(name, "readAlgorithm" | "readExpiry") {
+                let (phase, field) = if name == "readAlgorithm" {
+                    ("algorithm", "algorithm")
+                } else {
+                    ("expiry", "expiry")
+                };
+                let observed = self.observer.observe(&id)?;
+                self.event(phase, [("id".into(), observed)])?;
+                return self.cells[index].model_property(field);
+            }
             let field = if self.consumer == "jwk" {
                 "createdAt"
             } else {
@@ -302,6 +338,7 @@ impl Harness {
             methods: None,
             original,
             getter: None,
+            jwk_getters: None,
         }));
         let methods = ["valueOf", "toString", "getTime"].map(|name| {
             let state: Weak<Mutex<State>> = Arc::downgrade(&state);
@@ -326,6 +363,18 @@ impl Harness {
                     .unwrap()
                     .method("readSortField", receiver, arguments)
             }));
+            if consumer == "jwk" {
+                current.jwk_getters = Some(["readAlgorithm", "readExpiry"].map(|name| {
+                    let weak = Arc::downgrade(&state);
+                    FieldFunction::contextual(move |receiver, arguments| {
+                        weak.upgrade()
+                            .unwrap()
+                            .lock()
+                            .unwrap()
+                            .method(name, receiver, arguments)
+                    })
+                }));
+            }
         }
         for (index, spec) in scenario["values"].as_array().unwrap().iter().enumerate() {
             let id = format!("row-{index}");
@@ -375,9 +424,19 @@ impl Harness {
                 row.insert("name".into(), value);
             }
             current.cells.push(cell.into());
-            let row = match &current.getter {
-                Some(getter) if spec["kind"] != "missing" => getters::row(row, getter.clone()),
-                _ => row.into(),
+            let row = if accessors && (consumer == "jwk" || spec["kind"] != "missing") {
+                let names: &[&str] = if consumer == "jwk" {
+                    &["alg", "expiresAt", "createdAt"]
+                } else {
+                    &["name"]
+                };
+                let getters = names
+                    .iter()
+                    .map(|name| ((*name).into(), current.accessor(name).unwrap().into()))
+                    .collect();
+                getters::row(row, getters)
+            } else {
+                row.into()
             };
             current.rows.push(row);
         }
@@ -387,6 +446,21 @@ impl Harness {
 
     pub(crate) fn rows(&self) -> Vec<FieldValue> {
         self.0.lock().unwrap().rows.clone()
+    }
+
+    #[allow(dead_code, reason = "Only the JWT consumer invokes a keyring adapter.")]
+    pub(crate) fn read_keyring(&self, lane: &str, argument: FieldValue) -> AuthResult<FieldValue> {
+        let mut state = self.0.lock().unwrap();
+        let arguments = state.observer.observe(&vec![argument].into())?;
+        state.event(
+            if lane == "custom" {
+                "keyring-read"
+            } else {
+                "adapter-read"
+            },
+            [("arguments".into(), arguments)],
+        )?;
+        Ok(state.rows.clone().into())
     }
 
     #[allow(
@@ -478,67 +552,13 @@ impl Harness {
 
 pub(crate) fn assert_case(actual: &Json, case: &Json) {
     let label = format!(
-        "{}/{}/{}",
-        case["consumer"], case["scenario"], case["direction"]
+        "{}/{}/{}/{}/{}/{}",
+        case["consumer"],
+        case["scenario"],
+        case["direction"],
+        case["lane"],
+        case["algorithm"],
+        case["access"]
     );
     assert_replay(actual, &case["runtime"], &label);
-}
-
-/// The typed selection boundary does not retain the custom adapter's top-level object handle.
-#[allow(
-    dead_code,
-    reason = "The shared harness is also compiled by core, which has no JWT plugin."
-)]
-pub(crate) fn assert_jwk_selection(actual: &Json, case: &Json) {
-    let expected = &case["runtime"];
-    let label = format!(
-        "jwk/{}/{}/{}",
-        case["scenario"], case["lane"], case["algorithm"]
-    );
-    for section in ["before", "outcome", "after", "functions"] {
-        assert_replay(
-            &actual[section],
-            &expected[section],
-            &format!("{label}/{section}"),
-        );
-    }
-    let events = expected["events"].as_array().unwrap();
-    assert!(matches!(
-        events[0]["phase"].as_str(),
-        Some("keyring-read" | "adapter-read")
-    ));
-    assert_replay(
-        &actual["events"],
-        &Json::Array(events[1..].to_vec()),
-        &format!("{label}/comparison-events"),
-    );
-    let counts = expected["counts"].as_object().unwrap();
-    let comparison_counts = counts
-        .iter()
-        .filter(|(name, _)| !matches!(name.as_str(), "keyring-read" | "adapter-read"))
-        .map(|(name, count)| (name.clone(), count.clone()))
-        .collect::<Map<_, _>>();
-    assert_replay(
-        &actual["counts"],
-        &comparison_counts.into(),
-        &format!("{label}/comparison-counts"),
-    );
-    let actual_ids = actual["identities"].as_array().unwrap();
-    let expected_ids = expected["identities"].as_array().unwrap();
-    assert_eq!(
-        actual_ids.len(),
-        expected_ids.len(),
-        "{label}/returned identity count"
-    );
-    for (actual, expected) in actual_ids.iter().zip(expected_ids) {
-        assert_replay(
-            &actual["valueCells"],
-            &expected["valueCells"],
-            &format!("{label}/createdAt-identity"),
-        );
-        assert_eq!(
-            actual["storedRecord"], -1,
-            "The typed boundary must not masquerade as a native record handle"
-        );
-    }
 }
