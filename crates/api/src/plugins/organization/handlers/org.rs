@@ -77,6 +77,9 @@ pub(crate) async fn create_organization_core(
         .database
         .get_organization_by_slug_value(&body.slug.field_value())
         .await?
+        .as_ref()
+        .map(|organization| super::super::fields::organization(organization, ctx))
+        .transpose()?
         .is_some()
     {
         return Err(AuthError::from_code(
@@ -267,7 +270,13 @@ pub(crate) async fn update_organization_core(
     }
 
     if let Some(ref new_slug) = slug
-        && let Some(existing) = ctx.database.get_organization_by_slug(new_slug).await?
+        && let Some(existing) = ctx
+            .database
+            .get_organization_by_slug(new_slug)
+            .await?
+            .as_ref()
+            .map(|organization| super::super::fields::organization(organization, ctx))
+            .transpose()?
         && !existing.id.field_value().strict_equals(&org_id)
     {
         return Err(AuthError::from_code(
@@ -385,7 +394,7 @@ pub(crate) async fn delete_organization_core(
     let organization_view = crate::plugins::organization::fields::organization(&organization, ctx)?;
 
     let event = OrganizationUser {
-        organization: &organization,
+        organization: &organization_view,
         user: &session.user,
     };
     if let Some(hooks) = &config.hooks {
@@ -500,6 +509,9 @@ pub(crate) async fn check_slug_core(
         .database
         .get_organization_by_slug(&body.slug)
         .await?
+        .as_ref()
+        .map(|organization| super::super::fields::organization(organization, ctx))
+        .transpose()?
         .is_some()
     {
         return Err(AuthError::from_code(
@@ -569,6 +581,7 @@ pub(crate) async fn set_active_organization_core(
                     "Organization not found",
                 )
             })?;
+        let organization = super::super::fields::organization(&organization, ctx)?;
         organization.id().field_value()
     } else {
         let active_id = session.session.active_organization_id.field_value();
@@ -615,6 +628,7 @@ pub(crate) async fn set_active_organization_core(
                 "Organization not found",
             )
         })?;
+    let organization = super::super::fields::organization(&organization, ctx)?;
 
     let updated = ctx
         .database
@@ -635,10 +649,7 @@ pub(crate) async fn set_active_organization_core(
         )
         .await?;
 
-    Ok(Some(crate::plugins::organization::fields::organization(
-        &organization,
-        ctx,
-    )?))
+    Ok(Some(organization))
 }
 
 pub(crate) async fn leave_organization_core(
@@ -841,6 +852,7 @@ pub async fn handle_get_organization(
             "Organization not found",
         )
     })?;
+    let organization = super::super::fields::organization(&organization, ctx)?;
 
     if ctx
         .database
@@ -866,9 +878,7 @@ pub async fn handle_get_organization(
     }
     Ok(AuthResponse::native(
         None,
-        crate::plugins::organization::fields::organization(&organization, ctx)?
-            .field_values()?
-            .into(),
+        organization.field_values()?.into(),
     ))
 }
 

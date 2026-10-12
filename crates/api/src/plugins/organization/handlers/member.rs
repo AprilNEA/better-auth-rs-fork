@@ -73,6 +73,7 @@ pub(crate) async fn list_members_core(
                     "Organization not found",
                 )
             })?;
+        let organization = super::super::fields::organization(&organization, ctx)?;
         organization.id().field_value()
     } else {
         resolve_organization_id(
@@ -174,6 +175,7 @@ pub(crate) async fn get_active_member_role_core(
                     "Organization not found",
                 )
             })?;
+        let organization = super::super::fields::organization(&organization, ctx)?;
         organization.id().field_value()
     } else {
         resolve_organization_id(

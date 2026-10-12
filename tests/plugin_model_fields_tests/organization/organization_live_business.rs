@@ -8,6 +8,8 @@ use better_auth_core::{
 
 #[path = "organization_live_business_create.rs"]
 mod create;
+#[path = "organization_output_boundary.rs"]
+mod output_boundary;
 #[path = "organization_live_business_roles.rs"]
 mod roles;
 #[path = "organization_live_business_update.rs"]

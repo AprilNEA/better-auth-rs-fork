@@ -423,48 +423,6 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
             .collect()
     }
 
-    async fn after_request(
-        &self,
-        req: &AuthRequest,
-        response: &mut AuthResponse,
-        _ctx: &AuthContext<S>,
-    ) -> AuthResult<()> {
-        let member_endpoint = matches!(
-            (req.method(), req.path()),
-            (
-                HttpMethod::Get,
-                "/organization/get-active-member"
-                    | "/organization/list-members"
-                    | "/organization/get-active-member-role"
-            ) | (
-                HttpMethod::Post,
-                "/organization/remove-member"
-                    | "/organization/update-member-role"
-                    | "/organization/leave"
-            )
-        ) || (req.is_server_only()
-            && better_auth_core::hooks::current_request_hook_context()
-                .is_some_and(|context| context.operation_id.as_deref() == Some("addMember")));
-        if response.status >= 400
-            || member_endpoint
-            || req.path() == "/organization/get-full-organization"
-            || !req.path().starts_with("/organization/")
-        {
-            return Ok(());
-        }
-        if !response.is_json() || response.body.is_empty() {
-            return Ok(());
-        }
-        if let better_auth_core::ResponseBody::Native(value) = &mut response.body {
-            fields::filter_native_response(req.path(), value, &self.config.schema)?;
-            return Ok(());
-        }
-        let mut value = serde_json::from_slice(&response.body.bytes()?)?;
-        fields::filter_response(req.path(), &mut value, &self.config.schema);
-        response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&value)?);
-        Ok(())
-    }
-
     async fn on_request(
         &self,
         req: &AuthRequest,
