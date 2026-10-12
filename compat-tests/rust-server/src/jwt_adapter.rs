@@ -354,15 +354,13 @@ async fn run(base: &str, input: Value) -> AuthResult<Value> {
     }.await;
     let output = match output {
         Ok(output) => output,
-        Err(AuthError::Internal(message)) => json!({"thrown":true,"message":message}),
-        Err(error @ AuthError::Response(_)) => {
-            let body = error
-                .body_value()?
-                .json()?
-                .ok_or_else(|| AuthError::internal("JWT error body must be JSON"))?;
-            json!({"thrown":true,"message":body["message"]})
+        Err(error) => {
+            let mut output = json!({"thrown":true});
+            if let Some(message) = error.message_value()?.json()? {
+                output["message"] = message;
+            }
+            output
         }
-        Err(error) => json!({"thrown":true,"message":error.to_string()}),
     };
     let events = events.lock().unwrap().clone();
     Ok(json!({"events":events,"output":output,"rows":auth.store().list_jwks().await?.len()}))

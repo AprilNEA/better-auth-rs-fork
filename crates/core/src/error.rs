@@ -159,6 +159,12 @@ pub enum AuthError {
 impl AuthError {
     /// Construct an upstream BetterAuthError with native identity and hidden error properties.
     pub fn better_auth(message: impl Into<String>) -> Self {
+        let message: String = message.into();
+        Self::better_auth_native(message)
+    }
+
+    /// Preserve UTF-16 message code units in the shared native BetterAuthError representation.
+    pub fn better_auth_native(message: impl Into<crate::Utf16String>) -> Self {
         Self::from_thrown(native::better_auth(message.into()))
     }
 

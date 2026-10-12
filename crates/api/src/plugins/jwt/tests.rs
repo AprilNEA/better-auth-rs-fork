@@ -65,21 +65,35 @@ async fn pinned_algorithms_verify_and_reject_wrong_identity() {
         algorithm: Some(JwtAlgorithm::Rs256),
         ..Default::default()
     };
-    assert!(
-        plugin
-            .sign_with_options(Map::new(), &unconfigured, &ctx)
-            .await
-            .is_err()
+    let error = plugin
+        .sign_with_options(Map::new(), &unconfigured, &ctx)
+        .await
+        .unwrap_err();
+    assert_eq!(error.message_value().unwrap(), "signJWT: no key with alg \"RS256\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"EdDSA\"; additional algs configured via keyPairConfigs: PS256, ES512. Add \"RS256\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().".into());
+    assert_eq!(
+        error
+            .into_thrown_value()
+            .unwrap()
+            .model_property("name")
+            .unwrap(),
+        "BetterAuthError".into()
     );
     let missing = JwtSigningOptions {
         key_id: Some("missing".into()),
         ..Default::default()
     };
-    assert!(
-        plugin
-            .sign_with_options(Map::new(), &missing, &ctx)
-            .await
-            .is_err()
+    let error = plugin
+        .sign_with_options(Map::new(), &missing, &ctx)
+        .await
+        .unwrap_err();
+    assert_eq!(error.message_value().unwrap(), "signJWT: signingKeyId \"missing\" not found in JWKS. The key must be provisioned before it can be referenced.".into());
+    assert_eq!(
+        error
+            .into_thrown_value()
+            .unwrap()
+            .model_property("name")
+            .unwrap(),
+        "BetterAuthError".into()
     );
 }
 
@@ -674,8 +688,16 @@ async fn nullable_key_readback_preserves_write_and_endpoint_consumption_order() 
                         if message == "Cannot read properties of null (reading 'privateKey')"));
                     assert_eq!(*events.lock().unwrap(), ["read", "read", "write-null"]);
                 } else {
-                    assert!(matches!(result, Err(AuthError::Config(message))
-                        if message.contains("requested signing key is expired")));
+                    let error = result.unwrap_err();
+                    assert_eq!(error.message_value().unwrap(), "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.".into());
+                    assert_eq!(
+                        error
+                            .into_thrown_value()
+                            .unwrap()
+                            .model_property("name")
+                            .unwrap(),
+                        "BetterAuthError".into()
+                    );
                     assert_eq!(*events.lock().unwrap(), ["read", "write-null"]);
                 }
             }

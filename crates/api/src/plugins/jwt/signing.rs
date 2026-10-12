@@ -139,7 +139,7 @@ impl JwtPlugin {
         let mut selected = if let Some(id) = &options.key_id {
             let key = self.read_key(id, endpoint).await?;
             if !key.is_truthy() {
-                return Err(AuthError::config(format!(
+                return Err(AuthError::better_auth(format!(
                     "signJWT: signingKeyId \"{id}\" not found in JWKS. The key must be provisioned before it can be referenced."
                 )));
             }
@@ -150,14 +150,20 @@ impl JwtPlugin {
                         &key,
                         format!("unset (inherits keyPairConfig.alg \"{}\")", primary.name()).into(),
                     )?;
-                    return Err(AuthError::config(format!(
-                        "signJWT: signingKeyId \"{id}\" has alg \"{}\" but signingAlgorithm was set to \"{}\".",
-                        actual
-                            .display_utf16()?
-                            .to_utf8()
-                            .map_err(|error| AuthError::internal(error.to_string()))?,
-                        expected.name()
-                    )));
+                    let mut message = format!("signJWT: signingKeyId \"{id}\" has alg \"")
+                        .encode_utf16()
+                        .collect::<Vec<_>>();
+                    message.extend_from_slice(actual.display_utf16()?.as_utf16());
+                    message.extend(
+                        format!(
+                            "\" but signingAlgorithm was set to \"{}\".",
+                            expected.name()
+                        )
+                        .encode_utf16(),
+                    );
+                    return Err(AuthError::better_auth_native(
+                        better_auth_core::Utf16String::from_units(message),
+                    ));
                 }
             }
             key
@@ -186,12 +192,25 @@ impl JwtPlugin {
                         modulus_length: self.config.modulus_length,
                     })
                 })
-                .ok_or_else(|| AuthError::config("Requested JWT algorithm is not configured"))?;
+                .ok_or_else(|| {
+                    let advertised = self
+                        .config
+                        .key_pair_configs
+                        .iter()
+                        .map(|config| config.algorithm.name())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let advertised = if advertised.is_empty() { "none" } else { &advertised };
+                    AuthError::better_auth(format!(
+                        "signJWT: no key with alg \"{}\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"{}\"; additional algs configured via keyPairConfigs: {advertised}. Add \"{}\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().",
+                        algorithm.name(), primary.name(), algorithm.name()
+                    ))
+                })?;
             selected = self.create_key_pair_value(parameters, endpoint).await?;
         }
         let key = if !selected.is_truthy() || keys::expires_before(&selected)? {
             if options.key_id.is_some() || options.algorithm.is_some() {
-                return Err(AuthError::config(
+                return Err(AuthError::better_auth(
                     "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.",
                 ));
             }
@@ -206,7 +225,7 @@ impl JwtPlugin {
             crate::plugins::symmetric::decrypt_field(
                 config.encryption_secret(),
                 &ciphertext,
-            ).map_err(|_| AuthError::config("Failed to decrypt private key. Make sure the secret currently in use is the same as the one used to encrypt the private key. If you are using a different secret, either clean up your JWKS or disable private key encryption."))?.into()
+            ).map_err(|_| AuthError::better_auth("Failed to decrypt private key. Make sure the secret currently in use is the same as the one used to encrypt the private key. If you are using a different secret, either clean up your JWKS or disable private key encryption."))?.into()
         };
         let algorithm = keys::algorithm(&key, primary.name().into())?;
         let (algorithm, private) = keys::import(keys::parse_json(&private)?, &algorithm)?;

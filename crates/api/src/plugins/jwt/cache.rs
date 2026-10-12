@@ -17,6 +17,11 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
         expires_in: f64,
         context: SessionCookieContext<'_, S>,
     ) -> AuthResult<String> {
+        if self.plugin.config.custom_sign.is_some() {
+            return Err(AuthError::better_auth(
+                "`jwt({ sessionCookieCache: true })` requires locally managed JWT plugin keys and does not support `jwt.sign`.",
+            ));
+        }
         let runtime = self.runtime.context()?;
         let mut endpoint = EndpointContext::new(
             Some(context.request),

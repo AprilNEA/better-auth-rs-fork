@@ -87,6 +87,132 @@ fn pinned() -> JwtSigningOptions {
 }
 
 #[tokio::test]
+async fn initialization_guards_keep_upstream_error_class_message_and_precedence() -> AuthResult<()>
+{
+    let custom: JwtCustomSign = Arc::new(|_, _| Box::pin(async { Ok("unused".into()) }));
+    let remote = "https://remote.test/jwks".to_owned();
+    let cases = [
+        (
+            JwtPlugin::new().custom_sign(custom.clone()),
+            false,
+            "options.jwks.remoteUrl must be set when using options.jwt.sign",
+        ),
+        (
+            JwtPlugin::new().remote_url(remote.clone()),
+            false,
+            "options.jwks.keyPairConfig.alg must be specified when options.jwks.remoteUrl is used for OpenID metadata",
+        ),
+        (
+            JwtPlugin::new().jwks_path(""),
+            false,
+            "options.jwks.jwksPath must be a non-empty string starting with '/' and not contain '..'",
+        ),
+        (
+            JwtPlugin::new().jwks_path("keys"),
+            false,
+            "options.jwks.jwksPath must be a non-empty string starting with '/' and not contain '..'",
+        ),
+        (
+            JwtPlugin::new().jwks_path("/../keys"),
+            false,
+            "options.jwks.jwksPath must be a non-empty string starting with '/' and not contain '..'",
+        ),
+        (
+            JwtPlugin::new().session_cookie_cache(true),
+            false,
+            "`jwt({ sessionCookieCache: true })` requires `session.cookieCache.strategy = \"jwt\"`.",
+        ),
+        (
+            JwtPlugin::new()
+                .session_cookie_cache(true)
+                .custom_sign(custom)
+                .remote_url(remote)
+                .algorithm(JwtAlgorithm::EdDsa),
+            true,
+            "`jwt({ sessionCookieCache: true })` requires locally managed JWT plugin keys and does not support `jwt.sign`.",
+        ),
+    ];
+    for (plugin, jwt_cache, message) in cases {
+        let mut config = crate::plugins::test_helpers::create_test_config();
+        if jwt_cache {
+            config.session.cookie_cache = Some(better_auth_core::config::CookieCacheConfig {
+                strategy: Some(better_auth_core::config::CookieCacheStrategy::Jwt),
+                ..Default::default()
+            });
+        }
+        let config = Arc::new(config);
+        let store: Arc<dyn AuthStore<StatelessSchema>> =
+            Arc::new(EphemeralStore::new(config.clone()));
+        let mut init = AuthInitContext::new(config, store)?;
+        let error = plugin.on_init(&mut init).await.unwrap_err();
+        assert_eq!(error.message_value()?, message.into());
+        let raw = error.into_thrown_value()?;
+        assert_eq!(raw.model_property("name")?, "BetterAuthError".into());
+        assert_eq!(raw.model_property("stack")?, "".into());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_explicit_keys_keep_detailed_errors_without_creating_replacements() -> AuthResult<()>
+{
+    for (plugin, options, message) in [
+        (
+            JwtPlugin::new(),
+            JwtSigningOptions {
+                key_id: Some("missing".into()),
+                ..Default::default()
+            },
+            "signJWT: signingKeyId \"missing\" not found in JWKS. The key must be provisioned before it can be referenced.",
+        ),
+        (
+            JwtPlugin::new(),
+            JwtSigningOptions {
+                algorithm: Some(JwtAlgorithm::Rs256),
+                ..Default::default()
+            },
+            "signJWT: no key with alg \"RS256\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"EdDSA\"; additional algs configured via keyPairConfigs: none. Add \"RS256\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().",
+        ),
+        (
+            JwtPlugin::new().key_pair_configs(vec![
+                JwtKeyPairConfig::new(JwtAlgorithm::Ps256),
+                JwtKeyPairConfig::new(JwtAlgorithm::Es512),
+            ]),
+            JwtSigningOptions {
+                algorithm: Some(JwtAlgorithm::Rs256),
+                ..Default::default()
+            },
+            "signJWT: no key with alg \"RS256\" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg=\"EdDSA\"; additional algs configured via keyPairConfigs: PS256, ES512. Add \"RS256\" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().",
+        ),
+    ] {
+        let trace = Arc::new(Trace::default());
+        let writes = trace.clone();
+        let callbacks = keyring(Vec::<FieldValue>::new().into(), trace.clone()).create_jwk_native(
+            move |_, _| {
+                writes.record("write");
+                Box::pin(async {
+                    Err(AuthError::internal(
+                        "A missing pinned key must not be created",
+                    ))
+                })
+            },
+        );
+        let ctx = context(&plugin, callbacks).await?;
+        let error = plugin
+            .sign_with_options(Map::new(), &options, &ctx)
+            .await
+            .unwrap_err();
+        assert_eq!(error.message_value()?, message.into());
+        assert_eq!(
+            error.into_thrown_value()?.model_property("name")?,
+            "BetterAuthError".into()
+        );
+        assert_eq!(*trace.events.lock().unwrap(), ["read"]);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn signing_keeps_the_native_record_through_private_key_algorithm_and_id_consumption()
 -> AuthResult<()> {
     let trace = Arc::new(Trace::default());
@@ -134,13 +260,17 @@ async fn pinned_algorithm_mismatch_rereads_the_getter_for_its_error_message() ->
     for (second, actual) in [
         (
             FieldValue::Null,
-            "unset (inherits keyPairConfig.alg \"EdDSA\")",
+            better_auth_core::Utf16String::from("unset (inherits keyPairConfig.alg \"EdDSA\")"),
         ),
         (
             FieldValue::Undefined,
-            "unset (inherits keyPairConfig.alg \"EdDSA\")",
+            better_auth_core::Utf16String::from("unset (inherits keyPairConfig.alg \"EdDSA\")"),
         ),
-        (FieldValue::from("changed"), "changed"),
+        (FieldValue::from("changed"), "changed".into()),
+        (
+            better_auth_core::Utf16String::from_units(vec![0xd800, 65, 0xdc00]).into(),
+            better_auth_core::Utf16String::from_units(vec![0xd800, 65, 0xdc00]),
+        ),
     ] {
         let trace = Arc::new(Trace::default());
         let key = ObservedFields::new(key_fields()?, trace.clone(), None);
@@ -155,14 +285,82 @@ async fn pinned_algorithm_mismatch_rereads_the_getter_for_its_error_message() ->
             .sign_with_options(Map::new(), &options, &ctx)
             .await
             .unwrap_err();
-        assert!(
-            matches!(error, AuthError::Config(message) if message == format!("signJWT: signingKeyId \"selected\" has alg \"{actual}\" but signingAlgorithm was set to \"EdDSA\"."))
-        );
+        let mut message = "signJWT: signingKeyId \"selected\" has alg \""
+            .encode_utf16()
+            .collect::<Vec<_>>();
+        message.extend_from_slice(actual.as_utf16());
+        message.extend("\" but signingAlgorithm was set to \"EdDSA\".".encode_utf16());
+        assert_eq!(error.message_value()?.display_utf16()?.as_utf16(), message);
+        let raw = error.into_thrown_value()?;
+        assert_eq!(raw.model_property("name")?, "BetterAuthError".into());
+        assert_eq!(raw.model_property("stack")?, "".into());
         assert_eq!(
             *trace.events.lock().unwrap(),
             ["read", "get:id", "get:alg", "get:alg"]
         );
         assert_eq!(key.fields.get("lastRead")?, Some("alg".into()));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn mismatch_retains_getter_and_string_coercion_failures_and_mutations() -> AuthResult<()> {
+    for boundary in ["getter", "coercion"] {
+        let trace = Arc::new(Trace::default());
+        let original: FieldValue = FieldMap::from([("boundary".into(), boundary.into())]).into();
+        let key = ObservedFields::new(key_fields()?, trace.clone(), None);
+        let dynamic = Arc::new(FieldValue::from(FieldMap::new()));
+        let receiver = Arc::downgrade(&dynamic);
+        let failure = original.clone();
+        let fields = key.fields.clone();
+        let events = trace.clone();
+        dynamic.set_model_property(
+            "toString",
+            FieldFunction::contextual(move |this, _| {
+                assert!(this.strict_equals(&receiver.upgrade().unwrap()));
+                events.record("toString");
+                fields.set("progress", "coercion".into())?;
+                Err(AuthError::from_thrown(failure.clone()))
+            })
+            .into(),
+        )?;
+        let failure = original.clone();
+        let reads = Mutex::new(0);
+        key.getter(
+            "alg",
+            FieldFunction::contextual(move |receiver, _| {
+                let mut reads = reads.lock().unwrap();
+                *reads += 1;
+                if *reads == 1 {
+                    return Ok("RS256".into());
+                }
+                receiver.set_model_property("progress", "getter".into())?;
+                if boundary == "getter" {
+                    return Err(AuthError::from_thrown(failure.clone()));
+                }
+                Ok(dynamic.as_ref().clone())
+            }),
+        )?;
+        let plugin = JwtPlugin::new();
+        let ctx = context(&plugin, keyring(vec![key.value()].into(), trace.clone())).await?;
+        let error = plugin
+            .sign_with_options(
+                Map::new(),
+                &JwtSigningOptions {
+                    algorithm: Some(JwtAlgorithm::EdDsa),
+                    ..pinned()
+                },
+                &ctx,
+            )
+            .await
+            .unwrap_err();
+        assert!(error.into_thrown_value()?.strict_equals(&original));
+        assert_eq!(key.fields.get("progress")?, Some(boundary.into()));
+        let mut events = vec!["read", "get:id", "get:alg", "get:alg"];
+        if boundary == "coercion" {
+            events.push("toString");
+        }
+        assert_eq!(*trace.events.lock().unwrap(), events);
     }
     Ok(())
 }
@@ -185,8 +383,11 @@ async fn signing_rereads_truthy_expiry_and_compares_the_second_dynamic_value() -
         let result = plugin.sign_with_options(Map::new(), &pinned(), &ctx).await;
         let mut events = vec!["read", "get:id", "get:expiresAt", "get:expiresAt"];
         if expired {
-            assert!(
-                matches!(result, Err(AuthError::Config(message)) if message == "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.")
+            let error = result.unwrap_err();
+            assert_eq!(error.message_value()?, "signJWT: requested signing key is expired and an explicit kid/alg was provided; not auto-minting a replacement. Rotate the key explicitly.".into());
+            assert_eq!(
+                error.into_thrown_value()?.model_property("name")?,
+                "BetterAuthError".into()
             );
         } else {
             assert_eq!(super::super::tests::header(&result?)["kid"], "selected");

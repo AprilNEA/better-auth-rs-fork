@@ -336,9 +336,17 @@ async fn native_algorithm_reaches_import_only_after_plain_or_encrypted_json_cons
         let (ctx, _) = context(&plugin, vec![row.clone()]).await?;
         let error = plugin.sign(Map::new(), &ctx).await.unwrap_err();
         assert_eq!(
-            error.to_string().contains("Failed to decrypt private key"),
+            error
+                .instrumentation_message()?
+                .contains("Failed to decrypt private key"),
             decrypt_error
         );
+        if decrypt_error {
+            assert_eq!(
+                error.into_thrown_value()?.model_property("name")?,
+                "BetterAuthError".into()
+            );
+        }
     }
     Ok(())
 }

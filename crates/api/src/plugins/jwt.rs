@@ -174,16 +174,18 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
     async fn on_init(&self, ctx: &mut AuthInitContext<S>) -> AuthResult<()> {
         ctx.extensions.insert(self.config.clone());
         if self.config.custom_sign.is_some() && self.config.remote_url.is_none() {
-            return Err(AuthError::config("custom_sign requires remote_url"));
+            return Err(AuthError::better_auth(
+                "options.jwks.remoteUrl must be set when using options.jwt.sign",
+            ));
         }
         if self.config.remote_url.is_some() && self.config.algorithm.is_none() {
-            return Err(AuthError::config(
-                "remote_url requires an explicit algorithm",
+            return Err(AuthError::better_auth(
+                "options.jwks.keyPairConfig.alg must be specified when options.jwks.remoteUrl is used for OpenID metadata",
             ));
         }
         if !self.config.jwks_path.starts_with('/') || self.config.jwks_path.contains("..") {
-            return Err(AuthError::config(
-                "jwks_path must start with '/' and must not contain '..'",
+            return Err(AuthError::better_auth(
+                "options.jwks.jwksPath must be a non-empty string starting with '/' and not contain '..'",
             ));
         }
         if self.config.session_cookie_cache {
@@ -199,13 +201,13 @@ impl<S: AuthSchema> AuthPlugin<S> for JwtPlugin {
                     )
                 })
             {
-                return Err(AuthError::config(
-                    "session_cookie_cache requires the JWT cookie cache strategy",
+                return Err(AuthError::better_auth(
+                    "`jwt({ sessionCookieCache: true })` requires `session.cookieCache.strategy = \"jwt\"`.",
                 ));
             }
             if self.config.custom_sign.is_some() {
-                return Err(AuthError::config(
-                    "session_cookie_cache requires locally managed JWT keys",
+                return Err(AuthError::better_auth(
+                    "`jwt({ sessionCookieCache: true })` requires locally managed JWT plugin keys and does not support `jwt.sign`.",
                 ));
             }
             let signer: std::sync::Arc<dyn better_auth_core::session::SessionCookieSigner<S>> =
@@ -406,7 +408,7 @@ impl JwtPlugin {
             keys = self.read_keys(endpoint).await?;
         }
         if keys.is_null() || keys.is_undefined() || !keys.model_property("length")?.is_truthy() {
-            return Err(AuthError::internal(
+            return Err(AuthError::better_auth(
                 "No key sets found. Make sure you have a key in your database.",
             ));
         }

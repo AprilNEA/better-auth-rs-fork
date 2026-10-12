@@ -566,50 +566,64 @@ fn constructed_error_presence_and_enumeration_follow_error_properties() -> AuthR
 #[test]
 fn better_auth_errors_keep_hidden_properties_and_remain_outside_api_error_brands() -> AuthResult<()>
 {
-    let error = AuthError::better_auth("OAUTH_ACCOUNT_SUBJECT_INVALID");
-    let raw = error
-        .raw_value()
-        .ok_or_else(|| AuthError::internal("Expected native BetterAuthError"))?;
-    let object = raw
-        .as_object()
-        .ok_or_else(|| AuthError::internal("Expected BetterAuthError object"))?;
-    assert_eq!(raw.model_property("name")?, "BetterAuthError".into());
-    assert_eq!(
-        error.message_value()?,
-        "OAUTH_ACCOUNT_SUBJECT_INVALID".into()
-    );
-    assert_eq!(raw.model_property("stack")?, "".into());
-    for name in ["message", "stack"] {
+    let native_messages = [
+        crate::Utf16String::default(),
+        crate::Utf16String::from_units(vec![0xd800]),
+        crate::Utf16String::from_units(vec![0xdc00]),
+        crate::Utf16String::from_units(vec![0xd83d, 0xde00]),
+        crate::Utf16String::from_units(vec![0xdc00, 65, 0xd800]),
+    ];
+    for (message, error) in std::iter::once((
+        crate::Utf16String::from("OAUTH_ACCOUNT_SUBJECT_INVALID"),
+        AuthError::better_auth("OAUTH_ACCOUNT_SUBJECT_INVALID"),
+    ))
+    .chain(native_messages.into_iter().map(|message| {
+        let error = AuthError::better_auth_native(message.clone());
+        (message, error)
+    })) {
+        let raw = error
+            .raw_value()
+            .ok_or_else(|| AuthError::internal("Expected native BetterAuthError"))?;
+        let object = raw
+            .as_object()
+            .ok_or_else(|| AuthError::internal("Expected BetterAuthError object"))?;
+        assert_eq!(raw.model_property("name")?, "BetterAuthError".into());
+        assert_eq!(error.message_value()?, message.clone().into());
+        assert_eq!(raw.model_property("stack")?, "".into());
+        for name in ["message", "stack"] {
+            assert_eq!(
+                object.own_property_descriptor(name)?,
+                Some(crate::field_value::FieldPropertyDescriptor { enumerable: false })
+            );
+        }
+        assert_eq!(object.enumerable_keys()?, ["name"]);
         assert_eq!(
-            object.own_property_descriptor(name)?,
-            Some(crate::field_value::FieldPropertyDescriptor { enumerable: false })
+            raw.json()?,
+            Some(serde_json::json!({"name": "BetterAuthError"}))
+        );
+        let mut display = "BetterAuthError".encode_utf16().collect::<Vec<_>>();
+        if !message.as_utf16().is_empty() {
+            display.extend(": ".encode_utf16());
+            display.extend_from_slice(message.as_utf16());
+        }
+        assert_eq!(raw.display_utf16()?.as_utf16(), display);
+        assert!(!error.is_api_error()?);
+        for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
+            assert!(!error.is_api_error_instance(class));
+        }
+        let _ = object.set("name", "APIError".into())?;
+        assert!(error.is_api_error()?);
+        for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
+            assert!(!error.is_api_error_instance(class));
+        }
+        let raw = raw.clone();
+        let error = error.capture_native_headers(FieldMap::new().into());
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|retained| retained.strict_equals(&raw))
         );
     }
-    assert_eq!(object.enumerable_keys()?, ["name"]);
-    assert_eq!(
-        raw.json()?,
-        Some(serde_json::json!({"name": "BetterAuthError"}))
-    );
-    assert_eq!(
-        raw.display_utf16()?,
-        crate::Utf16String::from("BetterAuthError: OAUTH_ACCOUNT_SUBJECT_INVALID")
-    );
-    assert!(!error.is_api_error()?);
-    for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
-        assert!(!error.is_api_error_instance(class));
-    }
-    let _ = object.set("name", "APIError".into())?;
-    assert!(error.is_api_error()?);
-    for class in [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth] {
-        assert!(!error.is_api_error_instance(class));
-    }
-    let raw = raw.clone();
-    let error = error.capture_native_headers(FieldMap::new().into());
-    assert!(
-        error
-            .raw_value()
-            .is_some_and(|retained| retained.strict_equals(&raw))
-    );
     Ok(())
 }
 

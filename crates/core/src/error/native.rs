@@ -101,7 +101,7 @@ pub(super) fn construct(mut init: ApiErrorInit) -> AuthResult<FieldValue> {
     Ok(error_object(fields.into(), Some(init.class), hidden))
 }
 
-pub(super) fn better_auth(message: String) -> FieldValue {
+pub(super) fn better_auth(message: crate::Utf16String) -> FieldValue {
     error_object(
         FieldMap::from([
             ("message".into(), message.into()),

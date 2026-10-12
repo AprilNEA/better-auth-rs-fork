@@ -1,8 +1,141 @@
 import { expect, test } from "bun:test";
-import { APIError } from "@better-auth/core/error";
+import { APIError, BetterAuthError } from "@better-auth/core/error";
 import { APIError as EndpointAPIError, createEndpoint, createRouter, toResponse } from "better-call";
 import { z } from "zod";
 import { toZodSchema } from "better-auth/db";
+
+test("BetterAuthError retains UTF-16 messages, hidden properties, and native identity", () => {
+  for (const message of ["OAUTH_ACCOUNT_SUBJECT_INVALID", "", "\ud800", "\udc00", "😀", "\udc00A\ud800"]) {
+    const error = new BetterAuthError(message);
+    expect(error).toBeInstanceOf(BetterAuthError);
+    expect(error).not.toBeInstanceOf(APIError);
+    expect(error).not.toBeInstanceOf(EndpointAPIError);
+    expect(error.name).toBe("BetterAuthError");
+    expect(error.message).toBe(message);
+    expect(error.stack).toBe("");
+    for (const name of ["message", "stack"]) {
+      expect(Object.getOwnPropertyDescriptor(error, name)?.enumerable).toBe(false);
+    }
+    expect(Object.keys(error)).toStrictEqual(["name"]);
+    expect(JSON.stringify(error)).toBe('{"name":"BetterAuthError"}');
+    expect(String(error)).toBe(message ? `BetterAuthError: ${message}` : "BetterAuthError");
+    error.name = "APIError";
+    expect(error).not.toBeInstanceOf(EndpointAPIError);
+    expect(error.message).toBe(message);
+  }
+});
+
+test("JWT mismatch retains the second algorithm read and UTF-16 BetterAuthError message", async () => {
+  const { resolveSigningKey } = await import("../node_modules/better-auth/dist/plugins/jwt/sign.mjs");
+  for (const actual of [null, undefined, "changed", "\ud800A\udc00"]) {
+    const events: string[] = [];
+    let reads = 0;
+    const key = {
+      lastRead: "",
+      get id() { events.push("id"); return "selected"; },
+      get alg() { events.push("alg"); this.lastRead = "alg"; return ++reads === 1 ? "RS256" : actual; },
+      get privateKey() { throw new Error("Mismatch must not read privateKey"); },
+    };
+    let caught: unknown;
+    try {
+      await resolveSigningKey({ context: { adapter: {} } }, {
+        adapter: { async getJwks() { events.push("read"); return [key]; } },
+      }, { signingKeyId: "selected", signingAlgorithm: "EdDSA" });
+    } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(BetterAuthError);
+    const error = caught as BetterAuthError;
+    expect(error.name).toBe("BetterAuthError");
+    expect(error.stack).toBe("");
+    expect(error.message).toBe(`signJWT: signingKeyId "selected" has alg "${actual ?? 'unset (inherits keyPairConfig.alg "EdDSA")'}" but signingAlgorithm was set to "EdDSA".`);
+    expect(events).toStrictEqual(["read", "id", "alg", "alg"]);
+    expect(reads).toBe(2);
+    expect(key.lastRead).toBe("alg");
+  }
+});
+
+test("JWT mismatch propagates original second-read and string-coercion failures", async () => {
+  const { resolveSigningKey } = await import("../node_modules/better-auth/dist/plugins/jwt/sign.mjs");
+  for (const boundary of ["getter", "coercion"]) {
+    const events: string[] = [];
+    const original = { boundary };
+    const dynamic = { toString() {
+      expect(this).toBe(dynamic);
+      events.push("toString");
+      key.progress = "coercion";
+      throw original;
+    } };
+    let reads = 0;
+    const key = {
+      id: "selected", progress: "",
+      get alg() {
+        events.push("alg");
+        if (++reads === 1) return "RS256";
+        this.progress = "getter";
+        if (boundary === "getter") throw original;
+        return dynamic;
+      },
+    };
+    let caught: unknown;
+    try {
+      await resolveSigningKey({ context: { adapter: {} } }, {
+        adapter: { async getJwks() { events.push("read"); return [key]; } },
+      }, { signingKeyId: "selected", signingAlgorithm: "EdDSA" });
+    } catch (error) { caught = error; }
+    expect(caught).toBe(original);
+    expect(events).toStrictEqual(["read", "alg", "alg", ...(boundary === "coercion" ? ["toString"] : [])]);
+    expect(key.progress).toBe(boundary);
+  }
+});
+
+test("JWT configuration guards retain upstream BetterAuthError messages and precedence", async () => {
+  const { jwt } = await import("better-auth/plugins/jwt");
+  const sign = async () => "unused";
+  for (const [options, cache, message] of [
+    [{ jwt: { sign } }, false, "options.jwks.remoteUrl must be set when using options.jwt.sign"],
+    [{ jwks: { remoteUrl: "https://remote.test/jwks" } }, false, "options.jwks.keyPairConfig.alg must be specified when options.jwks.remoteUrl is used for OpenID metadata"],
+    ...["", "keys", "/../keys"].map((jwksPath) => [
+      { jwks: { jwksPath } }, false, "options.jwks.jwksPath must be a non-empty string starting with '/' and not contain '..'",
+    ]),
+    [{ sessionCookieCache: true }, false, '`jwt({ sessionCookieCache: true })` requires `session.cookieCache.strategy = "jwt"`.'],
+    [{ sessionCookieCache: true, jwt: { sign }, jwks: { remoteUrl: "https://remote.test/jwks", keyPairConfig: { alg: "EdDSA" } } }, true,
+      "`jwt({ sessionCookieCache: true })` requires locally managed JWT plugin keys and does not support `jwt.sign`."],
+  ]) {
+    let caught: unknown;
+    try {
+      const plugin = Reflect.apply(jwt, undefined, [options]);
+      await plugin.init({ options: { session: { cookieCache: { strategy: cache ? "jwt" : "compact" } } } });
+    } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(BetterAuthError);
+    expect((caught as BetterAuthError).message).toBe(message);
+    expect((caught as BetterAuthError).stack).toBe("");
+  }
+});
+
+test("JWT missing keys and unconfigured algorithms retain detailed BetterAuthError messages", async () => {
+  const { resolveSigningKey } = await import("../node_modules/better-auth/dist/plugins/jwt/sign.mjs");
+  for (const [overrides, configs, message] of [
+    [{ signingKeyId: "missing" }, [], 'signJWT: signingKeyId "missing" not found in JWKS. The key must be provisioned before it can be referenced.'],
+    ...[[], [{ alg: "PS256" }, { alg: "ES512" }]].map((keyPairConfigs) => [
+      { signingAlgorithm: "RS256" }, keyPairConfigs,
+      `signJWT: no key with alg "RS256" found in JWKS. The plugin auto-mints only one key matching keyPairConfig.alg="EdDSA"; additional algs configured via keyPairConfigs: ${keyPairConfigs.map((config) => config.alg).join(", ") || "none"}. Add "RS256" to jwks.keyPairConfigs so the plugin provisions it on first use, or mint the key explicitly via createJwk().`,
+    ]),
+  ]) {
+    const events: string[] = [];
+    let caught: unknown;
+    try {
+      await resolveSigningKey({ context: { adapter: {} } }, {
+        jwks: { keyPairConfigs: configs },
+        adapter: {
+          async getJwks() { events.push("read"); return []; },
+          async createJwk() { events.push("write"); throw new Error("A missing pinned key must not be created"); },
+        },
+      }, overrides);
+    } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(BetterAuthError);
+    expect((caught as BetterAuthError).message).toBe(message);
+    expect(events).toStrictEqual(["read"]);
+  }
+});
 
 async function observe(error: EndpointAPIError, status: number, keys: string[], bytes: string) {
   expect(error.statusCode).toBe(status);
