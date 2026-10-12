@@ -75,7 +75,7 @@ for (const scenario of cases) {
       response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`));
     } catch (error) { caught = error; }
     finally { console.error = originalConsole; }
-    const http = response ? { status: response.status, headers: [...response.headers], body: await response.text() } : null;
+    const http = response ? { status: response.status, statusText: response.statusText, headers: [...response.headers], body: await response.text() } : null;
     process.stdout.write(`${JSON.stringify({ case: "http-error-logging", name: scenario.name, events,
       logs: logs.map(([level, message, args]) => [level, message, args.map(argument => argument === cause ? "original" : "replacement")]),
       outer: outer.map(args => [args[0], args[1] === cause ? "original" : "replacement"]),
@@ -88,7 +88,7 @@ for (const scenario of cases) {
       expect(outer).toStrictEqual([]);
     } else {
       expect(caught).toBeUndefined();
-      expect(http).toStrictEqual({ status: 500, headers: [], body: "" });
+      expect(http).toStrictEqual({ status: 500, statusText: "Internal Server Error", headers: [], body: "" });
       expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
       if ("disabled" in scenario || "callback" in scenario) {
         expect(logs).toStrictEqual([]);
@@ -163,7 +163,7 @@ for (const callable of [true, false]) {
     try { response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`)); }
     catch (error) { caught = error; }
     finally { console.error = originalConsole; }
-    const http = response ? { status: response.status, headers: [...response.headers], body: await response.text() } : null;
+    const http = response ? { status: response.status, statusText: response.statusText, headers: [...response.headers], body: await response.text() } : null;
     process.stdout.write(`${JSON.stringify({ case: "http-error-message-method", callable, events,
       logs: logs.map(([level, message, args]) => [level, message === payload ? "payload" : message,
         args.map(argument => argument === cause ? "original" : "replacement")]),
@@ -172,7 +172,7 @@ for (const callable of [true, false]) {
       error: caught instanceof Error ? { name: caught.name, message: caught.message } : null })}\n`);
     if (callable) {
       expect(caught).toBeUndefined();
-      expect(http).toStrictEqual({ status: 500, headers: [], body: "" });
+      expect(http).toStrictEqual({ status: 500, statusText: "Internal Server Error", headers: [], body: "" });
       expect(logs).toStrictEqual([["error", payload, []]]);
       expect(logs[0]![1]).toBe(payload);
       expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
@@ -184,6 +184,74 @@ for (const callable of [true, false]) {
       expect(outer).toStrictEqual([]);
       expect(events).toStrictEqual(["message:1", "message:2", "message:3"]);
     }
+    expect(database).toStrictEqual(emptyDatabase());
+  });
+}
+
+for (const field of ["name", "message"] as const) for (const failure of [false, true]) {
+  test(`HTTP custom logger converts the native ${field} before its callback: failure=${failure}`, async () => {
+    const events: string[] = [];
+    const logs: [string, unknown, unknown[]][] = [];
+    const outer: unknown[][] = [];
+    const replacement = new Error("native logger conversion failed");
+    const payload = { kind: field, toString() {
+      events.push("to-string");
+      if (failure) throw replacement;
+      return "rendered native message";
+    } };
+    let logging = false;
+    let reads = 0;
+    let loggerReads = 0;
+    const cause = new Proxy({ name: field === "name" ? payload : "RuntimeFailure", get message() {
+      events.push(`message:${++reads}`);
+      if (field === "name" || !logging) return "ordinary failure";
+      return ++loggerReads < 3 ? "diagnostic: no column" : payload;
+    } }, { has(value, property) {
+      if (property === "message") logging = true;
+      return Reflect.has(value, property);
+    } });
+    const database = emptyDatabase();
+    const auth = betterAuth({
+      baseURL: origin, secret: "http-error-logging-secret-at-least-32-characters",
+      database: memoryAdapter(database), telemetry: { enabled: false }, rateLimit: { enabled: false },
+      logger: { log(level, message, ...args) { events.push("log"); logs.push([level, message, args]); } },
+      plugins: [{ id: "http-error-native-logging", middlewares: [{ path: "/logging-failure",
+        middleware: Object.assign(async () => { throw cause; }, { options: {} }),
+      }], endpoints: { loggingFailure: createAuthEndpoint("/logging-failure", { method: "GET" }, async () => ({ unreachable: true })) } }],
+    });
+    await auth.$context;
+    events.length = 0;
+    logs.length = 0;
+    const originalConsole = console.error;
+    console.error = (...args: unknown[]) => { events.push("console"); outer.push(args); };
+    let response: Response | undefined;
+    let caught: unknown;
+    try { response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`)); }
+    catch (error) { caught = error; }
+    finally { console.error = originalConsole; }
+    const http = response ? { status: response.status, statusText: response.statusText, headers: [...response.headers], body: await response.text() } : null;
+    process.stdout.write(`${JSON.stringify({ case: "http-error-native-logging", field, failure, events,
+      logs: logs.map(([level, message, args]) => [level, message === payload ? "payload" : message,
+        args.map(argument => argument === cause ? "original" : "replacement")]),
+      outer: outer.map(args => [args[0], args[1] === cause ? "original" : "replacement"]),
+      response: http, outcome: caught === replacement ? "replacement" : caught === undefined ? "returned" : "unexpected" })}\n`);
+    const expected = Array.from({ length: field === "name" ? 7 : 4 }, (_, index) => `message:${index + 1}`);
+    expected.push("to-string");
+    if (failure) {
+      expect(caught).toBe(replacement);
+      expect(response).toBeUndefined();
+      expect(logs).toStrictEqual([]);
+      expect(outer).toStrictEqual([]);
+    } else {
+      expect(caught).toBeUndefined();
+      expect(http).toStrictEqual({ status: 500, statusText: "Internal Server Error", headers: [], body: "" });
+      expect(logs).toStrictEqual([["error", payload, field === "name" ? [cause] : []]]);
+      expect(logs[0]![1]).toBe(payload);
+      if (field === "name") expect(logs[0]![2][0]).toBe(cause);
+      expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
+      expected.push("log", "console");
+    }
+    expect(events).toStrictEqual(expected);
     expect(database).toStrictEqual(emptyDatabase());
   });
 }
