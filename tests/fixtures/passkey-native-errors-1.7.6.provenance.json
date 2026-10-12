@@ -1,0 +1,109 @@
+{
+  "contract": "passkey-native-errors",
+  "version": "1.7.6",
+  "status": "Successful upstream native endpoint capture and frozen-input process replay; Rust paired acceptance remains separate.",
+  "run": "38250794732",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38250794732",
+  "commit": "37d3dd92c3eae732375b469b08897b4a8fe8681f",
+  "runConclusion": "success",
+  "captureTest": {
+    "name": "Passkey native errors preserve cookie consumption, verification order, original errors and committed storage",
+    "conclusion": "success",
+    "cases": 33
+  },
+  "artifactName": "focused-check-reference-contracts-37d3dd92c3eae732375b469b08897b4a8fe8681f-1",
+  "artifactId": "11747854400",
+  "artifact": {
+    "path": "/private/tmp/better-auth-focused-log-38250794732/focused-check.log",
+    "bytes": 4353868,
+    "sha256": "a6f7aab60d908ea3dfb1b770568434b564fb419386b86058c1eaa0063bbe6566"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/passkey-native-errors-capture.mjs",
+      "bytes": 20580,
+      "sha256": "5ac573d2f1046ae6a4fda4f1a5a232dd38481187250289bbbc7e911ab9ba7117"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/passkey-native-errors-capture.test.ts",
+      "bytes": 1821,
+      "sha256": "37146d6a372f8231566b388a8742d6b40973f06685ff20b608627dc5cfe1bd12"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2919,
+      "sha256": "ee3865321448cd61b3e0cbdbb444e0711702b9f59898e5adc5f94006a377d43b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/observation-replay.mjs",
+      "bytes": 1358,
+      "sha256": "5a93bcb984815c4ac2c9672dffe274d2d2e31fefd5b9ce100c2f7833ec2bb54f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/email-verification-duration-capture.mjs",
+      "bytes": 11739,
+      "sha256": "03d3f3001d5db30af7dabf494b20b6f41a4d939919b3cda75e5aaa96bd6bf805"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/schema-isolation.mjs",
+      "bytes": 699,
+      "sha256": "79af8b3844e032145b0ec142aeac2117c4131761850ff5464e1a9a8df8d8f5b3"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-runtime.mjs",
+      "bytes": 3145,
+      "sha256": "69630e525760cf34de80dbc1ae8717093481316fc426cd50dc7b84e7a179d017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    },
+    {
+      "path": "compat-tests/client-tests/tests/phase8/authenticator.ts",
+      "bytes": 3113,
+      "sha256": "8418beb0f10a0449185d7e2b3eaa7c421529368d137f3dbbd50fa5dcebe2e48d"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/passkey-native-errors-1.7.6.json",
+    "bytes": 2176287,
+    "sha256": "7713eb6371cc78384d96ccd2fb11536efa5af58b448de606cfdf912550e9c86d"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1081,
+      "bytes": 2176286,
+      "sha256": "76117424c870e6014b6f6bd0c9fbcbd1ee39995f9804bcd88708adc99e242f6c"
+    },
+    {
+      "line": 60521,
+      "byteOffset": 2177368,
+      "bytes": 2176286,
+      "sha256": "76117424c870e6014b6f6bd0c9fbcbd1ee39995f9804bcd88708adc99e242f6c"
+    }
+  ],
+  "selectedRecord": 0,
+  "extraction": "Use JSONDecoder.raw_decode only to locate each complete JSON document. Retain the first document bytes and the original terminating newline. Do not reserialize the fixture.",
+  "normalizations": [],
+  "sourceReplay": "Both recorded processes preserve identical provenance, boundaries, case names, scenarios, complete inputs, and complete runtime observations, including object key order. Replay uses the captured key and response bytes without importing the signer.",
+  "rawRecordsByteEqual": true,
+  "replayBoundary": "Compare complete inputs and runtime observations without normalization. Preserve raw descriptors, function metadata, original error identities and stacks as source evidence. Host stack text and raw descriptor internals remain outside the runtime comparison.",
+  "unpairedBoundaries": [
+    "Browser transport and default registration session middleware.",
+    "SQL transactions and backend persistence behavior.",
+    "Private challenge payloads owned by the Rust WebAuthn engine.",
+    "Host stack text and raw JavaScript descriptor internals."
+  ]
+}
