@@ -195,7 +195,7 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
             UpdatePasskeyAuthentication::Native { counter: 2 },
         )
         .await?;
-    let logs = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let logs = Arc::new(Mutex::new(Vec::<FieldValue>::new()));
     let observed = logs.clone();
     let logger: better_auth_core::FieldObject = FieldMap::from([
         ("level".into(), "error".into()),
@@ -206,13 +206,19 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
                 let error = arguments
                     .get(2)
                     .ok_or_else(|| AuthError::internal("Logger error is absent"))?;
-                observed.lock().unwrap().push(json!([
-                    arguments.first(),
-                    arguments.get(1),
-                    error.model_property("name")?,
-                    error.model_property("message")?,
-                    error.enumerable_fields()?,
-                ]));
+                observed.lock().unwrap().push(
+                    vec![
+                        arguments.first().cloned().expect("Logger level is present"),
+                        arguments
+                            .get(1)
+                            .cloned()
+                            .expect("Logger message is present"),
+                        error.model_property("name")?,
+                        error.model_property("message")?,
+                        error.enumerable_fields()?.into(),
+                    ]
+                    .into(),
+                );
                 Ok(FieldValue::Undefined)
             })
             .into(),
@@ -366,7 +372,7 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
             };
             assert_eq!(
                 *logs.lock().unwrap(),
-                [json!([
+                [FieldValue::from_json(json!([
                     "error",
                     "Failed to verify authentication",
                     error_name,
@@ -376,7 +382,7 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
                     } else {
                         json!({})
                     },
-                ])]
+                ]))?]
             );
             assert_eq!(
                 *conversions.lock().unwrap(),

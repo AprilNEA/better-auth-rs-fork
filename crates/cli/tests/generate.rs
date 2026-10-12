@@ -101,8 +101,8 @@ fn invalid_schema_configuration_preserves_existing_output() {
             "duplicate database table",
         ),
         (
-            r#"{"teamMember":{"additionalFields":{"label":{"type":"string"}}}}"#,
-            "does not support additionalFields",
+            r#"{"teamMember":{"additionalFields":{"label":{"type":"object"}}}}"#,
+            "unsupported additional field type",
         ),
         (
             r#"{"organization":{"additionalFields":{"owner":{"type":"string","references":{"model":"user","field":"id","onDelete":"delete"}}}}}"#,

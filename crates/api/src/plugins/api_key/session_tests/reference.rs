@@ -1,9 +1,9 @@
 use super::*;
 use better_auth_core::{
-    AuthConfig, FieldDate, FieldMap, FieldValue, StatelessSchema,
+    AuthConfig, FieldDate, FieldMap, FieldValue,
     id::IdGeneration,
     plugin_runtime::ModelFields,
-    store::{EphemeralStore, schema::EntityRole},
+    store::{EphemeralStore, StatelessSchema, schema::EntityRole},
     user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform},
 };
 use serde_json::json;
