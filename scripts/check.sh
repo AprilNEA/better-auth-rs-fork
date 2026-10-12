@@ -21,6 +21,12 @@ run_stage() {
     workspace-tests)
       cargo build --workspace --locked --tests --profile test --features axum,seaorm2,redis-cache --keep-going
       cargo test --workspace --locked --features axum,seaorm2,redis-cache --no-fail-fast
+      cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --ignored --test-threads=1
+      ;;
+    sql-cleanup)
+      cargo fmt --all -- --check
+      cargo clippy --locked -p better-auth-seaorm --tests -- -D warnings
+      cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --include-ignored --test-threads=1
       ;;
     rustls) cargo check -p better-auth --locked --no-default-features --features rustls,axum,seaorm2,redis-cache ;;
     rustdoc) RUSTDOCFLAGS="-D warnings" cargo doc --workspace --locked --no-deps --features axum,seaorm2,redis-cache ;;

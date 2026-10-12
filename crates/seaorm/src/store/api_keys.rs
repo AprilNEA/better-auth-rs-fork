@@ -1,4 +1,6 @@
 use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
+#[cfg(test)]
+mod cleanup_tests;
 mod fields;
 
 use super::instrumentation::database_operation;
@@ -322,22 +324,48 @@ where
     }
 
     async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
+        self.delete_expired_api_keys_with_clock(|| Utc::now().into())
+            .await
+    }
+}
+
+impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
+    SeaOrmStore<S, O, P>
+{
+    async fn delete_expired_api_keys_with_clock(
+        &self,
+        clock: impl FnOnce() -> better_auth_core::FieldDate + Send,
+    ) -> AuthResult<usize> {
+        let expired =
+            self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
+        let present =
+            self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
         database_operation::<Entity<P::ApiKey>, _>(self.config(), "deleteMany", async {
-            let bound =
-                self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", Utc::now().into())?;
-            let (expires_at, now) =
-                self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, bound)?;
-            let expired = QueryPredicate::new(
-                expires_at,
-                better_auth_core::WhereOperator::Lt,
-                better_auth_core::WhereMode::Sensitive,
-                now,
-            )
-            .with_save_as()
-            .bind(self.connection().get_database_backend())?;
+            let (expires_at, current) =
+                self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, expired)?;
+            let (present_column, null_operand) =
+                self.resolve_plugin_query_field::<P::ApiKey>(EntityRole::ApiKey, present)?;
+            let predicates = super::value_filter::all(
+                [
+                    QueryPredicate::new(
+                        expires_at,
+                        better_auth_core::WhereOperator::Lt,
+                        better_auth_core::WhereMode::Sensitive,
+                        current,
+                    )
+                    .with_save_as(),
+                    QueryPredicate::new(
+                        present_column,
+                        better_auth_core::WhereOperator::Ne,
+                        better_auth_core::WhereMode::Sensitive,
+                        null_operand,
+                    )
+                    .with_save_as(),
+                ],
+                self.connection().get_database_backend(),
+            )?;
             Entity::<P::ApiKey>::delete_many()
-                .filter(expires_at.is_not_null())
-                .filter(expired)
+                .filter(predicates)
                 .exec(self.connection())
                 .await
                 .map(|result| result.rows_affected as usize)
