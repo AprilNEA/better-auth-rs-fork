@@ -4,6 +4,8 @@
 pub mod concurrent;
 mod config;
 mod cookies;
+#[cfg(test)]
+mod initialization_tests;
 mod scope;
 mod url;
 
@@ -229,13 +231,11 @@ impl<S: AuthSchema> AuthContext<S> {
             .await?;
         let mut context = self.clone();
         context.config = initial.config.clone();
-        let base_url = self
+        let _ = context
             .request_runtime
             .base_url
-            .read()
-            .clone()
-            .unwrap_or_else(|| initial.base_url.clone());
-        context.request_runtime.base_url = Arc::new(RwLock::new(Some(base_url)));
+            .write()
+            .get_or_insert_with(|| initial.base_url.clone());
         context.request_runtime.values = Some(initial.values.clone());
         Ok(Arc::new(context))
     }

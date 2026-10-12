@@ -61,23 +61,28 @@ impl<'a> From<&'a str> for LogArgument<'a> {
         Self::Text(value)
     }
 }
-impl fmt::Display for LogArgument<'_> {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Text(value) => formatter.write_str(value),
+
+impl LogArgument<'_> {
+    fn display_string(self) -> crate::AuthResult<String> {
+        Ok(match self {
+            Self::Text(value) => value.to_owned(),
             Self::Value(value) => {
-                let native = crate::FieldValue::from((*value).clone());
-                fmt::Display::fmt(&LogArgument::Native(&native), formatter)
+                let native = crate::FieldValue::from(value.clone());
+                String::from_utf16_lossy(native.display_utf16()?.as_utf16())
             }
-            Self::Native(value) => formatter.write_str(&String::from_utf16_lossy(
-                value.display_utf16().map_err(|_| fmt::Error)?.as_utf16(),
-            )),
-            Self::Error(error) => fmt::Display::fmt(error, formatter),
-        }
+            Self::Native(value) => String::from_utf16_lossy(value.display_utf16()?.as_utf16()),
+            Self::Error(error) => error.to_string(),
+        })
     }
 }
 
-/// Synchronous application logger. The callback owns formatting and output.
+impl fmt::Display for LogArgument<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.display_string().map_err(|_| fmt::Error)?)
+    }
+}
+
+/// Synchronous application logger. The callback receives original values after message conversion.
 pub trait LogSink: Send + Sync {
     fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]);
 }
@@ -110,16 +115,46 @@ impl LoggerConfig {
         !self.disabled.unwrap_or(false) && level >= self.level.unwrap_or_default()
     }
 
+    /// Convert the message before selecting the sink. Preserve a native conversion failure.
     pub fn log<'a>(
         &self,
         level: LogLevel,
         message: impl Into<LogArgument<'a>>,
         arguments: &[LogArgument<'_>],
-    ) {
+    ) -> crate::AuthResult<()> {
         let message = message.into();
         if !self.enabled(level) {
-            return;
+            return Ok(());
         }
+        let prefix = self.prefix(level);
+        let formatted = format!("{prefix}{}", message.display_string()?);
+        self.emit(level, message, formatted, arguments);
+        Ok(())
+    }
+
+    fn prefix(&self, level: LogLevel) -> String {
+        let colors = self
+            .disable_colors
+            .map_or_else(|| std::io::stdout().is_terminal(), |disabled| !disabled);
+        let time = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        if colors {
+            format!(
+                "\x1b[2m{time}\x1b[0m {}{}\x1b[0m \x1b[1m[Better Auth]:\x1b[0m ",
+                level.color(),
+                level.name()
+            )
+        } else {
+            format!("{time} {} [Better Auth]: ", level.name())
+        }
+    }
+
+    fn emit(
+        &self,
+        level: LogLevel,
+        original: LogArgument<'_>,
+        message: String,
+        arguments: &[LogArgument<'_>],
+    ) {
         if let Some(sink) = &self.log {
             sink.log(
                 if level == LogLevel::Success {
@@ -127,24 +162,11 @@ impl LoggerConfig {
                 } else {
                     level
                 },
-                message,
+                original,
                 arguments,
             );
             return;
         }
-        let colors = self
-            .disable_colors
-            .map_or_else(|| std::io::stdout().is_terminal(), |disabled| !disabled);
-        let time = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let message = if colors {
-            format!(
-                "\x1b[2m{time}\x1b[0m {}{}\x1b[0m \x1b[1m[Better Auth]:\x1b[0m {message}",
-                level.color(),
-                level.name()
-            )
-        } else {
-            format!("{time} {} [Better Auth]: {message}", level.name())
-        };
         match level {
             LogLevel::Debug => tracing::debug!(target: "better-auth", message, ?arguments),
             LogLevel::Info | LogLevel::Success => {
@@ -155,20 +177,27 @@ impl LoggerConfig {
         }
     }
 
+    fn text(&self, level: LogLevel, message: &str, arguments: &[LogArgument<'_>]) {
+        if self.enabled(level) {
+            let formatted = format!("{}{message}", self.prefix(level));
+            self.emit(level, message.into(), formatted, arguments);
+        }
+    }
+
     pub fn debug(&self, message: &str, arguments: &[LogArgument<'_>]) {
-        self.log(LogLevel::Debug, message, arguments);
+        self.text(LogLevel::Debug, message, arguments);
     }
     pub fn info(&self, message: &str, arguments: &[LogArgument<'_>]) {
-        self.log(LogLevel::Info, message, arguments);
+        self.text(LogLevel::Info, message, arguments);
     }
     pub fn success(&self, message: &str, arguments: &[LogArgument<'_>]) {
-        self.log(LogLevel::Success, message, arguments);
+        self.text(LogLevel::Success, message, arguments);
     }
     pub fn warn(&self, message: &str, arguments: &[LogArgument<'_>]) {
-        self.log(LogLevel::Warn, message, arguments);
+        self.text(LogLevel::Warn, message, arguments);
     }
     pub fn error(&self, message: &str, arguments: &[LogArgument<'_>]) {
-        self.log(LogLevel::Error, message, arguments);
+        self.text(LogLevel::Error, message, arguments);
     }
 }
 
@@ -180,7 +209,8 @@ pub fn current() -> LoggerConfig {
 #[cfg(test)]
 #[expect(
     clippy::expect_used,
-    reason = "The test sink and assertions must fail if the recording mutex is poisoned."
+    clippy::panic_in_result_fn,
+    reason = "Logger contracts assert callback values and must fail if the recording mutex is poisoned."
 )]
 mod tests {
     use super::*;
@@ -211,7 +241,7 @@ mod tests {
     }
 
     #[test]
-    fn thresholds_keep_success_order_and_custom_arguments_unformatted() {
+    fn thresholds_keep_success_order_and_custom_arguments_unformatted() -> crate::AuthResult<()> {
         let levels = [
             LogLevel::Debug,
             LogLevel::Info,
@@ -236,7 +266,7 @@ mod tests {
                         event,
                         "literal %s",
                         &[LogArgument::Value(&structured), LogArgument::Value(&tail)],
-                    );
+                    )?;
                 }
                 let expected: Vec<_> = levels
                     .into_iter()
@@ -259,10 +289,12 @@ mod tests {
                 );
             }
         }
+        Ok(())
     }
 
     #[test]
-    fn native_arguments_reach_custom_sink_without_coercion_or_identity_loss() {
+    fn native_arguments_reach_custom_sink_without_coercion_or_identity_loss()
+    -> crate::AuthResult<()> {
         #[derive(Default)]
         struct NativeCapture(Mutex<Option<crate::FieldValue>>);
         impl LogSink for NativeCapture {
@@ -290,7 +322,7 @@ mod tests {
             LogLevel::Error,
             "native fields",
             &[LogArgument::Native(&argument)],
-        );
+        )?;
         let observed = sink.0.lock().expect("capture mutex is not poisoned");
         let observed_argument = observed.as_ref().expect("logger was called");
         assert!(observed_argument.strict_equals(&argument));
@@ -307,6 +339,7 @@ mod tests {
                 .is_undefined()
         );
         assert_eq!(LogArgument::Native(&message).to_string(), "\u{fffd}");
-        LoggerConfig::default().log(LogLevel::Error, LogArgument::Native(&message), &[]);
+        LoggerConfig::default().log(LogLevel::Error, LogArgument::Native(&message), &[])?;
+        Ok(())
     }
 }

@@ -123,7 +123,7 @@ impl Telemetry {
                 super::logger::LogLevel::Error,
                 LogArgument::Error(&error),
                 &[],
-            );
+            )?;
         }
         Ok(())
     }

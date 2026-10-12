@@ -1,6 +1,7 @@
 use crate::{FieldMap, FieldValue, SchemaValue};
 use thiserror::Error;
 
+mod http;
 mod native;
 #[cfg(test)]
 pub(crate) use native::brand_api_error_object;
@@ -382,11 +383,13 @@ impl AuthError {
         if self.is_api_error()? {
             self.to_auth_response().into_http_response()
         } else {
-            crate::observability::logger::current().error(
+            crate::observability::LoggerConfig::default().error(
                 "Authentication request failed",
                 &[crate::observability::LogArgument::Error(&self)],
             );
-            Ok(crate::AuthResponse::new(500))
+            let mut response = crate::AuthResponse::new(500);
+            response.status_text = "Internal Server Error".into();
+            Ok(response)
         }
     }
 
@@ -796,3 +799,7 @@ mod tests;
 #[cfg(test)]
 #[path = "error/native_tests.rs"]
 mod native_tests;
+
+#[cfg(test)]
+#[path = "error/http_tests.rs"]
+mod http_tests;

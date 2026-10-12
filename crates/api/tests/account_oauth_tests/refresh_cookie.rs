@@ -26,11 +26,19 @@ pub(super) async fn dispatch<S: better_auth_core::AuthSchema>(
     scope.is_http = true;
     better_auth_core::with_request_hook_context_value(
         scope,
-        dispatcher.run(&mut input, true, context, None, |request| async move {
-            plugin.on_request(&request, context).await?.ok_or_else(|| {
-                better_auth_core::AuthError::internal("OAuth endpoint did not match the request")
-            })
-        }),
+        dispatcher.run(
+            &mut input,
+            true,
+            context,
+            None,
+            |request, context| async move {
+                plugin.on_request(&request, &context).await?.ok_or_else(|| {
+                    better_auth_core::AuthError::internal(
+                        "OAuth endpoint did not match the request",
+                    )
+                })
+            },
+        ),
     )
     .await
 }

@@ -32,7 +32,10 @@ struct Capture {
 impl Capture {
     fn record(&self, phase: &str, context: &AuthContext<S>) -> AuthResult<()> {
         let mut value = policy(context)?;
-        value["phase"] = phase.into();
+        let _ = value
+            .as_object_mut()
+            .ok_or_else(|| AuthError::internal("Expected a runtime policy observation object"))?
+            .insert("phase".into(), phase.into());
         lock(&self.observations)?.push(value);
         Ok(())
     }
@@ -253,7 +256,7 @@ async fn http_runtime_writes_preserve_routing_configuration_trust_and_cookies() 
             assert!(auth.context().current_request_context().is_none());
             assert!(better_auth_core::hooks::current_request_hook_context().is_none());
         }
-        let expected_observations: Vec<_> = (0..2)
+        let expected_observations = (0..2)
             .flat_map(|_| {
                 [
                     ("onRequest", INITIAL_URL.to_owned()),
@@ -265,11 +268,16 @@ async fn http_runtime_writes_preserve_routing_configuration_trust_and_cookies() 
             })
             .map(|(phase, url)| {
                 let mut value = expected.clone();
-                value["phase"] = phase.into();
-                value["baseURL"] = url.into();
-                value
+                let fields = value.as_object_mut().ok_or_else(|| {
+                    AuthError::internal("Expected a runtime policy fixture object")
+                })?;
+                *fields.get_mut("baseURL").ok_or_else(|| {
+                    AuthError::internal("Expected the runtime policy fixture baseURL")
+                })? = url.into();
+                let _ = fields.insert("phase".into(), phase.into());
+                Ok(value)
             })
-            .collect();
+            .collect::<AuthResult<Vec<_>>>()?;
         assert_eq!(*lock(&capture.observations)?, expected_observations);
         let request_url = format!("{INITIAL_URL}/runtime-http");
         assert_eq!(

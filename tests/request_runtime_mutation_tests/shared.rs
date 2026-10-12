@@ -196,7 +196,9 @@ async fn dispatch_shares_runtime_with_hooks_handler_and_database_callbacks() -> 
         assert!(auth.context().current_request_context().is_none());
         assert!(better_auth_core::hooks::current_request_hook_context().is_none());
         let mut expected = empty_database();
-        expected["verification"] = json!([FieldValue::from(row().fields()?)
+        *expected.get_mut("verification").ok_or_else(|| {
+            AuthError::internal("Expected the verification table in the database fixture")
+        })? = json!([FieldValue::from(row().fields()?)
             .json()?
             .expect("Verification JSON")]);
         assert_eq!(snapshot(&store)?, expected);

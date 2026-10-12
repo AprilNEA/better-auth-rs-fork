@@ -339,10 +339,6 @@ impl FieldObjectSource for MessageGetterFailure {
     }
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions compare endpoint errors, callback order, and complete stored records with the upstream contract."
-)]
 async fn endpoint_error_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
     for (kind, phase) in [
         ("ordinary", "input"),

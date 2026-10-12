@@ -118,8 +118,14 @@ async fn create_consumes_captured_permissions_after_callback_mutation() -> AuthR
         );
     }
     let mut expected_storage = expected;
-    expected_storage["metadata"] = json!("null");
-    expected_storage["permissions"] = json!("{\"nodes\":[\"read\",\"write\"]}");
+    for (field, value) in [
+        ("metadata", json!("null")),
+        ("permissions", json!("{\"nodes\":[\"read\",\"write\"]}")),
+    ] {
+        *expected_storage.get_mut(field).ok_or_else(|| {
+            AuthError::internal(format!("Expected the {field} API Key storage field"))
+        })? = value;
+    }
     assert_eq!(
         FieldValue::from(stored.clone()).json()?,
         Some(expected_storage)

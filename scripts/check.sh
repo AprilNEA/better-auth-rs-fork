@@ -619,6 +619,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/endpoint-content-type.test.ts \
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
+        ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
+        ./compat-tests/reference-server/contracts/observability.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
         ./compat-tests/reference-server/contracts/hook-matcher-input.test.ts \
         ./compat-tests/reference-server/contracts/api-key-field-policies.test.ts \
@@ -630,6 +632,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/oauth-proxy-runtime-url.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api --features axum \
+        --tests -- -D warnings || json_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test native_endpoint_tests --test server_api_tests \
         --test organization_body_schema_tests \
@@ -638,16 +642,18 @@ run_stage() {
         --test oauth_proxy_request_url_tests --test request_runtime_mutation_tests \
         --test dynamic_runtime_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: wire:: \
-        request_runtime:: \
+        error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
+        request_runtime:: observability::logger:: observability::telemetry:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
         plugin::tests::response_status:: response_body::http_tests:: types::response:: \
         types::request_headers:: || json_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
-        plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::anonymous:: plugins::phone_number:: plugins::oauth:: \
+        plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::anonymous:: plugins::phone_number:: plugins::oauth:: plugins::custom_session:: \
         plugins::passkey:: plugins::siwe:: \
         plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
+      cargo test --locked -p better-auth-api --features axum \
+        --test account_oauth_tests || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests -- response_to_json:: api_key::updates:: \
         organization::organization_live_business::output_boundary:: || json_status=1

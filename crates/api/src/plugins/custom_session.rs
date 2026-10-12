@@ -191,40 +191,16 @@ impl<S: AuthSchema> AuthPlugin<S> for CustomSessionPlugin<S> {
                 if let Some(sessions) = sessions {
                     let context = Arc::new(context.clone());
                     let request = Arc::new(request.clone());
-                    let hook_context = better_auth_core::hooks::current_request_hook_context();
-                    // Promise.all rejects early while the other callbacks keep running.
-                    // Dropping a JoinHandle detaches the callback instead of cancelling it.
-                    let callbacks: Vec<_> = sessions
-                        .into_iter()
-                        .map(|session| {
-                            let callback = self.callback.clone();
-                            let context = context.clone();
-                            let request = request.clone();
-                            let hook_context = hook_context.clone();
-                            tokio::spawn(async move {
-                                let future = callback.customize(session, &request, &context);
-                                match hook_context {
-                                    Some(hook_context) => {
-                                        better_auth_core::with_request_hook_context_value(
-                                            hook_context,
-                                            future,
-                                        )
-                                        .await
-                                    }
-                                    None => future.await,
-                                }
-                            })
-                        })
-                        .collect();
-                    let values = futures_util::future::try_join_all(callbacks.into_iter().map(
-                        |callback| async {
-                            callback.await.map_err(|error| {
-                                better_auth_core::AuthError::internal(format!(
-                                    "Custom session callback task failed: {error}"
-                                ))
-                            })?
-                        },
-                    ))
+                    let callbacks = sessions.into_iter().map(|session| {
+                        let callback = self.callback.clone();
+                        let context = context.clone();
+                        let request = request.clone();
+                        async move { callback.customize(session, &request, &context).await }
+                    });
+                    let values = better_auth_core::request_runtime::concurrent::all(
+                        "Custom session callbacks",
+                        callbacks,
+                    )
                     .await?;
                     response.replace_json(&values)?;
                     for (name, value) in request.take_response_headers()? {
@@ -241,6 +217,10 @@ impl<S: AuthSchema> AuthPlugin<S> for CustomSessionPlugin<S> {
         .await
     }
 }
+
+#[cfg(test)]
+#[path = "custom_session/runtime_tests.rs"]
+mod runtime_tests;
 
 #[cfg(test)]
 mod tests {

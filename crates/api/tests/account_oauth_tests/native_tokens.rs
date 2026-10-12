@@ -255,12 +255,11 @@ async fn test_account_info_spreads_native_response_without_resolving_subject() {
         .headers
         .insert("cookie".into(), session_cookie(&session_token));
     let response = dispatcher
-        .native(request, route, &context, |request| {
+        .native(request, route, &context, |request, context| {
             let plugin = &plugin;
-            let context = &context;
             async move {
                 plugin
-                    .on_request(&request, context)
+                    .on_request(&request, &context)
                     .await?
                     .ok_or_else(|| AuthError::internal("Account-info endpoint did not match"))
             }

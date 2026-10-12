@@ -1,7 +1,7 @@
 use super::*;
 use better_auth::server_api::EndpointInput;
 use better_auth_core::NativeRequest;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 use tokio::sync::Notify;
 
 #[derive(Default)]
@@ -166,7 +166,7 @@ async fn concurrent_dispatches_isolate_writes_and_complete_in_reverse_release_or
         });
         let [first, second] = concurrent.peers.as_ref();
         let mut early = None;
-        let observation = async {
+        let observation = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::select! {
                 biased;
                 _ = async { let _ = tokio::join!(first.entered.notified(), second.entered.notified()); } => {},
@@ -190,15 +190,25 @@ async fn concurrent_dispatches_isolate_writes_and_complete_in_reverse_release_or
                 }
             }
             Ok(isolated)
-        }.await;
+        }).await;
         first.release.notify_one();
         second.release.notify_one();
         let result = match early {
             Some(result) => result,
-            None => operation.await,
+            None => match tokio::time::timeout(Duration::from_secs(5), &mut operation).await {
+                Ok(result) => result,
+                Err(_) => {
+                    operation.abort();
+                    return Err(AuthError::internal(
+                        "Concurrent dispatch did not finish within 5 seconds after releasing both peers",
+                    ));
+                }
+            },
         }
         .expect("Concurrent operation task completed")?;
-        assert!(observation?);
+        assert!(observation.map_err(|_| AuthError::internal(
+            "Concurrent peers did not reach their observation gates within 5 seconds",
+        ))??);
         let before = if nested {
             changed("parent")
         } else {

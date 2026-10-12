@@ -1,3 +1,8 @@
+#![expect(
+    clippy::unwrap_used,
+    reason = "The runtime fixture requires successful setup, bound plugin handles, and typed User output to compare scope isolation"
+)]
+
 use async_trait::async_trait;
 use better_auth::{AuthBuilder, AuthConfig};
 use better_auth_core::{

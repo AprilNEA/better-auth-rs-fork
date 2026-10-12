@@ -1,6 +1,7 @@
 use super::*;
 use better_auth::plugins::endpoint_context::{EndpointContext, OwnedEndpointContext};
 use better_auth_core::background::{BackgroundTask, BackgroundTasks, run_or_await};
+use std::time::Duration;
 use tokio::sync::Notify;
 
 #[derive(Default)]
@@ -122,7 +123,11 @@ async fn owned_background_callback_observes_later_writes_after_the_response() ->
         .plugin(background.clone())
         .build()
         .await?;
-    let response = call(&auth, "/runtime-background", false).await;
+    let response = tokio::time::timeout(
+        Duration::from_secs(5),
+        call(&auth, "/runtime-background", false),
+    )
+    .await;
     lock(&background.0.events)?.push("response");
     let retained = lock(&background.0.retained)?.clone();
     let after_response = retained.as_ref().map(|context| context.base_url());
@@ -130,10 +135,20 @@ async fn owned_background_callback_observes_later_writes_after_the_response() ->
     let tasks = std::mem::take(&mut *lock(&background.0.tasks)?);
     let task_count = tasks.len();
     background.0.release.notify_one();
-    for task in tasks {
-        task.await.expect("Background contract task completed");
-    }
-    let response = response?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        for task in tasks {
+            task.await.expect("Background contract task completed");
+        }
+    })
+    .await
+    .map_err(|_| {
+        AuthError::internal("Background callbacks did not finish within 5 seconds after release")
+    })?;
+    let response = response.map_err(|_| {
+        AuthError::internal(
+            "Endpoint did not return within 5 seconds while its background callback was pending",
+        )
+    })??;
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body.field_value()?.json()?,
