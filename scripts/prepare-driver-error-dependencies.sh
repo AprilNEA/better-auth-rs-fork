@@ -130,8 +130,9 @@ for section in ("dependencies", "dev-dependencies", "build-dependencies"):
 shutil.copy2(manifest, sys.argv[2])
 PY_CHECK
   cargo add --manifest-path "$dependency_manifest" --dev --no-default-features "${dependency_constraints[@]}"
-  cargo rm --manifest-path "$dependency_manifest" --dev "${dependency_constraint_names[@]}"
-  python3 - "$dependency_manifest" "$dependency_snapshot" <<'PY_CHECK'
+  python3 - "$dependency_manifest" "$dependency_snapshot" "${dependency_constraints[@]}" <<'PY_CHECK'
+import difflib
+import json
 import shutil
 import sys
 import tomllib
@@ -140,14 +141,25 @@ from pathlib import Path
 manifest = Path(sys.argv[1])
 snapshot = Path(sys.argv[2])
 current = tomllib.loads(manifest.read_text())
-original = tomllib.loads(snapshot.read_text())
-# Cargo may retain an empty table after removing the temporary dependencies.
-for data in (current, original):
-    if data.get("dev-dependencies") == {}:
-        data.pop("dev-dependencies")
-assert current == original, f"Temporary constraints changed persistent settings in {manifest}"
+expected = tomllib.loads(snapshot.read_text())
+for constraint in sys.argv[3:]:
+    name, version = constraint.split("@", 1)
+    expected.setdefault("dev-dependencies", {})[name] = {
+        "version": version,
+        "default-features": False,
+    }
+difference = "".join(difflib.unified_diff(
+    json.dumps(expected, sort_keys=True, indent=2).splitlines(keepends=True),
+    json.dumps(current, sort_keys=True, indent=2).splitlines(keepends=True),
+    fromfile="expected temporary dependencies",
+    tofile=str(manifest),
+))
+assert current == expected, f"Temporary constraints changed persistent settings:\n{difference}"
+# Restore the exact persistent manifest after validating the temporary Cargo changes.
 shutil.copy2(snapshot, manifest)
 PY_CHECK
+  # Cargo removes temporary root edges while retaining the selected dependency versions.
+  cargo metadata --manifest-path "$dependency_manifest" --all-features --format-version 1 > /dev/null
   cargo metadata --manifest-path "$dependency_manifest" --locked --all-features --format-version 1 \
     > "$dependency_output/graphs/$dependency_index.json"
 done
