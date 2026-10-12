@@ -8,7 +8,6 @@ use crate::error::{AuthError, AuthResult};
 use crate::hooks::SessionUpdate;
 use crate::schema::{AuthSchema, SeaOrmSessionModel};
 use crate::types::CreateSession;
-use better_auth_core::id::AdapterIdInput;
 use better_auth_core::store::schema::EntityRole;
 
 impl<S, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema> SeaOrmStore<S, O, P>
@@ -151,7 +150,7 @@ where
         &self,
         db: &C,
         tx: Option<super::HookTransaction<'_, S>>,
-        mut fields: better_auth_core::FieldMap,
+        fields: better_auth_core::FieldMap,
     ) -> AuthResult<Option<better_auth_core::wire::SessionView>>
     where
         C: ConnectionTrait,
@@ -160,45 +159,28 @@ where
         let readback_schema =
             better_auth_core::store::session_field_schema(&self.config().session, &fields);
         let schema = readback_schema.adapter_fields(&[]);
-        let mut supplied_id = fields.remove("id");
-        let fields = self
-            .model_fields
-            .with_id_input(
-                EntityRole::Session,
-                AdapterIdInput {
-                    force_allow_id: supplied_id.is_some(),
-                    supports_native_uuid: db.get_database_backend() == sea_orm::DbBackend::Postgres,
-                },
-                schema.storage_fields_with_bound_id(
-                    fields,
-                    true,
-                    || {
-                        let supplied = supplied_id.take();
-                        let Some(policy) =
-                            self.model_fields.id_input_policy(EntityRole::Session)?
-                        else {
-                            return Ok(supplied.filter(|value| !value.is_undefined()));
-                        };
-                        self.config()
-                            .advanced
-                            .database
-                            .generate_id()
-                            .adapter_create_id_input("session", supplied, policy)
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            self.config().advanced.database.generate_id(),
-                            S::Session::field_column,
-                            S::Session::native_json_field,
-                            db.get_database_backend(),
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let policy = self.config().advanced.database.generate_id();
+        let backend = db.get_database_backend();
+        let fields = super::record_write::prepare_fields(
+            &schema,
+            fields,
+            Some("session"),
+            (&self.model_fields, EntityRole::Session),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::Session::field_column,
+                    S::Session::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         let mut initialized_columns = S::Session::extra_insert_columns();
         initialized_columns.extend(S::Session::active_column());
         let record = super::record_write::RecordWrite::from_initialized_fields(
@@ -321,7 +303,7 @@ where
     pub(super) async fn prepare_session_update(
         &self,
         db: &impl ConnectionTrait,
-        mut input: better_auth_core::FieldMap,
+        input: better_auth_core::FieldMap,
     ) -> AuthResult<(
         super::record_write::RecordWrite<<S::Session as SeaOrmSessionModel>::Entity>,
         better_auth_core::user_fields::UserConfig,
@@ -329,46 +311,27 @@ where
         let backend = db.get_database_backend();
         self.validate_session_fields()?;
         let schema = better_auth_core::store::session_create_schema(&self.config().session, &input);
-        let mut supplied_id = input.remove("id");
-        let fields = self
-            .model_fields
-            .with_id_input(
-                EntityRole::Session,
-                AdapterIdInput {
-                    force_allow_id: false,
-                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-                },
-                schema.update_adapter_storage_fields(
-                    input,
-                    || {
-                        let Some(value) = supplied_id.take() else {
-                            return Ok(None);
-                        };
-                        let Some(policy) =
-                            self.model_fields.id_input_policy(EntityRole::Session)?
-                        else {
-                            return Ok(Some(value));
-                        };
-                        self.config()
-                            .advanced
-                            .database
-                            .generate_id()
-                            .adapter_id_input(value, policy)
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            self.config().advanced.database.generate_id(),
-                            S::Session::field_column,
-                            S::Session::native_json_field,
-                            backend,
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let policy = self.config().advanced.database.generate_id();
+        let fields = super::record_write::prepare_fields(
+            &schema,
+            input,
+            None,
+            (&self.model_fields, EntityRole::Session),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::Session::field_column,
+                    S::Session::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         let mut active = super::record_write::RecordWrite::<
             <S::Session as SeaOrmSessionModel>::Entity,
         >::default();

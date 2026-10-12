@@ -1,8 +1,15 @@
 //! Keep transformed fields intact until SQL parameter encoding.
 
-use better_auth_core::{AuthResult, FieldValue};
+use better_auth_core::{
+    AuthResult, FieldMap, FieldValue,
+    id::{AdapterIdInput, IdGeneration},
+    plugin_runtime::ModelFields,
+    store::schema::EntityRole,
+    user_fields::{UserConfig, UserFieldConfig},
+};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, Iden, QueryFilter, QueryResult,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, Iden, QueryFilter,
+    QueryResult,
     sea_query::{Condition, Query, SimpleExpr, Value},
 };
 
@@ -16,6 +23,48 @@ use super::{
 #[cfg(test)]
 #[path = "record_write_tests.rs"]
 mod tests;
+
+pub(super) async fn prepare_fields(
+    schema: &UserConfig,
+    input: FieldMap,
+    create_model: Option<&str>,
+    (runtime, role): (&ModelFields, EntityRole),
+    policy: &IdGeneration,
+    backend: DbBackend,
+    bind: impl Fn(&str, &UserFieldConfig, FieldValue) -> AuthResult<FieldValue>,
+) -> AuthResult<FieldMap> {
+    let supplied = input.get("id").cloned();
+    runtime
+        .with_id_input(
+            role,
+            AdapterIdInput {
+                force_allow_id: create_model.is_some() && supplied.is_some(),
+                supports_native_uuid: backend == DbBackend::Postgres,
+            },
+            schema.storage_fields_with_bound_id(
+                input,
+                create_model.is_some(),
+                || {
+                    // Earlier callbacks can replace the runtime ID policy before this declaration slot.
+                    let Some(current) = runtime.id_input_policy(role)? else {
+                        return Ok(supplied.clone());
+                    };
+                    match create_model {
+                        Some(model) => {
+                            policy.adapter_create_id_input(model, supplied.clone(), current)
+                        }
+                        None => supplied
+                            .clone()
+                            .map(|value| policy.adapter_id_input(value, current))
+                            .transpose()
+                            .map(Option::flatten),
+                    }
+                },
+                bind,
+            ),
+        )
+        .await
+}
 
 pub(super) fn private_column<C: ColumnTrait>(
     schema: &better_auth_core::user_fields::UserConfig,

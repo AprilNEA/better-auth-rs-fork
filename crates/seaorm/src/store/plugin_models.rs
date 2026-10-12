@@ -94,39 +94,16 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let fields = self.model_fields.plugin_fields(role);
         let backend = self.connection().get_database_backend();
         let policy = self.config().advanced.database.generate_id();
-        let id_policy = better_auth_core::id::AdapterIdInput {
-            force_allow_id: create && input.contains_key("id"),
-            supports_native_uuid: backend == DbBackend::Postgres,
-        };
-        let mut supplied_id = input.get("id").cloned();
-        let stored = self
-            .model_fields
-            .with_id_input(
-                role,
-                id_policy,
-                fields.storage_fields_with_bound_id(
-                    input,
-                    create,
-                    || {
-                        let supplied = supplied_id.take();
-                        let Some(current) = self.model_fields.id_input_policy(role)? else {
-                            return Ok(supplied.filter(|value| !value.is_undefined()));
-                        };
-                        if create {
-                            policy.adapter_create_id_input(model, supplied, current)
-                        } else {
-                            supplied
-                                .map(|value| policy.adapter_id_input(value, current))
-                                .transpose()
-                                .map(Option::flatten)
-                        }
-                    },
-                    |name, field, value| {
-                        additional_field_input::<M>(name, field, value, policy, backend)
-                    },
-                ),
-            )
-            .await?;
+        let stored = super::record_write::prepare_fields(
+            &fields,
+            input,
+            create.then_some(model),
+            (&self.model_fields, role),
+            policy,
+            backend,
+            |name, field, value| additional_field_input::<M>(name, field, value, policy, backend),
+        )
+        .await?;
         Write::<M>::from_fields(stored, M::column)
     }
 
@@ -139,11 +116,18 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         let fields = self.model_fields.plugin_fields(role);
         let records = rows
             .iter()
-            .map(|row| super::plugin_rows::record::<M>(row, &fields, backend))
+            .map(|row| {
+                super::plugin_rows::record::<M>(row, &fields, backend)
+                    .map(|record| record.with_id_output(&self.model_fields, role))
+            })
             .collect::<AuthResult<Vec<_>>>()?;
-        self.model_fields
-            .project_plugin_records(role, records, super::field_output::capabilities(backend))
-            .await
+        super::plugin_rows::project_records(
+            &fields.adapter_fields(&[]),
+            records,
+            backend,
+            T::from_field_values,
+        )
+        .await
     }
 }
 

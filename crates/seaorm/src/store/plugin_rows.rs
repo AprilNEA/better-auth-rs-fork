@@ -183,6 +183,23 @@ pub(super) fn ordered_output(fields: &UserConfig, output: FieldMap) -> FieldMap 
     output.in_field_order(&fields.fields().keys().cloned().collect::<Vec<_>>())
 }
 
+pub(super) async fn project_records<T>(
+    fields: &UserConfig,
+    records: Vec<AdapterRecord>,
+    backend: DbBackend,
+    decode: impl Fn(FieldMap) -> AuthResult<T>,
+) -> AuthResult<Vec<T>> {
+    fields
+        .project_adapter_records_with_capabilities(
+            records,
+            super::field_output::capabilities(backend),
+        )
+        .await?
+        .into_iter()
+        .map(|output| decode(ordered_output(fields, output)))
+        .collect()
+}
+
 pub(super) fn record<M: SeaOrmPluginModel>(
     row: &QueryResult,
     fields: &UserConfig,

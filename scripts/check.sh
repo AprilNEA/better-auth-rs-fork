@@ -657,10 +657,17 @@ run_stage() {
         request_runtime::concurrent:: background::tests:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::password:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: store::ephemeral::shared_column_contract_tests:: native_sort_ passkey wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: plugins::passkey:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: plugins::email_password:: plugins::username:: plugins::user_management:: plugins::have_i_been_pwned:: plugins::device_authorization::native_tests || cache_status=1
-      cargo test --locked -p better-auth-seaorm --lib -- store::plugin_record_tests:: store::plugin_rows::legacy_private_tests:: store::shared_column_tests:: || cache_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- \
+        store::plugin_records::tests:: store::plugin_rows::legacy_private_tests:: \
+        store::shared_column_tests:: store::record_write::tests:: \
+        store::api_keys::record_tests:: store::passkeys::record_tests:: \
+        store::organization_models::tests:: store::user_verification_tests:: \
+        store::history_tests:: || cache_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test secondary_storage_hooks_tests --test session_initial_defaults_tests \
-        --test api_key_delete_expired_tests || cache_status=1
+        --test api_key_delete_expired_tests --test api_key_additional_fields_tests \
+        --test passkey_additional_fields_tests --test async_field_transform_tests \
+        --test session_id_policy_tests --test query_binding_order_tests || cache_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || cache_status=1
       return "$cache_status"
       ;;

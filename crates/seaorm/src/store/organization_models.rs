@@ -1,7 +1,7 @@
 use crate::SeaOrmOrganizationModel;
 use better_auth_core::store::schema::{EntityRole, resolve_field_name};
 use better_auth_core::{
-    AuthError, AuthResult, id::AdapterIdInput, plugin_runtime::ModelFields, user_fields::UserConfig,
+    AuthError, AuthResult, plugin_runtime::ModelFields, user_fields::UserConfig,
 };
 use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
 use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, QueryFilter, Select};
@@ -248,7 +248,7 @@ pub(super) fn with_id(mut fields: FieldMap, supplied: Option<FieldValue>) -> Fie
 
 pub(super) async fn active<M: SeaOrmOrganizationModel>(
     core: FieldMap,
-    input: FieldMap,
+    mut input: FieldMap,
     config: &UserConfig,
     model: Option<&str>,
     backend: sea_orm::DbBackend,
@@ -286,50 +286,32 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
                 .transpose()
         })
         .collect::<AuthResult<Vec<_>>>()?;
-    let supplied = core.get("id").or_else(|| input.get("id")).cloned();
-    let fields = runtime
-        .with_id_input(
-            role,
-            AdapterIdInput {
-                force_allow_id: model.is_some() && supplied.is_some(),
-                supports_native_uuid: backend == DbBackend::Postgres,
-            },
-            config.organization_storage_fields_with_bound_id(
-                core,
-                input,
-                model.is_some(),
-                || match runtime.id_input_policy(role)? {
-                    Some(current) => match model {
-                        Some(model) => {
-                            policy.adapter_create_id_input(model, supplied.clone(), current)
-                        }
-                        None => supplied
-                            .clone()
-                            .map(|value| policy.adapter_id_input(value, current))
-                            .transpose()
-                            .map(Option::flatten),
-                    },
-                    None => Ok(supplied.clone()),
-                },
-                |storage_name, field, value| {
-                    let column = M::column(storage_name)?;
-                    let native_json = matches!(
-                        column.def().get_column_type(),
-                        sea_orm::ColumnType::Json | sea_orm::ColumnType::JsonBinary
-                    );
-                    crate::reference_id::input_binding(
-                        storage_name,
-                        field,
-                        value,
-                        policy,
-                        M::column,
-                        |_| native_json,
-                        backend,
-                    )
-                },
-            ),
-        )
-        .await?;
+    input.extend(core);
+    let fields = super::record_write::prepare_fields(
+        config,
+        input,
+        model,
+        (runtime, role),
+        policy,
+        backend,
+        |storage_name, field, value| {
+            let column = M::column(storage_name)?;
+            let native_json = matches!(
+                column.def().get_column_type(),
+                sea_orm::ColumnType::Json | sea_orm::ColumnType::JsonBinary
+            );
+            crate::reference_id::input_binding(
+                storage_name,
+                field,
+                value,
+                policy,
+                M::column,
+                |_| native_json,
+                backend,
+            )
+        },
+    )
+    .await?;
     let mut active = super::record_write::RecordWrite::<Entity<M>>::default();
     for (column, value) in private {
         active.native_field(column, value);
@@ -408,12 +390,7 @@ where
         .iter()
         .map(|row| raw_record::<M>(row, &fields, backend, runtime))
         .collect::<AuthResult<Vec<_>>>()?;
-    fields
-        .organization_output_records(records, backend == DbBackend::Postgres)
-        .await?
-        .into_iter()
-        .map(M::Record::from_field_values)
-        .collect()
+    plugin_rows::project_records(&fields, records, backend, M::Record::from_field_values).await
 }
 
 /// Resolve every configured field before accepting writes through this model.

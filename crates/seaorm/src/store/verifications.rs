@@ -9,7 +9,7 @@ use sea_orm::{
 
 use super::plugin_rows;
 use better_auth_core::store::VerificationStore;
-use better_auth_core::{FieldValue, id::AdapterIdInput, store::schema::EntityRole};
+use better_auth_core::{FieldValue, store::schema::EntityRole};
 
 use crate::error::AuthResult;
 use crate::hooks::VerificationUpdate;
@@ -472,49 +472,27 @@ where
             backend,
         )?;
         let input = prepared.into_fields();
-        let supplied = input.get("id").cloned();
-        let input = self
-            .model_fields
-            .with_id_input(
-                EntityRole::Verification,
-                AdapterIdInput {
-                    force_allow_id: false,
-                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-                },
-                fields.storage_fields_with_bound_id(
-                    input,
-                    false,
-                    || match self
-                        .model_fields
-                        .id_input_policy(EntityRole::Verification)?
-                    {
-                        Some(policy) => supplied
-                            .clone()
-                            .map(|value| {
-                                self.config()
-                                    .advanced
-                                    .database
-                                    .generate_id()
-                                    .adapter_id_input(value, policy)
-                            })
-                            .transpose()
-                            .map(Option::flatten),
-                        None => Ok(supplied.clone()),
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            self.config().advanced.database.generate_id(),
-                            S::Verification::field_column,
-                            S::Verification::native_json_field,
-                            backend,
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let policy = self.config().advanced.database.generate_id();
+        let input = super::record_write::prepare_fields(
+            &fields,
+            input,
+            None,
+            (&self.model_fields, EntityRole::Verification),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::Verification::field_column,
+                    S::Verification::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         let active = super::record_write::RecordWrite::<
             <S::Verification as SeaOrmVerificationModel>::Entity,
         >::from_fields(input, S::Verification::field_column)?;

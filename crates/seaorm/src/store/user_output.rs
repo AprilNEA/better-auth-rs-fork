@@ -53,16 +53,7 @@ where
         backend: DbBackend,
     ) -> AuthResult<Vec<UserView>> {
         let fields = self.user_field_schema().adapter_fields(&[]);
-        fields
-            .project_adapter_records_with_capabilities(
-                records,
-                super::field_output::capabilities(backend),
-            )
-            .await?
-            .into_iter()
-            .map(|output| super::plugin_rows::ordered_output(&fields, output))
-            .map(UserView::try_from)
-            .collect()
+        super::plugin_rows::project_records(&fields, records, backend, UserView::try_from).await
     }
 
     pub(super) async fn output_user(

@@ -1,6 +1,5 @@
 use super::instrumentation::database_operation;
 use async_trait::async_trait;
-use better_auth_core::id::AdapterIdInput;
 use better_auth_core::store::schema::EntityRole;
 use sea_orm::{ConnectionTrait, EntityName, QueryFilter, QuerySelect};
 
@@ -192,43 +191,29 @@ where
             }
         }
         let input = prepared.into_fields();
-        let supplied = input.get("id").cloned();
         let backend = db.get_database_backend();
         let schema = self.user_field_schema();
-        let fields = self
-            .model_fields
-            .with_id_input(
-                EntityRole::User,
-                AdapterIdInput {
-                    force_allow_id: supplied.is_some(),
-                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-                },
-                schema.storage_fields_with_bound_id(
-                    input,
-                    true,
-                    || match self.model_fields.id_input_policy(EntityRole::User)? {
-                        Some(policy) => self
-                            .config()
-                            .advanced
-                            .database
-                            .generate_id()
-                            .adapter_create_id_input("user", supplied.clone(), policy),
-                        None => Ok(supplied.clone()),
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            self.config().advanced.database.generate_id(),
-                            S::User::field_column,
-                            S::User::native_json_field,
-                            backend,
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let policy = self.config().advanced.database.generate_id();
+        let fields = super::record_write::prepare_fields(
+            &schema,
+            input,
+            Some("user"),
+            (&self.model_fields, EntityRole::User),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::User::field_column,
+                    S::User::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         let active =
             super::record_write::RecordWrite::<<S::User as SeaOrmUserModel>::Entity>::from_fields(
                 fields,
@@ -358,41 +343,27 @@ where
             value,
             backend,
         )?;
-        let supplied = input.get("id").cloned();
         let schema = self.user_field_schema();
-        let fields = self
-            .model_fields
-            .with_id_input(
-                EntityRole::User,
-                AdapterIdInput {
-                    force_allow_id: false,
-                    supports_native_uuid: backend == sea_orm::DbBackend::Postgres,
-                },
-                schema.storage_fields_with_bound_id(
-                    input,
-                    false,
-                    || match self.model_fields.id_input_policy(EntityRole::User)? {
-                        Some(input_policy) => supplied
-                            .clone()
-                            .map(|value| policy.adapter_id_input(value, input_policy))
-                            .transpose()
-                            .map(Option::flatten),
-                        None => Ok(supplied.clone()),
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            policy,
-                            S::User::field_column,
-                            S::User::native_json_field,
-                            backend,
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let fields = super::record_write::prepare_fields(
+            &schema,
+            input,
+            None,
+            (&self.model_fields, EntityRole::User),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::User::field_column,
+                    S::User::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         let active =
             super::record_write::RecordWrite::<<S::User as SeaOrmUserModel>::Entity>::from_fields(
                 fields,

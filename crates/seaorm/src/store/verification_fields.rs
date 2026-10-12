@@ -6,9 +6,7 @@ use super::{
 use crate::schema::{AuthSchema, SeaOrmVerificationModel};
 use better_auth_core::{
     AuthError, AuthResult, CreateVerification, FieldValue,
-    id::AdapterIdInput,
     store::schema::{EntityRole, resolve_field_name},
-    user_fields::{AdapterRecord, UserConfig},
     wire::VerificationView,
 };
 use sea_orm::{Condition, ConnectionTrait, DbBackend, sea_query::SimpleExpr};
@@ -103,28 +101,6 @@ where
         value_filter::all(predicates, backend)
     }
 
-    async fn project_verification_records(
-        &self,
-        fields: &UserConfig,
-        records: Vec<AdapterRecord>,
-        backend: DbBackend,
-    ) -> AuthResult<Vec<VerificationView>> {
-        let records = records
-            .into_iter()
-            .map(|record| record.with_id_output(&self.model_fields, EntityRole::Verification))
-            .collect();
-        Ok(fields
-            .project_adapter_records_with_capabilities(
-                records,
-                super::field_output::capabilities(backend),
-            )
-            .await?
-            .into_iter()
-            .map(|output| plugin_rows::ordered_output(fields, output))
-            .map(VerificationView::from_adapter_fields)
-            .collect())
-    }
-
     pub(super) async fn output_verifications(
         &self,
         rows: &[SqlRow],
@@ -145,10 +121,13 @@ where
                     S::Verification::id_column(),
                     S::Verification::field_column,
                 )
+                .map(|record| record.with_id_output(&self.model_fields, EntityRole::Verification))
             })
             .collect::<AuthResult<Vec<_>>>()?;
-        self.project_verification_records(&fields, records, backend)
-            .await
+        plugin_rows::project_records(&fields, records, backend, |fields| {
+            Ok(VerificationView::from_adapter_fields(fields))
+        })
+        .await
     }
 
     pub(super) async fn output_verification(
@@ -181,11 +160,15 @@ where
             backend,
             S::Verification::id_column(),
             S::Verification::field_column,
-        )?;
-        Ok(self
-            .project_verification_records(&fields, vec![record], backend)
+        )?
+        .with_id_output(&self.model_fields, EntityRole::Verification);
+        Ok(
+            plugin_rows::project_records(&fields, vec![record], backend, |fields| {
+                Ok(VerificationView::from_adapter_fields(fields))
+            })
             .await?
-            .remove(0))
+            .remove(0),
+        )
     }
 
     pub(super) async fn new_verification_active(
@@ -198,44 +181,27 @@ where
         let fields = self.config().verification.field_schema();
         let backend = db.get_database_backend();
         let input = input.fields()?;
-        let supplied = input.get("id").cloned();
-        let input = self
-            .model_fields
-            .with_id_input(
-                EntityRole::Verification,
-                AdapterIdInput {
-                    force_allow_id: supplied.is_some(),
-                    supports_native_uuid: backend == DbBackend::Postgres,
-                },
-                fields.storage_fields_with_bound_id(
-                    input,
-                    true,
-                    || match self
-                        .model_fields
-                        .id_input_policy(EntityRole::Verification)?
-                    {
-                        Some(policy) => self
-                            .config()
-                            .advanced
-                            .database
-                            .generate_id()
-                            .adapter_create_id_input("verification", supplied.clone(), policy),
-                        None => Ok(supplied.clone()),
-                    },
-                    |name, field, value| {
-                        crate::reference_id::input_binding(
-                            name,
-                            field,
-                            value,
-                            self.config().advanced.database.generate_id(),
-                            S::Verification::field_column,
-                            S::Verification::native_json_field,
-                            backend,
-                        )
-                    },
-                ),
-            )
-            .await?;
+        let policy = self.config().advanced.database.generate_id();
+        let input = super::record_write::prepare_fields(
+            &fields,
+            input,
+            Some("verification"),
+            (&self.model_fields, EntityRole::Verification),
+            policy,
+            backend,
+            |name, field, value| {
+                crate::reference_id::input_binding(
+                    name,
+                    field,
+                    value,
+                    policy,
+                    S::Verification::field_column,
+                    S::Verification::native_json_field,
+                    backend,
+                )
+            },
+        )
+        .await?;
         super::record_write::RecordWrite::from_initialized_fields(
             &fields,
             input,

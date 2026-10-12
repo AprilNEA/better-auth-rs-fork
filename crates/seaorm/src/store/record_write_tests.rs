@@ -319,14 +319,19 @@ async fn declared_undefined_keeps_database_default_instead_of_legacy_initializer
             ..Default::default()
         },
     );
-    let input = schema
-        .storage_fields_with_bound_id(
-            FieldMap::from([("label".into(), "supplied".into())]),
-            true,
-            || Ok(Some("row".into())),
-            |_, _, value| Ok(value),
-        )
-        .await?;
+    let input = prepare_fields(
+        &schema,
+        FieldMap::from([
+            ("id".into(), "row".into()),
+            ("label".into(), "supplied".into()),
+        ]),
+        Some("passkey"),
+        (&ModelFields::default(), EntityRole::Passkey),
+        &IdGeneration::Database,
+        DbBackend::Sqlite,
+        |_, _, value| Ok(value),
+    )
+    .await?;
     let write = RecordWrite::<passkey::Entity>::from_initialized_fields::<passkey::ActiveModel>(
         &schema,
         input,
