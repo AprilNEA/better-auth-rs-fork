@@ -36,12 +36,18 @@ pub enum AuthError {
     /// Preserve a thrown value, its object identity, and captured endpoint headers.
     #[error("{0}")]
     Response(ApiErrorResponse),
-    /// Public schema error with a field-specific message.
+    /// Better Auth field-policy error with a named `BAD_REQUEST` status.
     #[error("{message}")]
     FieldInput {
         /// Upstream schema error code.
         code: &'static str,
         /// Validation message safe to return to the caller.
+        message: String,
+    },
+    /// Better Call request-schema error with a numeric 400 status.
+    #[error("{message}")]
+    RequestValidation {
+        /// Ordered validation issues safe to return to the caller.
         message: String,
     },
     /// A documented upstream API error whose message is safe to return publicly.
@@ -245,6 +251,7 @@ impl AuthError {
     pub fn status_value(&self) -> AuthResult<FieldValue> {
         match self {
             Self::Response(response) => native::optional_property(&response.value, "status"),
+            Self::FieldInput { .. } => Ok("BAD_REQUEST".into()),
             _ => Ok(self.status_code()?.into_field_value()),
         }
     }
@@ -256,7 +263,10 @@ impl AuthError {
         }
         let (_, code, message) = self.error_payload()?;
         let mut fields = FieldMap::new();
-        if matches!(self, Self::FieldInput { .. }) {
+        if matches!(
+            self,
+            Self::FieldInput { .. } | Self::RequestValidation { .. }
+        ) {
             let _ = fields.insert("message".into(), message.clone().into());
         }
         if let Some(code) = code {
@@ -330,6 +340,7 @@ impl AuthError {
     pub fn is_api_error_instance(&self, class: ApiErrorClass) -> bool {
         match self {
             Self::Response(error) => api_error_instance(&error.value, class),
+            Self::RequestValidation { .. } => class == ApiErrorClass::BetterCall,
             Self::FieldInput { .. }
             | Self::Upstream { .. }
             | Self::BadRequest(_)
@@ -388,7 +399,7 @@ impl AuthError {
                     "statusCode",
                 )?));
             }
-            Self::FieldInput { .. } => 400,
+            Self::FieldInput { .. } | Self::RequestValidation { .. } => 400,
             Self::Upstream { status, .. } => *status,
             // 400
             Self::BadRequest(_) | Self::InvalidRequest(_) | Self::Validation(_) => 400,
@@ -464,6 +475,9 @@ impl AuthError {
         }
         let (code, message) = match self {
             Self::FieldInput { code, message } => (Some((*code).to_owned()), message.clone()),
+            Self::RequestValidation { message } => {
+                (Some("VALIDATION_ERROR".into()), message.clone())
+            }
             Self::Upstream { code, message, .. } => {
                 (Some((*code).to_owned()), (*message).to_owned())
             }
@@ -487,7 +501,7 @@ impl AuthError {
 
     /// Convert this error into an [`AuthResponse`](crate::types::AuthResponse).
     /// Native errors move their complete raw value without reading properties.
-    /// Field input errors use the upstream message-first coded body.
+    /// Input errors retain their constructor class, status, and message-first coded body.
     /// Legacy convenience variants generate a code-first body from [`Self::error_payload`].
     ///
     /// Named `to_auth_response` to avoid collision with Axum's
@@ -500,9 +514,6 @@ impl AuthError {
                 response.capture_native_error_headers(headers);
             }
             return response;
-        }
-        if let Self::FieldInput { code, message } = self {
-            return Self::from_code(400, code, message).to_auth_response();
         }
         if let Self::PasswordHash(error) = self {
             crate::observability::logger::current().error(
@@ -523,8 +534,17 @@ impl AuthError {
             Err(error) => return error.to_auth_response(),
         };
         if is_api_error {
+            let status = match self.status_value() {
+                Ok(status) => status,
+                Err(error) => return error.to_auth_response(),
+            };
             let error = match Self::try_api_error(ApiErrorInit {
-                status: status.into_field_value(),
+                class: if self.is_api_error_instance(ApiErrorClass::BetterAuth) {
+                    ApiErrorClass::BetterAuth
+                } else {
+                    ApiErrorClass::BetterCall
+                },
+                status,
                 body,
                 ..Default::default()
             }) {

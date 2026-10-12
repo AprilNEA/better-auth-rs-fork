@@ -72,7 +72,9 @@ pub(crate) fn invalid_type(location: &str, expected: &str, value: Option<&Value>
 }
 
 pub(crate) fn validation_error(message: &str) -> AuthError {
-    AuthError::from_code(400, "VALIDATION_ERROR", message)
+    AuthError::RequestValidation {
+        message: message.into(),
+    }
 }
 
 #[derive(Clone, Default)]

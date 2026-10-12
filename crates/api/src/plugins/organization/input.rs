@@ -36,8 +36,7 @@ pub(super) fn finish(errors: Vec<String>) -> AuthResult<()> {
     if errors.is_empty() {
         Ok(())
     } else {
-        Err(AuthError::FieldInput {
-            code: "VALIDATION_ERROR",
+        Err(AuthError::RequestValidation {
             message: errors.join("; "),
         })
     }
@@ -106,13 +105,12 @@ pub(super) fn native_fields(
         let field = schema.fields().get(name).filter(|field| field.input());
         let location = format!("{prefix}.{name}");
         if let Some(field) = field.filter(|_| !base_wins || builtin.is_none()) {
-            match field.validate_organization_input(body.get(name), &location, partial) {
+            match field.organization_input_outcome(body.get(name), &location, partial)? {
                 Ok(Some(value)) => {
                     let _ = output.insert(name.into(), value);
                 }
                 Ok(None) => {}
-                Err(AuthError::FieldInput { message, .. }) => errors.push(message),
-                Err(error) => return Err(error),
+                Err(message) => errors.push(message),
             }
         } else if let Some((_, kind, required)) = builtin
             && let Some(value) = field_value(

@@ -309,6 +309,103 @@ fn response_conversion_propagates_the_original_constructor_failure() -> AuthResu
 }
 
 #[test]
+fn organization_input_propagates_getter_failures_without_issue_aggregation() -> AuthResult<()> {
+    use crate::user_fields::{UserConfig, UserFieldConfig, UserFieldType};
+
+    let fields = UserConfig {
+        additional_fields: Some(
+            [
+                ("first".into(), UserFieldConfig::default()),
+                (
+                    "payload".into(),
+                    UserFieldConfig {
+                        field_type: UserFieldType::Json,
+                        ..Default::default()
+                    },
+                ),
+                ("later".into(), UserFieldConfig::default()),
+            ]
+            .into(),
+        ),
+    };
+    let failure = AuthError::from_code("CONFLICT", "VALIDATION_ERROR", "getter rejected");
+    let failure = failure
+        .raw_value()
+        .cloned()
+        .ok_or_else(|| AuthError::internal("Expected native getter failure"))?;
+    let reads = Arc::new(Mutex::new(Vec::new()));
+    let payload = source(&["value"], {
+        let failure = failure.clone();
+        let reads = reads.clone();
+        move |name| {
+            record(&reads, name)?;
+            Err(AuthError::from_thrown(failure.clone()))
+        }
+    });
+    let error = fields
+        .parse_organization_input(
+            &FieldMap::from([
+                ("first".into(), false.into()),
+                ("payload".into(), payload.into()),
+            ]),
+            "body",
+            false,
+        )
+        .err()
+        .ok_or_else(|| AuthError::internal("Organization schema ignored the getter failure"))?;
+    assert!(
+        error
+            .raw_value()
+            .is_some_and(|value| value.strict_equals(&failure))
+    );
+    assert_eq!(error.status_value()?, FieldValue::from("CONFLICT"));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+    assert_eq!(events(&reads)?, ["value"]);
+    let error = AuthError::from_returned_response(error.to_auth_response())?;
+    assert!(
+        error
+            .raw_value()
+            .is_some_and(|value| value.strict_equals(&failure))
+    );
+
+    for request_validation in [false, true] {
+        let payload = source(&["value"], move |_| {
+            Err(if request_validation {
+                AuthError::RequestValidation {
+                    message: "field getter rejected".into(),
+                }
+            } else {
+                AuthError::FieldInput {
+                    code: "CUSTOM_FIELD_FAILURE",
+                    message: "field getter rejected".into(),
+                }
+            })
+        });
+        let error = fields
+            .parse_organization_input(
+                &FieldMap::from([
+                    ("first".into(), false.into()),
+                    ("payload".into(), payload.into()),
+                ]),
+                "body",
+                false,
+            )
+            .err()
+            .ok_or_else(|| AuthError::internal("Organization schema swallowed a getter error"))?;
+        if request_validation {
+            assert!(
+                matches!(error, AuthError::RequestValidation { ref message } if message == "field getter rejected")
+            );
+        } else {
+            assert!(
+                matches!(error, AuthError::FieldInput { code: "CUSTOM_FIELD_FAILURE", ref message } if message == "field getter rejected")
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn instrumentation_propagates_top_level_message_getter_and_conversion_failures() -> AuthResult<()> {
     let failure: FieldValue = FieldMap::from([("failure".into(), "message".into())]).into();
     let getter: FieldValue = source(&["message"], {

@@ -9,8 +9,8 @@ use better_auth::server_api::EndpointInput;
 use better_auth::{AuthConfig, AuthError, AuthResult, BetterAuth};
 use better_auth_core::observability::{AfterEndpointHook, BeforeEndpointHook, EndpointHooks};
 use better_auth_core::{
-    AuthContext, AuthRequest, AuthResponse, BeforeRequestAction, HttpMethod, ResponseBody,
-    store::StatelessSchema as S,
+    ApiErrorClass, AuthContext, AuthRequest, AuthResponse, BeforeRequestAction, FieldValue,
+    HttpMethod, ResponseBody, store::StatelessSchema as S,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -140,10 +140,17 @@ async fn required_headers_preserve_schema_precedence_and_native_request_authorit
             .await
         {
             Ok(response) => (response.status, response.body),
-            Err(error) => (
-                error.status_code()?.typed().copied()?,
-                ResponseBody::Native(error.body_value()?),
-            ),
+            Err(error) => {
+                if case.kind != "empty" {
+                    assert_eq!(error.status_value()?, FieldValue::from(400u16));
+                    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+                    assert!(!error.is_api_error_instance(ApiErrorClass::BetterAuth));
+                }
+                (
+                    error.status_code()?.typed().copied()?,
+                    ResponseBody::Native(error.body_value()?),
+                )
+            }
         };
         let bytes = body.bytes()?;
         let result: Value = if body.is_empty() {

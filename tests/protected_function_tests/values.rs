@@ -1,6 +1,6 @@
 use super::support::{fixture, observe, operation, user};
 use better_auth_core::{
-    AuthError, AuthResult, FieldMap, FieldValue, StructuredCloneContext, UserView,
+    ApiErrorClass, AuthError, AuthResult, FieldMap, FieldValue, StructuredCloneContext, UserView,
     user_fields::{
         FieldTransforms, FieldValidators, UserConfig, UserFieldConfig, UserFieldFactory,
         UserFieldTransform,
@@ -174,11 +174,18 @@ fn own_property_parser_outcomes_match_captured_function_defaults() -> AuthResult
                         expected["result"]
                     );
                 }
-                Err(AuthError::FieldInput { code, message }) => {
+                Err(error @ AuthError::FieldInput { .. }) => {
                     assert_eq!(
-                        json!({"code": code, "message": message}),
-                        expected["error"]["properties"]["body"]
+                        error.body_value()?.json()?,
+                        Some(expected["error"]["properties"]["body"].clone())
                     );
+                    assert_eq!(
+                        error.status_value()?.json()?,
+                        Some(expected["error"]["properties"]["status"].clone())
+                    );
+                    assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+                    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+                    assert_eq!(error.status_code()?, 400);
                     assert_eq!(expected["error"]["properties"]["statusCode"], 400);
                 }
                 Err(error) => {

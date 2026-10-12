@@ -122,8 +122,7 @@ fn optional_string(value: NullableStringField, path: &str) -> AuthResult<Option<
     match value {
         NullableStringField::Missing => Ok(None),
         NullableStringField::Value(value) => Ok(Some(value)),
-        NullableStringField::Null => Err(AuthError::FieldInput {
-            code: "VALIDATION_ERROR",
+        NullableStringField::Null => Err(AuthError::RequestValidation {
             message: format!("[{path}] Invalid input: expected string, received null"),
         }),
     }

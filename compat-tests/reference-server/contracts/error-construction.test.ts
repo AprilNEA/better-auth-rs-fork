@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import { APIError } from "@better-auth/core/error";
-import { APIError as EndpointAPIError, createEndpoint, toResponse } from "better-call";
+import { APIError as EndpointAPIError, createEndpoint, createRouter, toResponse } from "better-call";
 import { z } from "zod";
+import { toZodSchema } from "better-auth/db";
 
 async function observe(error: EndpointAPIError, status: number, keys: string[], bytes: string) {
   expect(error.statusCode).toBe(status);
@@ -41,7 +42,11 @@ test("absent and null error bodies remain distinct", async () => {
 });
 
 test("custom coded field errors retain their explicit code", async () => {
-  await observe(APIError.from("BAD_REQUEST", { code: "CUSTOM_FIELD_FAILURE", message: "field rejected" }),
+  const error = APIError.from("BAD_REQUEST", { code: "CUSTOM_FIELD_FAILURE", message: "field rejected" });
+  expect(error).toBeInstanceOf(APIError);
+  expect(error).toBeInstanceOf(EndpointAPIError);
+  expect(error.status).toBe("BAD_REQUEST");
+  await observe(error,
     400, ["message", "code"], '{"message":"field rejected","code":"CUSTOM_FIELD_FAILURE"}');
 });
 
@@ -64,9 +69,45 @@ for (const location of ["body", "query", "headers"] as const) {
     expect(events).toStrictEqual([{ message, issues: location === "headers" ? []
       : [{ expected: kind, code: "invalid_type", path: [], message: issue }] }]);
     expect(caught).toBeInstanceOf(EndpointAPIError);
+    expect(caught).not.toBeInstanceOf(APIError);
+    expect((caught as EndpointAPIError).status).toBe(400);
     await observe(caught as EndpointAPIError, 400, ["message", "code"], JSON.stringify({ message, code: "VALIDATION_ERROR" }));
   });
 }
+
+test("Organization issues retain request identity and declaration order", async () => {
+  const endpoint = createEndpoint("/organization", {
+    method: "POST",
+    body: toZodSchema({ fields: { title: { type: "string" }, tags: { type: "string[]" } }, isClientSide: true }),
+  }, async () => { throw new Error("Invalid input must not reach the handler"); });
+  let caught: unknown;
+  try { await Reflect.apply(endpoint, undefined, [{ body: { title: false, tags: [null, 3] } }]); }
+  catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(EndpointAPIError);
+  expect(caught).not.toBeInstanceOf(APIError);
+  expect((caught as EndpointAPIError).status).toBe(400);
+  await observe(caught as EndpointAPIError, 400, ["message", "code"],
+    '{"message":"[body.title] Invalid input: expected string, received boolean; [body.tags.0] Invalid input: expected string, received null; [body.tags.1] Invalid input: expected string, received number","code":"VALIDATION_ERROR"}');
+});
+
+test("Organization field validation propagates original getter failures", () => {
+  const fields = toZodSchema({ fields: {
+    first: { type: "string" }, payload: { type: "json" }, later: { type: "string" },
+  }, isClientSide: true });
+  for (const failure of [
+    APIError.from("CONFLICT", { code: "VALIDATION_ERROR", message: "getter rejected" }),
+    APIError.from("BAD_REQUEST", { code: "CUSTOM_FIELD_FAILURE", message: "field getter rejected" }),
+    new EndpointAPIError(400, { message: "field getter rejected", code: "VALIDATION_ERROR" }),
+  ]) {
+    const events: string[] = [];
+    const payload = { get value() { events.push("value"); throw failure; } };
+    let caught: unknown;
+    try { fields.parse({ first: false, payload }); }
+    catch (error) { caught = error; }
+    expect(caught).toBe(failure);
+    expect(events).toStrictEqual(["value"]);
+  }
+});
 
 test("update-user preserves named builtin errors and complete explicit bodies", async () => {
   const { betterAuth } = await import("better-auth");
@@ -97,3 +138,38 @@ test("update-user preserves named builtin errors and complete explicit bodies", 
     expect(database).toStrictEqual(stored);
   }
 });
+
+for (const [name, contentType, input, status, code, message] of [
+  ["missing-type", undefined, "{}", 415, "UNSUPPORTED_MEDIA_TYPE", "Content-Type is required. Allowed types: application/json"],
+  ["disallowed-type", "text/plain", "{}", 415, "UNSUPPORTED_MEDIA_TYPE", 'Content-Type "text/plain" is not allowed. Allowed types: application/json'],
+  ["invalid-json", "application/json", "{", 400, "BAD_REQUEST", "Invalid JSON in request body"],
+  ["empty-json", "application/json", "", 400, "BAD_REQUEST", "Invalid JSON in request body"],
+] as const) {
+  test(`HTTP body parser ${name} retains Better Call provenance before serialization`, async () => {
+    let caught: unknown;
+    let calls = 0;
+    const router = createRouter({ body: createEndpoint("/body", {
+      method: "POST", metadata: { allowedMediaTypes: ["application/json"] },
+    }, async () => { calls++; return null; }) }, {
+      openapi: { disabled: true },
+      onError(error) { caught = error; },
+    });
+    const response = await router.handler(new Request("http://body-errors.test/body", {
+      method: "POST",
+      headers: contentType === undefined ? undefined : { "content-type": contentType },
+      body: new TextEncoder().encode(input),
+    }));
+    expect(caught).toBeInstanceOf(EndpointAPIError);
+    expect(caught).not.toBeInstanceOf(APIError);
+    const error = caught as EndpointAPIError;
+    expect(error.status).toBe(status);
+    expect(error.statusCode).toBe(status);
+    expect(error.body).toStrictEqual({ message, code });
+    expect(Object.keys(error.body!)).toStrictEqual(["message", "code"]);
+    expect(error.headers).toStrictEqual({});
+    expect(response.status).toBe(status);
+    expect(response.headers.get("content-type")).toBe("application/json");
+    expect(await response.text()).toBe(JSON.stringify({ message, code }));
+    expect(calls).toBe(0);
+  });
+}

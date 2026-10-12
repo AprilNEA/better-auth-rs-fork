@@ -22,9 +22,11 @@ Built-in constructors preserve the class of the upstream call site. One Time Tok
 
 `status_code()?` returns `SchemaValue<u16>` and preserves undefined, null, and dynamic values. Use `.typed()?` when the caller requires an ordinary status code. `body_value()?`, `headers_value()?`, and `message_value()?` read current properties and propagate getter errors. `raw_value()` retains the original object identity. `to_auth_response()` moves the complete error into `response.body`; use `api_error_body()?` to read its public payload or `into_http_response()?` to materialize HTTP bytes. HTTP conversion reads body, selected status, `status.toString()`, and selected headers in the upstream order.
 
-`AuthError::FieldInput` retains its code and message for input issue aggregation. Response conversion uses the same message-first native coded body as endpoint body, query, and required-header validation. `validate_request_body` returns `AuthResult<T>` so callers can propagate parsing and validation failures through the shared error boundary. The helper preserves its existing HTTP body and field order. `validation_error_response` remains available for callers that need an `AuthResponse` directly.
+`AuthError::FieldInput { code, message }` retains field-policy errors with Better Auth identity, named `BAD_REQUEST` status, and numeric status code `400`. `AuthError::RequestValidation { message }` retains endpoint body, query, and required-header issues with Better Call identity, numeric status `400`, and the fixed `VALIDATION_ERROR` code. Organization validators aggregate generated issues in declaration order. Getter failures propagate unchanged, including a getter that throws `RequestValidation`. Both variants use message-first native bodies. Error source determines the variant; neither the code nor the message determines the source. `validate_request_body` returns `AuthResult<T>` so callers can propagate parsing and validation failures through the shared error boundary. The helper preserves its existing HTTP body and field order. `validation_error_response` remains available for callers that need an `AuthResponse` directly.
 
 An undefined native body produces an empty HTTP body; explicit null serializes as `null`. Undefined object properties remain present for native callers and are omitted at HTTP JSON serialization. Existing convenience constructors retain their current response format. Ordinary runtime failures reach the dispatcher's empty 500 response; explicit API error bodies retain the endpoint's contract.
+
+The input-error distinction covers field policies and migrated endpoint schemas. Public `validator::Validate` convenience helpers keep their existing response contract. `UserFieldValidator` still represents rejection through `AuthResult`; returned validation issues, thrown JavaScript errors, and asynchronous Standard Schema results remain separate compatibility work. Default factories and synchronous transforms propagate their original errors without converting them to validation issues.
 
 Organization CRUD keeps endpoint-specific errors. Missing membership returns a coded 400 from update and delete, and a coded 403 from reads and set-active. Failed membership checks in reads and set-active still clear the active organization before returning the error. Create and delete return an empty 401 when authentication is required; update retains its message-only 401. Disabled organization deletion returns its coded 404 before session lookup.
 
@@ -36,7 +38,8 @@ Organization CRUD keeps endpoint-specific errors. Missing membership returns a c
 | `BadRequest` | 400 | Malformed request |
 | `InvalidRequest` | 400 | Invalid request parameters |
 | `Validation` | 400 | Input validation failed |
-| `FieldInput` | 400 | Native field validation code and message |
+| `FieldInput` | 400 | Better Auth field-policy code and message; named `BAD_REQUEST` status |
+| `RequestValidation` | 400 | Better Call request-schema issues; numeric status and `VALIDATION_ERROR` code |
 | `InvalidCredentials` | 401 | Wrong email/password |
 | `Unauthenticated` | 401 | No valid session token |
 | `SessionNotFound` | 401 | Session token not found or expired |

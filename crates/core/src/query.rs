@@ -89,14 +89,12 @@ fn type_name(value: &Value) -> &'static str {
 }
 
 fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthError {
-    AuthError::from_code(
-        400,
-        "VALIDATION_ERROR",
-        format!(
+    AuthError::RequestValidation {
+        message: format!(
             "[{location}] Invalid input: expected {expected}, received {}",
             type_name(value)
         ),
-    )
+    }
 }
 
 pub(crate) fn string_field<'a>(

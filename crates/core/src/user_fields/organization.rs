@@ -65,24 +65,22 @@ impl UserConfig {
         let mut parsed = FieldMap::new();
         let mut errors = Vec::new();
         for (name, field) in self.fields() {
-            match field.validate_organization_input(
+            match field.organization_input_outcome(
                 input.get(name),
                 &format!("{prefix}.{name}"),
                 partial,
-            ) {
+            )? {
                 Ok(Some(value)) => {
                     let _ = parsed.insert(name.clone(), value);
                 }
                 Ok(None) => {}
-                Err(AuthError::FieldInput { message, .. }) => errors.push(message),
-                Err(error) => return Err(error),
+                Err(message) => errors.push(message),
             }
         }
         if errors.is_empty() {
             Ok(parsed)
         } else {
-            Err(AuthError::FieldInput {
-                code: "VALIDATION_ERROR",
+            Err(AuthError::RequestValidation {
                 message: errors.join("; "),
             })
         }
@@ -158,14 +156,27 @@ impl UserFieldConfig {
         location: &str,
         partial: bool,
     ) -> AuthResult<Option<Value>> {
+        self.organization_input_outcome(value, location, partial)?
+            .map_err(|message| AuthError::RequestValidation { message })
+    }
+
+    /// Return generated issues separately from errors thrown while reading field values.
+    /// The outer result preserves getter failures, including typed request-validation errors.
+    #[doc(hidden)]
+    pub fn organization_input_outcome(
+        &self,
+        value: Option<&Value>,
+        location: &str,
+        partial: bool,
+    ) -> AuthResult<Result<Option<Value>, String>> {
         if !self.input() || value.is_none() && (partial || self.required == Some(false)) {
-            return Ok(None);
+            return Ok(Ok(None));
         }
         if matches!(value, Some(Value::Null | Value::Undefined)) && self.required == Some(false) {
-            return Ok(value.cloned());
+            return Ok(Ok(value.cloned()));
         }
         let expected = match &self.field_type {
-            UserFieldType::Enum(_) => return Ok(value.cloned()),
+            UserFieldType::Enum(_) => return Ok(Ok(value.cloned())),
             UserFieldType::String => "string",
             UserFieldType::Number => "number",
             UserFieldType::Boolean => "boolean",
@@ -215,12 +226,9 @@ impl UserFieldConfig {
             });
         }
         if errors.is_empty() {
-            Ok(value.cloned())
+            Ok(Ok(value.cloned()))
         } else {
-            Err(AuthError::FieldInput {
-                code: "VALIDATION_ERROR",
-                message: errors.join("; "),
-            })
+            Ok(Err(errors.join("; ")))
         }
     }
 }
@@ -312,7 +320,7 @@ mod tests {
                 .validate_organization_input(Some(&value), "body.payload", false)
                 .unwrap_err();
             assert!(
-                matches!(error, AuthError::FieldInput { code: "VALIDATION_ERROR", message } if message == "[body.payload] Invalid input")
+                matches!(error, AuthError::RequestValidation { message } if message == "[body.payload] Invalid input")
             );
         }
         let lone_surrogate = Value::from(crate::Utf16String::from_units(vec![0xd800]));
@@ -345,7 +353,7 @@ mod tests {
         );
         let invalid = Value::from(crate::FieldDate::invalid());
         assert!(
-            matches!(field.validate_organization_input(Some(&invalid), "body.date", false).unwrap_err(), AuthError::FieldInput { message, .. } if message == "[body.date] Invalid input: expected date, received Date")
+            matches!(field.validate_organization_input(Some(&invalid), "body.date", false).unwrap_err(), AuthError::RequestValidation { message } if message == "[body.date] Invalid input: expected date, received Date")
         );
         let field = UserFieldConfig {
             field_type: UserFieldType::Number,
@@ -357,7 +365,7 @@ mod tests {
             (f64::NEG_INFINITY, "-Infinity"),
         ] {
             assert!(
-                matches!(field.validate_organization_input(Some(&Value::from(number)), "body.number", false).unwrap_err(), AuthError::FieldInput { message, .. } if message == format!("[body.number] Invalid input: expected number, received {label}"))
+                matches!(field.validate_organization_input(Some(&Value::from(number)), "body.number", false).unwrap_err(), AuthError::RequestValidation { message } if message == format!("[body.number] Invalid input: expected number, received {label}"))
             );
         }
     }

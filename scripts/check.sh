@@ -577,6 +577,8 @@ run_stage() {
       bun --no-install test \
         ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
         ./compat-tests/reference-server/contracts/error-construction.test.ts \
+        ./compat-tests/reference-server/contracts/device-request-validation.test.ts \
+        ./compat-tests/reference-server/contracts/user-input-policy.test.ts \
         ./compat-tests/reference-server/contracts/admin-error-construction.test.ts \
         ./compat-tests/reference-server/contracts/update-user-native-session.test.ts \
         ./compat-tests/reference-server/contracts/username-session-consumption.test.ts \
@@ -588,9 +590,13 @@ run_stage() {
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || errors_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test native_endpoint_tests \
+        --test required_headers_tests --test device_request_validation_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests \
         --test admin_error_construction_tests -- -D warnings || errors_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        error:: session:: plugin::tests::raw_api_errors:: \
+        error:: session:: query:: http_body:: user_fields::organization::tests:: \
+        plugin::tests::raw_api_errors:: plugin::tests::async_body_dispatch:: \
+        plugin::tests::response_status:: plugin::tests::response_values:: \
         store::ephemeral::member_delete:: store::joins::organization:: || errors_status=1
       cargo test --locked -p better-auth-api --features axum --lib || errors_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
@@ -598,6 +604,8 @@ run_stage() {
         organization_role_business_consumes_ || errors_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test native_endpoint_tests --test admin_error_construction_tests --test organization_native_tests \
+        --test required_headers_tests --test device_request_validation_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests \
         --test organization_query_limits_tests --test username_runtime_tests || errors_status=1
       return "$errors_status"
       ;;
@@ -1088,9 +1096,10 @@ run_stage() {
         ./compat-tests/reference-server/contracts/user-input-policy.test.ts || validation_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api -- -D warnings || validation_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test required_headers_tests --test device_request_validation_tests -- -D warnings || validation_status=1
+        --test required_headers_tests --test device_request_validation_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests -- -D warnings || validation_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        error::construction_tests:: plugin::tests::async_body_dispatch:: \
+        error:: query:: http_body:: user_fields::organization::tests:: plugin::tests::async_body_dispatch:: \
         plugin::tests::response_status:: plugin::tests::response_values:: || validation_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::oauth::signin::error_tests:: || validation_status=1

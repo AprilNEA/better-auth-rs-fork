@@ -8,8 +8,17 @@ use crate::{AuthResponse, FieldMap, FieldValue};
 fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthResult<FieldValue> {
     assert_eq!(error.status_code()?, status);
     assert!(error.is_api_error()?);
+    let raw_status = error.status_value()?;
+    let brands = [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth]
+        .map(|class| error.is_api_error_instance(class));
     let body = error.body_value()?;
-    let response = error.to_auth_response();
+    let error = AuthError::from_returned_response(error.to_auth_response())?;
+    assert_eq!(error.status_value()?, raw_status);
+    assert_eq!(
+        [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth]
+            .map(|class| error.is_api_error_instance(class)),
+        brands
+    );
     let fields = body
         .as_object()
         .map(|body| body.snapshot_fields())
@@ -21,7 +30,7 @@ fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthRe
             .unwrap_or_default(),
         keys
     );
-    let response = response.into_http_response()?;
+    let response = error.to_auth_response().into_http_response()?;
     assert_eq!(response.status, status);
     assert_eq!(response.body.bytes()?.as_ref(), bytes);
     Ok(body)
@@ -158,6 +167,9 @@ fn field_input_retains_its_variant_until_response_conversion() -> AuthResult<()>
         )
     );
     assert_eq!(error.to_string(), "field rejected");
+    assert_eq!(error.status_value()?, FieldValue::from("BAD_REQUEST"));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
     let _ = observe(
         error,
         400,
@@ -168,18 +180,70 @@ fn field_input_retains_its_variant_until_response_conversion() -> AuthResult<()>
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Request schemas must retain Better Call identity and numeric status through conversion"
+)]
 fn record_and_query_validation_share_native_coded_error_bodies() -> AuthResult<()> {
     let mut request = crate::AuthRequest::new(crate::HttpMethod::Post, "/record");
     request.body = Some(b"42".to_vec());
     let error = crate::endpoint_input::record_body(&request)
         .err()
         .ok_or_else(|| AuthError::internal("Record schema accepted a number"))?;
+    assert!(matches!(error, AuthError::RequestValidation { .. }));
+    assert_eq!(error.status_value()?, FieldValue::from(400u16));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+    assert!(!error.is_api_error_instance(ApiErrorClass::BetterAuth));
     let _ = observe(error, 400, &["message", "code"],
         br#"{"message":"[body] Invalid input: expected record, received number","code":"VALIDATION_ERROR"}"#)?;
     let error = crate::query::session_query(Some(serde_json::json!(42)))
         .err()
         .ok_or_else(|| AuthError::internal("Query schema accepted a number"))?;
+    assert!(matches!(error, AuthError::RequestValidation { .. }));
+    assert_eq!(error.status_value()?, FieldValue::from(400u16));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+    assert!(!error.is_api_error_instance(ApiErrorClass::BetterAuth));
     let _ = observe(error, 400, &["message", "code"],
         br#"{"message":"[query] Invalid input: expected object, received number","code":"VALIDATION_ERROR"}"#)?;
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Organization issues must retain declaration order and the request-schema constructor"
+)]
+fn organization_issues_retain_request_brand_and_declaration_order() -> AuthResult<()> {
+    use crate::user_fields::{UserConfig, UserFieldConfig, UserFieldType};
+
+    let fields = UserConfig {
+        additional_fields: Some(
+            [
+                ("title".into(), UserFieldConfig::default()),
+                (
+                    "tags".into(),
+                    UserFieldConfig {
+                        field_type: UserFieldType::StringArray,
+                        ..Default::default()
+                    },
+                ),
+            ]
+            .into(),
+        ),
+    };
+    let input = FieldMap::from([
+        ("title".into(), false.into()),
+        ("tags".into(), vec![FieldValue::Null, 3u16.into()].into()),
+    ]);
+    let error = fields
+        .parse_organization_input(&input, "body", false)
+        .err()
+        .ok_or_else(|| AuthError::internal("Organization schema accepted invalid fields"))?;
+    assert!(matches!(error, AuthError::RequestValidation { .. }));
+    assert_eq!(error.status_value()?, FieldValue::from(400u16));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+    assert!(!error.is_api_error_instance(ApiErrorClass::BetterAuth));
+    let _ = observe(error, 400, &["message", "code"],
+        br#"{"message":"[body.title] Invalid input: expected string, received boolean; [body.tags.0] Invalid input: expected string, received null; [body.tags.1] Invalid input: expected string, received number","code":"VALIDATION_ERROR"}"#)?;
     Ok(())
 }

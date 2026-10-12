@@ -70,7 +70,7 @@ impl PasskeyPlugin {
         if authenticator_attachment
             .is_some_and(|value| !matches!(value, "platform" | "cross-platform"))
         {
-            return Err(AuthError::FieldInput { code: "VALIDATION_ERROR", message: "[query.authenticatorAttachment] Invalid option: expected one of \"platform\"|\"cross-platform\"".into() });
+            return Err(AuthError::RequestValidation { message: "[query.authenticatorAttachment] Invalid option: expected one of \"platform\"|\"cross-platform\"".into() });
         }
         let user = registration::resolve_user(ctx, req, &self.config).await?;
         let (result, cookie_header) = generate_register_options_core(

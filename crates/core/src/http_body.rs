@@ -1,5 +1,5 @@
-use crate::{AuthError, AuthRequest, AuthResponse, AuthResult};
-use serde_json::{Value, json};
+use crate::{ApiErrorClass, ApiErrorInit, AuthError, AuthRequest, AuthResult, FieldMap};
+use serde_json::Value;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ParsedHttpBody {
@@ -9,9 +9,18 @@ pub(crate) struct ParsedHttpBody {
 }
 
 fn error(status: u16, code: &str, message: &str) -> AuthError {
-    AuthResponse::text(status, json!({"message":message,"code":code}).to_string())
-        .with_header("content-type", "application/json")
-        .into()
+    match AuthError::try_api_error(ApiErrorInit {
+        class: ApiErrorClass::BetterCall,
+        status: status.into(),
+        body: FieldMap::from([
+            ("message".into(), message.into()),
+            ("code".into(), code.into()),
+        ])
+        .into(),
+        ..Default::default()
+    }) {
+        Ok(error) | Err(error) => error,
+    }
 }
 
 impl AuthRequest {
@@ -83,7 +92,86 @@ impl AuthRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::HttpMethod;
+    use crate::{FieldValue, HttpMethod};
+    use serde_json::json;
+
+    #[test]
+    fn parser_errors_retain_better_call_provenance_before_http_serialization() {
+        for (content_type, bytes, status, code, message) in [
+            (
+                None,
+                b"{}".as_slice(),
+                415u16,
+                "UNSUPPORTED_MEDIA_TYPE",
+                "Content-Type is required. Allowed types: application/json",
+            ),
+            (
+                Some("text/plain"),
+                b"{}".as_slice(),
+                415,
+                "UNSUPPORTED_MEDIA_TYPE",
+                "Content-Type \"text/plain\" is not allowed. Allowed types: application/json",
+            ),
+            (
+                Some("application/json"),
+                b"{".as_slice(),
+                400,
+                "BAD_REQUEST",
+                "Invalid JSON in request body",
+            ),
+            (
+                Some("application/json"),
+                b"".as_slice(),
+                400,
+                "BAD_REQUEST",
+                "Invalid JSON in request body",
+            ),
+        ] {
+            let mut request = AuthRequest::new(HttpMethod::Post, "/body");
+            request.body = Some(bytes.to_vec());
+            if let Some(content_type) = content_type {
+                request
+                    .headers
+                    .insert("content-type".into(), content_type.into());
+            }
+            let error = request
+                .parse_http_body(&["application/json".into()])
+                .unwrap_err();
+            assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+            assert!(!error.is_api_error_instance(ApiErrorClass::BetterAuth));
+            assert_eq!(error.status_value().unwrap(), FieldValue::from(status));
+            assert_eq!(error.status_code().unwrap(), status);
+            let body = error.body_value().unwrap();
+            assert_eq!(
+                body,
+                FieldValue::from(json!({"message": message, "code": code}))
+            );
+            assert_eq!(
+                body.as_object().unwrap().enumerable_keys().unwrap(),
+                ["message", "code"]
+            );
+            assert!(
+                error
+                    .headers_value()
+                    .unwrap()
+                    .enumerable_fields()
+                    .unwrap()
+                    .is_empty()
+            );
+            let response = error.to_auth_response().into_http_response().unwrap();
+            assert_eq!(response.status, status);
+            assert_eq!(
+                response.body.bytes().unwrap().as_ref(),
+                serde_json::to_vec(&json!({"message": message, "code": code})).unwrap()
+            );
+            assert_eq!(
+                response.headers.get("content-type"),
+                Some("application/json")
+            );
+            assert_eq!(request.body.as_deref(), Some(bytes));
+            assert!(!request.has_http_body_context());
+        }
+    }
 
     #[test]
     fn decoded_form_body_retains_raw_request_and_invalidates_on_replacement() {

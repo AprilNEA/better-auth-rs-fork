@@ -112,8 +112,7 @@ pub(super) fn validate(
     let raw = request.input_field_value()?;
     let mut errors = Vec::new();
     let Some(object) = raw.as_object() else {
-        return Err(AuthError::FieldInput {
-            code: "VALIDATION_ERROR",
+        return Err(AuthError::RequestValidation {
             message: input::native_invalid_type("body", "object", Some(&raw)),
         });
     };

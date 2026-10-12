@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use better_auth::plugins::{AdminPlugin, AnonymousPlugin, PhoneNumberPlugin, TwoFactorPlugin};
 use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
 use better_auth_core::{
-    AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
-    AuthSchema, FieldMap,
+    ApiErrorClass, AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult,
+    AuthRoute, AuthSchema, FieldMap, FieldValue,
     store::{EphemeralStore, StatelessSchema},
     user_fields::{
         FieldTransforms, FieldValidators, UserConfig, UserFieldConfig, UserFieldTransform,
@@ -134,12 +134,40 @@ fn defaults() -> FieldMap {
         .collect()
 }
 
-fn denied(result: AuthResult<FieldMap>, name: &str) {
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Schema errors must preserve both API classes, named status, and ordered bodies"
+)]
+fn schema_failure(error: &AuthError) -> AuthResult<()> {
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+    assert!(error.is_api_error_instance(ApiErrorClass::BetterCall));
+    assert_eq!(error.status_value()?, FieldValue::from("BAD_REQUEST"));
+    assert_eq!(error.status_code()?, 400);
+    assert_eq!(
+        error
+            .body_value()?
+            .enumerable_fields()?
+            .keys()
+            .collect::<Vec<_>>(),
+        ["message", "code"]
+    );
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Protected-field failures retain their typed code and complete message"
+)]
+fn denied(result: AuthResult<FieldMap>, name: &str) -> AuthResult<()> {
     assert!(
         matches!(result, Err(AuthError::FieldInput { code: "FIELD_NOT_ALLOWED", ref message })
         if message == &format!("{name} is not allowed to be set")),
         "{result:?}"
     );
+    let error = result
+        .err()
+        .ok_or_else(|| AuthError::internal("Protected field was accepted"))?;
+    schema_failure(&error)
 }
 
 #[tokio::test]
@@ -156,9 +184,9 @@ async fn native_user_input_declarations_preserve_default_protection() -> AuthRes
         if ["banned", "isAnonymous", "twoFactorEnabled"].contains(&name) {
             assert_eq!(context.parse_user_input(&input, true)?, defaults());
         } else {
-            denied(context.parse_user_input(&input, true), name);
+            denied(context.parse_user_input(&input, true), name)?;
         }
-        denied(context.parse_user_input(&input, false), name);
+        denied(context.parse_user_input(&input, false), name)?;
         for value in [Value::Null, json!(false), json!(0), json!("")] {
             let input = [(name.into(), value)].into_iter().collect();
             assert_eq!(context.parse_user_input(&input, true)?, defaults());
@@ -200,7 +228,7 @@ async fn user_input_replacements_follow_real_plugin_order_and_stop_at_callback_e
             for create in [true, false] {
                 let parsed = context.parse_user_input(&input, create);
                 if !late {
-                    denied(parsed, "role");
+                    denied(parsed, "role")?;
                     assert!(take_trace(&trace)?.is_empty());
                     continue;
                 }
@@ -209,6 +237,10 @@ async fn user_input_replacements_follow_real_plugin_order_and_stop_at_callback_e
                         assert!(
                             matches!(parsed, Err(AuthError::FieldInput { code: "VALIDATION_ERROR", ref message }) if message == "validator denied")
                         );
+                        let error = parsed.err().ok_or_else(|| {
+                            AuthError::internal("Validator rejection was ignored")
+                        })?;
+                        schema_failure(&error)?;
                         assert_eq!(take_trace(&trace)?, ["late:validate:role"]);
                     }
                     Some("banReason") => {
@@ -284,7 +316,123 @@ async fn protected_replacement_defaults_override_native_guards_without_callbacks
         .collect();
     assert_eq!(context.parse_user_input(&input, true)?, expected);
     assert_eq!(context.parse_user_input(&Map::new(), true)?, expected);
-    denied(context.parse_user_input(&input, false), "role");
+    denied(context.parse_user_input(&input, false), "role")?;
     assert!(take_trace(&trace)?.is_empty());
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Required fields must retain the same named schema error as protected and invalid fields"
+)]
+fn missing_user_fields_retain_named_schema_errors() -> AuthResult<()> {
+    let fields = UserConfig {
+        additional_fields: Some(
+            [(
+                "required".into(),
+                UserFieldConfig {
+                    required: Some(true),
+                    ..Default::default()
+                },
+            )]
+            .into(),
+        ),
+    };
+    let error = fields
+        .parse_input(&FieldMap::new(), true)
+        .err()
+        .ok_or_else(|| AuthError::internal("Required field was accepted"))?;
+    assert!(
+        matches!(error, AuthError::FieldInput { code: "MISSING_FIELD", ref message } if message == "required is required")
+    );
+    schema_failure(&error)?;
+    assert!(fields.parse_input(&FieldMap::new(), false)?.is_empty());
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Field callbacks must preserve original error identity and stop later field evaluation"
+)]
+fn user_input_factory_and_transform_propagate_original_failures() -> AuthResult<()> {
+    for factory in [false, true] {
+        let trace = Trace::default();
+        let failure = AuthError::from_code("CONFLICT", "VALIDATION_ERROR", "callback rejected");
+        let failure = failure
+            .raw_value()
+            .cloned()
+            .ok_or_else(|| AuthError::internal("Expected native callback failure"))?;
+        let rejected = {
+            let failure = failure.clone();
+            let trace = trace.clone();
+            move || {
+                record(&trace, if factory { "factory" } else { "transform" }.into())?;
+                Err(AuthError::from_thrown(failure.clone()))
+            }
+        };
+        let field = if factory {
+            UserFieldConfig {
+                default_value_fn: Some(Arc::new(rejected)),
+                ..Default::default()
+            }
+        } else {
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new(move |_| rejected())),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }
+        };
+        let fields = UserConfig {
+            additional_fields: Some(
+                [
+                    ("value".into(), field),
+                    (
+                        "later".into(),
+                        UserFieldConfig {
+                            default_value_fn: Some(Arc::new({
+                                let trace = trace.clone();
+                                move || {
+                                    record(&trace, "later".into())?;
+                                    Ok("later".into())
+                                }
+                            })),
+                            ..Default::default()
+                        },
+                    ),
+                ]
+                .into(),
+            ),
+        };
+        let input = if factory {
+            FieldMap::new()
+        } else {
+            FieldMap::from([("value".into(), true.into())])
+        };
+        let error = fields
+            .parse_input(&input, true)
+            .err()
+            .ok_or_else(|| AuthError::internal("Field callback failure was ignored"))?;
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&failure))
+        );
+        assert_eq!(error.status_value()?, FieldValue::from("CONFLICT"));
+        assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
+        assert_eq!(
+            take_trace(&trace)?,
+            [if factory { "factory" } else { "transform" }]
+        );
+        let error = AuthError::from_returned_response(error.to_auth_response())?;
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&failure))
+        );
+    }
     Ok(())
 }

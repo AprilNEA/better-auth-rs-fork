@@ -42,8 +42,7 @@ pub(super) fn account_body(
 }
 
 fn invalid_selection(location: &str, message: String) -> AuthResult<AuthResponse> {
-    Err(AuthError::FieldInput {
-        code: "VALIDATION_ERROR",
+    Err(AuthError::RequestValidation {
         message: format!("[{location}] {message}"),
     })
 }

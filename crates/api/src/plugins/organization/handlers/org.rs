@@ -220,8 +220,7 @@ pub(crate) async fn update_organization_core(
             NullableStringField::Value(_) => "Too small: expected string to have >=1 characters",
             NullableStringField::Null => "Invalid input: expected string, received null",
         };
-        Err(AuthError::FieldInput {
-            code: "VALIDATION_ERROR",
+        Err(AuthError::RequestValidation {
             message: format!("[body.data.{name}] {message}"),
         })
     };

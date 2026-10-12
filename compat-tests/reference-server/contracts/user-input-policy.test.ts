@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { APIError } from "@better-auth/core/error";
+import { APIError as EndpointAPIError } from "better-call";
 import { parseUserInput } from "better-auth/db";
 import { admin, anonymous, phoneNumber, twoFactor } from "better-auth/plugins";
 
@@ -29,6 +31,11 @@ function policies(label: string, trace: string[], reject?: string, protectedInpu
 function denied(action: () => unknown, name: string) {
   let caught: any;
   try { action(); } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(APIError);
+  expect(caught).toBeInstanceOf(EndpointAPIError);
+  expect(caught.status).toBe("BAD_REQUEST");
+  expect(caught.statusCode).toBe(400);
+  expect(Object.keys(caught.body)).toStrictEqual(["message", "code"]);
   expect(caught?.body).toStrictEqual({ code: "FIELD_NOT_ALLOWED", message: `${name} is not allowed to be set` });
 }
 
@@ -68,6 +75,11 @@ test("complete User declarations replace application and earlier plugin callback
         } else if (reject === "role") {
           let caught: any;
           try { parseUserInput(options, input, action); } catch (error) { caught = error; }
+          expect(caught).toBeInstanceOf(APIError);
+          expect(caught).toBeInstanceOf(EndpointAPIError);
+          expect(caught.status).toBe("BAD_REQUEST");
+          expect(caught.statusCode).toBe(400);
+          expect(Object.keys(caught.body)).toStrictEqual(["message", "code"]);
           expect(caught?.body).toStrictEqual({ code: "VALIDATION_ERROR", message: "validator denied" });
           expect(trace.splice(0)).toStrictEqual(["late:validate:role"]);
         } else if (reject === "banReason") {
@@ -98,3 +110,33 @@ test("protected replacement defaults take precedence without invoking callbacks"
   denied(() => parseUserInput(options, input, "update"), "role");
   expect(trace).toStrictEqual([]);
 });
+
+test("missing User fields retain named schema errors", () => {
+  const options = { user: { additionalFields: { required: { type: "string" as const, required: true } } } };
+  let caught: any;
+  try { parseUserInput(options, {}, "create"); } catch (error) { caught = error; }
+  expect(caught).toBeInstanceOf(APIError);
+  expect(caught).toBeInstanceOf(EndpointAPIError);
+  expect(caught.status).toBe("BAD_REQUEST");
+  expect(caught.statusCode).toBe(400);
+  expect(Object.keys(caught.body)).toStrictEqual(["message", "code"]);
+  expect(caught.body).toStrictEqual({ message: "required is required", code: "MISSING_FIELD" });
+  expect(plain(parseUserInput(options, {}, "update"))).toStrictEqual({});
+});
+
+for (const factory of [false, true]) {
+  test(`User ${factory ? "factory" : "transform"} propagates original failures`, () => {
+    const events: string[] = [];
+    const failure = APIError.from("CONFLICT", { code: "VALIDATION_ERROR", message: "callback rejected" });
+    const rejected = () => { events.push(factory ? "factory" : "transform"); throw failure; };
+    const options = { user: { additionalFields: {
+      value: { type: "string" as const, ...(factory ? { defaultValue: rejected } : { transform: { input: rejected } }) },
+      later: { type: "string" as const, defaultValue: () => { events.push("later"); return "later"; } },
+    } } };
+    let caught: unknown;
+    try { parseUserInput(options, factory ? {} : { value: true }, "create"); }
+    catch (error) { caught = error; }
+    expect(caught).toBe(failure);
+    expect(events).toStrictEqual([factory ? "factory" : "transform"]);
+  });
+}
