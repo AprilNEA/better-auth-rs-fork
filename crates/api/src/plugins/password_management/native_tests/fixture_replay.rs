@@ -11,6 +11,7 @@ use better_auth_core::{
 use serde_json::Value as Json;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod native_boundary;
 mod runtime;
 #[path = "../../../../../../tests/support/secondary_native_source.rs"]
 mod source;
