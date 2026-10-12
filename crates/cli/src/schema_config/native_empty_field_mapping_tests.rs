@@ -260,7 +260,7 @@ fn native_field_mappings_match_upstream_and_preserve_raw_declarations() {
     clippy::expect_used,
     reason = "Generated displayUsername attributes and raw declarations must be present for complete comparison."
 )]
-fn empty_display_username_mapping_preserves_distinct_physical_and_serialized_defaults() {
+fn empty_display_username_mapping_preserves_native_physical_and_serialized_defaults() {
     let mut observations = Vec::new();
     let mut fields = Vec::new();
     for (view, alias) in [
@@ -315,8 +315,8 @@ fn empty_display_username_mapping_preserves_distinct_physical_and_serialized_def
     assert_eq!(
         observations,
         vec![
-            json!({"view":"omitted","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":false},"effectiveColumn":"display_username","serdeRename":{"present":true,"value":"displayUsername"},"declaration":{}}),
-            json!({"view":"empty","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":false},"effectiveColumn":"display_username","serdeRename":{"present":true,"value":"displayUsername"},"declaration":{"fields":{"displayUsername":""}}}),
+            json!({"view":"omitted","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":true,"value":"displayUsername"},"effectiveColumn":"displayUsername","serdeRename":{"present":true,"value":"displayUsername"},"declaration":{}}),
+            json!({"view":"empty","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":true,"value":"displayUsername"},"effectiveColumn":"displayUsername","serdeRename":{"present":true,"value":"displayUsername"},"declaration":{"fields":{"displayUsername":""}}}),
             json!({"view":"custom","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":true,"value":"stored_display_name"},"effectiveColumn":"stored_display_name","serdeRename":{"present":true,"value":"stored_display_name"},"declaration":{"fields":{"displayUsername":"stored_display_name"}}}),
             json!({"view":"space","rustField":"display_username","rustType":rust_type,"seaOrmColumnName":{"present":true,"value":" "},"effectiveColumn":" " ,"serdeRename":{"present":true,"value":" "},"declaration":{"fields":{"displayUsername":" "}}}),
         ]

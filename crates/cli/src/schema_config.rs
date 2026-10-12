@@ -42,12 +42,6 @@ pub(crate) enum Database {
     Mysql,
 }
 
-pub(crate) fn core_field(role: Option<EntityRole>, column: &str) -> Option<&'static FieldDef> {
-    better_auth_schema_registry::core_fields(role?)
-        .iter()
-        .find(|field| field.column_name.unwrap_or(field.name) == column)
-}
-
 impl IdGeneration {
     pub(crate) fn rust_type(self, database: Database) -> &'static str {
         match (self, database) {
@@ -175,6 +169,7 @@ pub(crate) struct Entity {
     pub role: Option<EntityRole>,
     pub native_catalog: bool,
     pub fields: Vec<Field>,
+    catalog_fields: BTreeMap<&'static str, FieldDef>,
     registry_columns: BTreeMap<&'static str, String>,
     logical_columns: BTreeMap<String, String>,
     pub session_row_presence: bool,
@@ -289,8 +284,22 @@ impl Entity {
             Some(_) => true,
             None => false,
         };
-        let mut fields = fields
-            .iter()
+        let native_field = |field: &FieldDef| {
+            native_catalog
+                && !(options.two_factor_legacy_schema
+                    && definition.role == Some(EntityRole::User)
+                    && field.name == "two_factor_enabled")
+        };
+        let mut declarations = indexmap::IndexMap::new();
+        for field in fields {
+            let name = definition.role.map_or_else(
+                || field.name.to_lower_camel_case(),
+                |role| canonical_field_name(role, field.name),
+            );
+            declarations.insert(name, field);
+        }
+        let mut fields = declarations
+            .into_values()
             .filter(|field| !(native_catalog && field.adapter_private.is_some()))
             .collect::<Vec<_>>();
         if native_catalog && definition.role == Some(EntityRole::Organization) {
@@ -332,6 +341,11 @@ impl Entity {
             device_code_native_schema,
             passkey_native_schema,
             two_factor_native_schema,
+            catalog_fields: fields
+                .iter()
+                .filter(|field| native_field(field))
+                .map(|field| (field.column_name.unwrap_or(field.name), **field))
+                .collect(),
             registry_columns: BTreeMap::new(),
             logical_columns: BTreeMap::new(),
             fields: fields
@@ -389,15 +403,7 @@ impl Entity {
                             field.ty
                         })
                         .map_err(|error| format!("invalid field type: {error}"))?,
-                        column: if native_catalog
-                            && (session_row_presence
-                                || core_field(
-                                    definition.role,
-                                    field.column_name.unwrap_or(field.name),
-                                )
-                                .is_some()
-                                || two_factor_native_schema && field.name == "two_factor_enabled")
-                        {
+                        column: if native_field(field) {
                             logical_name.clone()
                         } else {
                             field.column_name.unwrap_or(field.name).to_owned()
@@ -427,16 +433,7 @@ impl Entity {
                 let field = entity
                     .fields
                     .iter_mut()
-                    .find(|field| {
-                        !field.primary_key
-                            && (field.ident.to_string().to_lower_camel_case() == *name
-                                || (entity.name == "api_key"
-                                    && name == "key"
-                                    && field.ident == "key_hash")
-                                || (entity.name == "passkey"
-                                    && name == "credentialID"
-                                    && field.ident == "credential_id"))
-                    })
+                    .find(|field| !field.primary_key && field.logical_name == *name)
                     .ok_or_else(|| {
                         format!("unknown configurable field `{}.{name}`", entity.name)
                     })?;
@@ -597,22 +594,8 @@ impl Entity {
         self.logical_columns.get(name).map(String::as_str)
     }
 
-    pub(crate) fn catalog_field(&self, column: &str) -> Option<&'static FieldDef> {
-        core_field(self.role, column).or_else(|| {
-            if self.session_row_presence {
-                return better_auth_schema_registry::plugin_schemas()
-                    .iter()
-                    .flat_map(|plugin| plugin.session_fields)
-                    .find(|field| field.column_name.unwrap_or(field.name) == column);
-            }
-            if !self.two_factor_native_schema || self.role != Some(EntityRole::User) {
-                return None;
-            }
-            better_auth_schema_registry::plugin_schemas()
-                .iter()
-                .flat_map(|plugin| plugin.user_fields)
-                .find(|field| field.name == "two_factor_enabled" && field.name == column)
-        })
+    pub(crate) fn catalog_field(&self, column: &str) -> Option<&FieldDef> {
+        self.catalog_fields.get(column)
     }
 }
 

@@ -66,9 +66,18 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(!stored.banned);
+        assert_eq!(stored.banned, None);
         assert!(!stored.two_factor_enabled);
-        assert_eq!(stored.metadata, json!({}));
+        let (catalog, _) = crate::sqlite_catalog::observe(&database, "user", "Missing User table")
+            .await
+            .unwrap();
+        assert!(
+            catalog["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|column| column["name"] != "metadata")
+        );
     }
 
     #[tokio::test]
@@ -164,7 +173,7 @@ mod tests {
         // The database must enforce invariants when concurrent requests bypass prechecks.
         for (statement, expected) in [
             (
-                "INSERT INTO user (id, name, email, emailVerified, image, createdAt, updatedAt, role, banned, ban_reason, ban_expires, metadata, two_factor_enabled, username, display_username) SELECT 'duplicate', name, email, emailVerified, image, createdAt, updatedAt, role, banned, ban_reason, ban_expires, metadata, two_factor_enabled, username, display_username FROM user LIMIT 1",
+                "INSERT INTO user (id, name, email, emailVerified, image, createdAt, updatedAt, role, banned, banReason, banExpires, two_factor_enabled, username, displayUsername) SELECT 'duplicate', name, email, emailVerified, image, createdAt, updatedAt, role, banned, banReason, banExpires, two_factor_enabled, username, displayUsername FROM user LIMIT 1",
                 "UNIQUE constraint failed: user.email",
             ),
             (

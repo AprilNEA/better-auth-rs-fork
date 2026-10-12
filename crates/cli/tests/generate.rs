@@ -299,12 +299,18 @@ fn legacy_user_defaults_do_not_reach_native_or_replaced_fields() {
                     String::from_utf8_lossy(&result.stderr)
                 );
                 let source = String::from_utf8(result.stdout).unwrap();
-                for field in model(&source, "user").fields {
+                let fields = model(&source, "user").fields;
+                assert_eq!(
+                    fields
+                        .iter()
+                        .any(|field| field.ident.as_ref().unwrap() == "metadata"),
+                    replaced,
+                    "Admin must not declare an upstream metadata field"
+                );
+                for field in fields {
                     let name = field.ident.as_ref().unwrap().to_string();
                     let declaration = field.to_token_stream().to_string();
-                    let expected = !replaced
-                        && (matches!(name.as_str(), "metadata" | "banned")
-                            || name == "two_factor_enabled" && legacy);
+                    let expected = !replaced && name == "two_factor_enabled" && legacy;
                     assert_eq!(
                         declaration.contains("default_"),
                         expected,
@@ -312,11 +318,7 @@ fn legacy_user_defaults_do_not_reach_native_or_replaced_fields() {
                     );
                     if expected {
                         assert!(
-                            declaration.contains(if name == "metadata" {
-                                "('{}')"
-                            } else {
-                                "default_value = false"
-                            }),
+                            declaration.contains("default_value = false"),
                             "{declaration}"
                         );
                     }

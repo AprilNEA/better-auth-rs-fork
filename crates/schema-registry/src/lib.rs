@@ -345,10 +345,10 @@ static PLUGINS: &[PluginSchema] = &[
         name: "admin",
         user_fields: &[
             f!("role", "Option<String>"),
-            f!("banned", "bool"),
+            f!("banned", "Option<bool>"),
             f!("ban_reason", "Option<String>"),
             f!("ban_expires", "Option<DateTimeUtc>"),
-            f!("metadata", "Json"),
+            private!("metadata", "Json", "metadata"),
         ],
         session_fields: &[f!("impersonated_by", "Option<String>")],
         extra_entities: &[],

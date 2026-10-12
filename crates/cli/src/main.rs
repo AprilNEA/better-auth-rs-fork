@@ -111,8 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(String::from)
             .collect();
     }
-    plugins.sort();
-    plugins.dedup();
     let config = if let Some(path) = schema_config {
         let bytes = fs::read(&path).map_err(|error| {
             std::io::Error::new(

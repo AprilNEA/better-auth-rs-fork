@@ -3,7 +3,7 @@ title: Phone Number
 description: Authenticate phone numbers with single-use OTPs and password credentials.
 ---
 
-Generate the user schema with `--plugins phone-number` and migrate `phone_number` and `phone_number_verified` before enabling the plugin. The phone number column must have a unique index.
+Generate the user schema with `--plugins phone-number` and migrate the `phoneNumber` and `phoneNumberVerified` columns before enabling the plugin. Generated Rust fields remain `phone_number` and `phone_number_verified`. For earlier snake_case columns, migrate the column names or retain explicit `user.fields` mappings in the schema configuration. The phone number column must have a unique index.
 
 ```rust
 use better_auth::plugins::PhoneNumberPlugin;

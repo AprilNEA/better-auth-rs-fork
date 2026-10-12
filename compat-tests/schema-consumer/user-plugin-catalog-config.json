@@ -1,0 +1,102 @@
+{
+  "default": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin"],
+    "configuration": {}
+  },
+  "reversed": {
+    "plugins": ["admin", "two-factor", "last-login-method", "username", "phone-number", "anonymous"],
+    "configuration": {}
+  },
+  "mapped": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin"],
+    "configuration": {
+      "user": {
+        "modelName": "plugin_users",
+        "fields": {
+          "isAnonymous": "stored_anonymous",
+          "phoneNumber": "stored_phone",
+          "phoneNumberVerified": "stored_phone_verified",
+          "username": "stored_username",
+          "displayUsername": "stored_display",
+          "lastLoginMethod": "stored_login",
+          "twoFactorEnabled": "stored_two_factor",
+          "role": "stored_role",
+          "banned": "stored_banned",
+          "banReason": "stored_ban_reason",
+          "banExpires": "stored_ban_expires"
+        }
+      },
+      "session": {"modelName": "plugin_sessions", "fields": {"impersonatedBy": "stored_impersonator"}}
+    }
+  },
+  "empty-mappings": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin"],
+    "configuration": {
+      "user": {
+        "fields": {
+          "isAnonymous": "",
+          "phoneNumber": "",
+          "phoneNumberVerified": "",
+          "username": "",
+          "displayUsername": "",
+          "lastLoginMethod": "",
+          "twoFactorEnabled": "",
+          "role": "",
+          "banned": "",
+          "banReason": "",
+          "banExpires": ""
+        }
+      },
+      "session": {"fields": {"impersonatedBy": ""}}
+    }
+  },
+  "replaced": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin"],
+    "configuration": {
+      "user": {
+        "additionalFields": {
+          "isAnonymous": {"type": "string", "required": false, "fieldName": "replacement_anonymous", "index": true},
+          "phoneNumber": {"type": "number", "required": false, "fieldName": "replacement_phone"},
+          "phoneNumberVerified": {"type": "date", "required": false, "fieldName": "replacement_phone_verified"},
+          "username": {"type": "json", "required": false, "fieldName": "replacement_username"},
+          "displayUsername": {"type": "boolean", "required": true, "fieldName": "replacement_display"},
+          "lastLoginMethod": {"type": "number", "required": false, "bigint": true, "fieldName": "replacement_login"},
+          "twoFactorEnabled": {"type": "string[]", "required": false, "fieldName": "replacement_two_factor"},
+          "role": {"type": "number[]", "required": false, "fieldName": "replacement_role"},
+          "banned": {"type": "string", "required": false, "unique": true, "fieldName": "replacement_banned"},
+          "banReason": {"type": "boolean", "required": false, "fieldName": "replacement_ban_reason"},
+          "banExpires": {"type": "string", "required": false, "fieldName": "replacement_ban_expires", "references": {"model": "user", "field": "id", "onDelete": "set null"}},
+          "metadata": {"type": "json", "required": false}
+        }
+      },
+      "session": {"additionalFields": {"impersonatedBy": {"type": "number", "required": false, "fieldName": "replacement_impersonator"}}}
+    }
+  },
+  "shared-columns": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin"],
+    "configuration": {
+      "user": {
+        "additionalFields": {
+          "isAnonymous": {"type": "boolean", "required": true, "fieldName": "shared_status"},
+          "banned": {"type": "string", "required": false, "fieldName": "shared_status"},
+          "phoneNumber": {"type": "string", "required": false, "unique": true, "fieldName": "shared_handle"},
+          "username": {"type": "number", "required": false, "fieldName": "shared_handle"}
+        }
+      }
+    }
+  },
+  "duplicate-plugins": {
+    "plugins": ["anonymous", "phone-number", "username", "last-login-method", "two-factor", "admin", "admin", "two-factor", "last-login-method", "username", "phone-number", "anonymous"],
+    "configuration": {
+      "user": {
+        "additionalFields": {
+          "isAnonymous": {"type": "string", "required": false, "fieldName": "duplicate_anonymous"},
+          "username": {"type": "number", "required": false, "fieldName": "duplicate_username"},
+          "twoFactorEnabled": {"type": "string", "required": false, "fieldName": "duplicate_two_factor"},
+          "banned": {"type": "string", "required": false, "fieldName": "duplicate_banned"}
+        }
+      },
+      "session": {"additionalFields": {"impersonatedBy": {"type": "boolean", "required": false, "fieldName": "duplicate_impersonator"}}}
+    }
+  }
+}

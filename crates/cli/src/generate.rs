@@ -24,9 +24,12 @@ pub(crate) fn generate_schema(
     if !options.session_active_column {
         session.retain(|field| field.name != "active");
     }
-    let mut extra_entities: Vec<&ExtraEntitySchema> = Vec::new();
+    let mut extra_entities = indexmap::IndexMap::new();
     if rate_limit_database {
-        extra_entities.push(&registry::RATE_LIMIT);
+        extra_entities.insert(
+            model_name(registry::RATE_LIMIT.mod_name),
+            &registry::RATE_LIMIT,
+        );
     }
     for plugin_name in plugins {
         if let Some(schema) = registry::plugin_schemas()
@@ -35,7 +38,9 @@ pub(crate) fn generate_schema(
         {
             user.extend_from_slice(schema.user_fields);
             session.extend_from_slice(schema.session_fields);
-            extra_entities.extend(schema.extra_entities.iter());
+            for entity in schema.extra_entities {
+                extra_entities.insert(model_name(entity.mod_name), entity);
+            }
         }
     }
     let core_entities = [
@@ -65,7 +70,7 @@ pub(crate) fn generate_schema(
         },
     ];
     let mut definitions = Vec::new();
-    for entity in core_entities.iter().chain(extra_entities) {
+    for entity in core_entities.iter().chain(extra_entities.into_values()) {
         let fields = match entity.role {
             Some(EntityRole::User) => user.as_slice(),
             Some(EntityRole::Session) => session.as_slice(),
@@ -274,21 +279,11 @@ fn gen_entity(entity: &Entity, generation: IdGeneration, config: &SchemaConfig) 
         let primary_key = field
             .primary_key
             .then(|| quote! { #[sea_orm(primary_key, auto_increment = #auto_increment)] });
-        let legacy_default = if entity.role == Some(EntityRole::User) && field.attributes.is_none()
-        {
-            match field.registry_column {
-                Some("metadata") => {
-                    Some(quote!(#[sea_orm(default_expr = "Expr::cust(\"('{}')\")")]))
-                }
-                Some("banned") => Some(quote!(#[sea_orm(default_value = false)])),
-                Some("two_factor_enabled") if !entity.two_factor_native_schema => {
-                    Some(quote!(#[sea_orm(default_value = false)]))
-                }
-                _ => None,
-            }
-        } else {
-            None
-        };
+        let legacy_default = (entity.role == Some(EntityRole::User)
+            && field.attributes.is_none()
+            && field.registry_column == Some("two_factor_enabled")
+            && !entity.two_factor_native_schema)
+            .then(|| quote!(#[sea_orm(default_value = false)]));
         let number_storage = if entity.role == Some(EntityRole::RateLimit) && name == "count" {
             Some(quote!(#[sea_orm(column_type = "Integer")]))
         } else if field.attributes.is_none()
@@ -500,7 +495,7 @@ fn gen_table(
                 let definition = entity.catalog_field(field.registry_column?)?;
                 let data_type = match definition.ty {
                     "String" | "Option<String>" => quote!(column.text();),
-                    "bool" => quote!(column.integer();),
+                    "bool" | "Option<bool>" => quote!(column.integer();),
                     "DateTimeUtc" | "Option<DateTimeUtc>" => {
                         quote!(column.custom(Alias::new("date"));)
                     }
@@ -583,7 +578,8 @@ fn gen_server_native_column(
             quote!(column.string_len(191);)
         }
         (Database::Mysql, "String" | "Option<String>")
-            if (entity.passkey_native_schema && definition.name == "credential_id")
+            if inline_native_unique(entity, field)
+                || (entity.passkey_native_schema && definition.name == "credential_id")
                 || (entity.two_factor_native_schema && definition.name == "secret")
                 || (entity.api_key_native_schema
                     && matches!(definition.name, "config_id" | "reference_id" | "key_hash"))
@@ -624,7 +620,7 @@ fn gen_server_native_column(
         {
             quote!(column.text();)
         }
-        (_, "bool") => quote!(column.boolean();),
+        (_, "bool" | "Option<bool>") => quote!(column.boolean();),
         (Database::Postgres, "DateTimeUtc" | "Option<DateTimeUtc>") => {
             quote!(column.timestamp_with_time_zone();)
         }
