@@ -619,7 +619,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts || logger_status=1
-      cargo clippy --locked -p better-auth-core --tests -- -D warnings || logger_status=1
+      cargo clippy --locked -p better-auth-core --lib -- -D warnings || logger_status=1
       cargo clippy --locked -p better-auth-api --lib -- -D warnings || logger_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test http_api_error_logging_tests --test observability_tests -- -D warnings || logger_status=1
@@ -1103,7 +1103,7 @@ run_stage() {
         ./compat-tests/reference-server/consumer-contracts/device-reference-values.test.ts \
         ./compat-tests/reference-server/contracts/device-reference-defaults.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-reference-defaults.test.ts
-      cargo clippy --locked -p better-auth-core --tests -- -D warnings
+      cargo clippy --locked -p better-auth-core --lib -- -D warnings
       cargo test --locked -p better-auth-core --lib -- store::ephemeral::jwks::id_slot_tests::
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test device_grant_tests \

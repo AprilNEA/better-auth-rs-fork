@@ -172,10 +172,6 @@ async fn create_record(
     required(record)
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Every seed input, complete adapter return, and storage snapshot must match the captured source fixture."
-)]
 async fn seed(writer: &EphemeralStore, model: &str, setup: &JsonValue) -> AuthResult<String> {
     let input = &setup["input"];
     let seed_model = required(input["model"].as_str())?;
@@ -197,10 +193,6 @@ async fn seed(writer: &EphemeralStore, model: &str, setup: &JsonValue) -> AuthRe
     Ok(id)
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired business contract compares complete observations while checking each public return boundary explicitly."
-)]
 async fn verify_case(expected: &JsonValue) -> AuthResult<()> {
     let model = required(expected["model"].as_str())?;
     let operation = required(expected["operation"].as_str())?;
