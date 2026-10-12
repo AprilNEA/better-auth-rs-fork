@@ -174,7 +174,7 @@ async fn dispatch_uses_upstream_templates_without_rewriting_http_request_paths()
         );
         let trace = Trace::default();
         let handler_observations = observations.clone();
-        let handler = move |request: AuthRequest| async move {
+        let handler = move |request: AuthRequest, _context| async move {
             handler_observations.record("handler", &request)?;
             AuthResponse::json(200, &serde_json::json!({"ok": true}))
         };

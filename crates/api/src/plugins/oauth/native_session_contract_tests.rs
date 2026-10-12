@@ -542,16 +542,22 @@ async fn dispatch<S: AuthSchema>(
             .unwrap();
         set_request_hook_route(request.path(), Some(&route));
         match dispatcher
-            .run(&mut request, true, context, None, |request| async move {
-                for plugin in plugins.iter() {
-                    if let Some(response) = plugin.on_request(&request, context).await? {
-                        return Ok(response);
+            .run(
+                &mut request,
+                true,
+                context,
+                None,
+                |request, context| async move {
+                    for plugin in plugins.iter() {
+                        if let Some(response) = plugin.on_request(&request, &context).await? {
+                            return Ok(response);
+                        }
                     }
-                }
-                Err(AuthError::internal(
-                    "OAuth capture endpoint was not handled",
-                ))
-            })
+                    Err(AuthError::internal(
+                        "OAuth capture endpoint was not handled",
+                    ))
+                },
+            )
             .await
         {
             Ok(response) => Ok(response),

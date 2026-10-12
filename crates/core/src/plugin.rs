@@ -261,7 +261,8 @@ pub struct AuthInitContext<S: AuthSchema> {
     pub metadata: MetadataMap,
 }
 
-/// Context passed to plugin methods.
+/// Context passed to plugin methods. Clones retain the same mutable runtime URL.
+/// HTTP handlers and endpoint dispatches create separate runtime contexts.
 pub struct AuthContext<S: AuthSchema> {
     pub(crate) request_runtime: crate::request_runtime::RequestRuntime,
     pub extensions: crate::RuntimeExtensions,

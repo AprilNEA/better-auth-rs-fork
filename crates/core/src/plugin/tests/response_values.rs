@@ -235,7 +235,7 @@ async fn native_values_and_http_bodies_match_the_pinned_response_contract() -> A
                     fallback.clone()
                 };
                 let initial = endpoint.body.clone();
-                let handler = move |request: AuthRequest| async move {
+                let handler = move |request: AuthRequest, _context| async move {
                     request.set_response_status(201)?;
                     request.set_response_header("x-endpoint", "1")?;
                     request.set_response_header("authorization", "queued")?;
@@ -409,7 +409,7 @@ async fn invalid_response_status_preserves_native_values_and_range_errors() -> A
                 request.clone(),
                 route.clone(),
                 &context,
-                move |_| async move { Ok(output) },
+                move |_, _context| async move { Ok(output) },
             )
             .await?;
         assert_eq!(
@@ -419,9 +419,13 @@ async fn invalid_response_status_preserves_native_values_and_range_errors() -> A
         same_body(&native.body, &ResponseBody::Native(value.clone()));
         let mut request = request;
         let error = dispatcher
-            .run(&mut request, true, &context, None, move |_| async move {
-                Ok(native)
-            })
+            .run(
+                &mut request,
+                true,
+                &context,
+                None,
+                move |_, _context| async move { Ok(native) },
+            )
             .await
             .unwrap_err();
         let message =

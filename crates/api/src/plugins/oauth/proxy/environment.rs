@@ -23,7 +23,7 @@ fn vendor_url() -> Option<String> {
         })
 }
 
-fn origin(value: &str) -> Option<Origin> {
+pub(super) fn origin(value: &str) -> Option<Origin> {
     Url::parse(value)
         .ok()
         .map(|url| url.origin())
@@ -48,7 +48,7 @@ impl OAuthProxyConfig {
         }
         // Upstream selects the first nonempty vendor value before validating its origin.
         let vendor = vendor_url().filter(|url| origin(url).is_some());
-        parse_url(vendor.as_deref().unwrap_or(ctx.base_url()))
+        parse_url(&vendor.unwrap_or_else(|| ctx.base_url()))
     }
 
     pub(super) fn skip_proxy<S: AuthSchema>(
@@ -69,13 +69,17 @@ impl OAuthProxyConfig {
             .as_deref()
             .filter(|url| !url.is_empty())
             .or(production_env.as_deref())
-            .unwrap_or(ctx.base_url());
+            .map(str::to_owned)
+            .unwrap_or_else(|| ctx.base_url());
+        if production.is_empty() {
+            return false;
+        }
         let current = self
             .current_url
             .clone()
             .filter(|url| !url.is_empty())
             .or_else(|| req.url().map(ToString::to_string))
             .or_else(vendor_url);
-        current.is_some_and(|current| origin(production) == origin(&current))
+        current.is_some_and(|current| origin(&production) == origin(&current))
     }
 }

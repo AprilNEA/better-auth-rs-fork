@@ -64,7 +64,7 @@ pub(super) fn cookies<S: AuthSchema>(
         .filter(|value| !value.is_empty())
         .map(str::to_owned)
         .unwrap_or_else(|| {
-            url::Url::parse(auth.base_url())
+            url::Url::parse(&auth.base_url())
                 .ok()
                 .and_then(|url| url.host_str().map(str::to_owned))
                 .unwrap_or_else(|| "localhost".into())

@@ -223,7 +223,7 @@ async fn dispatch(
     };
     let endpoint_calls = Arc::new(AtomicUsize::new(0));
     let calls = endpoint_calls.clone();
-    let handler = move |request: AuthRequest| async move {
+    let handler = move |request: AuthRequest, _context| async move {
         let _ = calls.fetch_add(1, Ordering::SeqCst);
         if let Some(status) = status {
             request.set_response_status(status)?;

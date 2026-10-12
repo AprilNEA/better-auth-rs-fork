@@ -623,8 +623,11 @@ run_stage() {
         ./compat-tests/reference-server/contracts/hook-matcher-input.test.ts \
         ./compat-tests/reference-server/contracts/api-key-field-policies.test.ts \
         ./compat-tests/reference-server/contracts/organization-output-boundary.test.ts \
+        ./compat-tests/reference-server/contracts/request-runtime-mutation.test.ts \
+        ./compat-tests/reference-server/contracts/request-runtime-url-routing.test.ts \
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-input.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-proxy-runtime-url.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
@@ -632,9 +635,11 @@ run_stage() {
         --test organization_body_schema_tests \
         --test api_key_number_name_tests --test api_key_additional_fields_tests \
         --test oauth_token_duration_tests --test oauth_proxy_hooks_tests \
-        --test oauth_proxy_request_url_tests -- -D warnings || json_status=1
+        --test oauth_proxy_request_url_tests --test request_runtime_mutation_tests \
+        --test dynamic_runtime_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
         error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: wire:: \
+        request_runtime:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
         plugin::tests::response_status:: response_body::http_tests:: types::response:: \
@@ -650,7 +655,8 @@ run_stage() {
         --test native_endpoint_tests --test server_api_tests \
         --test organization_body_schema_tests \
         --test api_key_number_name_tests --test oauth_token_duration_tests \
-        --test oauth_proxy_hooks_tests --test oauth_proxy_request_url_tests || json_status=1
+        --test oauth_proxy_hooks_tests --test oauth_proxy_request_url_tests \
+        --test request_runtime_mutation_tests --test dynamic_runtime_tests || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test api_key_additional_fields_tests -- typed_metadata:: || json_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || json_status=1

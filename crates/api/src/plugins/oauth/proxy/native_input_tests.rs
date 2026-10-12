@@ -1,5 +1,4 @@
-//! Paired native input contracts; the request redirect field represents the Rust proxy's base override.
-//! `AuthContext::base_url()` remains immutable and is not an equivalent observation of upstream baseURL mutation.
+//! Paired native input contracts retain the endpoint runtime after getter, conversion, and setter failures.
 
 #![expect(
     clippy::unwrap_used,
@@ -17,11 +16,11 @@ use better_auth_core::{
     endpoint_dispatch::EndpointDispatcher,
     endpoint_input::ValidatedBody,
     field_value::{FieldObjectSource, FieldPropertyDescriptor},
-    observability::EndpointHooks,
+    observability::{BeforeEndpointHook, EndpointHooks},
     store::{EphemeralStore, StatelessSchema as S, schema::EntityRole},
 };
 
-use super::{CALLBACK_CONTEXT, OAuthProxyPlugin, REDIRECT_BASE_CONTEXT};
+use super::{CALLBACK_CONTEXT, OAuthProxyPlugin};
 use crate::plugins::test_helpers;
 
 const ORIGIN: &str = "http://preview.proxy-input.test";
@@ -33,6 +32,21 @@ const PRODUCTION_BASE: &str = "http://production.proxy-input.test/api/auth";
 struct Trace {
     events: Mutex<Vec<String>>,
     written: Mutex<Option<FieldValue>>,
+    runtime: Mutex<Option<AuthContext<S>>>,
+}
+
+struct CaptureRuntime(Arc<Trace>);
+
+#[async_trait]
+impl BeforeEndpointHook<S> for CaptureRuntime {
+    async fn before(
+        &self,
+        _: &AuthRequest,
+        context: &AuthContext<S>,
+    ) -> AuthResult<Option<BeforeRequestAction>> {
+        *self.0.runtime.lock().unwrap() = Some(context.clone());
+        Ok(None)
+    }
 }
 
 struct ObservedBody {
@@ -160,7 +174,7 @@ impl AuthPlugin<S> for Following {
     async fn before_request(
         &self,
         request: &AuthRequest,
-        _: &AuthContext<S>,
+        context: &AuthContext<S>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
         self.trace.events.lock().unwrap().push("following".into());
         assert!(request.input_field_value()?.strict_equals(&self.body));
@@ -169,10 +183,12 @@ impl AuthPlugin<S> for Following {
             Some(b"original transport bytes".as_slice())
         );
         assert_eq!(
-            request.server_context(REDIRECT_BASE_CONTEXT)?,
-            self.expected
-                .as_ref()
-                .map(|_| FieldValue::from(PRODUCTION_BASE)),
+            context.base_url(),
+            if self.expected.is_some() {
+                PRODUCTION_BASE
+            } else {
+                BASE
+            },
         );
         if let Some(expected) = &self.expected {
             let actual = if self.dynamic {
@@ -206,8 +222,7 @@ impl AuthPlugin<S> for Following {
 }
 
 #[tokio::test]
-async fn native_input_preserves_identity_effect_order_and_request_redirect_override()
--> AuthResult<()> {
+async fn native_input_preserves_identity_effect_order_and_runtime_mutation() -> AuthResult<()> {
     for case in [
         "missing",
         "null",
@@ -319,7 +334,10 @@ async fn native_input_preserves_identity_effect_order_and_request_redirect_overr
                 Box::new(proxy) as Box<dyn AuthPlugin<S>>,
                 Box::new(following),
             ]),
-            EndpointHooks::default(),
+            EndpointHooks {
+                before: Some(Arc::new(CaptureRuntime(trace.clone()))),
+                after: None,
+            },
             [route.clone()],
         );
         let mut request = AuthRequest::new(HttpMethod::Post, "/sign-in/social");
@@ -327,7 +345,7 @@ async fn native_input_preserves_identity_effect_order_and_request_redirect_overr
         request.set_endpoint_body(ValidatedBody::unvalidated_native(body.clone()));
         let observation = request.clone();
         let error = dispatcher
-            .native(request, route, &context, |_| async {
+            .native(request, route, &context, |_, _| async {
                 Err(AuthError::internal(
                     "The following hook must stop before endpoint validation",
                 ))
@@ -376,10 +394,11 @@ async fn native_input_preserves_identity_effect_order_and_request_redirect_overr
                 "convert-provider" | "convert-callback" | "set-callback"
             );
         assert_eq!(
-            observation.server_context(REDIRECT_BASE_CONTEXT)?,
-            redirected.then(|| PRODUCTION_BASE.into()),
+            trace.runtime.lock().unwrap().as_ref().unwrap().base_url(),
+            if redirected { PRODUCTION_BASE } else { BASE },
             "{case}"
         );
+        assert_eq!(context.base_url(), BASE, "{case}: outer runtime");
         if case == "ordinary" {
             assert_eq!(
                 body.as_object().unwrap().own_keys()?,

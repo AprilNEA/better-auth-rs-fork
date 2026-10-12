@@ -22,22 +22,29 @@ impl Harness {
             .find(|route| route.matches(request.method(), request.path()))
             .unwrap();
         self.dispatcher
-            .native(request, route, &self.context, |request| async move {
-                if is_callback {
-                    callback::handle_callback(
-                        self.plugin.resolved_config().await?,
-                        state.scenario.provider_id(),
-                        &request,
-                        &self.context,
-                    )
-                    .await
-                } else {
-                    self.plugin
-                        .on_request(&request, &self.context)
-                        .await?
-                        .ok_or_else(|| AuthError::internal("Native profile endpoint did not match"))
-                }
-            })
+            .native(
+                request,
+                route,
+                &self.context,
+                |request, context| async move {
+                    if is_callback {
+                        callback::handle_callback(
+                            self.plugin.resolved_config().await?,
+                            state.scenario.provider_id(),
+                            &request,
+                            &context,
+                        )
+                        .await
+                    } else {
+                        self.plugin
+                            .on_request(&request, &context)
+                            .await?
+                            .ok_or_else(|| {
+                                AuthError::internal("Native profile endpoint did not match")
+                            })
+                    }
+                },
+            )
             .await
     }
 

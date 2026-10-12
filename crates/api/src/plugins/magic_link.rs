@@ -167,7 +167,7 @@ impl MagicLinkPlugin {
                 ..Default::default()
             })
             .await?;
-        let mut url = Url::parse(ctx.base_url())
+        let mut url = Url::parse(&ctx.base_url())
             .map_err(|error| AuthError::config(format!("Invalid base URL: {error}")))?;
         let base_path = if url.path() == "/" {
             ctx.config.base_path.as_str()
@@ -224,7 +224,7 @@ impl MagicLinkPlugin {
                 "[query.token] Invalid input: expected string, received undefined",
             ));
         };
-        let base = Url::parse(ctx.base_url())
+        let base = Url::parse(&ctx.base_url())
             .map_err(|error| AuthError::config(format!("Invalid base URL: {error}")))?;
         let callback = callback_url(req, ctx, &base, "callbackURL", "/")?;
         let error_callback = callback_url(req, ctx, &base, "errorCallbackURL", callback.as_str())?;

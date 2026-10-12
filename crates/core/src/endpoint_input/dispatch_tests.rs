@@ -160,7 +160,7 @@ async fn hook_mutations_reach_validation_and_handler_without_replacing_raw_scope
             [route.clone()],
         );
         let handler_observer = hooks.clone();
-        let handler = move |request: AuthRequest| async move {
+        let handler = move |request: AuthRequest, _context| async move {
             handler_observer.phases.lock().push("handler");
             let body = request.input_field_value()?;
             assert!(!handler_observer.raw.strict_equals(&body));

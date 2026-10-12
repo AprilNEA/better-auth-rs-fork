@@ -96,7 +96,7 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
             &header,
             &keys,
             self.plugin.config.algorithm,
-            Some(issuer(&runtime)),
+            Some(&issuer(&runtime)),
             Some(&[AUDIENCE]),
             15,
         );
@@ -114,14 +114,15 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
     }
 }
 
-fn issuer<S: AuthSchema>(context: &AuthContext<S>) -> &str {
+fn issuer<S: AuthSchema>(context: &AuthContext<S>) -> String {
     let base_url = context
         .config
         .base_url
         .as_static()
+        .map(str::to_owned)
         .unwrap_or_else(|| context.base_url());
     if base_url.is_empty() {
-        AUDIENCE
+        AUDIENCE.to_owned()
     } else {
         base_url
     }

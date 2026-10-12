@@ -388,7 +388,7 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
             );
             let mut request = AuthRequest::new(HttpMethod::Get, "/status-contract");
             let retained_before = hooks.retained_before.clone();
-            let handler = move |request: AuthRequest| async move {
+            let handler = move |request: AuthRequest, _context| async move {
                 if let Some(status) = case.status {
                     request.set_response_status(status)?;
                 }

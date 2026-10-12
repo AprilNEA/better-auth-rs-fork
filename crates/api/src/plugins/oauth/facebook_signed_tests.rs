@@ -293,9 +293,9 @@ impl App {
                     true,
                     &self.context,
                     None,
-                    |request| async move {
+                    |request, context| async move {
                         self.plugins[0]
-                            .on_request(&request, &self.context)
+                            .on_request(&request, &context)
                             .await
                             .map(|response| response.unwrap())
                     },

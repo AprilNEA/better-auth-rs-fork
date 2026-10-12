@@ -15,6 +15,8 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
+use parking_lot::RwLock;
+
 use self::url::Source;
 use crate::{
     AuthConfig, AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema,
@@ -32,26 +34,28 @@ pub struct NativeRequest<'a> {
 pub(crate) struct RequestRuntime {
     identity: scope::Identity,
     initial: Arc<tokio::sync::OnceCell<Initialized>>,
+    base_url: Arc<RwLock<Option<String>>>,
     values: Option<RuntimeValues>,
 }
 
 #[derive(Clone)]
 struct Initialized {
     config: Arc<AuthConfig>,
+    base_url: String,
     values: RuntimeValues,
 }
 
 #[derive(Clone)]
 struct RuntimeValues {
-    base_url: String,
-    trusted_origins: Vec<String>,
-    trusted_providers: Vec<String>,
+    base_path: String,
+    trusted_origins: Arc<[String]>,
+    trusted_providers: Arc<[String]>,
     is_production: bool,
 }
 
 impl RequestRuntime {
     /// Run before plugin initialization; plugin contributions merge afterward.
-    async fn initialize(config: &mut AuthConfig) -> AuthResult<RuntimeValues> {
+    async fn initialize(mut config: AuthConfig) -> AuthResult<Initialized> {
         if let BaseUrl::Dynamic(policy) = &config.base_url
             && policy.allowed_hosts.is_empty()
         {
@@ -81,7 +85,7 @@ impl RequestRuntime {
             config.base_path = "/api/auth".to_owned();
         }
         let is_production = url::environment("NODE_ENV")?.as_deref() == Some("production");
-        let cookies = CookieSettings::from_config(config, is_production);
+        let cookies = CookieSettings::from_config(&config, is_production);
         if config
             .advanced
             .cross_sub_domain_cookies
@@ -97,19 +101,33 @@ impl RequestRuntime {
             ));
         }
         config.install_cookie_settings(cookies.clone());
-        let trusted_origins = origins(config, &config.base_url, None).await?;
+        let trusted_origins = origins(&config, &config.base_url, None).await?;
         let trusted_providers = config
             .account
             .account_linking
             .trusted_provider_values()
             .resolve(None)
             .await?;
-        Ok(RuntimeValues {
-            base_url,
-            trusted_origins,
-            trusted_providers,
+        let values = RuntimeValues {
+            base_path: routing_path(&base_url, &config.base_path).to_owned(),
+            trusted_origins: trusted_origins.into(),
+            trusted_providers: trusted_providers.into(),
             is_production,
+        };
+        Ok(Initialized {
+            config: Arc::new(config),
+            base_url,
+            values,
         })
+    }
+
+    fn fork(&self) -> Self {
+        Self {
+            identity: self.identity.clone(),
+            initial: self.initial.clone(),
+            base_url: Arc::new(RwLock::new(self.base_url.read().clone())),
+            values: self.values.clone(),
+        }
     }
 }
 
@@ -132,22 +150,33 @@ impl<S: AuthSchema> AuthContext<S> {
                 .is_some_and(|origin| self.is_origin_trusted(&origin))
     }
 
-    /// Full resolved authentication URL, including its effective routing path.
-    pub fn base_url(&self) -> &str {
-        self.request_runtime.values.as_ref().map_or_else(
-            || self.config.base_url.as_static().unwrap_or(""),
-            |values| values.base_url.as_str(),
-        )
+    /// Snapshot of this context's authentication URL. Later assignments do not change the snapshot.
+    pub fn base_url(&self) -> String {
+        self.request_runtime
+            .base_url
+            .read()
+            .clone()
+            .unwrap_or_else(|| self.config.base_url.as_static().unwrap_or("").to_owned())
     }
 
-    /// Route prefix from the resolved URL, including a configured URL path.
+    /// Replace the URL shared by this context's handles. URL consumers perform their own parsing.
+    /// The assignment does not change options, routing, cookies, or trust policies.
+    pub fn set_base_url(&self, value: impl Into<String>) {
+        let value = value.into();
+        *self.request_runtime.base_url.write() = Some(value);
+    }
+
+    /// Route prefix captured before HTTP hooks. URL assignments do not select a different router.
     pub fn base_path(&self) -> &str {
-        let url = self.base_url();
-        url.find("://")
-            .and_then(|scheme| url.get(scheme + 3..))
-            .and_then(|authority| authority.find('/').and_then(|start| authority.get(start..)))
-            .map(|path| path.split(['?', '#']).next().unwrap_or("/"))
-            .unwrap_or(&self.config.base_path)
+        self.request_runtime.values.as_ref().map_or_else(
+            || {
+                routing_path(
+                    self.config.base_url.as_static().unwrap_or(""),
+                    &self.config.base_path,
+                )
+            },
+            |values| values.base_path.as_str(),
+        )
     }
 
     pub fn trusted_origins(&self) -> &[String] {
@@ -158,7 +187,7 @@ impl<S: AuthSchema> AuthContext<S> {
                     .as_static()
                     .unwrap_or(&[])
             },
-            |values| values.trusted_origins.as_slice(),
+            |values| values.trusted_origins.as_ref(),
         )
     }
 
@@ -176,7 +205,7 @@ impl<S: AuthSchema> AuthContext<S> {
                     .as_static()
                     .unwrap_or(&[])
             },
-            |values| values.trusted_providers.as_slice(),
+            |values| values.trusted_providers.as_ref(),
         )
     }
 
@@ -196,19 +225,34 @@ impl<S: AuthSchema> AuthContext<S> {
         let initial = self
             .request_runtime
             .initial
-            .get_or_try_init(|| async {
-                let mut config = (*self.config).clone();
-                let values = RequestRuntime::initialize(&mut config).await?;
-                Ok::<_, AuthError>(Initialized {
-                    config: Arc::new(config),
-                    values,
-                })
-            })
+            .get_or_try_init(|| RequestRuntime::initialize((*self.config).clone()))
             .await?;
         let mut context = self.clone();
         context.config = initial.config.clone();
+        let base_url = self
+            .request_runtime
+            .base_url
+            .read()
+            .clone()
+            .unwrap_or_else(|| initial.base_url.clone());
+        context.request_runtime.base_url = Arc::new(RwLock::new(Some(base_url)));
         context.request_runtime.values = Some(initial.values.clone());
         Ok(Arc::new(context))
+    }
+
+    fn fork_request_context(&self) -> Self {
+        let mut context = self.clone();
+        context.request_runtime = self.request_runtime.fork();
+        context
+    }
+
+    pub(crate) async fn with_endpoint_context<T, F, Fut>(&self, operation: F) -> T
+    where
+        F: FnOnce(Arc<Self>) -> Fut,
+        Fut: Future<Output = T>,
+    {
+        let context = Arc::new(self.fork_request_context());
+        scope::run(context.clone(), async move { operation(context).await }).await
     }
 
     /// Resolve native URL policy and enter this auth instance's runtime scope.
@@ -262,7 +306,7 @@ impl<S: AuthSchema> AuthContext<S> {
                 .resolve_dynamic(Some(Source::Request(request)), false)
                 .await?
         } else {
-            let mut resolved = (*context).clone();
+            let mut resolved = context.fork_request_context();
             if context
                 .config
                 .base_url
@@ -283,19 +327,23 @@ impl<S: AuthSchema> AuthContext<S> {
                         "Could not get base URL from request. Please provide a valid base URL.",
                     )
                 })?;
-                resolved.runtime_values_mut()?.base_url = base_url.clone();
+                resolved.set_base_url(base_url.clone());
                 Arc::make_mut(&mut resolved.config).base_url =
                     BaseUrl::Static(url::origin(&base_url).unwrap_or_default());
             }
             resolved.runtime_values_mut()?.trusted_origins =
-                origins(&resolved.config, &resolved.config.base_url, Some(request)).await?;
+                origins(&resolved.config, &resolved.config.base_url, Some(request))
+                    .await?
+                    .into();
             resolved.runtime_values_mut()?.trusted_providers = resolved
                 .config
                 .account
                 .account_linking
                 .trusted_provider_values()
                 .resolve(Some(request))
-                .await?;
+                .await?
+                .into();
+            resolved.capture_routing_path()?;
             Arc::new(resolved)
         };
         scope::run(resolved.clone(), async move { operation(resolved).await }).await
@@ -313,6 +361,15 @@ impl<S: AuthSchema> AuthContext<S> {
             .values
             .as_mut()
             .ok_or_else(|| AuthError::internal("Request context is not initialized"))
+    }
+
+    fn capture_routing_path(&mut self) -> AuthResult<()> {
+        let path = ::url::Url::parse(&self.base_url())
+            .map_err(|_| AuthError::type_error("Invalid URL"))?
+            .path()
+            .to_owned();
+        self.runtime_values_mut()?.base_path = path;
+        Ok(())
     }
 
     pub(crate) fn runtime_identity(&self) -> RuntimeIdentity {
@@ -372,20 +429,23 @@ impl<S: AuthSchema> AuthContext<S> {
             }
             None => None,
         };
-        let mut resolved = self.clone();
-        resolved.runtime_values_mut()?.base_url = base_url.clone();
+        let mut resolved = self.fork_request_context();
+        resolved.set_base_url(base_url.clone());
         Arc::make_mut(&mut resolved.config).base_url =
             BaseUrl::Static(url::origin(&base_url).unwrap_or_default());
         // The source policy still contributes every allowed host, not only this request's host.
         resolved.runtime_values_mut()?.trusted_origins =
-            origins(&resolved.config, &self.config.base_url, request).await?;
+            origins(&resolved.config, &self.config.base_url, request)
+                .await?
+                .into();
         resolved.runtime_values_mut()?.trusted_providers = resolved
             .config
             .account
             .account_linking
             .trusted_provider_values()
             .resolve(request)
-            .await?;
+            .await?
+            .into();
         if self
             .config
             .advanced
@@ -397,8 +457,17 @@ impl<S: AuthSchema> AuthContext<S> {
                 CookieSettings::from_config(&resolved.config, self.runtime_values()?.is_production);
             Arc::make_mut(&mut resolved.config).install_cookie_settings(cookies);
         }
+        resolved.capture_routing_path()?;
         Ok(Arc::new(resolved))
     }
+}
+
+fn routing_path<'a>(url: &'a str, fallback: &'a str) -> &'a str {
+    url.find("://")
+        .and_then(|scheme| url.get(scheme + 3..))
+        .and_then(|authority| authority.find('/').and_then(|start| authority.get(start..)))
+        .map(|path| path.split(['?', '#']).next().unwrap_or("/"))
+        .unwrap_or(fallback)
 }
 
 async fn origins(

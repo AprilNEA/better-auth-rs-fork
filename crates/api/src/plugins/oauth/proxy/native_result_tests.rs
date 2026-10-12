@@ -20,7 +20,7 @@ use better_auth_core::{
 };
 use chrono::{Duration, Utc};
 
-use super::{OAuthProxyPlugin, REDIRECT_BASE_CONTEXT};
+use super::OAuthProxyPlugin;
 use crate::plugins::{symmetric, test_helpers};
 
 const ORIGIN: &str = "http://preview.proxy-result.test";
@@ -477,7 +477,7 @@ async fn native_result_after_hook_rechecks_skip_and_ignores_explicit_json_bytes(
             plugin()
         };
         let mut req = request();
-        req.set_server_context(REDIRECT_BASE_CONTEXT, PRODUCTION.into())?;
+        fixture.context.set_base_url(PRODUCTION);
         if !same_origin {
             let _ = req.headers.insert("x-skip-oauth-proxy".into(), "1".into());
         }
@@ -487,6 +487,7 @@ async fn native_result_after_hook_rechecks_skip_and_ignores_explicit_json_bytes(
             .after_request(&req, &mut response, &fixture.context)
             .await?;
         assert!(returned(&response)?.strict_equals(&original));
+        assert_eq!(fixture.context.base_url(), PRODUCTION);
     }
     let bytes = serde_json::to_vec(&serde_json::json!({"url": URL}))?;
     let mut response = AuthResponse::new(201).with_header("x-proxy", "explicit");

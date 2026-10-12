@@ -80,7 +80,6 @@ pub(super) async fn handle_callback(
                         req,
                         ctx,
                         FlowStartRequest {
-                            redirect_base: None,
                             anonymous_user_id: None,
                             provider_name,
                             provider,

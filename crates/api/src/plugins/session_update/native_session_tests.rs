@@ -99,8 +99,8 @@ impl Fixture {
     }
 
     async fn update(&self, request: &AuthRequest) -> AuthResult<AuthResponse> {
-        dispatch(request, &self.ctx, |request| async move {
-            super::handle(&request, &self.ctx).await
+        dispatch(request, &self.ctx, |request, context| async move {
+            super::handle(&request, &context).await
         })
         .await
     }
@@ -263,9 +263,10 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
                 "/update-session",
                 input.clone(),
             )?;
-            let context = &fixture.ctx;
             let handler =
-                move |request: AuthRequest| async move { super::handle(&request, context).await };
+                move |request: AuthRequest, context: Arc<AuthContext<StatelessSchema>>| async move {
+                    super::handle(&request, &context).await
+                };
             let result = if http {
                 dispatcher
                     .run(&mut request, true, &fixture.ctx, None, handler)

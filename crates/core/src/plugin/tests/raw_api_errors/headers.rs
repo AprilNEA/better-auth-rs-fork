@@ -54,7 +54,7 @@ async fn headers_identity_controls_rereads_and_prevents_duplicate_context_cookie
                 {
                     let captured = captured.clone();
                     let value = value.clone();
-                    move |request| async move {
+                    move |request, _context| async move {
                         let handle = request.response_headers_value()?;
                         assert!(handle.strict_equals(&request.clone().response_headers_value()?));
                         *captured.lock().unwrap() = handle;

@@ -201,7 +201,7 @@ pub(crate) async fn reset_password_token_core(
 
     if token.is_empty() || query.callback_url.is_none() {
         return Ok(ResetPasswordTokenResult::Redirect(build_redirect_url(
-            ctx.base_url(),
+            &ctx.base_url(),
             query.callback_url.as_deref(),
             &[("error", "INVALID_TOKEN")],
         )?));
@@ -218,14 +218,14 @@ pub(crate) async fn reset_password_token_core(
     };
     if expired {
         return Ok(ResetPasswordTokenResult::Redirect(build_redirect_url(
-            ctx.base_url(),
+            &ctx.base_url(),
             query.callback_url.as_deref(),
             &[("error", "INVALID_TOKEN")],
         )?));
     }
 
     Ok(ResetPasswordTokenResult::Redirect(build_redirect_url(
-        ctx.base_url(),
+        &ctx.base_url(),
         query.callback_url.as_deref(),
         &[("token", token)],
     )?))

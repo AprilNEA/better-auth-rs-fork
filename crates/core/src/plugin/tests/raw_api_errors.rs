@@ -193,7 +193,7 @@ impl Hooks {
         );
         let mut request = AuthRequest::new(HttpMethod::Get, "/raw-api-error");
         let hook = self.clone();
-        let handler = move |request: AuthRequest| async move {
+        let handler = move |request: AuthRequest, _context| async move {
             hook.events.lock().unwrap().push("handler".into());
             request.set_response_header("x-handler", "1")?;
             request.set_response_status(status)?;

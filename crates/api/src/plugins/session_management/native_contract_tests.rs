@@ -464,9 +464,9 @@ async fn dispatch(
         None,
     );
     dispatcher
-        .native(request, route, context, |request| async move {
+        .native(request, route, context, |request, context| async move {
             plugin
-                .on_request(&request, context)
+                .on_request(&request, &context)
                 .await?
                 .ok_or_else(|| AuthError::internal("Session contract route was not handled"))
         })

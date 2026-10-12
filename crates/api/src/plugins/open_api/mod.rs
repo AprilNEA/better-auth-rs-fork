@@ -76,7 +76,7 @@ fn schema(context: &AuthContext<impl AuthSchema>) -> AuthResult<OpenApiSpec> {
     context
         .extensions
         .get::<OpenApiRegistry>()
-        .map(|registry| registry.generate(context.base_url()))
+        .map(|registry| registry.generate(&context.base_url()))
         .ok_or_else(|| AuthError::config("OpenAPI registry is not initialized"))
 }
 

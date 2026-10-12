@@ -99,7 +99,7 @@ async fn dispatch_with_transport<S, F, Fut>(
 ) -> AuthResult<AuthResponse>
 where
     S: AuthSchema,
-    F: FnOnce(AuthRequest) -> Fut,
+    F: FnOnce(AuthRequest, Arc<AuthContext<S>>) -> Fut,
     Fut: Future<Output = AuthResult<AuthResponse>>,
 {
     let dispatcher = context
@@ -123,7 +123,7 @@ pub(crate) async fn dispatch<S, F, Fut>(
 ) -> AuthResult<AuthResponse>
 where
     S: AuthSchema,
-    F: FnOnce(AuthRequest) -> Fut,
+    F: FnOnce(AuthRequest, Arc<AuthContext<S>>) -> Fut,
     Fut: Future<Output = AuthResult<AuthResponse>>,
 {
     dispatch_with_transport(false, request, context, handler).await
@@ -134,8 +134,8 @@ pub(crate) async fn dispatch_http_plugin<S: AuthSchema>(
     context: &AuthContext<S>,
     plugin: &impl AuthPlugin<S>,
 ) -> AuthResult<Option<AuthResponse>> {
-    dispatch_with_transport(true, request, context, |request| async move {
-        plugin.on_request(&request, context).await?.ok_or_else(|| {
+    dispatch_with_transport(true, request, context, |request, context| async move {
+        plugin.on_request(&request, &context).await?.ok_or_else(|| {
             AuthError::internal("Native Session fixture did not match a plugin endpoint")
         })
     })
@@ -148,8 +148,8 @@ pub(crate) async fn dispatch_plugin<S: AuthSchema>(
     context: &AuthContext<S>,
     plugin: &impl AuthPlugin<S>,
 ) -> AuthResult<Option<AuthResponse>> {
-    dispatch(request, context, |request| async move {
-        plugin.on_request(&request, context).await?.ok_or_else(|| {
+    dispatch(request, context, |request, context| async move {
+        plugin.on_request(&request, &context).await?.ok_or_else(|| {
             AuthError::internal("Native Session fixture did not match a plugin endpoint")
         })
     })

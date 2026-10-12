@@ -280,7 +280,7 @@ async fn native_phone_matcher_retains_input_presence_and_getter_order() -> AuthR
         let mut request = AuthRequest::new(HttpMethod::Post, "/update-user");
         request.set_endpoint_body(ValidatedBody::unvalidated_native(body));
         let error = dispatcher
-            .native(request, route, &context, |_| async {
+            .native(request, route, &context, |_, _| async {
                 Err(AuthError::internal(
                     "The matcher contract must stop before its handler",
                 ))
@@ -410,7 +410,7 @@ async fn api_key_wraps_only_the_matcher_getter_for_native_and_typed_calls() -> A
                         AuthRequest::new(HttpMethod::Post, "/sign-in/anonymous"),
                         route,
                         &context,
-                        |_| async {
+                        |_, _| async {
                             Err(AuthError::internal(
                                 "The API Key getter must stop before its handler",
                             ))

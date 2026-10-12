@@ -225,7 +225,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
         request: &AuthRequest,
         context: &AuthContext<StatelessSchema>,
     ) -> AuthResult<Option<AuthResponse>> {
-        self.record("onRequest", Some(request), Some(context.base_url()));
+        self.record("onRequest", Some(request), Some(&context.base_url()));
         Ok(None)
     }
     async fn before_request(
@@ -233,7 +233,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
         request: &AuthRequest,
         context: &AuthContext<StatelessSchema>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
-        self.record("before", original(request), Some(context.base_url()));
+        self.record("before", original(request), Some(&context.base_url()));
         Ok(None)
     }
     async fn on_request(
@@ -245,7 +245,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
             return Ok(None);
         }
         let before = context_value(context);
-        self.record("endpoint", original(request), Some(context.base_url()));
+        self.record("endpoint", original(request), Some(&context.base_url()));
         self.rendezvous("endpoint", original(request)).await;
         Ok(Some(AuthResponse::json(
             200,
@@ -258,7 +258,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
         _: &mut AuthResponse,
         context: &AuthContext<StatelessSchema>,
     ) -> AuthResult<()> {
-        self.record("after", original(request), Some(context.base_url()));
+        self.record("after", original(request), Some(&context.base_url()));
         Ok(())
     }
 }

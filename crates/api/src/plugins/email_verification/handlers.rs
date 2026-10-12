@@ -37,7 +37,7 @@ async fn send_for_user<S: better_auth_core::AuthSchema>(
         config.verification_token_expiry(),
         None,
     )?;
-    let url = verification_url(ctx.base_url(), &token, body.callback_url.as_deref());
+    let url = verification_url(&ctx.base_url(), &token, body.callback_url.as_deref());
     if let Some(task) = super::delivery::delivery(
         Some(config),
         VerificationEmail { user, url, token },
@@ -211,7 +211,7 @@ pub(super) async fn verify_email_core(
                 config.verification_token_expiry(),
                 Some("change-email-verification"),
             )?;
-            let url = verification_url(ctx.base_url(), &token, query.callback_url.as_deref());
+            let url = verification_url(&ctx.base_url(), &token, query.callback_url.as_deref());
             if super::delivery::available(Some(config), ctx) {
                 let mut fields = user.enumerable_fields()?;
                 let _ = fields.insert("email".into(), update_to.clone());
@@ -263,7 +263,7 @@ pub(super) async fn verify_email_core(
                 chrono::Duration::hours(1),
                 None,
             )?;
-            let url = verification_url(ctx.base_url(), &token, query.callback_url.as_deref());
+            let url = verification_url(&ctx.base_url(), &token, query.callback_url.as_deref());
             if super::delivery::available(Some(config), ctx) {
                 let task = super::delivery::delivery(
                     Some(config),

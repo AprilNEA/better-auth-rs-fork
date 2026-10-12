@@ -664,8 +664,8 @@ impl<S: AuthSchema> BetterAuth<S> {
             .extensions
             .get::<Arc<better_auth_core::endpoint_dispatch::EndpointDispatcher<S>>>()
             .ok_or_else(|| AuthError::config("Endpoint dispatcher is not initialized"))?
-            .run(req, http, context, None, |request| async move {
-                self.execute_endpoint(&request, context).await
+            .run(req, http, context, None, |request, context| async move {
+                self.execute_endpoint(&request, &context).await
             })
             .await
     }
@@ -755,7 +755,7 @@ impl<S: AuthSchema> BetterAuth<S> {
         self.context
             .extensions
             .get::<OpenApiRegistry>()
-            .map(|registry| registry.generate(self.context.base_url()))
+            .map(|registry| registry.generate(&self.context.base_url()))
             .ok_or_else(|| AuthError::config("OpenAPI registry is not initialized"))
     }
 
@@ -775,7 +775,7 @@ impl<S: AuthSchema> BetterAuth<S> {
                     .extensions
                     .get::<OpenApiRegistry>()
                     .ok_or_else(|| AuthError::config("OpenAPI registry is not initialized"))?
-                    .generate(context.base_url());
+                    .generate(&context.base_url());
                 Ok(Some(AuthResponse::json(None, &spec)?))
             }
             (HttpMethod::Post, core_paths::UPDATE_USER) => {

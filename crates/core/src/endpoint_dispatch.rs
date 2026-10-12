@@ -42,7 +42,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
         handler: F,
     ) -> AuthResult<AuthResponse>
     where
-        F: FnOnce(AuthRequest) -> Fut,
+        F: FnOnce(AuthRequest, Arc<AuthContext<S>>) -> Fut,
         Fut: Future<Output = AuthResult<AuthResponse>>,
     {
         let route_path = if route.server_only {
@@ -93,6 +93,29 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
 
     /// Run the same pipeline for HTTP and native endpoints. The handler may borrow an active transaction.
     pub async fn run<F, Fut>(
+        &self,
+        req: &mut AuthRequest,
+        http: bool,
+        context: &AuthContext<S>,
+        native_route: Option<AuthRoute>,
+        handler: F,
+    ) -> AuthResult<AuthResponse>
+    where
+        F: FnOnce(AuthRequest, Arc<AuthContext<S>>) -> Fut,
+        Fut: Future<Output = AuthResult<AuthResponse>>,
+    {
+        context
+            .with_endpoint_context(|context| async move {
+                let handler_context = context.clone();
+                self.run_in_context(req, http, &context, native_route, |request| {
+                    handler(request, handler_context)
+                })
+                .await
+            })
+            .await
+    }
+
+    async fn run_in_context<F, Fut>(
         &self,
         req: &mut AuthRequest,
         http: bool,
@@ -527,11 +550,7 @@ impl<S: AuthSchema> AuthContext<S> {
                 .extensions
                 .get::<Arc<EndpointDispatcher<S>>>()
                 .ok_or_else(|| AuthError::config("Endpoint dispatcher is not initialized"))?;
-            dispatcher
-                .native(request, route, &context, |request| {
-                    handler(request, context.clone())
-                })
-                .await
+            dispatcher.native(request, route, &context, handler).await
         })
         .await
     }

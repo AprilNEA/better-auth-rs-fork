@@ -159,8 +159,7 @@ async fn trusted_hooks_preserve_native_user_identity_for_http_and_native_consume
             } else {
                 SessionRead::Authoritative
             };
-            let handler = |request: AuthRequest| {
-                let context = &context;
+            let handler = |request: AuthRequest, context: Arc<AuthContext<StatelessSchema>>| {
                 let user = &user;
                 async move {
                     let resolved = context.native_session(&request, read).await?.unwrap();
@@ -270,8 +269,7 @@ async fn authoritative_server_reads_discard_injected_users_and_cannot_restore_re
                 .headers
                 .insert("cookie".into(), format!("{name}={token}"));
             let response = dispatcher
-                .run(&mut request, true, &context, None, |request| {
-                    let context = &context;
+                .run(&mut request, true, &context, None, |request, context| {
                     let expected = &persisted.user;
                     async move {
                         let result = context.require_authoritative_native_session(&request).await;
@@ -348,9 +346,12 @@ async fn cookie_and_json_input_cannot_install_a_trusted_native_session() -> Auth
             [AuthRoute::post("/session-probe", "sessionProbe")],
         );
         let response = dispatcher
-            .run(&mut request, true, &context, None, |request| {
-                let context = &context;
-                async move {
+            .run(
+                &mut request,
+                true,
+                &context,
+                None,
+                |request, context| async move {
                     assert!(request.native_session_snapshot()?.is_none());
                     assert!(
                         context
@@ -361,8 +362,8 @@ async fn cookie_and_json_input_cannot_install_a_trusted_native_session() -> Auth
                     assert!(request.native_session_snapshot()?.is_none());
                     assert!(request.new_session()?.is_none());
                     Ok(AuthResponse::new(204))
-                }
-            })
+                },
+            )
             .await?;
         assert_eq!(response.status, 204);
         assert_eq!(
@@ -413,8 +414,7 @@ async fn later_session_hooks_replace_earlier_native_or_api_key_style_injection()
         );
         let mut request = AuthRequest::new(HttpMethod::Post, "/session-probe");
         let _ = dispatcher
-            .run(&mut request, true, &context, None, |request| {
-                let context = &context;
+            .run(&mut request, true, &context, None, |request, context| {
                 let stored = &stored;
                 async move {
                     let selected = context.require_native_session(&request).await?;

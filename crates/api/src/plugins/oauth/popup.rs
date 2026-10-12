@@ -244,7 +244,6 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
         .map(|scopes| scopes.split(',').map(str::to_owned).collect::<Vec<_>>());
     let additional = StateExtras::popup_entries(req.query_string("additionalData")?);
     let request = handlers::FlowStartRequest {
-        redirect_base: None,
         anonymous_user_id: None,
         provider_name: &provider_name,
         provider,

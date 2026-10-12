@@ -108,7 +108,7 @@ async fn matcher_failures_preserve_log_identity_and_skip_handler_error_recovery(
             [route.clone()],
         );
         let mut request = AuthRequest::new(HttpMethod::Get, "/matcher-error");
-        let handler = |_: AuthRequest| async {
+        let handler = |_: AuthRequest, _context| async {
             Err(AuthError::internal(
                 "A matcher failure must stop before the endpoint handler",
             ))

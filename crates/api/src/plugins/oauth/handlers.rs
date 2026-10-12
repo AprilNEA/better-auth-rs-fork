@@ -195,7 +195,6 @@ pub(super) struct InitiatedOAuthFlow {
 }
 
 pub(super) struct FlowStartRequest<'a> {
-    pub(super) redirect_base: Option<String>,
     pub(super) anonymous_user_id: Option<String>,
     pub(super) provider_name: &'a str,
     pub(super) provider: &'a ResolvedProvider,
@@ -875,9 +874,6 @@ async fn social_sign_in_core(
         req,
         ctx,
         FlowStartRequest {
-            redirect_base: req
-                .server_context(super::proxy::REDIRECT_BASE_CONTEXT)?
-                .and_then(|value| value.as_str().map(str::to_owned)),
             anonymous_user_id,
             provider_name: &body.provider,
             provider,
@@ -917,9 +913,6 @@ async fn link_social_core(
         req,
         ctx,
         FlowStartRequest {
-            redirect_base: req
-                .server_context(super::proxy::REDIRECT_BASE_CONTEXT)?
-                .and_then(|value| value.as_str().map(str::to_owned)),
             anonymous_user_id: None,
             provider_name: &body.provider,
             provider,
@@ -1005,14 +998,7 @@ pub(super) fn oauth_authorization_url(
     build_authorization_url(
         request.provider,
         AuthorizationRequest {
-            callback_url: &format!(
-                "{}/callback/{}",
-                request
-                    .redirect_base
-                    .clone()
-                    .unwrap_or_else(|| auth_base_url(ctx)),
-                request.provider_name
-            ),
+            callback_url: &format!("{}/callback/{}", auth_base_url(ctx), request.provider_name),
             scopes: request.scopes,
             state: &flow.state,
             code_challenge: &flow.code_challenge,

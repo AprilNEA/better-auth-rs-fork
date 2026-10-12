@@ -26,6 +26,8 @@ mod linking_tests;
 mod native_input_tests;
 #[cfg(test)]
 mod native_result_tests;
+#[cfg(test)]
+mod runtime_url_tests;
 
 /// Production-to-preview callback configuration.
 #[derive(Clone, better_auth_core::PluginConfig)]
@@ -50,7 +52,6 @@ pub struct OAuthProxyPlugin {
     config: OAuthProxyConfig,
 }
 
-pub(super) const REDIRECT_BASE_CONTEXT: &str = "oauthProxyRedirectBase";
 const CALLBACK_CONTEXT: &str = "oauthProxyCallback";
 
 pub(super) fn validate_callback_url<S: AuthSchema>(
@@ -325,27 +326,42 @@ impl<S: AuthSchema> AuthPlugin<S> for OAuthProxyPlugin {
             "plugin:oauth-proxy",
             async {
                 let Some(location) = response.headers.get("location").filter(|location| {
-                    location.contains("/oauth-proxy?callbackURL")
-                        || location.contains("/oauth-proxy-callback?callbackURL")
+                    (location.contains("/oauth-proxy?callbackURL")
+                        || location.contains("/oauth-proxy-callback?callbackURL"))
+                        && location.starts_with("http")
                 }) else {
                     return Ok(());
                 };
-                let Ok(location) = Url::parse(location) else {
+                let production = self
+                    .config
+                    .production_url
+                    .as_deref()
+                    .filter(|url| !url.is_empty())
+                    .or_else(|| {
+                        ctx.config
+                            .base_url
+                            .as_static()
+                            .filter(|url| !url.is_empty())
+                    })
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| ctx.base_url());
+                let production = environment::origin(&production);
+                let location =
+                    Url::parse(location).map_err(|_| AuthError::type_error("Invalid URL"))?;
+                if production.as_ref() == Some(&location.origin()) {
+                    if let Some((_, target)) = location
+                        .query_pairs()
+                        .find(|(key, _)| key == "callbackURL")
+                        .filter(|(_, target)| !target.is_empty())
+                    {
+                        let _ = response.headers.insert("location", target.into_owned());
+                    }
                     return Ok(());
-                };
-                let production = parse_url(
-                    self.config
-                        .production_url
-                        .as_deref()
-                        .filter(|url| !url.is_empty())
-                        .unwrap_or(ctx.base_url()),
-                )?;
-                if location.origin() == production.origin()
-                    && let Some((_, target)) =
-                        location.query_pairs().find(|(key, _)| key == "callbackURL")
-                {
-                    let _ = response.headers.insert("location", target.into_owned());
                 }
+                ctx.config.logger.warn(
+                    "OAuth proxy: cross-origin callback reached after hook unexpectedly",
+                    &[],
+                );
                 Ok(())
             },
         )
@@ -403,10 +419,7 @@ impl OAuthProxyPlugin {
             .as_deref()
             .filter(|url| !url.is_empty())
         {
-            req.set_server_context(
-                REDIRECT_BASE_CONTEXT,
-                format!("{}{base_path}", production.trim_end_matches('/')).into(),
-            )?;
+            ctx.set_base_url(format!("{}{base_path}", production.trim_end_matches('/')));
         }
         let mut callback: Vec<u16> = format!(
             "{}{base_path}/callback/",
@@ -789,17 +802,30 @@ impl OAuthProxyPlugin {
             ));
         };
         handlers::validate_redirect_target(callback, ctx, "Invalid callbackURL")?;
+        let base_url = ctx
+            .config
+            .base_url
+            .as_static()
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                environment::origin(&ctx.base_url())
+                    .map(|origin| origin.ascii_serialization())
+                    .unwrap_or_default()
+            });
         let default_error = ctx
             .config
             .api_error
             .error_url
             .clone()
             .filter(|value| !value.is_empty())
-            .unwrap_or_else(|| format!("{}/error", ctx.base_url().trim_end_matches('/')));
+            .unwrap_or_else(|| format!("{}/api/auth/error", base_url.trim_end_matches('/')));
         let Some(encrypted) = req
             .query_string("profile")?
             .filter(|value| !value.is_empty())
         else {
+            ctx.config
+                .logger
+                .error("OAuth proxy callback missing profile data", &[]);
             return redirect_error(&default_error, "missing_profile", None);
         };
         let plain = match symmetric::decrypt(self.encryption_key(ctx), encrypted) {

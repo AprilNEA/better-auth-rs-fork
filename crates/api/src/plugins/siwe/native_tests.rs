@@ -325,12 +325,11 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                 .clone();
             let dispatcher =
                 EndpointDispatcher::new(Arc::new(Vec::new()), Default::default(), routes);
-            let handler = |req: AuthRequest| {
+            let handler = |req: AuthRequest, ctx: Arc<AuthContext<StatelessSchema>>| {
                 let plugin = &plugin;
-                let ctx = &ctx;
                 async move {
                     plugin
-                        .on_request(&req, ctx)
+                        .on_request(&req, &ctx)
                         .await?
                         .ok_or_else(|| AuthError::not_found("SIWE endpoint"))
                 }

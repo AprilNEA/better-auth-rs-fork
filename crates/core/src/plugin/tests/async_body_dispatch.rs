@@ -85,8 +85,12 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
         PHASES
             .scope(RefCell::new(Vec::new()), async {
                 crate::with_request_hook_context(&original, async {
-                    let dispatch =
-                        dispatcher.run(&mut request, true, &context, None, |request| async move {
+                    let dispatch = dispatcher.run(
+                        &mut request,
+                        true,
+                        &context,
+                        None,
+                        |request, _context| async move {
                             record("endpoint");
                             assert!(request.endpoint_headers().is_some());
                             assert_eq!(request.input_body()?, Some(json!({"displayName": "Ada"})));
@@ -110,7 +114,8 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
                                     "page": request.query.as_ref().unwrap()["page"],
                                 }),
                             )
-                        });
+                        },
+                    );
                     let mut dispatch = Box::pin(dispatch);
                     assert!(futures_util::poll!(dispatch.as_mut()).is_pending());
                     assert_eq!(phases(), ["body:start"]);

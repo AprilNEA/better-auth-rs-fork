@@ -236,12 +236,11 @@ async fn observe(
     scope.is_http = http;
     let response = with_request_hook_context_value(
         scope,
-        dispatcher.run(&mut request, http, &context, None, |request| {
+        dispatcher.run(&mut request, http, &context, None, |request, context| {
             let plugin = &plugin;
-            let context = &context;
             async move {
                 plugin
-                    .on_request(&request, context)
+                    .on_request(&request, &context)
                     .await?
                     .ok_or_else(|| AuthError::internal("Missing ordinary OAuth response"))
             }
@@ -548,12 +547,11 @@ async fn exercise_endpoint_verifier(
     scope.is_http = http;
     let response = with_request_hook_context_value(
         scope,
-        dispatcher.run(&mut request, http, &context, None, |request| {
+        dispatcher.run(&mut request, http, &context, None, |request, context| {
             let plugin = &plugin;
-            let context = &context;
             async move {
                 plugin
-                    .on_request(&request, context)
+                    .on_request(&request, &context)
                     .await?
                     .ok_or_else(|| AuthError::internal("Missing typed verifier response"))
             }

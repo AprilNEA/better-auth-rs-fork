@@ -171,7 +171,7 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                     [route.clone()],
                 );
                 let mut request = AuthRequest::new(HttpMethod::Get, "/header-contract");
-                let handler = |request: AuthRequest| async move {
+                let handler = |request: AuthRequest, _context| async move {
                     request.set_response_header("x-endpoint", "1")?;
                     if mode == "endpoint-error" {
                         return Err(response("error", content_type)?.into());
@@ -361,7 +361,7 @@ async fn json_http_output_strips_request_headers_but_native_output_preserves_the
             ]);
             supplied.extend(request_headers.map(|name| (name.to_owned(), "1".to_owned())));
             let mut request = AuthRequest::new(HttpMethod::Get, "/header-filter");
-            let handler = |request: AuthRequest| {
+            let handler = |request: AuthRequest, _context| {
                 let supplied = supplied.clone();
                 let body = body.clone();
                 async move {
@@ -557,7 +557,7 @@ async fn explicit_responses_keep_owned_headers_separate_until_http_materializati
                     [route.clone()],
                 );
                 let mut request = AuthRequest::new(HttpMethod::Get, "/explicit-header-contract");
-                let handler = |request: AuthRequest| async move {
+                let handler = |request: AuthRequest, _context| async move {
                     queue_explicit_headers(&request, "endpoint", override_type)?;
                     if mode == "replace" {
                         AuthResponse::json(None, &json!({"phase":"endpoint"}))
