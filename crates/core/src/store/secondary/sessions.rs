@@ -70,7 +70,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let token = original.get("token").cloned().unwrap_or_default();
         let current = self
             .secondary()?
-            .get_native(&active_sessions_key(&user_id)?)
+            .clone()
+            .invoke_get_native(active_sessions_key(&user_id)?)?
             .await?;
         let now = self.now();
         let current = cache::decode(current)?.unwrap_or_else(references::empty);
@@ -101,11 +102,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
             crate::SchemaValue::<crate::FieldDate>::from_field(furthest).cache_ttl(now)?;
         if seconds > 0.0 {
             self.secondary()?
-                .set_native(
-                    &active_sessions_key(&user_id)?,
-                    &references.stringify_native()?,
-                    Some(seconds),
-                )
+                .clone()
+                .invoke_set_native(
+                    active_sessions_key(&user_id)?,
+                    references.stringify_native()?,
+                    Some(Some(seconds)),
+                )?
                 .await?;
         }
         let user = match transaction {
@@ -116,7 +118,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         if seconds > 0.0 {
             let value = cache::session_envelope(session.clone(), user);
             self.secondary()?
-                .set_native(&token, &value.stringify_native()?, Some(seconds))
+                .clone()
+                .invoke_set_native(token, value.stringify_native()?, Some(Some(seconds)))?
                 .await?;
         }
         Ok(())
@@ -129,7 +132,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
     pub(super) async fn references_value(&self, user_id: &FieldValue) -> AuthResult<FieldValue> {
         Ok(cache::decode(
             self.secondary()?
-                .get_native(&active_sessions_key(user_id)?)
+                .clone()
+                .invoke_get_native(active_sessions_key(user_id)?)?
                 .await?,
         )?
         .unwrap_or_else(references::empty))
@@ -146,7 +150,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let seconds =
             crate::SchemaValue::<crate::FieldDate>::from_field(expires_at).cache_ttl(now)?;
         self.secondary()?
-            .set_native(key, &encoded, Some(seconds))
+            .clone()
+            .invoke_set_native(key.clone(), encoded, Some(Some(seconds)))?
             .await
     }
 
@@ -155,7 +160,13 @@ impl<S: AuthSchema> SecondaryStore<S> {
         token: &FieldValue,
         patch: FieldMap,
     ) -> AuthResult<Option<crate::wire::SessionView>> {
-        let Some(cached) = cache::decode(self.secondary()?.get_native(token).await?)? else {
+        let Some(cached) = cache::decode(
+            self.secondary()?
+                .clone()
+                .invoke_get_native(token.clone())?
+                .await?,
+        )?
+        else {
             return Ok(None);
         };
         let mut fields = cached.model_property("session")?.enumerable_fields()?;
@@ -184,15 +195,21 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 ("user".into(), cached.model_property("user")?),
             ]);
             self.secondary()?
-                .set_native(
-                    token,
-                    &FieldValue::from(envelope).stringify_native()?,
-                    Some(seconds),
-                )
+                .clone()
+                .invoke_set_native(
+                    token.clone(),
+                    FieldValue::from(envelope).stringify_native()?,
+                    Some(Some(seconds)),
+                )?
                 .await?;
             let key = active_sessions_key(&updated.user_id.field_value())?;
-            let current = cache::decode(self.secondary()?.get_native(&key).await?)?
-                .unwrap_or_else(references::empty);
+            let current = cache::decode(
+                self.secondary()?
+                    .clone()
+                    .invoke_get_native(key.clone())?
+                    .await?,
+            )?
+            .unwrap_or_else(references::empty);
             let filter_token = token.clone();
             let filtered = references::filter(&current, move |reference| {
                 Ok(!reference
@@ -213,7 +230,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 self.write_references(&key, &references, furthest, now)
                     .await?;
             } else {
-                self.secondary()?.delete_native(&key).await?;
+                self.secondary()?.clone().invoke_delete_native(key)?.await?;
             }
         }
         Ok(Some(updated))
@@ -300,7 +317,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             references::iter(&references::tokens(references)?)?.collect::<AuthResult<Vec<_>>>()?;
         for reference in references::iter(references)? {
             self.secondary()?
-                .delete_native(&reference?.model_property("token")?)
+                .clone()
+                .invoke_delete_native(reference?.model_property("token")?)?
                 .await?;
         }
         let key = active_sessions_key(user_id)?;
@@ -322,7 +340,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
         if furthest.is_truthy() {
             self.write_references(&key, &remaining, furthest, now).await
         } else {
-            self.secondary()?.delete_native(&key).await
+            self.secondary()?.clone().invoke_delete_native(key)?.await
         }
     }
 
@@ -334,7 +352,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let mut sessions = Vec::new();
         let raw = self
             .secondary()?
-            .get_native(&active_sessions_key(user_id)?)
+            .clone()
+            .invoke_get_native(active_sessions_key(user_id)?)?
             .await?;
         if !raw.as_ref().is_some_and(FieldValue::is_truthy) {
             return Ok(sessions);
@@ -351,7 +370,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 continue;
             }
             seen.push(token.clone());
-            let raw = self.secondary()?.get_native(&token).await?;
+            let raw = self.secondary()?.clone().invoke_get_native(token)?.await?;
             let Ok(Some(cached)) = cache::parse(raw) else {
                 continue;
             };
@@ -442,7 +461,11 @@ impl<S: AuthSchema> SessionStore<S> for SecondaryStore<S> {
         if self.storage.is_none() {
             return self.inner.get_session_by_token_value(token).await;
         }
-        let raw = self.secondary()?.get_native(token).await?;
+        let raw = self
+            .secondary()?
+            .clone()
+            .invoke_get_native(token.clone())?
+            .await?;
         if raw.as_ref().is_some_and(FieldValue::is_truthy) {
             let Some(cached) = cache::decode(raw)? else {
                 return Ok(None);
@@ -526,7 +549,11 @@ impl<S: AuthSchema> SessionStore<S> for SecondaryStore<S> {
         if self.storage.is_none() {
             return self.inner.get_session_snapshot_value(token).await;
         }
-        let raw = self.secondary()?.get_native(token).await?;
+        let raw = self
+            .secondary()?
+            .clone()
+            .invoke_get_native(token.clone())?
+            .await?;
         if raw.as_ref().is_some_and(FieldValue::is_truthy) {
             let Some(cached) = cache::decode(raw)? else {
                 return Ok(None);
@@ -555,7 +582,11 @@ impl<S: AuthSchema> SessionStore<S> for SecondaryStore<S> {
         }
         let mut sessions = Vec::new();
         for token in tokens {
-            let raw = self.secondary()?.get_native(&token.as_str().into()).await?;
+            let raw = self
+                .secondary()?
+                .clone()
+                .invoke_get_native(token.as_str().into())?
+                .await?;
             let Ok(Some(cached)) = cache::parse(raw) else {
                 continue;
             };

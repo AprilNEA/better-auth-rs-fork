@@ -25,7 +25,10 @@ use better_auth_core::{
     user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType},
     wire::SessionView,
 };
-use std::sync::Mutex;
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -89,15 +92,11 @@ struct Storage {
     request: Mutex<Option<AuthRequest>>,
     writes: Mutex<Vec<Write>>,
     fail_published: bool,
+    synchronous_failure: AtomicBool,
 }
 
-#[async_trait::async_trait]
-impl SecondaryStorage for Storage {
-    async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
-        self.inner.get(key).await
-    }
-
-    async fn set_native(
+impl Storage {
+    fn record_write(
         &self,
         key: &FieldValue,
         value: &FieldValue,
@@ -121,6 +120,47 @@ impl SecondaryStorage for Storage {
         if fail {
             return Err(AuthError::bad_request("device secondary write rejected"));
         }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl SecondaryStorage for Storage {
+    fn invoke_set_native(
+        self: Arc<Self>,
+        key: FieldValue,
+        value: FieldValue,
+        ttl: Option<Option<f64>>,
+    ) -> AuthResult<better_auth_core::store::SecondaryStorageFuture<()>> {
+        assert!(ttl.is_some());
+        if self.synchronous_failure.load(Ordering::SeqCst) {
+            self.record_write(&key, &value, ttl.flatten())?;
+            Ok(Box::pin(async move {
+                self.inner.set_native(&key, &value, ttl.flatten()).await
+            }))
+        } else {
+            Ok(Box::pin(async move {
+                self.set_native(&key, &value, ttl.flatten()).await
+            }))
+        }
+    }
+
+    async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
+        self.inner.get(key).await
+    }
+
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
+        if self.synchronous_failure.load(Ordering::SeqCst) {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.record_write(key, value, ttl)?;
         self.inner.set_native(key, value, ttl).await
     }
 
@@ -407,29 +447,35 @@ async fn native_session_values_reach_publication_cache_and_response_without_coer
 
 #[tokio::test]
 async fn cache_failure_keeps_consumption_session_and_published_snapshot() -> TestResult {
-    let fixture = Fixture::new(
-        7.0.into(),
-        FieldDate::invalid().into(),
-        SessionOutcome::Continue,
-        true,
-    )
-    .await?;
-    assert!(
-        matches!(fixture.redeem().await, Err(AuthError::BadRequest(message)) if message == "device secondary write rejected")
-    );
-    fixture.assert_consumed(1).await?;
-    let published = fixture
-        .request
-        .new_session()?
-        .ok_or("Missing published snapshot after cache failure")?;
-    assert_eq!(
-        published.user_field("name")?,
-        FieldValue::from("Selected User")
-    );
-    let writes = fixture.storage.writes.lock().unwrap();
-    assert_eq!(writes.len(), 3);
-    assert!(writes[2].published.is_some());
-    assert!(writes[2].ttl.is_some_and(f64::is_nan));
+    for synchronous in [false, true] {
+        let fixture = Fixture::new(
+            7.0.into(),
+            FieldDate::invalid().into(),
+            SessionOutcome::Continue,
+            true,
+        )
+        .await?;
+        fixture
+            .storage
+            .synchronous_failure
+            .store(synchronous, Ordering::SeqCst);
+        assert!(
+            matches!(fixture.redeem().await, Err(AuthError::BadRequest(message)) if message == "device secondary write rejected")
+        );
+        fixture.assert_consumed(1).await?;
+        let published = fixture
+            .request
+            .new_session()?
+            .ok_or("Missing published snapshot after cache failure")?;
+        assert_eq!(
+            published.user_field("name")?,
+            FieldValue::from("Selected User")
+        );
+        let writes = fixture.storage.writes.lock().unwrap();
+        assert_eq!(writes.len(), 3);
+        assert!(writes[2].published.is_some());
+        assert!(writes[2].ttl.is_some_and(f64::is_nan));
+    }
     Ok(())
 }
 

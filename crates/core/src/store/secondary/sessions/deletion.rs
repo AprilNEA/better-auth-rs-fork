@@ -7,7 +7,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             return self.inner.delete_session_by_token_value(token).await;
         };
         if let Some(cached) = storage
-            .get_native(token)
+            .clone()
+            .invoke_get_native(token.clone())?
             .await?
             .filter(FieldValue::is_truthy)
         {
@@ -26,7 +27,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             let user_id = session.model_property("userId")?;
             let key = active_sessions_key(&user_id)?;
             if let Some(current) = storage
-                .get_native(&key)
+                .clone()
+                .invoke_get_native(key)?
                 .await?
                 .filter(FieldValue::is_truthy)
             {
@@ -61,7 +63,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
                     .await?;
                 } else {
                     storage
-                        .delete_native(&active_sessions_key(&user_id)?)
+                        .clone()
+                        .invoke_delete_native(active_sessions_key(&user_id)?)?
                         .await?;
                 }
             } else {
@@ -70,7 +73,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                     .error("Active sessions list not found in secondary storage", &[])?;
             }
         }
-        storage.delete_native(token).await?;
+        storage.clone().invoke_delete_native(token.clone())?.await?;
         if !self.database_sessions() {
             return Ok(());
         }

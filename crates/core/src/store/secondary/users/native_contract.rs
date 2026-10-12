@@ -194,10 +194,15 @@ fn snapshot(
     Ok(json!({"database": database, "cache": cache, "rootData": root_data}))
 }
 
-async fn capture(scenario: &Json) -> AuthResult<Json> {
+async fn capture(scenario: &Json, synchronous_storage: bool) -> AuthResult<Json> {
     let observer = Observer::default();
     let values = values::Values::new(scenario, observer.clone())?;
-    let cache = Arc::new(Storage::new(scenario, &values, observer.clone())?);
+    let cache = Arc::new(Storage::new(
+        scenario,
+        &values,
+        observer.clone(),
+        synchronous_storage,
+    )?);
     let initial_index = cache.value(INDEX);
     let mut config = AuthConfig::default();
     config.session.store_session_in_database = Some(scenario["storeInDatabase"] == true);
@@ -287,12 +292,14 @@ async fn session_secondary_native_runtime_matches_complete_upstream_observations
     assert_eq!(fixture["version"], "1.7.6");
     assert_eq!(fixture["cases"].as_array().unwrap().len(), 16);
     for case in fixture["cases"].as_array().unwrap() {
-        let actual = capture(&case["scenario"]).await?;
-        assert_replay(
-            &actual,
-            &case["runtime"],
-            case["scenario"]["name"].as_str().unwrap(),
-        );
+        for synchronous_storage in [false, true] {
+            let actual = capture(&case["scenario"], synchronous_storage).await?;
+            let label = format!(
+                "{}/synchronous={synchronous_storage}",
+                case["scenario"]["name"].as_str().unwrap()
+            );
+            assert_replay(&actual, &case["runtime"], &label);
+        }
     }
     Ok(())
 }

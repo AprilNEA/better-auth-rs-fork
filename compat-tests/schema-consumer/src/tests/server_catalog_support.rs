@@ -94,7 +94,7 @@ pub async fn assert_frozen_ddl(
     let actual = complete_catalog(database, backend, table).await?;
     let table = table.to_owned();
     let source = source.to_owned();
-    let check = |database: DatabaseConnection| async move {
+    let check = move |database: DatabaseConnection| async move {
         let _ = database.execute_unprepared(&source).await?;
         let expected = complete_catalog(&database, backend, &table).await?;
         eprintln!(

@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) struct Storage {
+    synchronous_storage: bool,
     cache: Mutex<indexmap::IndexMap<String, FieldValue>>,
     observer: Observer,
     references: Vec<FieldValue>,
@@ -14,6 +15,7 @@ impl Storage {
         scenario: &Json,
         values: &values::Values,
         observer: Observer,
+        synchronous_storage: bool,
     ) -> AuthResult<Self> {
         let mut cache =
             indexmap::IndexMap::from([(INDEX.into(), values.initial_index.clone().into())]);
@@ -45,6 +47,7 @@ impl Storage {
             let _ = cache.insert(INDEX.into(), vec![reference.clone()].into());
         }
         Ok(Self {
+            synchronous_storage,
             cache: Mutex::new(cache),
             observer,
             references: values.references.clone(),
@@ -74,17 +77,8 @@ impl Storage {
     }
 }
 
-#[async_trait]
-impl SecondaryStorage for Storage {
-    async fn get(&self, key: &str) -> AuthResult<Option<Json>> {
-        self.get_native(&key.into())
-            .await?
-            .map(|value| value.json())
-            .transpose()
-            .map(Option::flatten)
-    }
-
-    async fn get_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
+impl Storage {
+    fn read(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
         let key = key.display_utf16()?.to_utf8().unwrap();
         if key == INDEX {
             let mut reads = self.reads.lock().unwrap();
@@ -113,12 +107,7 @@ impl SecondaryStorage for Storage {
         Ok(Some(value))
     }
 
-    async fn set_native(
-        &self,
-        key: &FieldValue,
-        value: &FieldValue,
-        ttl: Option<f64>,
-    ) -> AuthResult<()> {
+    fn write(&self, key: &FieldValue, value: &FieldValue, ttl: Option<f64>) -> AuthResult<()> {
         let key = key.display_utf16()?.to_utf8().unwrap();
         let mut observer = self.observer.lock().unwrap();
         let observed = observer.observe(value)?;
@@ -135,13 +124,97 @@ impl SecondaryStorage for Storage {
         Ok(())
     }
 
-    async fn delete(&self, key: &str) -> AuthResult<()> {
+    fn remove(&self, key: &str) -> AuthResult<()> {
         self.observer
             .lock()
             .unwrap()
             .record("cache.delete", [("key".into(), key.into())]);
         let _ = self.cache.lock().unwrap().shift_remove(key);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl SecondaryStorage for Storage {
+    fn invoke_get_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<Option<FieldValue>>> {
+        if self.synchronous_storage {
+            let value = self.read(&key)?;
+            Ok(Box::pin(async move { Ok(value) }))
+        } else {
+            Ok(Box::pin(async move { self.get_native(&key).await }))
+        }
+    }
+
+    fn invoke_set_native(
+        self: Arc<Self>,
+        key: FieldValue,
+        value: FieldValue,
+        ttl: Option<Option<f64>>,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<()>> {
+        assert!(ttl.is_some());
+        if self.synchronous_storage {
+            self.write(&key, &value, ttl.flatten())?;
+            Ok(Box::pin(async { Ok(()) }))
+        } else {
+            Ok(Box::pin(async move {
+                self.set_native(&key, &value, ttl.flatten()).await
+            }))
+        }
+    }
+
+    fn invoke_delete_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<()>> {
+        if self.synchronous_storage {
+            self.remove(&key.decode::<String>()?)?;
+            Ok(Box::pin(async { Ok(()) }))
+        } else {
+            Ok(Box::pin(async move { self.delete_native(&key).await }))
+        }
+    }
+
+    async fn get(&self, key: &str) -> AuthResult<Option<Json>> {
+        self.get_native(&key.into())
+            .await?
+            .map(|value| value.json())
+            .transpose()
+            .map(Option::flatten)
+    }
+
+    async fn get_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.read(key)
+    }
+
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.write(key, value, ttl)
+    }
+
+    async fn delete(&self, key: &str) -> AuthResult<()> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.remove(key)
     }
 
     async fn get_and_delete(&self, key: &str) -> AuthResult<Option<Json>> {

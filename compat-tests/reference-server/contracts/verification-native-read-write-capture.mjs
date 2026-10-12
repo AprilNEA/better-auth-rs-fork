@@ -1,3 +1,4 @@
+import { secondaryStorageInvocation } from "./secondary-storage-invocation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -138,20 +139,20 @@ function inputFor(scenario, native) {
   };
 }
 
-async function captureCase(scenario) {
+async function captureCase(scenario, synchronousStorage) {
   const native = createSecondaryNativeObserver();
   const runtime = createSecondaryRuntimeObserver(native);
   const root = inputFor(scenario, native);
   const cache = new Map([[key, root.input], ["unrelated", "retained"]]);
   const database = { user: [], session: [], account: [], verification: [] };
   let active = false;
-  const storage = {
-    async get(requested) {
+  const storage = secondaryStorageInvocation({
+    get(requested) {
       const value = cache.get(requested) ?? null;
       if (active) native.record("storage.get", { key: requested, value: native.snapshot(value) });
       return value;
     },
-    async set(requested, value, ttl) {
+    set(requested, value, ttl) {
       if (active) {
         native.record("storage.set", { key: requested, value: native.snapshot(value), ttl: native.snapshot(ttl) });
         if (scenario.input === "set-error") {
@@ -161,12 +162,12 @@ async function captureCase(scenario) {
       }
       cache.set(requested, value);
     },
-    async delete(requested) {
+    delete(requested) {
       if (active) native.record("storage.delete", { key: requested });
       cache.delete(requested);
     },
     async getAndDelete() { throw new assert.AssertionError({ message: "Read and update must not consume verification values" }); },
-  };
+  }, synchronousStorage);
   const hooks = Object.fromEntries(["before", "after"].map(phase => [phase, data => {
     if (active) native.record(`hook:update:${phase}`, { data: native.snapshot(data) });
   }]));
@@ -224,7 +225,7 @@ async function captureCase(scenario) {
   };
 }
 
-export async function captureVerificationNativeReadWrite() {
+export async function captureVerificationNativeReadWrite(synchronousStorage = false) {
   assertSecondaryNativeVersions(["better-auth", "@better-auth/core"]);
   const provenance = ["better-auth/dist/db/internal-adapter.mjs", "@better-auth/core/dist/utils/json.mjs"].map(path => ({
     path, sha256: createHash("sha256").update(readFileSync(new URL(`../node_modules/${path}`, import.meta.url))).digest("hex"),
@@ -232,7 +233,7 @@ export async function captureVerificationNativeReadWrite() {
   return withClock(async setClock => {
     setClock(now);
     const cases = [];
-    for (const scenario of verificationNativeReadWriteCases) cases.push(await captureCase(scenario));
+    for (const scenario of verificationNativeReadWriteCases) cases.push(await captureCase(scenario, synchronousStorage));
     return { version: secondaryNativeVersion, backend: "memory", provenance,
       boundary: "Real findVerificationValue and updateVerificationByIdentifier with native secondary values. Read keeps raw truthiness and one safeJSONParse result. Update preserves spread, nullish expiry, Date getTime, JSON callback identity, errors, and storage. Reflection remains in source audit; runtime compares complete returned values and ordered state.", cases };
   });

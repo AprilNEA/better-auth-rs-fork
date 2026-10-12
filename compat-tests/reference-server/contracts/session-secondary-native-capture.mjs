@@ -1,3 +1,4 @@
+import { secondaryStorageInvocation } from "./secondary-storage-invocation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -76,7 +77,7 @@ function updateChain(native, rootKind, references) {
   return { root, filtered, concatenated, sorted };
 }
 
-async function captureCase(scenario) {
+async function captureCase(scenario, synchronousStorage) {
   const native = createSecondaryNativeObserver();
   const runtime = createSecondaryRuntimeObserver(native);
   const owner = user();
@@ -101,8 +102,8 @@ async function captureCase(scenario) {
   let active = false;
   let indexReads = 0;
   let roots = {};
-  const storage = {
-    async get(key) {
+  const storage = secondaryStorageInvocation({
+    get(key) {
       if (active && key === indexKey && ++indexReads === 2 && scenario.operation === "batch-delete") {
         cache.set(indexKey, JSON.stringify([...references, concurrent]));
         native.record("concurrent:index-replacement", { value: native.snapshot(cache.get(indexKey)) });
@@ -111,12 +112,12 @@ async function captureCase(scenario) {
       if (active) native.record("cache.get", { key, value: native.snapshot(value) });
       return value;
     },
-    async set(key, value, ttl) {
+    set(key, value, ttl) {
       if (active) native.record("cache.set", { key, value: native.snapshot(value), ttl: native.snapshot(ttl) });
       cache.set(key, value);
     },
-    async delete(key) { if (active) native.record("cache.delete", { key }); cache.delete(key); },
-  };
+    delete(key) { if (active) native.record("cache.delete", { key }); cache.delete(key); },
+  }, synchronousStorage);
   if (scenario.root) {
     retained.extra.native = function retainedChild() {};
     retained.extra.date = date(-5000);
@@ -246,7 +247,7 @@ async function captureCase(scenario) {
       events: runtime.events, after: runtimeAfter, functionIds: runtime.functionIds } };
 }
 
-export async function captureSessionSecondaryNative() {
+export async function captureSessionSecondaryNative(synchronousStorage = false) {
   assertSecondaryNativeVersions(["better-auth", "@better-auth/core"]);
   const provenance = ["better-auth/dist/db/internal-adapter.mjs", "@better-auth/core/dist/utils/json.mjs"].map(path => ({
     path, sha256: createHash("sha256").update(readFileSync(new URL(`../node_modules/${path}`, import.meta.url))).digest("hex"),
@@ -254,7 +255,7 @@ export async function captureSessionSecondaryNative() {
   return withClock(async setClock => {
     setClock(now);
     const cases = [];
-    for (const scenario of sessionSecondaryNativeCases) cases.push(await captureCase(scenario));
+    for (const scenario of sessionSecondaryNativeCases) cases.push(await captureCase(scenario, synchronousStorage));
     return { version: secondaryNativeVersion, backend: "memory", boundary: "Session internalAdapter with native secondary-storage values; each case records complete memory tables and cache values.", provenance, cases };
   });
 }

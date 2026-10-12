@@ -154,7 +154,7 @@ impl LogSink for Logger {
     }
 }
 
-async fn capture(scenario: &Json) -> AuthResult<Json> {
+async fn capture(scenario: &Json, synchronous_storage: bool) -> AuthResult<Json> {
     let observer = Observer::default();
     let original: FieldValue = FieldMap::from([
         ("rejected".into(), scenario["name"].as_str().unwrap().into()),
@@ -167,6 +167,7 @@ async fn capture(scenario: &Json) -> AuthResult<Json> {
         &roots,
         &original,
         observer.clone(),
+        synchronous_storage,
     )?);
     let initial_index = cache.value(INDEX);
     let mut config = AuthConfig::default();
@@ -261,12 +262,14 @@ async fn session_undefined_writes_match_complete_upstream_runtime() -> AuthResul
         .collect();
     assert_eq!(cases.len(), 12);
     for case in cases {
-        let actual = capture(&case["scenario"]).await?;
-        assert_replay(
-            &actual,
-            &case["runtime"],
-            case["scenario"]["name"].as_str().unwrap(),
-        );
+        for synchronous_storage in [false, true] {
+            let actual = capture(&case["scenario"], synchronous_storage).await?;
+            let label = format!(
+                "{}/synchronous={synchronous_storage}",
+                case["scenario"]["name"].as_str().unwrap()
+            );
+            assert_replay(&actual, &case["runtime"], &label);
+        }
     }
     Ok(())
 }

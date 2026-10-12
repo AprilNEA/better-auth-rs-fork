@@ -16,11 +16,30 @@ struct GatedStorage {
     completed: mpsc::UnboundedSender<crate::FieldValue>,
     reject: Semaphore,
     release: Semaphore,
+    synchronous_storage: bool,
 }
 
 #[async_trait]
 impl SecondaryStorage for GatedStorage {
+    fn invoke_get_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<Option<FieldValue>>> {
+        if self.synchronous_storage && key == FieldValue::from("rejected-session") {
+            self.started
+                .send("rejected-session".into())
+                .map_err(|error| AuthError::internal(error.to_string()))?;
+            return Err(AuthError::bad_request("refresh failure"));
+        }
+        Ok(Box::pin(async move { self.get_native(&key).await }))
+    }
+
     async fn get(&self, key: &str) -> AuthResult<Option<Value>> {
+        if self.synchronous_storage && key == "rejected-session" {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
         if matches!(key, "rejected-session" | "pending-session") {
             self.started
                 .send(key.into())
@@ -81,7 +100,10 @@ impl LogSink for Logs {
 #[tokio::test]
 async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
 -> Result<(), Box<dyn std::error::Error>> {
-    for committed in [false, true] {
+    for (committed, synchronous_storage) in [false, true]
+        .into_iter()
+        .flat_map(|committed| [false, true].map(|synchronous| (committed, synchronous)))
+    {
         let (started, mut starts) = mpsc::unbounded_channel();
         let (completed, mut writes) = mpsc::unbounded_channel();
         let (logger, mut logs) = mpsc::unbounded_channel();
@@ -91,6 +113,7 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
             completed,
             reject: Semaphore::new(0),
             release: Semaphore::new(0),
+            synchronous_storage,
         });
         let mut config = crate::AuthConfig::default();
         {

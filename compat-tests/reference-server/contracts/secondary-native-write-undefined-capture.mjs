@@ -1,3 +1,4 @@
+import { secondaryStorageInvocation } from "./secondary-storage-invocation.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -31,19 +32,19 @@ export const secondaryNativeWriteUndefinedCases = [
   })))),
 ];
 
-function storage(native, cache, original, rejectKey, beforeGet = () => {}) {
+function storage(native, cache, original, rejectKey, beforeGet = () => {}, synchronousStorage = false) {
   let active = false;
   const writes = [];
-  return {
+  return secondaryStorageInvocation({
     writes,
     activate() { active = true; },
-    async get(key) {
+    get(key) {
       if (active) beforeGet(key);
       const value = cache.get(key) ?? null;
       if (active) native.record("storage.get", { key, value: native.snapshot(value) });
       return value;
     },
-    async set(key, value, ttl) {
+    set(key, value, ttl) {
       if (active) {
         writes.push({ key, value, ttl });
         native.record("storage.set", { key, value: native.snapshot(value), ttl: native.snapshot(ttl) });
@@ -54,11 +55,11 @@ function storage(native, cache, original, rejectKey, beforeGet = () => {}) {
       }
       cache.set(key, value);
     },
-    async delete(key) {
+    delete(key) {
       if (active) native.record("storage.delete", { key });
       cache.delete(key);
     },
-  };
+  }, synchronousStorage);
 }
 
 function method(native, receiver, name, callback) {
@@ -185,7 +186,7 @@ function sessionRoots(native, scenario, references) {
   return { index, filtered, sorted, toJSONResult: result };
 }
 
-async function captureSession(scenario) {
+async function captureSession(scenario, synchronousStorage) {
   const native = createSecondaryNativeObserver();
   const runtime = createSecondaryRuntimeObserver(native);
   const owner = { id: "owner", name: "Owner", email: "owner@secondary-native.test", emailVerified: true,
@@ -214,7 +215,7 @@ async function captureSession(scenario) {
       cache.set(sessionIndexKey, roots.index);
       native.record("concurrent:index-replacement", { value: native.snapshot(roots.index) });
     }
-  });
+  }, synchronousStorage);
   const hooks = Object.fromEntries(["create", "update", "delete"].map(operation => [operation, {
     before(data) { if (active) native.record(`hook:${operation}:before`, { data: native.snapshot(data) }); },
     after(data) { if (active) native.record(`hook:${operation}:after`, { data: native.snapshot(data) }); },
@@ -255,7 +256,7 @@ async function captureSession(scenario) {
   return captureResult(scenario, input, before, outcome, after, native, runtime);
 }
 
-export async function captureSecondaryNativeWriteUndefined() {
+export async function captureSecondaryNativeWriteUndefined(synchronousStorage = false) {
   assertSecondaryNativeVersions(["better-auth", "@better-auth/core", "@better-auth/api-key"]);
   const sessionProvenance = ["better-auth/dist/db/internal-adapter.mjs", "@better-auth/core/dist/utils/json.mjs"].map(path => ({
     path, sha256: createHash("sha256").update(readFileSync(new URL(`../node_modules/${path}`, import.meta.url))).digest("hex"),
@@ -265,7 +266,7 @@ export async function captureSecondaryNativeWriteUndefined() {
     return withSecondarySourceExports("@better-auth/api-key", ["setApiKeyInStorage", "deleteApiKeyFromStorage"], async (source, apiKeyProvenance) => {
       const cases = [];
       for (const scenario of secondaryNativeWriteUndefinedCases) {
-        cases.push(await (scenario.domain === "api-key" ? captureApiKey(scenario, source) : captureSession(scenario)));
+        cases.push(await (scenario.domain === "api-key" ? captureApiKey(scenario, source) : captureSession(scenario, synchronousStorage)));
       }
       return {
         version: secondaryNativeVersion, backend: "memory", provenance: { apiKey: apiKeyProvenance, session: sessionProvenance },

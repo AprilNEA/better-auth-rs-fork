@@ -271,7 +271,7 @@ impl PendingWrite {
         )
         .await
         .into_iter()
-        .collect::<Option<Vec<_>>>()?;
+        .collect::<Option<()>>()?;
         if let Some(reference) = self.insert_reference {
             batch.observe(modify_reference(storage, key, reference, true).await)?;
         }

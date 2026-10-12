@@ -44,7 +44,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             user.ok_or_else(|| AuthError::internal("Cannot refresh sessions for a missing user"))?;
         let raw = self
             .secondary()?
-            .get_native(&active_sessions_key(&user.id.field_value())?)
+            .clone()
+            .invoke_get_native(active_sessions_key(&user.id.field_value())?)?
             .await?;
         if !raw.as_ref().is_some_and(FieldValue::is_truthy) {
             return Ok(());
@@ -96,7 +97,13 @@ impl<S: AuthSchema> SecondaryStore<S> {
         user: &FieldValue,
         now: chrono::DateTime<chrono::Utc>,
     ) -> AuthResult<()> {
-        let Some(cached) = cache::decode(self.secondary()?.get_native(token).await?)? else {
+        let Some(cached) = cache::decode(
+            self.secondary()?
+                .clone()
+                .invoke_get_native(token.clone())?
+                .await?,
+        )?
+        else {
             return Ok(());
         };
         let expires = cached
@@ -108,7 +115,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
             ("user".into(), user.clone()),
         ]));
         self.secondary()?
-            .set_native(token, &envelope.stringify_native()?, Some(seconds))
+            .clone()
+            .invoke_set_native(
+                token.clone(),
+                envelope.stringify_native()?,
+                Some(Some(seconds)),
+            )?
             .await?;
         Ok(())
     }

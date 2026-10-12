@@ -36,6 +36,7 @@ impl DatabaseHooks<StatelessSchema> for UpdateHooks {
 }
 
 struct Cache {
+    synchronous_storage: bool,
     entries: Entries,
     observer: Observer,
     set_error: Option<FieldValue>,
@@ -58,15 +59,8 @@ impl Cache {
     }
 }
 
-#[async_trait]
-impl SecondaryStorage for Cache {
-    async fn get(&self, _: &str) -> AuthResult<Option<Json>> {
-        Err(AuthError::internal(
-            "Verification must read the native cache value",
-        ))
-    }
-
-    async fn get_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
+impl Cache {
+    fn read(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
         let key: String = key.decode()?;
         let value = self.entries.lock().unwrap().get(&key).cloned();
         let value = value.filter(|value| !value.is_null() && !value.is_undefined());
@@ -79,12 +73,7 @@ impl SecondaryStorage for Cache {
         Ok(value)
     }
 
-    async fn set_native(
-        &self,
-        key: &FieldValue,
-        value: &FieldValue,
-        ttl: Option<f64>,
-    ) -> AuthResult<()> {
+    fn write(&self, key: &FieldValue, value: &FieldValue, ttl: Option<f64>) -> AuthResult<()> {
         let key: String = key.decode()?;
         let mut observer = self.observer.lock().unwrap();
         let observed = observer.observe(value)?;
@@ -106,13 +95,95 @@ impl SecondaryStorage for Cache {
         Ok(())
     }
 
-    async fn delete(&self, key: &str) -> AuthResult<()> {
+    fn remove(&self, key: &str) -> AuthResult<()> {
         self.observer
             .lock()
             .unwrap()
             .record("storage.delete", [("key".into(), key.into())]);
         let _ = self.entries.lock().unwrap().shift_remove(key);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl SecondaryStorage for Cache {
+    fn invoke_get_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<Option<FieldValue>>> {
+        if self.synchronous_storage {
+            let value = self.read(&key)?;
+            Ok(Box::pin(async move { Ok(value) }))
+        } else {
+            Ok(Box::pin(async move { self.get_native(&key).await }))
+        }
+    }
+
+    fn invoke_set_native(
+        self: Arc<Self>,
+        key: FieldValue,
+        value: FieldValue,
+        ttl: Option<Option<f64>>,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<()>> {
+        assert!(ttl.is_some());
+        if self.synchronous_storage {
+            self.write(&key, &value, ttl.flatten())?;
+            Ok(Box::pin(async { Ok(()) }))
+        } else {
+            Ok(Box::pin(async move {
+                self.set_native(&key, &value, ttl.flatten()).await
+            }))
+        }
+    }
+
+    fn invoke_delete_native(
+        self: Arc<Self>,
+        key: FieldValue,
+    ) -> AuthResult<crate::store::SecondaryStorageFuture<()>> {
+        if self.synchronous_storage {
+            self.remove(&key.decode::<String>()?)?;
+            Ok(Box::pin(async { Ok(()) }))
+        } else {
+            Ok(Box::pin(async move { self.delete_native(&key).await }))
+        }
+    }
+
+    async fn get(&self, _: &str) -> AuthResult<Option<Json>> {
+        Err(AuthError::internal(
+            "Verification must read the native cache value",
+        ))
+    }
+
+    async fn get_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.read(key)
+    }
+
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.write(key, value, ttl)
+    }
+
+    async fn delete(&self, key: &str) -> AuthResult<()> {
+        if self.synchronous_storage {
+            return Err(AuthError::internal(
+                "Synchronous storage must use the invocation interface",
+            ));
+        }
+        self.remove(key)
     }
 
     async fn get_and_delete(&self, _: &str) -> AuthResult<Option<Json>> {
@@ -165,7 +236,11 @@ impl LogSink for ParseLogger {
     }
 }
 
-async fn capture(scenario: &Json, in_transaction: bool) -> AuthResult<Json> {
+async fn capture(
+    scenario: &Json,
+    in_transaction: bool,
+    synchronous_storage: bool,
+) -> AuthResult<Json> {
     let name = scenario["name"].as_str().unwrap();
     let observer = Observer::default();
     let input = inputs::Input::new(name, scenario["input"].as_str().unwrap(), observer.clone())?;
@@ -175,6 +250,7 @@ async fn capture(scenario: &Json, in_transaction: bool) -> AuthResult<Json> {
         ("unrelated".into(), "retained".into()),
     ]);
     let cache = Arc::new(Cache {
+        synchronous_storage,
         entries,
         observer: observer.clone(),
         set_error: (scenario["input"] == "set-error").then(|| input.original.clone()),
@@ -268,9 +344,13 @@ async fn verification_native_read_and_update_match_complete_upstream_runtime() -
         let scenario = &case["scenario"];
         let name = scenario["name"].as_str().unwrap();
         for in_transaction in [false, true] {
-            let actual = capture(scenario, in_transaction).await?;
-            let label = format!("{name}/transaction={in_transaction}");
-            failures.record(&label, || assert_replay(&actual, &case["runtime"], &label));
+            for synchronous_storage in [false, true] {
+                let actual = capture(scenario, in_transaction, synchronous_storage).await?;
+                let label = format!(
+                    "{name}/transaction={in_transaction}/synchronous={synchronous_storage}"
+                );
+                failures.record(&label, || assert_replay(&actual, &case["runtime"], &label));
+            }
         }
     }
     failures.finish();

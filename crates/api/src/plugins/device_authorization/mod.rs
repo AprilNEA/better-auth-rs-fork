@@ -441,7 +441,12 @@ impl DeviceAuthorizationPlugin {
             ]));
             let value = envelope.stringify_native()?;
             storage
-                .set_native(&token, &value, Some(device_session_ttl(&session)?))
+                .clone()
+                .invoke_set_native(
+                    token.clone(),
+                    value,
+                    Some(Some(device_session_ttl(&session)?)),
+                )?
                 .await?;
         }
 

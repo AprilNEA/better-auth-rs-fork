@@ -102,8 +102,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         self.storage.is_none() || self.config.verification.store_in_database
     }
 
-    fn secondary(&self) -> AuthResult<&dyn SecondaryStorage> {
-        self.storage.as_deref().ok_or_else(|| {
+    fn secondary(&self) -> AuthResult<&Arc<dyn SecondaryStorage>> {
+        self.storage.as_ref().ok_or_else(|| {
             AuthError::internal("Secondary storage operation requires an installed backend")
         })
     }

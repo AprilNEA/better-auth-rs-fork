@@ -45,7 +45,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             };
             for other in identifiers.iter().filter(|other| *other != identifier) {
                 self.secondary()?
-                    .delete(&format!("verification:{other}"))
+                    .clone()
+                    .invoke_delete_native(format!("verification:{other}").into())?
                     .await?;
             }
             return Ok(Some(record));
@@ -67,7 +68,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             .0;
         if let Some(storage) = &self.storage {
             storage
-                .delete(&format!("verification:{identifier}"))
+                .clone()
+                .invoke_delete_native(format!("verification:{identifier}").into())?
                 .await?;
         }
         if self.database_verifications() {
@@ -218,11 +220,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 crate::SchemaValue::<crate::FieldDate>::from_field(expiry).cache_ttl(self.now())?;
             if seconds > 0.0 {
                 self.secondary()?
-                    .set_native(
-                        &format!("verification:{identifier}").into(),
-                        &updated.stringify_native()?,
-                        Some(seconds),
-                    )
+                    .clone()
+                    .invoke_set_native(
+                        format!("verification:{identifier}").into(),
+                        updated.stringify_native()?,
+                        Some(Some(seconds)),
+                    )?
                     .await?;
             }
             if !self.database_verifications() {
@@ -270,11 +273,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
         .cache_ttl(self.now())?;
         if seconds > 0.0 {
             storage
-                .set_native(
-                    &format!("verification:{identifier}").into(),
-                    &FieldValue::from(fields).stringify_native()?,
-                    Some(seconds),
-                )
+                .clone()
+                .invoke_set_native(
+                    format!("verification:{identifier}").into(),
+                    FieldValue::from(fields).stringify_native()?,
+                    Some(Some(seconds)),
+                )?
                 .await?;
         }
         Ok(())
@@ -285,7 +289,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             return Ok(None);
         };
         let value = storage
-            .get_native(&format!("verification:{identifier}").into())
+            .clone()
+            .invoke_get_native(format!("verification:{identifier}").into())?
             .await?
             .filter(FieldValue::is_truthy);
         cache::decode(value)
@@ -309,7 +314,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         if let Some(storage) = &self.storage {
             for identifier in identifiers {
                 storage
-                    .delete(&format!("verification:{identifier}"))
+                    .clone()
+                    .invoke_delete_native(format!("verification:{identifier}").into())?
                     .await?;
             }
         }

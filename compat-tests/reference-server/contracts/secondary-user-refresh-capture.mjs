@@ -1,3 +1,4 @@
+import { secondaryStorageInvocation } from "./secondary-storage-invocation.mjs";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
@@ -72,7 +73,7 @@ function normalize(value, updatedAt) {
   return value;
 }
 
-async function captureCase(backend, scenario) {
+async function captureCase(backend, scenario, synchronousStorage) {
   const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
   const memory = Object.fromEntries(tables.map(table => [table, []]));
   const events = [];
@@ -101,33 +102,36 @@ async function captureCase(backend, scenario) {
     verification: { storeInDatabase: true },
     telemetry: { enabled: false },
     logger: { level: "debug", log(level, message, ...args) { record({ kind: "logger", level, message, args }); } },
-    secondaryStorage: {
-      async get(key) {
+    secondaryStorage: secondaryStorageInvocation({
+      get(key) {
         record({ kind: "cache.get.start", key });
+        const read = () => {
+          if (enabled && ((scenario.name.endsWith("refresh-error") && key === indexKey) || (scenario.parallel && key === "token-a"))) {
+            record({ kind: "cache.get.throw", key, error: cacheFailure });
+            throw cacheFailure;
+          }
+          const value = cache.get(key) ?? null;
+          record({ kind: "cache.get.return", key, value });
+          return value;
+        };
         if (enabled && scenario.parallel && Object.hasOwn(gates, key)) {
           gates[key].entered.resolve();
-          await gates[key].release.promise;
+          return gates[key].release.promise.then(read);
         }
-        if (enabled && ((scenario.name.endsWith("refresh-error") && key === indexKey) || (scenario.parallel && key === "token-a"))) {
-          record({ kind: "cache.get.throw", key, error: cacheFailure });
-          throw cacheFailure;
-        }
-        const value = cache.get(key) ?? null;
-        record({ kind: "cache.get.return", key, value });
-        return value;
+        return read();
       },
-      async set(key, value, ttl) {
+      set(key, value, ttl) {
         record({ kind: "cache.set.start", key, value, ttl });
         cache.set(key, value);
         record({ kind: "cache.set.return", key, value: undefined });
         if (key === "token-b") siblingFinished.resolve();
       },
-      async delete(key) {
+      delete(key) {
         record({ kind: "cache.delete.start", key });
         cache.delete(key);
         record({ kind: "cache.delete.return", key, value: undefined });
       },
-    },
+    }, synchronousStorage),
     databaseHooks: { user: { update: {
       before(data, context) {
         record({ kind: "hook.before", data, context });
@@ -315,10 +319,10 @@ function verifyCase(backend, scenario, before, afterReturn, after, events, outco
   }
 }
 
-export async function captureSecondaryUserRefreshCases(scenarios) {
+export async function captureSecondaryUserRefreshCases(scenarios, synchronousStorage = false) {
   const cases = [];
   for (const backend of ["memory", "sqlite"]) {
-    for (const scenario of scenarios) cases.push(await captureCase(backend, scenario));
+    for (const scenario of scenarios) cases.push(await captureCase(backend, scenario, synchronousStorage));
   }
   return {
     version,
