@@ -25,18 +25,20 @@ for (const scenario of cases) {
     const logs: [string, unknown, unknown[]][] = [];
     const outer: unknown[][] = [];
     const replacement = new Error("logger property failed");
+    let logging = false;
     let selectedName = false;
     const target: Record<string, unknown> = { message: scenario.message };
     if (scenario.errorName !== undefined) target.name = scenario.errorName;
     const cause = new Proxy(target, {
       has(value, property) {
         if (property === "name" || property === "message") events.push(`has:${property}`);
-        if (property === "name") selectedName = true;
+        if (property === "message") logging = true;
+        if (property === "name" && logging) selectedName = true;
         return Reflect.has(value, property);
       },
       get(value, property, receiver) {
         if (property === "name" || property === "message") events.push(`get:${property}`);
-        if ("failure" in scenario && (scenario.failure === "message" && property === "message"
+        if (logging && "failure" in scenario && (scenario.failure === "message" && property === "message"
           || scenario.failure === "name" && property === "name" && selectedName)) throw replacement;
         return Reflect.get(value, property, receiver);
       },
@@ -73,6 +75,12 @@ for (const scenario of cases) {
       response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`));
     } catch (error) { caught = error; }
     finally { console.error = originalConsole; }
+    const http = response ? { status: response.status, headers: [...response.headers], body: await response.text() } : null;
+    process.stdout.write(`${JSON.stringify({ case: "http-error-logging", name: scenario.name, events,
+      logs: logs.map(([level, message, args]) => [level, message, args.map(argument => argument === cause ? "original" : "replacement")]),
+      outer: outer.map(args => [args[0], args[1] === cause ? "original" : "replacement"]),
+      outcome: caught === replacement ? "replacement" : caught === cause ? "original" : http?.status,
+      response: http })}\n`);
     if ("failure" in scenario || "throwError" in scenario) {
       expect(caught).toBe("failure" in scenario ? replacement : cause);
       expect(response).toBeUndefined();
@@ -80,13 +88,10 @@ for (const scenario of cases) {
       expect(outer).toStrictEqual([]);
     } else {
       expect(caught).toBeUndefined();
-      expect(response!.status).toBe(500);
-      expect([...response!.headers]).toStrictEqual([]);
-      expect(await response!.text()).toBe("");
+      expect(http).toStrictEqual({ status: 500, headers: [], body: "" });
       expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
       if ("disabled" in scenario || "callback" in scenario) {
         expect(logs).toStrictEqual([]);
-        expect(events.filter(event => event.startsWith("has:") || event === "get:message")).toStrictEqual([]);
       } else if ("database" in scenario) {
         expect(logs).toStrictEqual([["error", scenario.message, []]]);
       } else {
@@ -95,11 +100,26 @@ for (const scenario of cases) {
         if (scenario.name === "native-name") expect(logs[0]![1]).toBe(scenario.errorName);
       }
     }
+    const expected = ["middleware", "has:name", ...(scenario.errorName === undefined ? [] : ["get:name"]), "get:message", "get:name"];
+    if ("throwError" in scenario) expected.push("get:name");
+    else if ("disabled" in scenario) expected.push("get:name", "console");
+    else if ("callback" in scenario) expected.push("callback", "get:name", "console");
+    else {
+      expected.push("has:message", "get:message");
+      if (!("failure" in scenario && scenario.failure === "message")) {
+        const keyword = "database" in scenario ? scenario.message.slice("diagnostic: ".length) : undefined;
+        const tests = keyword === undefined ? 5 : ["no column", "column", "relation", "table", "does not exist"].indexOf(keyword) + 1;
+        expected.push(...Array(tests).fill("get:message"));
+        if (keyword !== undefined) expected.push("get:message", "log", "get:name", "console");
+        else {
+          expected.push("get:name", "has:name");
+          if (scenario.errorName !== undefined) expected.push("get:name");
+          if (!("failure" in scenario)) expected.push("log", "get:name", "console");
+        }
+      }
+    }
+    expect(events).toStrictEqual(expected);
     expect(database).toStrictEqual(emptyDatabase());
-    process.stdout.write(`${JSON.stringify({ case: "http-error-logging", name: scenario.name, events,
-      logs: logs.map(([level, message, args]) => [level, message, args.map(argument => argument === cause ? "original" : "replacement")]),
-      outer: outer.map(args => [args[0], args[1] === cause ? "original" : "replacement"]),
-      outcome: caught === replacement ? "replacement" : caught === cause ? "original" : "500" })}\n`);
   });
 }
 
@@ -115,10 +135,16 @@ for (const callable of [true, false]) {
       return { matched: true };
     } : 42 };
     let reads = 0;
-    const cause = { name: "RuntimeFailure", get message() {
+    let logging = false;
+    let loggerReads = 0;
+    const cause = new Proxy({ name: "RuntimeFailure", get message() {
       events.push(`message:${++reads}`);
-      return reads === 1 ? "ordinary failure" : reads === 2 ? receiver : payload;
-    } };
+      if (!logging) return "ordinary failure";
+      return ++loggerReads === 1 ? "ordinary failure" : loggerReads === 2 ? receiver : payload;
+    } }, { has(value, property) {
+      if (property === "message") logging = true;
+      return Reflect.has(value, property);
+    } });
     const database = emptyDatabase();
     const auth = betterAuth({
       baseURL: origin, secret: "http-error-logging-secret-at-least-32-characters",
@@ -137,24 +163,27 @@ for (const callable of [true, false]) {
     try { response = await auth.handler(new Request(`${origin}/api/auth/logging-failure`)); }
     catch (error) { caught = error; }
     finally { console.error = originalConsole; }
+    const http = response ? { status: response.status, headers: [...response.headers], body: await response.text() } : null;
+    process.stdout.write(`${JSON.stringify({ case: "http-error-message-method", callable, events,
+      logs: logs.map(([level, message, args]) => [level, message === payload ? "payload" : message,
+        args.map(argument => argument === cause ? "original" : "replacement")]),
+      outer: outer.map(args => [args[0], args[1] === cause ? "original" : "replacement"]),
+      response: http,
+      error: caught instanceof Error ? { name: caught.name, message: caught.message } : null })}\n`);
     if (callable) {
       expect(caught).toBeUndefined();
-      expect(response!.status).toBe(500);
-      expect([...response!.headers]).toStrictEqual([]);
-      expect(await response!.text()).toBe("");
+      expect(http).toStrictEqual({ status: 500, headers: [], body: "" });
       expect(logs).toStrictEqual([["error", payload, []]]);
       expect(logs[0]![1]).toBe(payload);
       expect(outer).toStrictEqual([["# SERVER_ERROR: ", cause]]);
-      expect(events).toStrictEqual(["message:1", "message:2", "includes:no column", "message:3", "log", "console"]);
+      expect(events).toStrictEqual(["message:1", "message:2", "message:3", "includes:no column", "message:4", "log", "console"]);
     } else {
       expect(caught).toBeInstanceOf(TypeError);
       expect(response).toBeUndefined();
       expect(logs).toStrictEqual([]);
       expect(outer).toStrictEqual([]);
-      expect(events).toStrictEqual(["message:1", "message:2"]);
+      expect(events).toStrictEqual(["message:1", "message:2", "message:3"]);
     }
     expect(database).toStrictEqual(emptyDatabase());
-    process.stdout.write(`${JSON.stringify({ case: "http-error-message-method", callable, events,
-      error: caught instanceof Error ? { name: caught.name, message: caught.message } : null })}\n`);
   });
 }
