@@ -9,7 +9,7 @@ import { withRestoredSchema } from "./schema-isolation.mjs";
 const origin = "http://passkey-null-update.test";
 const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
 
-for (const operation of ["authentication", "rename"] as const) {
+for (const operation of ["authentication", "rename", "stale-counter", "stale-counter-signature", "stale-counter-dynamic", "stale-counter-dynamic-signature"] as const) {
   test(`a null Passkey update reaches the ${operation} business boundary`, async () => {
     await withRestoredSchema(passkey().schema, async () => {
       const memory: Record<string, any[]> = { user: [], session: [], account: [], verification: [], passkey: [] };
@@ -17,6 +17,22 @@ for (const operation of ["authentication", "rename"] as const) {
       let deletions = 0;
       const logs: unknown[] = [];
       const updates: unknown[] = [];
+      const conversions: string[] = [];
+      const dynamic = operation.includes("dynamic");
+      const counterValue = {
+        valueOf(...args: unknown[]) {
+          expect(this).toBe(counterValue);
+          expect(args).toStrictEqual([]);
+          conversions.push("valueOf");
+          return 2;
+        },
+        toString(...args: unknown[]) {
+          expect(this).toBe(counterValue);
+          expect(args).toStrictEqual([]);
+          conversions.push("toString");
+          return "projected counter";
+        },
+      };
       const auth = betterAuth({
         database: memoryAdapter(memory), baseURL: origin,
         secret: "passkey-null-update-contract-at-least-thirty-two",
@@ -43,6 +59,9 @@ for (const operation of ["authentication", "rename"] as const) {
               }
               return value;
             } },
+          }, counter: {
+            type: "number", required: true,
+            transform: { output(value: unknown) { return remove && dynamic ? counterValue : value; } },
           } } } },
         }],
       });
@@ -72,6 +91,8 @@ for (const operation of ["authentication", "rename"] as const) {
       });
       expect(registered.status).toBe(200);
       expect(memory.passkey).toHaveLength(1);
+      const stale = operation.startsWith("stale-counter");
+      if (stale) memory.passkey[0].counter = 2;
       const selected = structuredClone(memory.passkey[0]);
       const users = structuredClone(memory.user);
       const sessions = structuredClone(memory.session);
@@ -82,13 +103,35 @@ for (const operation of ["authentication", "rename"] as const) {
         return result;
       };
       remove = true;
-      if (operation === "authentication") {
+      if (operation !== "rename") {
         const pending = await request("generate-authenticate-options");
         expect(pending.status).toBe(200);
         const options = await pending.json() as AuthenticationOptions;
-        const result = await request("verify-authentication", cookies(pending), {
-          response: key.authenticate(options, origin, 1, 0x01, registration.user.id),
-        });
+        const assertion = key.authenticate(options, origin, dynamic ? 0 : 1, 0x01, registration.user.id);
+        if (operation.endsWith("signature")) {
+          const signature = Buffer.from(assertion.response.signature, "base64url");
+          signature[signature.length - 1] ^= 1;
+          assertion.response.signature = signature.toString("base64url");
+        }
+        const result = await request("verify-authentication", cookies(pending), { response: assertion });
+        if (stale) {
+          expect(result.status).toBe(400);
+          expect(await result.json()).toStrictEqual({ code: "AUTHENTICATION_FAILED", message: "Authentication failed" });
+          expect(result.headers.getSetCookie().some(value => value.startsWith(`${context.authCookies.sessionToken.name}=`))).toBe(false);
+          expect(memory).toStrictEqual({ user: users, session: sessions, account: [], verification: [], passkey: [selected] });
+          expect(updates).toStrictEqual([]);
+          expect(deletions).toBe(0);
+          expect(logs).toHaveLength(1);
+          const [level, message, error] = logs[0] as [unknown, unknown, Error];
+          expect([level, message]).toStrictEqual(["error", "Failed to verify authentication"]);
+          expect(error).toBeInstanceOf(Error);
+          expect(error.name).toBe("Error");
+          expect(error.message).toBe(dynamic
+            ? "Response counter value 0 was lower than expected projected counter"
+            : "Response counter value 1 was lower than expected 2");
+          expect(conversions).toStrictEqual(dynamic ? ["valueOf", "valueOf", "toString"] : []);
+          return;
+        }
         expect(result.status).toBe(200);
         expect(memory.session).toHaveLength(sessions.length + 1);
         const created = memory.session.find(session => !sessions.some(old => old.id === session.id));

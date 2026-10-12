@@ -11,12 +11,19 @@ const configuration = JSON.parse(readFileSync(new URL("../../schema-consumer/sha
 const version = JSON.parse(readFileSync(new URL("../node_modules/@better-auth/core/package.json", import.meta.url), "utf8")).version;
 assert.equal(version, "1.7.6");
 
-export async function captureSharedDeclarations() {
+export async function captureSharedDeclarations(organizationSource = "declarations") {
+  assert.ok(organizationSource === "declarations" || organizationSource === "options");
   const database = new Database(":memory:");
   try {
     const coreModels = ["user", "session", "account", "verification"];
+    const organizationModels = ["organization", "member", "invitation", "team", "organizationRole"];
+    const organizationOptions = { teams: { enabled: true }, dynamicAccessControl: { enabled: true } };
+    if (organizationSource === "options") {
+      organizationOptions.schema = Object.fromEntries(organizationModels.map(name => [name, structuredClone(configuration[name])]));
+    }
     const pluginDeclarations = Object.fromEntries(Object.entries(configuration)
-      .filter(([name]) => !coreModels.includes(name))
+      .filter(([name]) => !coreModels.includes(name)
+        && !(organizationSource === "options" && organizationModels.includes(name)))
       .map(([name, model]) => [name, { fields: model.additionalFields }]));
     const options = {
       baseURL: "http://shared-declarations.test",
@@ -25,7 +32,7 @@ export async function captureSharedDeclarations() {
       telemetry: { enabled: false },
       ...Object.fromEntries(coreModels.map(name => [name, configuration[name]])),
       rateLimit: { storage: "database", fields: configuration.rateLimit.fields },
-      plugins: [organization({ teams: { enabled: true }, dynamicAccessControl: { enabled: true } }), {
+      plugins: [organization(organizationOptions), {
         id: "shared-declaration-replacements",
         schema: pluginDeclarations,
       }],
@@ -40,7 +47,16 @@ export async function captureSharedDeclarations() {
     assert.ok(!Object.hasOwn(schema.rateLimit.fields, "discardedField"));
     assert.equal(schema.rateLimit.fields.lastRequest.type, "number");
     assert.equal(schema.rateLimit.fields.lastRequest.fieldName, "stored_last_request");
-    return { version, database: "sqlite", configuration, models };
+    const observation = { version, database: "sqlite", configuration, models };
+    if (organizationSource === "options") {
+      observation.configurationBoundary = {
+        core: "BetterAuthOptions.additionalFields",
+        organization: "organization(options.schema).additionalFields",
+        teamMember: "late plugin.schema fields; organization options have no additionalFields expansion",
+        rateLimit: "database rateLimit options replace the late plugin.schema fields",
+      };
+    }
+    return observation;
   } finally {
     database.close();
   }

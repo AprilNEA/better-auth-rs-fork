@@ -11,6 +11,7 @@ for (const name of ["better-auth", "@better-auth/core", "@better-auth/api-key"])
 
 const origin = "http://session-reference.test";
 const secret = "x".repeat(64);
+const requestIp = "203.0.113.9";
 const createdAt = () => new Date(1_893_456_000_000);
 const expiresAt = () => new Date(4_102_444_800_000);
 
@@ -53,7 +54,7 @@ for (const reference of [1, "001"]) {
       for (const method of ["native", "GET", "POST"]) {
         events.length = 0;
         const start = Date.now();
-        const headers = new Headers({ "x-api-key": secret });
+        const headers = new Headers({ "x-api-key": secret, "x-forwarded-for": requestIp });
         const result = method === "native"
           ? await auth.api.getSession({ headers })
           : await auth.handler(new Request(`${origin}/api/auth/get-session`, { method, headers }));
@@ -73,7 +74,7 @@ for (const reference of [1, "001"]) {
         const expected = {
           user: { ...initialUser, id: "1", name: "Projected owner" },
           session: {
-            id: "1", token: secret, userId: reference, userAgent: null, ipAddress: null,
+            id: "1", token: secret, userId: reference, userAgent: null, ipAddress: method === "native" ? null : requestIp,
             createdAt: actual.session.createdAt, updatedAt: actual.session.updatedAt, expiresAt: expiresAt(),
           },
         };

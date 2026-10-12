@@ -1,0 +1,2297 @@
+{
+  "version": "1.7.6",
+  "database": "sqlite",
+  "configuration": {
+    "user": {
+      "fields": {
+        "createdAt": "previous_user_created"
+      },
+      "additionalFields": {
+        "name": {
+          "type": "json",
+          "required": true
+        },
+        "createdAt": {
+          "type": "date",
+          "required": true
+        }
+      }
+    },
+    "session": {
+      "fields": {
+        "expiresAt": "previous_session_expiry"
+      },
+      "additionalFields": {
+        "expiresAt": {
+          "type": "date",
+          "required": true,
+          "fieldName": ""
+        }
+      }
+    },
+    "account": {
+      "fields": {
+        "providerId": "previous_provider"
+      },
+      "additionalFields": {
+        "providerId": {
+          "type": "string",
+          "required": true,
+          "fieldName": ""
+        }
+      }
+    },
+    "verification": {
+      "additionalFields": {
+        "createdAt": {
+          "type": "date",
+          "required": true
+        }
+      }
+    },
+    "organization": {
+      "additionalFields": {
+        "logo": {
+          "type": "json",
+          "required": false
+        }
+      }
+    },
+    "member": {
+      "additionalFields": {
+        "createdAt": {
+          "type": "date",
+          "required": true,
+          "fieldName": ""
+        }
+      }
+    },
+    "invitation": {
+      "additionalFields": {
+        "expiresAt": {
+          "type": "date",
+          "required": true
+        }
+      }
+    },
+    "team": {
+      "additionalFields": {
+        "updatedAt": {
+          "type": "date",
+          "required": false
+        }
+      }
+    },
+    "teamMember": {
+      "additionalFields": {
+        "createdAt": {
+          "type": "date",
+          "required": false,
+          "fieldName": ""
+        },
+        "label": {
+          "type": "json",
+          "required": false,
+          "fieldName": "stored_label"
+        }
+      }
+    },
+    "organizationRole": {
+      "additionalFields": {
+        "createdAt": {
+          "type": "date",
+          "required": true
+        }
+      }
+    },
+    "rateLimit": {
+      "fields": {
+        "lastRequest": "stored_last_request"
+      },
+      "additionalFields": {
+        "lastRequest": {
+          "type": "string",
+          "required": false,
+          "fieldName": "discarded_request"
+        },
+        "discardedField": {
+          "type": "json",
+          "required": false
+        }
+      }
+    }
+  },
+  "models": [
+    {
+      "model": "user",
+      "fields": [
+        "name",
+        "email",
+        "emailVerified",
+        "image",
+        "createdAt",
+        "updatedAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "user",
+        "tbl_name": "user"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "email",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "emailVerified",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "image",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "sqlite_autoindex_user_2",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "email"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "email",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_user_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_user_1",
+          "tbl_name": "user",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_user_2",
+          "tbl_name": "user",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "user",
+          "tbl_name": "user",
+          "sql": "CREATE TABLE \"user\" (\"id\" text not null primary key, \"name\" text not null, \"email\" text not null unique, \"emailVerified\" integer not null, \"image\" text, \"createdAt\" date not null, \"updatedAt\" date not null)"
+        }
+      ]
+    },
+    {
+      "model": "session",
+      "fields": [
+        "expiresAt",
+        "token",
+        "createdAt",
+        "updatedAt",
+        "ipAddress",
+        "userAgent",
+        "userId",
+        "activeOrganizationId",
+        "activeTeamId"
+      ],
+      "table": {
+        "type": "table",
+        "name": "session",
+        "tbl_name": "session"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "expiresAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "token",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "ipAddress",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "userAgent",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "userId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "activeOrganizationId",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "activeTeamId",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "session_userId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 7,
+              "name": "userId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 7,
+              "name": "userId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_session_2",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "token"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "token",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 2,
+            "name": "sqlite_autoindex_session_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "user",
+          "from": "userId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "session_userId_idx",
+          "tbl_name": "session",
+          "sql": "CREATE INDEX \"session_userId_idx\" on \"session\" (\"userId\")"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_session_1",
+          "tbl_name": "session",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_session_2",
+          "tbl_name": "session",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "session",
+          "tbl_name": "session",
+          "sql": "CREATE TABLE \"session\" (\"id\" text not null primary key, \"expiresAt\" date not null, \"token\" text not null unique, \"createdAt\" date not null, \"updatedAt\" date not null, \"ipAddress\" text, \"userAgent\" text, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"activeOrganizationId\" text, \"activeTeamId\" text)"
+        }
+      ]
+    },
+    {
+      "model": "account",
+      "fields": [
+        "accountId",
+        "providerId",
+        "userId",
+        "accessToken",
+        "refreshToken",
+        "idToken",
+        "accessTokenExpiresAt",
+        "refreshTokenExpiresAt",
+        "scope",
+        "password",
+        "createdAt",
+        "updatedAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "account",
+        "tbl_name": "account"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "accountId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "providerId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "userId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "accessToken",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "refreshToken",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "idToken",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "accessTokenExpiresAt",
+          "type": "date",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "refreshTokenExpiresAt",
+          "type": "date",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 9,
+          "name": "scope",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 10,
+          "name": "password",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 11,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 12,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "account_userId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "userId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "userId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_account_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "user",
+          "from": "userId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "account_userId_idx",
+          "tbl_name": "account",
+          "sql": "CREATE INDEX \"account_userId_idx\" on \"account\" (\"userId\")"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_account_1",
+          "tbl_name": "account",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "account",
+          "tbl_name": "account",
+          "sql": "CREATE TABLE \"account\" (\"id\" text not null primary key, \"accountId\" text not null, \"providerId\" text not null, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"accessToken\" text, \"refreshToken\" text, \"idToken\" text, \"accessTokenExpiresAt\" date, \"refreshTokenExpiresAt\" date, \"scope\" text, \"password\" text, \"createdAt\" date not null, \"updatedAt\" date not null)"
+        }
+      ]
+    },
+    {
+      "model": "verification",
+      "fields": [
+        "identifier",
+        "value",
+        "expiresAt",
+        "createdAt",
+        "updatedAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "verification",
+        "tbl_name": "verification"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "identifier",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "value",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "expiresAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "verification_identifier_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "identifier"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "identifier",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_verification_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_verification_1",
+          "tbl_name": "verification",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "verification_identifier_idx",
+          "tbl_name": "verification",
+          "sql": "CREATE INDEX \"verification_identifier_idx\" on \"verification\" (\"identifier\")"
+        },
+        {
+          "type": "table",
+          "name": "verification",
+          "tbl_name": "verification",
+          "sql": "CREATE TABLE \"verification\" (\"id\" text not null primary key, \"identifier\" text not null, \"value\" text not null, \"expiresAt\" date not null, \"createdAt\" date not null, \"updatedAt\" date not null)"
+        }
+      ]
+    },
+    {
+      "model": "organization",
+      "fields": [
+        "name",
+        "slug",
+        "logo",
+        "createdAt",
+        "metadata"
+      ],
+      "table": {
+        "type": "table",
+        "name": "organization",
+        "tbl_name": "organization"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "slug",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "logo",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "metadata",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "sqlite_autoindex_organization_2",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "slug"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "slug",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_organization_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_organization_1",
+          "tbl_name": "organization",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_organization_2",
+          "tbl_name": "organization",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "organization",
+          "tbl_name": "organization",
+          "sql": "CREATE TABLE \"organization\" (\"id\" text not null primary key, \"name\" text not null, \"slug\" text not null unique, \"logo\" text, \"createdAt\" date not null, \"metadata\" text)"
+        }
+      ]
+    },
+    {
+      "model": "member",
+      "fields": [
+        "organizationId",
+        "userId",
+        "role",
+        "createdAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "member",
+        "tbl_name": "member"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "organizationId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "userId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "member_userId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "userId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "userId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "member_organizationId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 2,
+            "name": "sqlite_autoindex_member_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "user",
+          "from": "userId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "seq": 0,
+          "table": "organization",
+          "from": "organizationId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "member_organizationId_idx",
+          "tbl_name": "member",
+          "sql": "CREATE INDEX \"member_organizationId_idx\" on \"member\" (\"organizationId\")"
+        },
+        {
+          "type": "index",
+          "name": "member_userId_idx",
+          "tbl_name": "member",
+          "sql": "CREATE INDEX \"member_userId_idx\" on \"member\" (\"userId\")"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_member_1",
+          "tbl_name": "member",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "member",
+          "tbl_name": "member",
+          "sql": "CREATE TABLE \"member\" (\"id\" text not null primary key, \"organizationId\" text not null references \"organization\" (\"id\") on delete cascade, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"role\" text not null, \"createdAt\" date not null)"
+        }
+      ]
+    },
+    {
+      "model": "invitation",
+      "fields": [
+        "organizationId",
+        "email",
+        "role",
+        "teamId",
+        "status",
+        "expiresAt",
+        "createdAt",
+        "inviterId"
+      ],
+      "table": {
+        "type": "table",
+        "name": "invitation",
+        "tbl_name": "invitation"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "organizationId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "email",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "teamId",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "status",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 6,
+          "name": "expiresAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 7,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 8,
+          "name": "inviterId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "invitation_email_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "email"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "email",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "invitation_organizationId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 2,
+            "name": "sqlite_autoindex_invitation_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "user",
+          "from": "inviterId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "seq": 0,
+          "table": "organization",
+          "from": "organizationId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "invitation_email_idx",
+          "tbl_name": "invitation",
+          "sql": "CREATE INDEX \"invitation_email_idx\" on \"invitation\" (\"email\")"
+        },
+        {
+          "type": "index",
+          "name": "invitation_organizationId_idx",
+          "tbl_name": "invitation",
+          "sql": "CREATE INDEX \"invitation_organizationId_idx\" on \"invitation\" (\"organizationId\")"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_invitation_1",
+          "tbl_name": "invitation",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "invitation",
+          "tbl_name": "invitation",
+          "sql": "CREATE TABLE \"invitation\" (\"id\" text not null primary key, \"organizationId\" text not null references \"organization\" (\"id\") on delete cascade, \"email\" text not null, \"role\" text, \"teamId\" text, \"status\" text not null, \"expiresAt\" date not null, \"createdAt\" date not null, \"inviterId\" text not null references \"user\" (\"id\") on delete cascade)"
+        }
+      ]
+    },
+    {
+      "model": "team",
+      "fields": [
+        "name",
+        "memberCount",
+        "organizationId",
+        "createdAt",
+        "updatedAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "team",
+        "tbl_name": "team"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "name",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "memberCount",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "organizationId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "team_organizationId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "organizationId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "organizationId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_team_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "organization",
+          "from": "organizationId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_team_1",
+          "tbl_name": "team",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "team_organizationId_idx",
+          "tbl_name": "team",
+          "sql": "CREATE INDEX \"team_organizationId_idx\" on \"team\" (\"organizationId\")"
+        },
+        {
+          "type": "table",
+          "name": "team",
+          "tbl_name": "team",
+          "sql": "CREATE TABLE \"team\" (\"id\" text not null primary key, \"name\" text not null, \"memberCount\" integer not null, \"organizationId\" text not null references \"organization\" (\"id\") on delete cascade, \"createdAt\" date not null, \"updatedAt\" date)"
+        }
+      ]
+    },
+    {
+      "model": "teamMember",
+      "fields": [
+        "teamId",
+        "userId",
+        "membershipKey",
+        "createdAt",
+        "label"
+      ],
+      "table": {
+        "type": "table",
+        "name": "teamMember",
+        "tbl_name": "teamMember"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "teamId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "userId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "membershipKey",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "stored_label",
+          "type": "TEXT",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "teamMember_userId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "userId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "userId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "teamMember_teamId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "teamId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "teamId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 2,
+            "name": "sqlite_autoindex_teamMember_2",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "membershipKey"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 3,
+              "name": "membershipKey",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 3,
+            "name": "sqlite_autoindex_teamMember_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "user",
+          "from": "userId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        },
+        {
+          "id": 1,
+          "seq": 0,
+          "table": "team",
+          "from": "teamId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_teamMember_1",
+          "tbl_name": "teamMember",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_teamMember_2",
+          "tbl_name": "teamMember",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "teamMember_teamId_idx",
+          "tbl_name": "teamMember",
+          "sql": "CREATE INDEX \"teamMember_teamId_idx\" on \"teamMember\" (\"teamId\")"
+        },
+        {
+          "type": "index",
+          "name": "teamMember_userId_idx",
+          "tbl_name": "teamMember",
+          "sql": "CREATE INDEX \"teamMember_userId_idx\" on \"teamMember\" (\"userId\")"
+        },
+        {
+          "type": "table",
+          "name": "teamMember",
+          "tbl_name": "teamMember",
+          "sql": "CREATE TABLE \"teamMember\" (\"id\" text not null primary key, \"teamId\" text not null references \"team\" (\"id\") on delete cascade, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"membershipKey\" text unique, \"createdAt\" date, \"stored_label\" text)"
+        }
+      ]
+    },
+    {
+      "model": "organizationRole",
+      "fields": [
+        "organizationId",
+        "role",
+        "permission",
+        "createdAt",
+        "updatedAt"
+      ],
+      "table": {
+        "type": "table",
+        "name": "organizationRole",
+        "tbl_name": "organizationRole"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "organizationId",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "role",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "permission",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 4,
+          "name": "createdAt",
+          "type": "date",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 5,
+          "name": "updatedAt",
+          "type": "date",
+          "notnull": 0,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "organizationRole_role_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "role"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 2,
+              "name": "role",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "organizationRole_organizationId_idx",
+            "unique": 0,
+            "origin": "c",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "organizationId",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 2,
+            "name": "sqlite_autoindex_organizationRole_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [
+        {
+          "id": 0,
+          "seq": 0,
+          "table": "organization",
+          "from": "organizationId",
+          "to": "id",
+          "on_update": "NO ACTION",
+          "on_delete": "CASCADE",
+          "match": "NONE"
+        }
+      ],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "organizationRole_organizationId_idx",
+          "tbl_name": "organizationRole",
+          "sql": "CREATE INDEX \"organizationRole_organizationId_idx\" on \"organizationRole\" (\"organizationId\")"
+        },
+        {
+          "type": "index",
+          "name": "organizationRole_role_idx",
+          "tbl_name": "organizationRole",
+          "sql": "CREATE INDEX \"organizationRole_role_idx\" on \"organizationRole\" (\"role\")"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_organizationRole_1",
+          "tbl_name": "organizationRole",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "organizationRole",
+          "tbl_name": "organizationRole",
+          "sql": "CREATE TABLE \"organizationRole\" (\"id\" text not null primary key, \"organizationId\" text not null references \"organization\" (\"id\") on delete cascade, \"role\" text not null, \"permission\" text not null, \"createdAt\" date not null, \"updatedAt\" date)"
+        }
+      ]
+    },
+    {
+      "model": "rateLimit",
+      "fields": [
+        "key",
+        "count",
+        "lastRequest"
+      ],
+      "table": {
+        "type": "table",
+        "name": "rateLimit",
+        "tbl_name": "rateLimit"
+      },
+      "columns": [
+        {
+          "cid": 0,
+          "name": "id",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 1
+        },
+        {
+          "cid": 1,
+          "name": "key",
+          "type": "TEXT",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 2,
+          "name": "count",
+          "type": "INTEGER",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        },
+        {
+          "cid": 3,
+          "name": "stored_last_request",
+          "type": "bigint",
+          "notnull": 1,
+          "dflt_value": null,
+          "pk": 0
+        }
+      ],
+      "indexes": [
+        {
+          "definition": {
+            "seq": 0,
+            "name": "sqlite_autoindex_rateLimit_2",
+            "unique": 1,
+            "origin": "u",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "key"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 1,
+              "name": "key",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "definition": {
+            "seq": 1,
+            "name": "sqlite_autoindex_rateLimit_1",
+            "unique": 1,
+            "origin": "pk",
+            "partial": 0
+          },
+          "columns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id"
+            }
+          ],
+          "extendedColumns": [
+            {
+              "seqno": 0,
+              "cid": 0,
+              "name": "id",
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 1
+            },
+            {
+              "seqno": 1,
+              "cid": -1,
+              "name": null,
+              "desc": 0,
+              "coll": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ],
+      "foreignKeys": [],
+      "ddl": [
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_rateLimit_1",
+          "tbl_name": "rateLimit",
+          "sql": null
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_rateLimit_2",
+          "tbl_name": "rateLimit",
+          "sql": null
+        },
+        {
+          "type": "table",
+          "name": "rateLimit",
+          "tbl_name": "rateLimit",
+          "sql": "CREATE TABLE \"rateLimit\" (\"id\" text not null primary key, \"key\" text not null unique, \"count\" integer not null, \"stored_last_request\" bigint not null)"
+        }
+      ]
+    }
+  ]
+}

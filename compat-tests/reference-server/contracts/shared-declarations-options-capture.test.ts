@@ -1,0 +1,16 @@
+import { expect, test } from "bun:test";
+import { readFileSync, rmSync } from "node:fs";
+import { runStandaloneCapture } from "./standalone-capture";
+import { writeObservation } from "./write-observation.mjs";
+
+test("Shared CLI declarations retain Organization option mutations and complete SQLite catalogs", async () => {
+  const capture = new URL("./shared-declarations-options-capture.mjs", import.meta.url);
+  const first = await runStandaloneCapture(capture);
+  await writeObservation(first.stdout);
+  expect({ status: first.status, stderr: first.stderr }, `Capture evidence: ${first.directory}`).toStrictEqual({ status: 0, stderr: "" });
+  const second = await runStandaloneCapture(capture);
+  expect({ status: second.status, stderr: second.stderr }, `Capture evidence: ${second.directory}`).toStrictEqual({ status: 0, stderr: "" });
+  expect(readFileSync(second.output, "utf8"), `Capture evidence: ${second.directory}`).toBe(readFileSync(first.output, "utf8"));
+  rmSync(first.directory, { recursive: true });
+  rmSync(second.directory, { recursive: true });
+}, 120_000);

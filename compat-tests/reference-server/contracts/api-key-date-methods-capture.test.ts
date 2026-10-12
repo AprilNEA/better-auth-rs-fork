@@ -1,14 +1,10 @@
-import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { runStandaloneCapture } from "./standalone-capture";
-import { writeObservation } from "./write-observation.mjs";
+import { test } from "bun:test";
+import { expectStandaloneObservation } from "./standalone-capture";
 
 test("API Key cache dates invoke native methods before complete storage writes", async () => {
-  const capture = new URL("./api-key-date-methods-capture.mjs", import.meta.url);
-  const first = await runStandaloneCapture(capture);
-  await writeObservation(first.stdout);
-  expect({ status: first.status, stderr: first.stderr }, `Capture evidence: ${first.directory}`).toEqual({ status: 0, stderr: "" });
-  const second = await runStandaloneCapture(capture);
-  expect({ status: second.status, stderr: second.stderr }, `Capture evidence: ${second.directory}`).toEqual({ status: 0, stderr: "" });
-  expect(readFileSync(second.output, "utf8"), `Capture evidence: ${second.directory}`).toBe(readFileSync(first.output, "utf8"));
+  await expectStandaloneObservation(
+    new URL("./api-key-date-methods-capture.mjs", import.meta.url),
+    new URL("../../../tests/fixtures/api-key-date-methods-1.7.6.json", import.meta.url),
+    "API Key native date methods",
+  );
 }, 120_000);

@@ -1,0 +1,65 @@
+{
+  "contract": "shared-declarations-final-schema",
+  "version": "1.7.6",
+  "status": "source capture and repeated-process equality passed; CLI final-declaration input and complete Rust replay remain open",
+  "run": "38237338221",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38237338221",
+  "commit": "ea8ebc5bbdbdca9d8934edc3524cfbab4b7ddd2d",
+  "runConclusion": "failure from independent Session IP expectations; this complete source capture passed",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38237338221-clean.log",
+    "bytes": 443661,
+    "sha256": "d73b90dde88a446fe272e5ff81c834c168ede53e3e7ffc35d24bfff3fc4280fb"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/shared-declarations-capture.mjs",
+      "bytes": 2672,
+      "sha256": "c47b9845d2229127f82f6ecfaf13ecc491a9e758b4ca915e82b1972c6ea143ae"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/shared-declarations-capture.test.ts",
+      "bytes": 1049,
+      "sha256": "ab427c557f679c9e51d825eaf663a3be36e3c260e4240a0719a77aa81902d27f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/sqlite-catalog.ts",
+      "bytes": 2260,
+      "sha256": "f53afd791c4e687d9da4d4c9722956374bcf1dd6547e26add4bda91d1d2ce2cc"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2677,
+      "sha256": "1076a75618059a6ca6fb12fb32fa53fe9443d375ecd96f540bf58cc28612d70b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    },
+    {
+      "path": "compat-tests/schema-consumer/shared-declarations-schema.json",
+      "bytes": 1740,
+      "sha256": "ac0e90cd5dd9e12a4b20f1142822a3983a0e927cc2d816cfea48a3ef53913231"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/shared-declarations-1.7.6.json",
+    "bytes": 53791,
+    "sha256": "b019dd83881d644a6e0bef50b72dd8b2256348739d110e2bfbc4bfb2df0f9c3e"
+  },
+  "models": 11,
+  "records": [
+    {
+      "line": 2609,
+      "byteOffset": 403370,
+      "bytes": 26580,
+      "sha256": "edbe2db23cf10f364d4c5d5ffa280d572181285fe93d78cc32c1c1ad6e1ae22e"
+    }
+  ],
+  "extraction": "Retain the complete source observation, including configuration, logical field order, every SQLite catalog row, and raw DDL. Format as JSON.",
+  "normalizations": [],
+  "configurationBoundary": "Core model additionalFields are BetterAuthOptions. Organization-family and RateLimit additionalFields are late plugin.schema declarations. Database rateLimit options replace late plugin declarations.",
+  "rustBoundary": "The existing CLI Organization additionalFields entry represents Organization plugin options. Those options mutate OrganizationRole required flags while endpoints initialize. This final-schema observation must not be treated as a paired CLI options fixture. A separate options capture retains the matching input boundary. The generic ordered final-declaration CLI interface and default Organization native catalog remain open.",
+  "ddlBoundary": "Existing generated SQLite contracts compare complete table, column, index, extended-index, and foreign-key catalog rows through sqlite_catalog::observe. They retain original DDL separately as evidence because Kysely and SeaQuery emit different equivalent SQL syntax. This source replay compares the full original observation without SQL normalization."
+}
