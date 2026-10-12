@@ -13,7 +13,9 @@ use crate::plugins::{
         EMAIL, Harness, PHONE, ReplayFailures, assert_replay,
     },
 };
-use better_auth_core::{AuthError, AuthRequest, FieldMap, FieldValue, HttpMethod, NativeRequest};
+use better_auth_core::{
+    AuthError, AuthPlugin, FieldMap, FieldValue, NativeRequest, store::StatelessSchema,
+};
 use serde_json::{Value as Json, json};
 
 async fn capture(scenario: &Json) -> AuthResult<Json> {
@@ -49,11 +51,19 @@ async fn capture(scenario: &Json) -> AuthResult<Json> {
                 Ok(FieldMap::from([("otp".into(), value)]).into())
             }
             "email-check" => {
-                let mut request = AuthRequest::new(HttpMethod::Post, "/email-otp/check-verification-otp");
-                request.body = Some(serde_json::to_vec(&json!({
-                    "email":EMAIL,"type":"sign-in","otp":if scenario["wrong"] == true {"000000"} else {"123456"},
-                }))?);
-                plugin.check(&request, &context).await?.body.field_value()
+                let route = <EmailOtpPlugin as AuthPlugin<StatelessSchema>>::routes(&plugin)
+                    .into_iter()
+                    .find(|route| route.path == "/email-otp/check-verification-otp")
+                    .ok_or_else(|| AuthError::internal("Email OTP check route is absent"))?;
+                context.dispatch_native(
+                    NativeRequest::default(),
+                    route,
+                    Some(json!({
+                        "email":EMAIL,"type":"sign-in","otp":if scenario["wrong"] == true {"000000"} else {"123456"},
+                    })),
+                    None,
+                    |request, context| async move { plugin.check(&request, &context).await },
+                ).await?.body.field_value()
             }
             "email-reuse" => {
                 let endpoint = EndpointContext::new(None, FieldValue::Undefined, &context);

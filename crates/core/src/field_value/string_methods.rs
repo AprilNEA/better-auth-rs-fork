@@ -81,15 +81,26 @@ impl FieldValue {
         end: Option<&Self>,
         expression: &str,
     ) -> AuthResult<Self> {
-        match (self, self.method_property("slice")?) {
+        self.slice_method_with(|| Ok((start.clone(), end.cloned())), expression)
+    }
+
+    /// Read `slice` before evaluating its arguments and retain the resolved method for the call.
+    pub fn slice_method_with(
+        &self,
+        arguments: impl FnOnce() -> AuthResult<(Self, Option<Self>)>,
+        expression: &str,
+    ) -> AuthResult<Self> {
+        let method = self.method_property("slice")?;
+        let (start, end) = arguments()?;
+        match (self, method) {
             (_, Some(Self::Function(method))) => {
-                let mut arguments = vec![start.clone()];
-                arguments.extend(end.cloned());
+                let mut arguments = vec![start];
+                arguments.extend(end);
                 method.call_with(self, &arguments)
             }
             (Self::String(_) | Self::Utf16String(_), None) => {
                 let text = self.display_utf16()?;
-                let (start, end) = slice_bounds(text.as_utf16().len(), start, end)?;
+                let (start, end) = slice_bounds(text.as_utf16().len(), &start, end.as_ref())?;
                 Ok(Utf16String::from_units(
                     text.as_utf16()
                         .iter()
@@ -101,7 +112,7 @@ impl FieldValue {
                 .into())
             }
             (Self::Array(array), None) => {
-                let (start, end) = slice_bounds(array.len()?, start, end)?;
+                let (start, end) = slice_bounds(array.len()?, &start, end.as_ref())?;
                 let result = FieldArray::new();
                 result.set_length(end - start)?;
                 for (output, input) in (start..end).enumerate() {
@@ -200,6 +211,45 @@ fn slice_bounds(
 mod tests {
     use super::*;
     use crate::{FieldFunction, FieldMap};
+
+    #[test]
+    fn slice_resolves_method_before_arguments_and_preserves_error_order() -> AuthResult<()> {
+        let input: FieldValue = FieldMap::from([(
+            "slice".into(),
+            FieldFunction::contextual(|receiver, arguments| {
+                assert!(receiver.model_property("slice")?.is_null());
+                Ok(arguments.to_vec().into())
+            })
+            .into(),
+        )])
+        .into();
+        let sliced = input.slice_method_with(
+            || {
+                input.set_model_property("slice", FieldValue::Null)?;
+                Ok((1.into(), Some(3.into())))
+            },
+            "input",
+        )?;
+        assert_eq!(sliced, vec![1.into(), 3.into()].into());
+
+        let original: FieldValue = FieldMap::from([("original".into(), true.into())]).into();
+        let failed_arguments =
+            input.slice_method_with(|| Err(AuthError::from_thrown(original.clone())), "input");
+        assert!(matches!(failed_arguments,
+            Err(error) if error.raw_value().is_some_and(|value| value.strict_equals(&original))));
+
+        let mut evaluated = false;
+        let failed_lookup = FieldValue::Null.slice_method_with(
+            || {
+                evaluated = true;
+                Ok((0.into(), None))
+            },
+            "input",
+        );
+        assert!(matches!(failed_lookup, Err(AuthError::TypeError(_))));
+        assert!(!evaluated);
+        Ok(())
+    }
 
     #[test]
     fn methods_preserve_utf16_holes_and_custom_results() -> AuthResult<()> {

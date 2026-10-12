@@ -13,7 +13,7 @@ use crate::plugins::{
         Harness, NOW, ORIGIN, ReplayFailures, SECRET, assert_replay, consumer_user, date,
     },
 };
-use better_auth_core::{AuthPlugin, Headers, HttpMethod, store::StatelessSchema};
+use better_auth_core::{AuthPlugin, AuthRoute, Headers, HttpMethod, store::StatelessSchema};
 use serde_json::{Value as Json, json};
 
 mod trust;
@@ -126,9 +126,15 @@ async fn two_factor(scenario: &Json) -> AuthResult<Json> {
     harness.activate();
     let harness = &harness;
     let result = context
-        .with_native_context(
-            better_auth_core::NativeRequest::default(),
-            |context| async move {
+        .dispatch_native(
+            better_auth_core::NativeRequest {
+                headers: Some(&request.headers),
+                ..Default::default()
+            },
+            AuthRoute::server_only(HttpMethod::Post, "captureNativeVerification"),
+            Some(json!({})),
+            None,
+            |request, context| async move {
                 let result: AuthResult<FieldValue> = async {
                     let state = resolve_two_factor_state(&request, &context).await?;
                     harness.record("consumer:resolved", [("key".into(), state.key().into())]);
@@ -150,7 +156,7 @@ async fn two_factor(scenario: &Json) -> AuthResult<Json> {
                     .into())
                 }
                 .await;
-                let accumulated = request.take_response_headers()?;
+                let accumulated = Headers::from_field_value(&request.response_headers_value()?)?;
                 harness.record(
                     "consumer:two-factor-finally",
                     [
@@ -158,10 +164,11 @@ async fn two_factor(scenario: &Json) -> AuthResult<Json> {
                         ("cookies".into(), cookies(&accumulated)),
                     ],
                 );
-                result
+                result.map(|value| AuthResponse::native(None, value))
             },
         )
-        .await;
+        .await
+        .and_then(|response| response.body.field_value());
     harness.finish(before, harness.outcome(result)?, &inner)
 }
 

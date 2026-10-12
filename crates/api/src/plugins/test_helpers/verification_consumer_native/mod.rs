@@ -35,15 +35,14 @@ pub(crate) fn assert_replay(actual: &Json, expected: &Json, name: &str) {
     if let Some(stack) = expected.pointer(path) {
         assert_eq!(expected["outcome"]["error"]["name"], "APIError");
         assert!(stack.as_str().unwrap().starts_with("APIError\n    at "));
-        assert!(
-            actual.pointer(path).is_none(),
-            "{name}: Rust must not fabricate a JavaScript stack"
+        let undefined_stack = json!({"type":"undefined"});
+        assert_eq!(
+            actual.pointer(path),
+            Some(&undefined_stack),
+            "{name}: the debug dispatcher must retain the undefined Rust host stack"
         );
-        let _ = expected["outcome"]["error"]["ownEnumerable"]
-            .as_object_mut()
-            .unwrap()
-            .shift_remove("stack");
-        eprintln!("{name}: {path} remains unpaired JavaScript host metadata");
+        *expected.pointer_mut(path).unwrap() = undefined_stack;
+        eprintln!("{name}: the value at {path} remains unpaired JavaScript host metadata");
     }
     observation::assert_replay(actual, &expected, name);
 }

@@ -374,9 +374,8 @@ pub(super) fn split(value: &FieldValue) -> AuthResult<(FieldValue, FieldValue)> 
         return Ok((value.clone(), "".into()));
     }
     let stored = value.slice_method(&0.into(), Some(&index), "input")?;
-    let attempts = value.slice_method(
-        &better_auth_core::query::field_add(&index, &1.into())?,
-        None,
+    let attempts = value.slice_method_with(
+        || Ok((better_auth_core::query::field_add(&index, &1.into())?, None)),
         "input",
     )?;
     Ok((stored, attempts))
