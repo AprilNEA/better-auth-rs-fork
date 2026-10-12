@@ -190,21 +190,18 @@ impl EphemeralStore {
         let team_fields = if team_ids.is_empty() {
             None
         } else {
-            Some((
-                self.field_config(EntityRole::Team)?,
-                self.organization_query_field(
-                    EntityRole::Team,
-                    "organizationId",
-                    invitation.organization_id.field_value(),
-                )?,
-            ))
+            Some(self.organization_query_field(
+                EntityRole::Team,
+                "organizationId",
+                invitation.organization_id.field_value(),
+            )?)
         };
         let (mut transaction_base, staged, pending_hooks) = self.begin_adapter_transaction()?;
         let mut team_memberships = team_fields
-            .map(|(schema, organization)| {
+            .map(|organization| {
                 self.snapshot_table(&transaction_base, EntityRole::TeamMember)
                     .cloned()
-                    .map(|base| (schema, organization, base))
+                    .map(|base| (organization, base))
             })
             .transpose()?;
         let mut allocated_memberships = Vec::new();
@@ -214,7 +211,7 @@ impl EphemeralStore {
             super::team_capacity::PreparedTeamSeats,
             Option<usize>,
         )> = Vec::new();
-        if let Some((_, team_org, membership_base)) = &mut team_memberships {
+        if let Some((team_org, membership_base)) = &mut team_memberships {
             for team_id in &team_ids {
                 let selector = Value::from(team_id.as_str());
                 let bound_team_id =
@@ -511,7 +508,7 @@ impl EphemeralStore {
                             "Member allocation changed while field transforms were pending",
                         ));
                     }
-                    if let Some((_, _, membership_base)) = &team_memberships {
+                    if let Some((_, membership_base)) = &team_memberships {
                         let memberships = self.snapshot_table(state, EntityRole::TeamMember)?;
                         if memberships.len()? != membership_base.len()? {
                             return Err(AuthError::conflict(
@@ -526,7 +523,7 @@ impl EphemeralStore {
             validate_common(&op.capture_state()?)?;
             let mut existing_guards = Vec::new();
             let mut reservation_guards = Vec::new();
-            if let Some((_, team_org, _)) = &team_memberships {
+            if let Some((team_org, _)) = &team_memberships {
                 for (id, team_id) in &team_checks {
                     let team = op
                         .capture_table(EntityRole::Team)?
@@ -591,7 +588,7 @@ impl EphemeralStore {
                 }
             }
             validate_allocations(&op.capture_state()?)?;
-            if let Some((_, _, membership_base)) = &team_memberships {
+            if let Some((_, membership_base)) = &team_memberships {
                 let _ = transaction_base.tables.insert(
                     self.memory_model_name(EntityRole::TeamMember)?.to_owned(),
                     membership_base.clone(),
@@ -601,7 +598,7 @@ impl EphemeralStore {
             // Bound selectors and identity checks below do not invoke conversion or application callbacks.
             let current = op.capture_state()?;
             validate_common(&current)?;
-            if let Some((_, team_org, _)) = &team_memberships {
+            if let Some((team_org, _)) = &team_memberships {
                 for ((_, team_id), lookup) in team_checks.iter().zip(existing_guards) {
                     let team = self
                         .snapshot_table(&current, EntityRole::Team)?

@@ -8,6 +8,7 @@ test("OAuth Proxy callback preserves native merge, parsing order, errors, and si
   const result = Bun.spawnSync({
     cmd: [process.execPath, "--no-install", helper],
     env: { ...process.env, NO_COLOR: "1" }, stdout: "pipe", stderr: "pipe",
+    maxBuffer: 16 * 1024 * 1024, timeout: 25_000,
   });
   writeSync(1, result.stdout);
   writeSync(1, `${JSON.stringify({ contract: "oauth-proxy-callback-process", exitCode: result.exitCode, signalCode: result.signalCode, stderr: result.stderr.toString() })}\n`);
@@ -16,6 +17,8 @@ test("OAuth Proxy callback preserves native merge, parsing order, errors, and si
   const records = result.stdout.toString().trimEnd().split("\n").map(line => JSON.parse(line));
   expect(records.map(record => record.name)).toStrictEqual(callbackCases().map(scenario => scenario.name));
   expect(new Set(records.map(record => record.name)).size).toBe(records.length);
+  expect(records.filter(record => record.globalLogs.length).map(record => record.name))
+    .toStrictEqual(["invalid-user-json-becomes-undefined"]);
   for (const record of records) {
     expect(record.version).toBe("1.7.6");
     expect(record.hasOriginalRequest).toBe(false);

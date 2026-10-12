@@ -55,6 +55,7 @@ async function captureCase(scenario) {
   const observer = createProtectedFunctionObserver();
   const events = [];
   const logs = [];
+  const globalLogs = [];
   const providerCalls = [];
   const storeCalls = [];
   const getterCalls = [];
@@ -202,25 +203,50 @@ async function captureCase(scenario) {
   keys = 0;
   let result;
   let caught;
+  const savedConsole = { error: console.error, warn: console.warn, log: console.log };
+  for (const method of Object.keys(savedConsole)) {
+    console[method] = (...args) => globalLogs.push({ method, args, eventIndex: events.length });
+  }
   try { result = await hook.handler(request); } catch (error) { caught = error; }
+  finally { Object.assign(console, savedConsole); }
   const observe = () => {
     const outcome = caught === undefined ? { kind: "returned", value: observer.observe(result) }
       : { kind: "thrown", error: errorObservation(caught, observer, originalError) };
     const observedLogs = logs.map(({ level, message, args }) => ({ level, message,
       arguments: args.map(value => value instanceof Error ? errorObservation(value, observer, originalError) : observer.observe(value)),
     }));
+    const observedGlobalLogs = globalLogs.map(({ method, args, eventIndex }) => ({ method, eventIndex,
+      arguments: args.map(value => value !== null && typeof value === "object" && !(value instanceof Error)
+        ? Object.fromEntries(Object.entries(value).map(([key, field]) => [key,
+          field instanceof Error ? errorObservation(field, observer, originalError) : observer.observe(field)]))
+        : value instanceof Error ? errorObservation(value, observer, originalError) : observer.observe(value)),
+    }));
     return {
       name: scenario.name, scope: scenario.scope ?? "callback-contract", version,
       method: request.method, hasOriginalRequest: Object.hasOwn(request, "request"),
       inputs: { before, after: { query: inputObservation(query, observer), body: inputObservation(body, observer) } },
       encryption: { packagePlaintext, ciphertext, cookiePlaintext, cookieCiphertext },
-      outcome, events, logs: observedLogs, providerCalls: observer.observe(providerCalls), storeCalls: observer.observe(storeCalls),
+      outcome, events, logs: observedLogs, globalLogs: observedGlobalLogs,
+      providerCalls: observer.observe(providerCalls), storeCalls: observer.observe(storeCalls),
       getterCalls: getterCalls.map(call => ({ name: call.name, sameReceiver: call.receiver === call.owner, sameMarker: call.value === marker })),
       originalError: errorObservation(originalError, observer, originalError),
       database, functions: observer.functions,
     };
   };
   try {
+    for (const method of Object.keys(savedConsole)) assert.equal(console[method], savedConsole[method]);
+    assert.equal(globalLogs.length, scenario.invalidUser ? 1 : 0);
+    if (scenario.invalidUser) {
+      const [{ method, args, eventIndex }] = globalLogs;
+      assert.equal(method, "error");
+      assert.equal(eventIndex, 3);
+      assert.equal(args.length, 2);
+      assert.equal(args[0], `${new Date(now).toISOString()} ERROR [Better Auth]: Error parsing JSON`);
+      assert.deepEqual(Reflect.ownKeys(args[1]), ["error"]);
+      assert.ok(args[1].error instanceof SyntaxError);
+      assert.equal(args[1].error.name, "SyntaxError");
+      assert.equal(args[1].error.message, 'JSON Parse error: Unexpected identifier "not"');
+    }
     assert.equal(request.query, query);
     assert.equal(request.body, body);
     assert.deepEqual(descriptors(query), queryDescriptors);

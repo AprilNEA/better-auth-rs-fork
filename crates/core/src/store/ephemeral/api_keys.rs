@@ -296,11 +296,9 @@ impl EphemeralStore {
         &self,
         clock: impl FnOnce() -> FieldDate + Send,
     ) -> AuthResult<usize> {
+        let current = self.plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
+        let absent = self.plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
         self.raw("apikey", "deleteMany", |op| {
-            let current =
-                self.plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
-            let absent =
-                self.plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
             let table = op.capture_table(EntityRole::ApiKey)?;
             let selected = table.select_refs(|key| {
                 crate::memory_query::matches_all(
