@@ -801,5 +801,4 @@ mod tests;
 mod native_tests;
 
 #[cfg(test)]
-#[path = "error/http_tests.rs"]
 mod http_tests;
