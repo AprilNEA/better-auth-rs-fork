@@ -1,0 +1,64 @@
+{
+  "user": {
+    "fields": { "createdAt": "previous_user_created" },
+    "additionalFields": {
+      "name": { "type": "json", "required": true },
+      "createdAt": { "type": "date", "required": true }
+    }
+  },
+  "session": {
+    "fields": { "expiresAt": "previous_session_expiry" },
+    "additionalFields": {
+      "expiresAt": { "type": "date", "required": true, "fieldName": "" }
+    }
+  },
+  "account": {
+    "fields": { "providerId": "previous_provider" },
+    "additionalFields": {
+      "providerId": { "type": "string", "required": true, "fieldName": "" }
+    }
+  },
+  "verification": {
+    "additionalFields": {
+      "createdAt": { "type": "date", "required": true }
+    }
+  },
+  "organization": {
+    "additionalFields": {
+      "logo": { "type": "json", "required": false }
+    }
+  },
+  "member": {
+    "additionalFields": {
+      "createdAt": { "type": "date", "required": true, "fieldName": "" }
+    }
+  },
+  "invitation": {
+    "additionalFields": {
+      "expiresAt": { "type": "date", "required": true }
+    }
+  },
+  "team": {
+    "additionalFields": {
+      "updatedAt": { "type": "date", "required": false }
+    }
+  },
+  "teamMember": {
+    "additionalFields": {
+      "createdAt": { "type": "date", "required": false, "fieldName": "" },
+      "label": { "type": "json", "required": false, "fieldName": "stored_label" }
+    }
+  },
+  "organizationRole": {
+    "additionalFields": {
+      "createdAt": { "type": "date", "required": true }
+    }
+  },
+  "rateLimit": {
+    "fields": { "lastRequest": "stored_last_request" },
+    "additionalFields": {
+      "lastRequest": { "type": "string", "required": false, "fieldName": "discarded_request" },
+      "discardedField": { "type": "json", "required": false }
+    }
+  }
+}
