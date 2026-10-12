@@ -162,6 +162,13 @@ fn enrollment(runtime: &Json) -> AuthResult<Json> {
         .map_err(|error| AuthError::internal(error.to_string()))?;
     assert_eq!(decoded, plaintext.as_bytes());
     assert_eq!(plaintext.len(), 32);
+    let encoded = totp_rs::Secret::Raw(plaintext.as_bytes().to_vec()).to_encoded();
+    assert_eq!(
+        runtime["outcome"]["result"]["totpURI"],
+        format!(
+            "otpauth://totp/Better%20Auth:owner%40verification-consumer-native.test?secret={encoded}&issuer=Better+Auth&digits=6&period=30"
+        )
+    );
     assert_eq!(uri.scheme(), "otpauth");
     assert_eq!(uri.host_str(), Some("totp"));
     assert_eq!(

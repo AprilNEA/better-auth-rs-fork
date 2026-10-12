@@ -65,7 +65,7 @@ async fn generated_attributes_enforce_indexes_references_and_delete_actions() {
     );
     assert_eq!(
         columns.get("wideFractional").map(String::as_str),
-        Some("BIGINT")
+        Some("bigint")
     );
     assert_eq!(columns.get("owner_id").map(String::as_str), Some("TEXT"));
     assert_eq!(columns.get("bigOwner").map(String::as_str), Some("TEXT"));
