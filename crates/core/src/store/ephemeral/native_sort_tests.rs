@@ -47,7 +47,7 @@ async fn memory_native_sort_replays_complete_source_runtime() -> AuthResult<()> 
                 .capture_table(EntityRole::User)?
                 .snapshot_refs()?
                 .into_iter()
-                .map(|row| row.raw_value())
+                .map(|row| row.field_value())
                 .collect())
         })?;
         harness.bind_rows(rows);
