@@ -1,9 +1,44 @@
 use super::*;
 use better_auth_core::{
+    BeforeRequestAction,
+    endpoint_dispatch::EndpointDispatcher,
+    observability::{BeforeEndpointHook, EndpointHooks},
     session::NativeSessionData,
     store::StoreCapabilities,
     user_fields::{UserFieldFactory, UserFieldReference, UserFieldType},
 };
+
+struct InjectSession(NativeSessionData);
+
+#[async_trait]
+impl<S: AuthSchema> BeforeEndpointHook<S> for InjectSession {
+    async fn before(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<BeforeRequestAction>> {
+        Ok(Some(BeforeRequestAction::InjectNativeSession {
+            session: Box::new(self.0.clone()),
+        }))
+    }
+}
+
+pub(super) fn inject_session<S: AuthSchema>(
+    context: &mut AuthContext<S>,
+    plugin: &impl AuthPlugin<S>,
+    session: NativeSessionData,
+) {
+    context
+        .extensions
+        .insert(Arc::new(EndpointDispatcher::<S>::new(
+            Arc::new(Vec::new()),
+            EndpointHooks {
+                before: Some(Arc::new(InjectSession(session))),
+                after: None,
+            },
+            plugin.routes(),
+        )));
+}
 
 async fn check_authoritative_user<S: AuthSchema>(
     database: Arc<dyn AuthStore<S>>,
@@ -119,15 +154,15 @@ async fn check_authoritative_user<S: AuthSchema>(
                 json!({"password": PASSWORD})
             }),
         );
-        request.replace_native_session_snapshot(Some(NativeSessionData {
-            session: session.clone(),
-            user: FieldMap::from([("id".into(), "stale-owner".into())]).into(),
-        }))?;
-        let response = plugin
-            .on_request(
-                &request,
-                context.initialize_request_context().await?.as_ref(),
-            )
+        inject_session(
+            &mut context,
+            &plugin,
+            NativeSessionData {
+                session: session.clone(),
+                user: FieldMap::from([("id".into(), "stale-owner".into())]).into(),
+            },
+        );
+        let response = test_helpers::native_session::dispatch_plugin(&request, &context, &plugin)
             .await?
             .unwrap();
         let mut expected_user = FieldMap::from(raw.user_view(&user).await?);
@@ -153,7 +188,7 @@ async fn check_authoritative_user<S: AuthSchema>(
                 vec!["session-owner-projection", "user-projection", "verify"]
             }
         );
-        let mut expected_account = FieldMap::from(account);
+        let mut expected_account = account.field_values()?;
         if change {
             let _ = expected_account.insert("password".into(), "new-hash".into());
             let _ = expected_account.insert(

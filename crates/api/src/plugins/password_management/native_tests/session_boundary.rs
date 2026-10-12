@@ -176,19 +176,19 @@ async fn native_session_owner_reaches_revocation_and_preserves_committed_failure
                 json!({"currentPassword":PASSWORD,"newPassword":PASSWORD,"revokeOtherSessions":true}),
             ),
         );
-        request.replace_native_session_snapshot(Some(NativeSessionData {
-            session: selected,
-            user: FieldMap::from([
-                ("id".into(), 7.into()),
-                ("name".into(), "Native owner".into()),
-            ])
-            .into(),
-        }))?;
-        let error = plugin
-            .on_request(
-                &request,
-                context.initialize_request_context().await?.as_ref(),
-            )
+        super::authoritative_session::inject_session(
+            &mut context,
+            &plugin,
+            NativeSessionData {
+                session: selected,
+                user: FieldMap::from([
+                    ("id".into(), 7.into()),
+                    ("name".into(), "Native owner".into()),
+                ])
+                .into(),
+            },
+        );
+        let error = test_helpers::native_session::dispatch_plugin(&request, &context, &plugin)
             .await
             .err()
             .unwrap();
@@ -224,7 +224,11 @@ async fn native_session_owner_reaches_revocation_and_preserves_committed_failure
                 ]
             }
         );
-        let mut expected = FieldMap::from(initial_accounts.into_iter().next().unwrap());
+        let mut expected = initial_accounts
+            .into_iter()
+            .next()
+            .unwrap()
+            .field_values()?;
         let _ = expected.insert("password".into(), "new-hash".into());
         assert_eq!(
             raw_context

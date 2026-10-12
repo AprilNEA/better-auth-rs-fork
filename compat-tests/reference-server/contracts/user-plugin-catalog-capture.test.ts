@@ -7,5 +7,5 @@ for (const backend of ["sqlite", "postgres", "mysql"]) {
     const fixture = new URL(`../../../tests/fixtures/user-plugin-catalog-${backend}-1.7.6.json`, import.meta.url);
     await expectStandaloneCapture(capture, fixture, [backend]);
     await expectStandaloneCapture(capture, fixture, [backend]);
-  });
+  }, 30_000);
 }

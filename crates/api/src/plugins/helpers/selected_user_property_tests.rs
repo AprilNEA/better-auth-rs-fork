@@ -128,7 +128,7 @@ fn user(shape: &str, trace: &Arc<Trace>) -> (FieldValue, Arc<OnceLock<FieldValue
         trace: trace.clone(),
         receiver: Arc::downgrade(&receiver),
     }));
-    let user = match shape {
+    let user: FieldValue = match shape {
         "array" => FieldArray::with_length_and_properties(0, properties).into(),
         "function" => FieldFunction::contextual_with_properties(
             |_, _| Err(AuthError::internal("The User function must not be called")),
