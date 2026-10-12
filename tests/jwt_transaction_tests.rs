@@ -246,7 +246,7 @@ async fn native_sign_endpoint_preserves_child_identity_undefined_and_custom_resu
             let returned = result.clone();
             let calls = sign_calls.clone();
             Box::pin(async move {
-                calls.fetch_add(1, Ordering::SeqCst);
+                let _ = calls.fetch_add(1, Ordering::SeqCst);
                 assert!(!claims.strict_equals(&input));
                 assert!(claims.model_property("child")?.strict_equals(&child));
                 assert!(
