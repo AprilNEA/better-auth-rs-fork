@@ -26,7 +26,7 @@ pub(crate) fn generate_schema(
     }
     let mut extra_entities = indexmap::IndexMap::new();
     if rate_limit_database {
-        extra_entities.insert(
+        let _ = extra_entities.insert(
             model_name(registry::RATE_LIMIT.mod_name),
             &registry::RATE_LIMIT,
         );
@@ -39,7 +39,7 @@ pub(crate) fn generate_schema(
             user.extend_from_slice(schema.user_fields);
             session.extend_from_slice(schema.session_fields);
             for entity in schema.extra_entities {
-                extra_entities.insert(model_name(entity.mod_name), entity);
+                let _ = extra_entities.insert(model_name(entity.mod_name), entity);
             }
         }
     }
@@ -670,7 +670,7 @@ fn gen_column_type(field: &AdditionalField) -> TokenStream {
         return quote!(column.text(););
     };
     match name.as_str() {
-        "number" if field.bigint => quote!(column.custom(Alias::new("BIGINT"));),
+        "number" if field.bigint => quote!(column.custom(Alias::new("bigint"));),
         "number" => quote!(column.integer();),
         "string"
             if !field.unique && field.references.is_none() && !field.sortable && !field.index =>
@@ -810,29 +810,8 @@ fn gen_indexes(entity: &Entity, database: Database) -> Vec<TokenStream> {
         }
     }
     indexes.into_iter().map(|(columns, unique)| {
-        let native_index = entity.fields.iter().find(|field| {
-            ((entity.passkey_native_schema
-                && matches!(field.registry_column, Some("user_id" | "credential_id")))
-                || (entity.two_factor_native_schema
-                && matches!(field.registry_column, Some("secret" | "user_id")))
-                || (entity.api_key_native_schema
-                && matches!(field.registry_column, Some("config_id" | "reference_id" | "key")))
-                || (entity.role == Some(EntityRole::WalletAddress)
-                && field.registry_column == Some("user_id"))
-                || (entity.role == Some(EntityRole::TeamMember)
-                && matches!(field.registry_column, Some("team_id" | "user_id")))
-                || (matches!(database, Database::Sqlite)
-                && (matches!(
-                    (entity.role, field.registry_column),
-                    (Some(EntityRole::Verification), Some("identifier"))
-                        | (Some(EntityRole::Account), Some("user_id"))
-                        | (Some(EntityRole::Member), Some("organization_id" | "user_id"))
-                        | (Some(EntityRole::OrganizationRole), Some("organization_id" | "role"))
-                        | (Some(EntityRole::Team), Some("organization_id"))
-                        | (Some(EntityRole::Invitation), Some("organization_id" | "email"))
-                ) || (entity.session_row_presence && field.registry_column == Some("user_id")))))
-                && field.attributes.is_none()
-                && !unique && columns.as_slice() == [field.column.as_str()]
+        let native_index = entity.native_catalog && !unique && entity.fields.iter().any(|field| {
+            field.attributes.is_none() && columns.as_slice() == [field.column.as_str()]
         });
         let device_index = entity.device_code_native_schema && unique && entity.fields.iter().any(|field| {
             matches!(field.registry_column, Some("device_code" | "user_code"))
@@ -842,10 +821,8 @@ fn gen_indexes(entity: &Entity, database: Database) -> Vec<TokenStream> {
             field.attributes.as_ref().is_some_and(|attributes| attributes.index)
                 && !unique && columns.as_slice() == [field.column.as_str()]
         });
-        let name = if device_index || declared_index {
+        let name = if device_index || declared_index || native_index {
             native_field_index_name(table, &columns.join("_"), unique)
-        } else if let Some(field) = native_index {
-            native_field_index_name(table, &field.column, false)
         } else {
             format!("idx_{table}_{}", columns.join("_"))
         };

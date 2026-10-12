@@ -126,7 +126,7 @@ Run the CLI with every plugin that your application registers:
 better-auth-rs generate --plugins two-factor,api-key --output src/auth_schema.rs
 ```
 
-The CLI generates core entities, plugin fields and tables, unique indexes, and foreign keys. Unknown plugin names fail. Existing output files are preserved unless you pass `--force`.
+The CLI generates core entities, plugin fields and tables, unique indexes, and foreign keys. Unknown plugin names fail. Existing output files are preserved unless you pass `--force`. Native catalog fields use the shared upstream single-column index naming rule on SQLite, PostgreSQL, and MySQL. Complete field replacements use the same rule; legacy schema modes retain their existing names.
 
 Call the generated `create_auth_tables(&database).await?` from the application's initial migration. The function creates tables in an empty database and fails when a table already exists. The function does not compare schemas, alter existing tables, or track migration versions. Use your application's versioned SeaORM migrations for later changes, including plugin additions.
 

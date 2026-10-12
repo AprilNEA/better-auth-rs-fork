@@ -296,7 +296,7 @@ impl Entity {
                 || field.name.to_lower_camel_case(),
                 |role| canonical_field_name(role, field.name),
             );
-            declarations.insert(name, field);
+            let _ = declarations.insert(name, field);
         }
         let mut fields = declarations
             .into_values()
