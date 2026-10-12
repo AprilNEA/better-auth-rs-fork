@@ -12,7 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - contract: logger-background-ownership
+          - contract: background-success-values
+            regressions: []
+          - contract: email-otp-override-values
             regressions: []
     runs-on: ubuntu-latest
     timeout-minutes: 10
