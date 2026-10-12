@@ -255,7 +255,11 @@ pub(super) async fn verify_totp_core(
     if !valid {
         let _ = finish_attempt(attempt, true, ctx).await?;
         record_failure(&state, &two_factor, &config.account_lockout, ctx).await?;
-        return Err(AuthError::authentication_failed("Invalid code"));
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "INVALID_CODE",
+            "Invalid code",
+        ));
     }
     reset_failures(&state, &two_factor, &config.account_lockout, ctx).await?;
     let needs_enrollment = !two_factor
@@ -471,7 +475,11 @@ pub(super) async fn verify_otp_core(
         if let Some(factor) = &factor {
             record_failure(&state, factor, &config.account_lockout, ctx).await?;
         }
-        return Err(AuthError::authentication_failed("Invalid code"));
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "INVALID_CODE",
+            "Invalid code",
+        ));
     }
     if let Some(factor) = &factor {
         reset_failures(&state, factor, &config.account_lockout, ctx).await?;

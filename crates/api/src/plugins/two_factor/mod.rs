@@ -883,7 +883,9 @@ async fn finalize_pending_two_factor<S: better_auth_core::AuthSchema>(
             "Set-Cookie",
             clear_cookie_header(req, &ctx.config, TWO_FACTOR_COOKIE_SUFFIX)?,
         )?;
-        return Err(AuthError::authentication_failed(
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "INVALID_TWO_FACTOR_COOKIE",
             "Invalid two factor cookie",
         ));
     };

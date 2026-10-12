@@ -376,6 +376,15 @@ async fn otp_native_values_preserve_counter_parsing_and_consumption() -> TestRes
         .await
         .unwrap_err();
         assert_eq!(error.status_code().unwrap(), status);
+        if status == 401 {
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &error,
+                "UNAUTHORIZED",
+                401,
+                "INVALID_CODE",
+                "Invalid code",
+            );
+        }
         let remaining = fixture
             .ctx
             .database
@@ -427,7 +436,13 @@ async fn decrypted_short_secret_reaches_totp_verification() -> TestResult {
     )
     .await
     .unwrap_err();
-    assert_eq!(error.status_code().unwrap(), 401);
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &error,
+        "UNAUTHORIZED",
+        401,
+        "INVALID_CODE",
+        "Invalid code",
+    );
     assert_eq!(fixture.attempts().await?, Some("1".into()));
     assert_eq!(
         fixture
@@ -575,7 +590,7 @@ async fn finalization_preserves_selected_native_owner_token_and_cookie() -> Test
     let user = UserView::try_from(selected)?;
     let (response, cookies) = finalize_pending_two_factor(
         PendingTwoFactorState {
-            user,
+            user: user.clone(),
             key: "native-factor-challenge".into(),
             dont_remember: false,
             verification: better_auth_core::FieldMap::from([(
@@ -636,6 +651,69 @@ async fn finalization_preserves_selected_native_owner_token_and_cookie() -> Test
             .await?
             .is_none()
     );
+    let sessions = fixture.ctx.database.get_user_sessions("17").await?;
+    for replacement in [None, Some(FieldValue::from("17"))] {
+        if let Some(value) = replacement {
+            let _ = fixture
+                .ctx
+                .database
+                .create_verification(CreateVerification {
+                    identifier: "native-factor-challenge".into(),
+                    value: SchemaValue::from_field(value),
+                    expires_at: (Utc::now() + Duration::minutes(5)).into(),
+                    ..Default::default()
+                })
+                .await?;
+        }
+        let request = AuthRequest::new(HttpMethod::Post, "/two-factor/verify-totp");
+        let error = finalize_pending_two_factor(
+            PendingTwoFactorState {
+                user: user.clone(),
+                key: "native-factor-challenge".into(),
+                dont_remember: false,
+                verification: FieldMap::from([(
+                    "expiresAt".into(),
+                    (Utc::now() + Duration::minutes(5)).into(),
+                )])
+                .into(),
+            },
+            &request,
+            false,
+            &fixture.ctx,
+        )
+        .await
+        .unwrap_err();
+        crate::plugins::test_helpers::assert_coded_api_error(
+            &error,
+            "UNAUTHORIZED",
+            401,
+            "INVALID_TWO_FACTOR_COOKIE",
+            "Invalid two factor cookie",
+        );
+        assert!(request.new_session()?.is_none());
+        let headers = request.take_response_headers()?;
+        let cookies = headers.get_all("Set-Cookie").collect::<Vec<_>>();
+        assert_eq!(cookies.len(), 1);
+        assert!(
+            cookies
+                .iter()
+                .all(|cookie| cookie.starts_with("better-auth.two_factor=")
+                    && cookie.contains("Max-Age=0"))
+        );
+        assert!(
+            fixture
+                .ctx
+                .database
+                .get_verification_by_identifier("native-factor-challenge")
+                .await?
+                .is_none()
+        );
+        assert_eq!(*owners.0.lock().unwrap(), [FieldValue::from(17.0)]);
+        assert_eq!(
+            fixture.ctx.database.get_user_sessions("17").await?,
+            sessions
+        );
+    }
     Ok(())
 }
 
