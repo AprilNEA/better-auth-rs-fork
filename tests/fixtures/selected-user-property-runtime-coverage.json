@@ -1,0 +1,56 @@
+{
+  "fixture": "tests/fixtures/selected-user-property-1.7.6.json",
+  "fixtureSha256": "116bb86b477a1a15d836e689f09722a55a5e933b9e53f04dec1f7d10105f6153",
+  "sourceProvenance": "tests/fixtures/selected-user-property-1.7.6.provenance.json",
+  "caseCount": 20,
+  "contract": "Replay all frozen selected-User cases through the real password-change and Session-issuance implementation. Compare complete runtime observations with NativeObservation and the shared ordered assert_replay.",
+  "compared": [
+    "Every case: shape, throwsAt, changing, exact read count, complete outcome, original thrown-object identity, complete APIError name/message/properties, and empty errorFunctions.",
+    "Every case: the complete ordered getter/hash/verify/delete-before/delete-after/create-cancel events. Compare every hook argument and its key order, getter receiver identity, and creation owner identity.",
+    "Every case: selected-User type, own runtime keys, property order, enumerable flags, getter function identity, absent setter, array length, Date value, and selected-function identity before and after the operation. Descriptor observation never invokes the ID getter.",
+    "Every case: complete Adapter readback of Session and Account rows before and after the operation, including all fields, own-undefined values, Dates, row order, and field order. User and Verification observations read the actual empty physical tables. Existing raw-storage assertions independently check all persisted rows.",
+    "Every case: function identity registration order. The test-source accessor invokes the same FieldFunction handle reported by its descriptor observation.",
+    "Every non-reflection source snapshot: own keys and descriptor order checked by the strict shared source decoder. The frozen storage and event snapshots contain no object-reference nodes; the decoder rejects any new reference instead of discarding the alias.",
+    "The original 20 default-generation scenarios still execute with their existing event, original-failure, and raw-storage assertions. The four successful Session-issuance scenarios still assert retained User identity and persisted owner/session/token values."
+  ],
+  "deterministicReplay": {
+    "source": "The successful standalone capture fixed the wall clock and supplied byte 1 to crypto.getRandomValues before the real upstream operation.",
+    "rust": "The additional replay lane uses the existing Session field declarations to supply fixed defaults for token, expiresAt, createdAt, and updatedAt. Each declaration clones its complete native declaration before replacing only the default value factory.",
+    "fields": {
+      "token": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "expiresAt": "2033-05-25T03:33:20.000Z",
+      "createdAt": "2033-05-18T03:33:20.000Z",
+      "updatedAt": "2033-05-18T03:33:20.000Z"
+    },
+    "boundary": "PreparedSessionCreate evaluates configured defaults before the creation-before hook and overlays the four generated values in their existing property slots. The complete hook object is compared without deleting, replacing, or normalizing observed fields. The replay does not establish equivalent default clock, expiry generation, entropy, or token generation.",
+    "callbackEffects": "The four added default factories return fixed native values and have no external effects. The complete getter, hash, verifier, deletion, and creation-hook event sequence remains compared with the frozen source. The original default-generation lane remains separate."
+  },
+  "notCompared": [
+    {
+      "pathPattern": "/cases/*/functions/*/{name,length,source,string,ownKeys}",
+      "reason": "Rust functions do not expose JavaScript source reflection. Every source value remains in the unchanged frozen fixture; function identities and registration order are compared."
+    },
+    {
+      "pathPattern": "/cases/*/{userBefore,userAfter}/(function intrinsic properties length,name,prototype)",
+      "reason": "The source selectedUser function has JavaScript intrinsic descriptors and a prototype/constructor cycle. Rust retains callable identity and the complete application-defined ID accessor, but does not expose those intrinsic properties."
+    },
+    {
+      "pathPattern": "/cases/*/{userBefore,userAfter}/properties/id/get/{identity,ownKeys,properties}",
+      "reason": "The ID getter crosses the explicit opaque-function boundary. Its actual callable identity is compared. JavaScript length/name/prototype reflection and its constructor cycle remain in the source fixture."
+    },
+    {
+      "pathPattern": "/cases/*/**/properties/*/1/{writable,configurable}",
+      "reason": "FieldObject exposes enumerable state, not JavaScript writable/configurable flags. These source flags remain in the frozen fixture."
+    },
+    {
+      "pathPattern": "/cases/*/{before,after,events}/**/identity",
+      "reason": "The existing runtime observer compares complete values and property order without allocation labels. These snapshots contain no ordinary shared-reference nodes. Selected User identity is separately checked by every getter's sameReceiver and the retained-handle success assertions."
+    },
+    {
+      "pathPattern": "/cases/*/events/create-cancel/arguments/0/{token,expiresAt,createdAt,updatedAt} generation",
+      "reason": "All four resulting values are compared exactly. Their default clock/entropy generation is not paired: the Rust replay supplies values through the existing configured-default boundary. This remains an uncovered production-generation boundary."
+    }
+  ],
+  "hostErrors": {},
+  "verification": "Rust CI pending. The complete source fixture is frozen from successful CI and is not resampled by this change."
+}
