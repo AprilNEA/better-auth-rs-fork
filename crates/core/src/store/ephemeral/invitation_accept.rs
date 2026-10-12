@@ -10,6 +10,7 @@ struct InvitationClaim {
     row: super::rows::RowRef<FieldMap>,
     fields: FieldMap,
     schema: crate::user_fields::UserConfig,
+    selector: (String, Value),
 }
 
 fn validate_membership_allocations(
@@ -39,6 +40,9 @@ impl InvitationClaim {
         if !invitations.contains_ref(&self.row)? {
             return Err(AuthError::bad_request("Invitation not found"));
         }
+        if !super::organization_rows::matches(&self.row, std::slice::from_ref(&self.selector))? {
+            return Err(AuthError::conflict(changed_message));
+        }
         if !super::organization_rows::field(&self.row, &self.schema, "status")?
             .strict_equals(&"accepted".into())
         {
@@ -66,7 +70,7 @@ impl EphemeralStore {
         effects: SessionWriteEffects<StatelessSchema>,
     ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
         let bound_id =
-            self.organization_query(EntityRole::Invitation, "id", invitation_id.clone())?;
+            self.organization_query_field(EntityRole::Invitation, "id", invitation_id.clone())?;
         let patch = self
             .prepare_increment_one_patch(
                 EntityRole::Invitation,
@@ -82,7 +86,7 @@ impl EphemeralStore {
                 .select_organization_rows(
                     EntityRole::Invitation,
                     &[
-                        ("id".into(), bound_id.field_value()),
+                        bound_id.clone(),
                         (schema.record_storage_key("status").into(), "pending".into()),
                     ],
                 )?
@@ -101,6 +105,7 @@ impl EphemeralStore {
                 row,
                 fields,
                 schema,
+                selector: bound_id,
             })
         })?;
         // Claim output follows the committed claim and precedes the compensation boundary.
@@ -160,16 +165,16 @@ impl EphemeralStore {
         maximum: TeamMemberLimits<'_>,
         mut effects: SessionWriteEffects<StatelessSchema>,
     ) -> AuthResult<(Member, Option<SessionView>)> {
-        let member_schema = self.field_config(EntityRole::Member)?;
         let session_selector = session_token
             .filter(|_| effects.write_database())
             .map(|token| self.memory_session_token_query(token.clone()))
             .transpose()?;
-        let member_user = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
-        let member_org = self.organization_reference_query(
+        let member_user =
+            self.organization_query_field(EntityRole::Member, "userId", user_id.clone())?;
+        let member_org = self.organization_query_field(
             EntityRole::Member,
             "organizationId",
-            &invitation.organization_id,
+            invitation.organization_id.field_value(),
         )?;
         let team_id = invitation.team_id.field_value();
         let team_ids: Vec<_> = if teams_enabled && team_id.is_truthy() {
@@ -187,10 +192,10 @@ impl EphemeralStore {
         } else {
             Some((
                 self.field_config(EntityRole::Team)?,
-                self.organization_reference_query(
+                self.organization_query_field(
                     EntityRole::Team,
                     "organizationId",
-                    &invitation.organization_id,
+                    invitation.organization_id.field_value(),
                 )?,
             ))
         };
@@ -209,11 +214,11 @@ impl EphemeralStore {
             super::team_capacity::PreparedTeamSeats,
             Option<usize>,
         )> = Vec::new();
-        if let Some((team_schema, team_org, membership_base)) = &mut team_memberships {
+        if let Some((_, team_org, membership_base)) = &mut team_memberships {
             for team_id in &team_ids {
                 let selector = Value::from(team_id.as_str());
                 let bound_team_id =
-                    self.organization_query(EntityRole::Team, "id", selector.clone())?;
+                    self.organization_query_field(EntityRole::Team, "id", selector.clone())?;
                 team_checks.push((team_id.clone(), bound_team_id.clone()));
                 let pending: Vec<_> = reservations
                     .iter()
@@ -276,13 +281,7 @@ impl EphemeralStore {
                     let team = self
                         .select_organization_rows(
                             EntityRole::Team,
-                            &[
-                                ("id".into(), bound_team_id.field_value()),
-                                (
-                                    team_schema.record_storage_key("organizationId").into(),
-                                    team_org.field_value(),
-                                ),
-                            ],
+                            &[bound_team_id.clone(), team_org.clone()],
                         )?
                         .into_iter()
                         .next()
@@ -292,7 +291,9 @@ impl EphemeralStore {
                         .len();
                     Ok((team, actual))
                 })?;
-                let mut prepared = self.prepare_team_reservation(team, actual, limit).await?;
+                let mut prepared = self
+                    .prepare_team_reservation(team, bound_team_id, actual, limit)
+                    .await?;
                 if !prepared.reserved {
                     return Err(AuthError::from_code(
                         "FORBIDDEN",
@@ -326,16 +327,7 @@ impl EphemeralStore {
                 reservations.push((team_id.clone(), prepared, limit));
             }
         }
-        let member_selectors = [
-            (
-                member_schema.record_storage_key("organizationId").into(),
-                member_org.field_value(),
-            ),
-            (
-                member_schema.record_storage_key("userId").into(),
-                member_user.field_value(),
-            ),
-        ];
+        let member_selectors = [member_org, member_user];
         let member_count = self.operation(|op| {
             let state = op.capture_state()?;
             claim.validate(
@@ -534,20 +526,14 @@ impl EphemeralStore {
             validate_common(&op.capture_state()?)?;
             let mut existing_guards = Vec::new();
             let mut reservation_guards = Vec::new();
-            if let Some((team_schema, team_org, _)) = &team_memberships {
+            if let Some((_, team_org, _)) = &team_memberships {
                 for (id, team_id) in &team_checks {
                     let team = op
                         .capture_table(EntityRole::Team)?
                         .select_refs(|row| {
                             super::organization_rows::matches(
                                 row,
-                                &[
-                                    ("id".into(), team_id.field_value()),
-                                    (
-                                        team_schema.record_storage_key("organizationId").into(),
-                                        team_org.field_value(),
-                                    ),
-                                ],
+                                &[team_id.clone(), team_org.clone()],
                             )
                         })?
                         .into_iter()
@@ -575,8 +561,10 @@ impl EphemeralStore {
                 }
                 for (id, prepared, maximum) in &reservations {
                     let team = prepared.current(&op.capture_table(EntityRole::Team)?)?;
-                    if !organization_value(&team, team_schema, "organizationId")
-                        .strict_equals(&team_org.field_value())
+                    if !team
+                        .get(&team_org.0)
+                        .unwrap_or(&Value::Undefined)
+                        .strict_equals(&team_org.1)
                     {
                         return Err(AuthError::bad_request("Team not found"));
                     }
@@ -613,20 +601,14 @@ impl EphemeralStore {
             // Bound selectors and identity checks below do not invoke conversion or application callbacks.
             let current = op.capture_state()?;
             validate_common(&current)?;
-            if let Some((team_schema, team_org, _)) = &team_memberships {
+            if let Some((_, team_org, _)) = &team_memberships {
                 for ((_, team_id), lookup) in team_checks.iter().zip(existing_guards) {
                     let team = self
                         .snapshot_table(&current, EntityRole::Team)?
                         .select_refs(|row| {
                             super::organization_rows::matches(
                                 row,
-                                &[
-                                    ("id".into(), team_id.field_value()),
-                                    (
-                                        team_schema.record_storage_key("organizationId").into(),
-                                        team_org.field_value(),
-                                    ),
-                                ],
+                                &[team_id.clone(), team_org.clone()],
                             )
                         })?
                         .into_iter()
@@ -655,8 +637,10 @@ impl EphemeralStore {
                 {
                     let team =
                         prepared.current(self.snapshot_table(&current, EntityRole::Team)?)?;
-                    if !organization_value(&team, team_schema, "organizationId")
-                        .strict_equals(&team_org.field_value())
+                    if !team
+                        .get(&team_org.0)
+                        .unwrap_or(&Value::Undefined)
+                        .strict_equals(&team_org.1)
                     {
                         return Err(AuthError::bad_request("Team not found"));
                     }

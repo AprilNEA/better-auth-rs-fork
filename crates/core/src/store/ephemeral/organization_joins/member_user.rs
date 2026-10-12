@@ -2,21 +2,17 @@ use super::*;
 
 fn selected_users(
     op: &super::super::operation::MemoryOperation<'_>,
-    fields: (&str, &str),
+    field: &str,
     value: &Value,
 ) -> AuthResult<Vec<RowRef<FieldMap>>> {
-    op.capture_table(EntityRole::User)?.select_refs(|user| {
-        Ok(user
-            .field(fields.1)?
-            .unwrap_or_default()
-            .strict_equals(value))
-    })
+    op.capture_table(EntityRole::User)?
+        .select_refs(|user| Ok(user.field(field)?.unwrap_or_default().strict_equals(value)))
 }
 
 impl EphemeralStore {
     pub(in crate::store::ephemeral) async fn read_member_user(
         &self,
-        predicate: impl Fn(&Member) -> AuthResult<bool> + Send,
+        selectors: &[(String, Value)],
         require_user: bool,
     ) -> AuthResult<Option<MemberUser>> {
         let fields = self.organization_fields()?.member;
@@ -26,14 +22,10 @@ impl EphemeralStore {
         let limit = self.config.advanced.database.find_many_limit();
         let selected = {
             let join = &join;
-            let fields = &fields;
             self.raw("member", "findOne", move |op| {
-                let selected = op.capture_table(EntityRole::Member)?.select_refs(|row| {
-                    predicate(&super::super::organization_rows::view(
-                        &row.shallow_fields()?,
-                        fields,
-                    )?)
-                })?;
+                let selected = op
+                    .capture_table(EntityRole::Member)?
+                    .select_refs(|row| super::super::organization_rows::matches(row, selectors))?;
                 let (source, users) = if native {
                     let groups = native_relationships(
                         selected.into_iter().map(RecordSource::Live).collect(),
@@ -91,20 +83,16 @@ impl EphemeralStore {
                     Vec::new()
                 } else {
                     let (logical, physical) = join.fallback_target(
-                        (EntityRole::User, "user", &self.config.user),
+                        (EntityRole::User, "user", &self.user_schema()),
                         &self.model_fields,
                     )?;
-                    let value = if logical == "id" {
-                        self.memory_primary_id_query(&value)?
-                    } else {
-                        self.memory_field_query(&self.user_schema(), &logical, value)?
-                    };
+                    let value = self.memory_field_query(&self.user_schema(), &logical, value)?;
                     self.raw(
                         "user",
                         if join.many { "findMany" } else { "findOne" },
                         |op| {
                             Ok(crate::query::paginate_memory(
-                                selected_users(op, (&logical, &physical), &value)?,
+                                selected_users(op, &physical, &value)?,
                                 Some(if join.many { limit } else { 1.0 }),
                                 None,
                             ))

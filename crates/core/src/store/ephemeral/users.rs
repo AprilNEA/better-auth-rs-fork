@@ -4,7 +4,6 @@ use super::*;
 use crate::id::AdapterIdInput;
 use crate::store::database_hooks::{DatabaseHookControl, PreparedRecordWrite};
 use crate::store::schema::EntityRole;
-use crate::store::schema::resolve_field_name;
 
 impl EphemeralStore {
     pub(super) async fn user_ref_by_email(
@@ -20,8 +19,8 @@ impl EphemeralStore {
         name: &str,
         value: &Value,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        self.model_fields.begin_id_query(EntityRole::User)?;
-        let (physical, value) = self.user_field_selector(name, value)?;
+        let (physical, value) =
+            self.memory_query_field(EntityRole::User, &self.user_schema(), name, value.clone())?;
         self.user_ref(|user| {
             Ok(crate::query::field_matches_equality(
                 &user.field(&physical)?.unwrap_or_default(),
@@ -31,36 +30,10 @@ impl EphemeralStore {
         .await
     }
 
-    pub(super) fn user_field_selector(
-        &self,
-        name: &str,
-        value: &Value,
-    ) -> AuthResult<(String, Value)> {
-        let schema = self.user_schema();
-        let (logical, field) = schema
-            .fields()
-            .get_key_value(name)
-            .or_else(|| {
-                schema
-                    .fields()
-                    .iter()
-                    .find(|(_, field)| field.field_name.as_deref() == Some(name))
-            })
-            .ok_or_else(|| AuthError::config(format!("User field {name} does not exist")))?;
-        let value = if logical == "id" {
-            self.memory_primary_id_query(value)?
-        } else {
-            self.memory_field_query(&schema, logical, value.clone())?
-        };
-        let physical = resolve_field_name(field.field_name.as_deref(), logical);
-        Ok((physical.to_owned(), value))
-    }
-
     pub(super) async fn user_ref(
         &self,
         predicate: impl Fn(&RowRef<FieldMap>) -> AuthResult<bool> + Send,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        self.model_fields.begin_id_query(EntityRole::User)?;
         self.raw("user", "findOne", move |op| {
             Ok(op
                 .capture_table(EntityRole::User)?
@@ -75,8 +48,9 @@ impl EphemeralStore {
         &self,
         id: &Value,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        let id = self.memory_primary_id_query(id)?;
-        self.user_ref(|user| Ok(user.field("id")?.unwrap_or_default().strict_equals(&id)))
+        let (column, id) =
+            self.memory_query_field(EntityRole::User, &self.user_schema(), "id", id.clone())?;
+        self.user_ref(|user| Ok(user.field(&column)?.unwrap_or_default().strict_equals(&id)))
             .await
     }
 
@@ -109,7 +83,6 @@ impl EphemeralStore {
         self.config
             .user
             .user_field_schema_with_plugins(self.model_fields.user_plugin_fields())
-            .adapter_fields(&[])
     }
 
     #[cfg(test)]
@@ -184,8 +157,8 @@ impl EphemeralStore {
         let Some(update) = self.prepare_user_update_optional(update).await? else {
             return Ok(std::ops::ControlFlow::Break(()));
         };
-        self.model_fields.canonicalize_id(EntityRole::User)?;
-        let (physical, value) = self.user_field_selector(field, value)?;
+        let (physical, value) =
+            self.memory_query_field(EntityRole::User, &self.user_schema(), field, value.clone())?;
         let update = self.prepare_user_update_fields(update).await?;
         self.finish_user_update(&physical, &value, update)
             .await
@@ -319,8 +292,12 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         ids: &[Value],
         limit: f64,
     ) -> AuthResult<Vec<UserView>> {
-        self.model_fields.begin_id_query(EntityRole::User)?;
-        let bound = self.memory_primary_id_query(&ids.to_vec().into())?;
+        let (column, bound) = self.memory_query_field(
+            EntityRole::User,
+            &self.user_schema(),
+            "id",
+            ids.to_vec().into(),
+        )?;
         let ids = bound
             .as_array()
             .ok_or_else(|| AuthError::internal("Native ID batch query lost its array shape"))?;
@@ -328,7 +305,7 @@ impl UserStore<StatelessSchema> for EphemeralStore {
             .raw("user", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
                     op.capture_table(EntityRole::User)?.select_refs(|user| {
-                        let actual = user.field("id")?.unwrap_or_default();
+                        let actual = user.field(&column)?.unwrap_or_default();
                         ids.includes(&actual)
                     })?,
                     Some(limit),
@@ -441,15 +418,15 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         }
         self.delete_user_accounts_with_hooks(id).await?;
         let snapshot: AuthResult<Option<UserView>> = async {
-            self.model_fields.begin_id_query(EntityRole::User)?;
-            let stored_id = self.memory_primary_id_query(id)?;
+            let (column, stored_id) =
+                self.memory_query_field(EntityRole::User, &self.user_schema(), "id", id.clone())?;
             let user = self
                 .raw("user", "findMany", |op| {
                     Ok(op
                         .capture_table(EntityRole::User)?
                         .select_refs(|user| {
                             Ok(crate::query::field_matches_equality(
-                                &user.field("id")?.unwrap_or_default(),
+                                &user.field(&column)?.unwrap_or_default(),
                                 &stored_id,
                             ))
                         })?
@@ -485,13 +462,13 @@ impl UserStore<StatelessSchema> for EphemeralStore {
             }
         }
         crate::store::database_hooks::await_adapter_lookup().await;
-        self.model_fields.begin_id_query(EntityRole::User)?;
-        let stored_id = self.memory_primary_id_query(id)?;
+        let (column, stored_id) =
+            self.memory_query_field(EntityRole::User, &self.user_schema(), "id", id.clone())?;
         self.raw("user", "delete", |op| {
             let table = op.capture_table(EntityRole::User)?;
             let selected = table.select_refs(|user| {
                 Ok(crate::query::field_matches_equality(
-                    &user.field("id")?.unwrap_or_default(),
+                    &user.field(&column)?.unwrap_or_default(),
                     &stored_id,
                 ))
             })?;
@@ -507,37 +484,41 @@ impl UserStore<StatelessSchema> for EphemeralStore {
         let _ = params
             .limit
             .get_or_insert(self.config.advanced.database.find_many_limit());
-        let query = crate::user_query::PreparedUserQuery::for_adapter(
+        let schema = self.user_schema();
+        let bind =
+            |name: &str, value| self.memory_query_field(EntityRole::User, &schema, name, value);
+        let query = crate::user_query::PreparedUserQuery::for_memory_adapter(
             &params,
             &self.config.user,
-            &self.model_fields,
-        )?
-        .bind_memory_filter(|name, value| {
-            if matches!(name, "id" | "_id") {
-                return self.memory_primary_id_query(&value);
-            }
-            self.memory_field_query(&self.user_schema(), name, value)
-        })?;
+            bind,
+        )?;
         let users: Vec<_> = self
             .raw("user", "findMany", |op| {
                 let selected = op.capture_table(EntityRole::User)?.select_refs(|user| {
                     query.matches_memory_fields(|name| Ok(user.field(name)?.unwrap_or_default()))
                 })?;
+                let sort_fields = self
+                    .model_fields
+                    .runtime_fields(EntityRole::User, &schema)?;
                 query
-                    .page_memory(selected, |user, name| {
+                    .page_memory(selected, &sort_fields, |user, name| {
                         Ok(user.field(name)?.unwrap_or_default())
                     })
                     .map(|(users, _)| users)
             })
             .await?;
         let users = self.output_user_refs(users).await?;
-        query.begin_adapter_count(&self.model_fields)?;
+        let count = crate::user_query::PreparedUserQuery::for_memory_adapter(
+            &params,
+            &self.config.user,
+            bind,
+        )?;
         let total = self
             .raw("user", "count", |op| {
                 Ok(op
                     .capture_table(EntityRole::User)?
                     .select_refs(|user| {
-                        query
+                        count
                             .matches_memory_fields(|name| Ok(user.field(name)?.unwrap_or_default()))
                     })?
                     .len())

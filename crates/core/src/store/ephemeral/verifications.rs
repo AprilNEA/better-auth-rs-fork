@@ -34,25 +34,6 @@ impl EphemeralStore {
         Ok(self.output_verifications(vec![record]).await?.remove(0))
     }
 
-    pub(super) fn verification_query(
-        &self,
-        name: &str,
-        value: impl Into<Value>,
-    ) -> AuthResult<Value> {
-        self.model_fields.begin_id_query(EntityRole::Verification)?;
-        let schema = self.config.verification.field_schema().adapter_fields(&[]);
-        if !schema.fields().contains_key(name) {
-            return Err(AuthError::config(format!(
-                "Unknown verification field: {name}"
-            )));
-        }
-        if name == "id" {
-            self.memory_primary_id_query(&value.into())
-        } else {
-            self.memory_field_query(&schema, name, value.into())
-        }
-    }
-
     pub(super) async fn verification_storage_fields(
         &self,
         input: FieldMap,
@@ -137,14 +118,19 @@ impl EphemeralStore {
         &self,
         identifier: &str,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        let bound_identifier = self.verification_query("identifier", identifier)?;
+        let (identifier_column, bound_identifier) = self.memory_query_field(
+            EntityRole::Verification,
+            &self.config.verification.field_schema(),
+            "identifier",
+            identifier.into(),
+        )?;
         let records = self
             .raw("verification", "findMany", |op| {
                 let mut records =
                     op.capture_table(EntityRole::Verification)?
                         .select_refs(|row| {
-                            Ok(self
-                                .verification_field(row, "identifier")?
+                            Ok(row
+                                .field(&identifier_column)?
                                 .unwrap_or_default()
                                 .strict_equals(&bound_identifier))
                         })?;
@@ -221,14 +207,19 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         .await;
         // The fallback observes rows left by input, persistence, or output failures.
         if let Err(error) = result {
-            let bound = self.verification_query("id", id)?;
+            let (column, bound) = self.memory_query_field(
+                EntityRole::Verification,
+                &self.config.verification.field_schema(),
+                "id",
+                id.into(),
+            )?;
             let found = self
                 .raw("verification", "findOne", |op| {
                     Ok(op
                         .capture_table(EntityRole::Verification)?
                         .select_refs(|record| {
                             Ok(record
-                                .field("id")?
+                                .field(&column)?
                                 .unwrap_or_default()
                                 .strict_equals(&bound))
                         })?
@@ -296,20 +287,30 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         identifier: &str,
         value: &str,
     ) -> AuthResult<Option<VerificationView>> {
-        let bound_identifier = self.verification_query("identifier", identifier)?;
-        let bound_value = self.verification_query("value", value)?;
+        let (identifier_column, bound_identifier) = self.memory_query_field(
+            EntityRole::Verification,
+            &self.config.verification.field_schema(),
+            "identifier",
+            identifier.into(),
+        )?;
+        let (value_column, bound_value) = self.memory_query_field(
+            EntityRole::Verification,
+            &self.config.verification.field_schema(),
+            "value",
+            value.into(),
+        )?;
         let record = self
             .raw("verification", "findOne", |op| {
                 Ok(op
                     .capture_table(EntityRole::Verification)?
                     .select_refs(|row| {
                         crate::memory_query::matches_all(
-                            [("identifier", &bound_identifier), ("value", &bound_value)],
+                            [
+                                (&identifier_column, &bound_identifier),
+                                (&value_column, &bound_value),
+                            ],
                             |(name, value)| {
-                                Ok(self
-                                    .verification_field(row, name)?
-                                    .unwrap_or_default()
-                                    .strict_equals(value))
+                                Ok(row.field(name)?.unwrap_or_default().strict_equals(value))
                             },
                         )
                     })?
@@ -324,14 +325,19 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         .transpose()
     }
     async fn get_verification_by_value(&self, value: &str) -> AuthResult<Option<VerificationView>> {
-        let bound_value = self.verification_query("value", value)?;
+        let (value_column, bound_value) = self.memory_query_field(
+            EntityRole::Verification,
+            &self.config.verification.field_schema(),
+            "value",
+            value.into(),
+        )?;
         let record = self
             .raw("verification", "findOne", |op| {
                 Ok(op
                     .capture_table(EntityRole::Verification)?
                     .select_refs(|row| {
-                        Ok(self
-                            .verification_field(row, "value")?
+                        Ok(row
+                            .field(&value_column)?
                             .unwrap_or_default()
                             .strict_equals(&bound_value))
                     })?
@@ -349,14 +355,19 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         &self,
         identifier: &str,
     ) -> AuthResult<Option<VerificationView>> {
-        let bound_identifier = self.verification_query("identifier", identifier)?;
+        let (identifier_column, bound_identifier) = self.memory_query_field(
+            EntityRole::Verification,
+            &self.config.verification.field_schema(),
+            "identifier",
+            identifier.into(),
+        )?;
         let record = self
             .raw("verification", "findOne", |op| {
                 Ok(op
                     .capture_table(EntityRole::Verification)?
                     .select_refs(|row| {
-                        Ok(self
-                            .verification_field(row, "identifier")?
+                        Ok(row
+                            .field(&identifier_column)?
                             .unwrap_or_default()
                             .strict_equals(&bound_identifier))
                     })?
@@ -398,14 +409,21 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         Ok(())
     }
     async fn delete_verification_by_identifier(&self, identifier: &str) -> AuthResult<()> {
-        let bound_identifier = self.verification_query("identifier", identifier)?;
         let _ = self
             .delete_verifications_with_hooks(
-                |row| {
-                    Ok(self
-                        .verification_field(row, "identifier")?
-                        .unwrap_or_default()
-                        .strict_equals(&bound_identifier))
+                || {
+                    let (column, value) = self.memory_query_field(
+                        EntityRole::Verification,
+                        &self.config.verification.field_schema(),
+                        "identifier",
+                        identifier.into(),
+                    )?;
+                    Ok(move |row: &RowRef<FieldMap>| {
+                        Ok(row
+                            .field(&column)?
+                            .unwrap_or_default()
+                            .strict_equals(&value))
+                    })
                 },
                 false,
             )
@@ -413,34 +431,48 @@ impl VerificationStore<StatelessSchema> for EphemeralStore {
         Ok(())
     }
     async fn delete_verification(&self, id: &str) -> AuthResult<()> {
-        let id = self.verification_query("id", id)?;
+        let bind = || {
+            let (column, value) = self.memory_query_field(
+                EntityRole::Verification,
+                &self.config.verification.field_schema(),
+                "id",
+                id.into(),
+            )?;
+            Ok(move |row: &RowRef<FieldMap>| {
+                Ok(row
+                    .field(&column)?
+                    .unwrap_or_default()
+                    .strict_equals(&value))
+            })
+        };
+        let predicate = bind()?;
         let rows = self
             .raw("verification", "findOne", |op| {
                 Ok(op
                     .capture_table(EntityRole::Verification)?
-                    .select_refs(|row| Ok(row.field("id")?.unwrap_or_default().strict_equals(&id)))?
+                    .select_refs(predicate)?
                     .into_iter()
                     .next()
                     .into_iter()
                     .collect())
             })
             .await?;
-        let _ = self
-            .finish_verification_delete(
-                rows,
-                |row| Ok(row.field("id")?.unwrap_or_default().strict_equals(&id)),
-                false,
-            )
-            .await?;
+        let _ = self.finish_verification_delete(rows, bind, false).await?;
         Ok(())
     }
     async fn delete_expired_verifications(&self) -> AuthResult<usize> {
-        let now = self.verification_query("expiresAt", Value::Date(Utc::now().into()))?;
+        let now = Value::Date(Utc::now().into());
         self.delete_verifications_with_hooks(
-            |row| {
-                crate::memory_query::matches_all(["expiresAt"], |name| {
+            || {
+                let (column, now) = self.memory_query_field(
+                    EntityRole::Verification,
+                    &self.config.verification.field_schema(),
+                    "expiresAt",
+                    now.clone(),
+                )?;
+                Ok(move |row: &RowRef<FieldMap>| {
                     crate::memory_query::matches(
-                        self.verification_field(row, name)?.as_ref(),
+                        row.field(&column)?.as_ref(),
                         &now,
                         crate::WhereOperator::Lt,
                         crate::WhereMode::Sensitive,

@@ -56,7 +56,7 @@ impl EphemeralStore {
         (selector, value): (&str, Value),
     ) -> AuthResult<Vec<(FieldMap, JoinValue<FieldMap>)>> {
         let fields = self.field_config(parent.role)?;
-        let value = self.organization_query(parent.role, selector, value)?;
+        let selector = self.organization_query_field(parent.role, selector, value)?;
         let child_fields = self.field_config(EntityRole::Organization)?;
         let runtime = self.model_fields.organization_join_schema();
         let relation = ResolvedJoin::resolve(
@@ -69,13 +69,7 @@ impl EphemeralStore {
         let native = self.config.advanced.database.joins == Some(true);
         let (sources, children) = self
             .raw(parent.name, "findMany", |op| {
-                let rows = self.select_organization_rows(
-                    parent.role,
-                    &[(
-                        fields.record_storage_key(selector).into(),
-                        value.field_value(),
-                    )],
-                )?;
+                let rows = self.select_organization_rows(parent.role, &[selector])?;
                 if !native {
                     let sources = crate::query::paginate_memory(rows, Some(limit), None)
                         .into_iter()
@@ -147,11 +141,8 @@ impl EphemeralStore {
                                     (EntityRole::Organization, "organization", child_fields),
                                     runtime,
                                 )?;
-                                let value = store.organization_query(
-                                    EntityRole::Organization,
-                                    &logical,
-                                    value,
-                                )?;
+                                let value =
+                                    store.memory_field_query(child_fields, &logical, value)?;
                                 store
                                     .raw(
                                         "organization",
@@ -159,7 +150,7 @@ impl EphemeralStore {
                                         |_| {
                                             let rows = store.select_organization_rows(
                                                 EntityRole::Organization,
-                                                &[(physical.clone(), value.field_value())],
+                                                &[(physical, value)],
                                             )?;
                                             Ok(if relation.many {
                                                 crate::query::paginate_memory(

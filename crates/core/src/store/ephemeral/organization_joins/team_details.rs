@@ -10,10 +10,10 @@ impl EphemeralStore {
         pending: &[(RowRef<FieldMap>, FieldMap)],
     ) -> AuthResult<Option<TeamDetails>> {
         let team_fields = self.field_config(EntityRole::Team)?;
-        let team_id = self.organization_query(EntityRole::Team, "id", team_id.clone())?;
+        let team_id = self.organization_query_field(EntityRole::Team, "id", team_id.clone())?;
         let organization_id = organization_id
             .filter(|id| id.is_truthy())
-            .map(|id| self.organization_query(EntityRole::Team, "organizationId", id.clone()))
+            .map(|id| self.organization_query_field(EntityRole::Team, "organizationId", id.clone()))
             .transpose()?;
         let member_fields = self.field_config(EntityRole::TeamMember)?;
         let runtime = self.model_fields.organization_join_schema();
@@ -37,12 +37,9 @@ impl EphemeralStore {
                     for (_, patch) in pending.iter().filter(|(source, _)| source.same_row(row)) {
                         source = source.with_patch(patch.clone());
                     }
-                    let mut selectors = vec![("id", team_id.field_value())];
+                    let mut selectors = vec![team_id.clone()];
                     if let Some(id) = &organization_id {
-                        selectors.push((
-                            team_fields.record_storage_key("organizationId"),
-                            id.field_value(),
-                        ));
+                        selectors.push(id.clone());
                     }
                     crate::memory_query::matches_all(selectors.iter(), |(name, expected)| {
                         Ok(crate::query::field_matches_equality(
@@ -115,14 +112,14 @@ impl EphemeralStore {
                         (EntityRole::TeamMember, "teamMember", &member_fields),
                         &runtime,
                     )?;
-                    let value = self.organization_query(EntityRole::TeamMember, &logical, value)?;
+                    let value = self.memory_field_query(&member_fields, &logical, value)?;
                     self.raw(
                         "teamMember",
                         if relation.many { "findMany" } else { "findOne" },
                         |_| {
                             let rows = self.select_organization_rows(
                                 EntityRole::TeamMember,
-                                &[(physical.clone(), value.field_value())],
+                                &[(physical, value)],
                             )?;
                             Ok(if relation.many {
                                 crate::query::paginate_memory(rows, Some(limit), None)

@@ -49,7 +49,7 @@ impl EphemeralStore {
                 let (logical, physical) = relation
                     .join
                     .fallback_target((relation.role, relation.model, &relation.fields), runtime)?;
-                let value = self.organization_query(relation.role, &logical, value)?;
+                let value = self.memory_field_query(&relation.fields, &logical, value)?;
                 self.raw(
                     relation.model,
                     if relation.join.many {
@@ -58,10 +58,8 @@ impl EphemeralStore {
                         "findOne"
                     },
                     |_| {
-                        let rows = self.select_organization_rows(
-                            relation.role,
-                            &[(physical.clone(), value.field_value())],
-                        )?;
+                        let rows =
+                            self.select_organization_rows(relation.role, &[(physical, value)])?;
                         Ok(if relation.join.many {
                             crate::query::paginate_memory(rows, Some(relation.limit), None)
                         } else {
@@ -103,7 +101,7 @@ impl EphemeralStore {
             OrganizationKey::IdValue(id) => ("id", id.clone()),
             OrganizationKey::Slug(slug) => ("slug", Value::from(slug)),
         };
-        let value = self.organization_query(EntityRole::Organization, field, value)?;
+        let selector = self.organization_query_field(EntityRole::Organization, field, value)?;
         let runtime = self.model_fields.organization_join_schema();
         let default_limit = self.config.advanced.database.find_many_limit();
         let relation = |role, model, limit| -> AuthResult<DetailRelation> {
@@ -135,10 +133,8 @@ impl EphemeralStore {
         let native = self.config.advanced.database.joins == Some(true);
         let selected = self
             .raw("organization", "findOne", |op| {
-                let parents = self.select_organization_rows(
-                    EntityRole::Organization,
-                    &[(fields.record_storage_key(field).into(), value.field_value())],
-                )?;
+                let parents =
+                    self.select_organization_rows(EntityRole::Organization, &[selector])?;
                 let Some(first) = parents.first() else {
                     return Ok(None);
                 };
@@ -233,15 +229,18 @@ impl EphemeralStore {
         let users = if owners.is_empty() {
             Vec::new()
         } else {
-            self.model_fields.begin_id_query(EntityRole::User)?;
-            let owners = self
-                .memory_primary_id_query(&owners.into())?
-                .decode::<Vec<Value>>()?;
+            let (column, owners) = self.memory_query_field(
+                EntityRole::User,
+                &self.user_schema(),
+                "id",
+                owners.into(),
+            )?;
+            let owners = owners.decode::<Vec<Value>>()?;
             let rows = self
                 .raw("user", "findMany", |op| {
                     Ok(crate::query::paginate_memory(
                         op.capture_table(EntityRole::User)?.select_refs(|user| {
-                            let id = user.field("id")?.unwrap_or_default();
+                            let id = user.field(&column)?.unwrap_or_default();
                             Ok(owners.iter().any(|owner| id.same_value_zero(owner)))
                         })?,
                         Some(query.users_limit),

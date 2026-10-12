@@ -6,6 +6,7 @@ use serde_json::{Value as JsonValue, json};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod core_query_alias_tests;
 mod plugin_credentials;
 mod session_creates;
 mod session_undefined_alias;

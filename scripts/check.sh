@@ -329,6 +329,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-team-delete-context.test.ts \
         ./compat-tests/reference-server/contracts/organization-physical-fields.test.ts \
         ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
+        ./compat-tests/reference-server/contracts/core-query-id-alias.test.ts \
         ./compat-tests/reference-server/contracts/plugin-model-fields.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-input.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-output.test.ts \

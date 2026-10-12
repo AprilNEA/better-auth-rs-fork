@@ -6,18 +6,7 @@ use crate::store::schema::EntityRole;
 use crate::{AuthError, AuthResult, FieldMap, FieldValue, SchemaValue};
 
 fn model(role: EntityRole) -> AuthResult<&'static str> {
-    match role {
-        EntityRole::ApiKey => Ok("apikey"),
-        EntityRole::Passkey => Ok("passkey"),
-        EntityRole::DeviceCode => Ok("deviceCode"),
-        EntityRole::TwoFactor => Ok("twoFactor"),
-        EntityRole::Jwk => Ok("jwks"),
-        EntityRole::WalletAddress => Ok("walletAddress"),
-        EntityRole::RateLimit => Ok("rateLimit"),
-        _ => Err(AuthError::config(format!(
-            "Plugin record storage is not implemented for {role:?}"
-        ))),
-    }
+    crate::plugin_runtime::ModelFields::native_model_name(role)
 }
 
 impl EphemeralStore {
@@ -37,38 +26,7 @@ impl EphemeralStore {
         name: &str,
         value: FieldValue,
     ) -> AuthResult<(String, FieldValue)> {
-        let fields = self.model_fields.plugin_fields(role);
-        let fields = self.model_fields.runtime_fields(role, &fields)?;
-        let name = if name == "_id" { "id" } else { name };
-        let model = model(role)?;
-        let (logical, physical) = if name == "id" {
-            (
-                "id",
-                crate::store::schema::resolve_field_name(
-                    fields
-                        .fields()
-                        .get("id")
-                        .and_then(|field| field.field_name.as_deref()),
-                    "id",
-                ),
-            )
-        } else {
-            let (logical, field) =
-                crate::user_query::declared_field(name, &fields).ok_or_else(|| {
-                    AuthError::config(format!("Field {name} not found in model {model}"))
-                })?;
-            (
-                logical,
-                crate::store::schema::resolve_field_name(field.field_name.as_deref(), logical),
-            )
-        };
-        self.model_fields.begin_id_query(role)?;
-        let value = if logical == "id" {
-            self.memory_primary_id_query(&value)?
-        } else {
-            self.memory_field_query(&fields, logical, value)?
-        };
-        Ok((physical.to_owned(), value))
+        self.memory_query_field(role, &self.model_fields.plugin_fields(role), name, value)
     }
 
     pub(super) async fn project_plugin_refs(

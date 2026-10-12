@@ -50,6 +50,7 @@ fn count_compare(
 /// Prepared callbacks cannot be replayed when another writer changes the seat calculation.
 pub(super) struct PreparedTeamSeats {
     source: RowRef<FieldMap>,
+    selector: (String, Value),
     count: Option<Value>,
     column: String,
     actual: usize,
@@ -83,7 +84,12 @@ impl PreparedTeamSeats {
     }
 
     pub(super) fn current(&self, teams: &TableRef<FieldMap>) -> AuthResult<FieldMap> {
-        if !teams.contains_ref(&self.source)? {
+        if !teams.contains_ref(&self.source)?
+            || !super::organization_rows::matches(
+                &self.source,
+                std::slice::from_ref(&self.selector),
+            )?
+        {
             return Err(AuthError::conflict(
                 "Team changed while field transforms were pending",
             ));
@@ -133,16 +139,9 @@ impl EphemeralStore {
         &self,
         values: Vec<(&str, Value)>,
     ) -> AuthResult<Vec<(String, Value)>> {
-        let schema = self.field_config(EntityRole::TeamMember)?;
         values
             .into_iter()
-            .map(|(name, value)| {
-                Ok((
-                    schema.record_storage_key(name).to_owned(),
-                    self.organization_query(EntityRole::TeamMember, name, value)?
-                        .field_value(),
-                ))
-            })
+            .map(|(name, value)| self.organization_query_field(EntityRole::TeamMember, name, value))
             .collect()
     }
 
@@ -274,11 +273,10 @@ impl EphemeralStore {
         &self,
         prepared: &mut PreparedTeamSeats,
     ) -> AuthResult<()> {
-        let minimum = self
-            .organization_query(EntityRole::Team, "memberCount", Value::from(1))?
-            .field_value();
+        let (column, minimum) =
+            self.organization_query_field(EntityRole::Team, "memberCount", Value::from(1))?;
         let mut team = prepared.fields()?;
-        if count_compare(&team, &prepared.column, &minimum)?.is_some_and(|order| !order.is_lt()) {
+        if count_compare(&team, &column, &minimum)?.is_some_and(|order| !order.is_lt()) {
             let count = increment_count(&team, &prepared.column, -1.0);
             let _ = team.insert(prepared.column.clone(), count.clone());
             let _ = self.output_team(team).await?;
@@ -302,18 +300,14 @@ impl EphemeralStore {
     pub(super) async fn prepare_team_reservation(
         &self,
         source: RowRef<FieldMap>,
+        selector: (String, Value),
         actual: usize,
         maximum: Option<usize>,
     ) -> AuthResult<PreparedTeamSeats> {
         let mut team = source.shallow_fields()?;
-        let column = self
-            .field_config(EntityRole::Team)?
-            .record_storage_key("memberCount")
-            .to_owned();
+        let (column, actual_count) =
+            self.organization_query_field(EntityRole::Team, "memberCount", Value::from(actual))?;
         let initial_count = team.get(&column).cloned();
-        let actual_count = self
-            .organization_query(EntityRole::Team, "memberCount", Value::from(actual))?
-            .field_value();
         let patch = self
             .prepare_increment_one_patch(
                 EntityRole::Team,
@@ -333,11 +327,14 @@ impl EphemeralStore {
             };
         let reserved = match maximum {
             Some(maximum) => {
-                let bound = self
-                    .organization_query(EntityRole::Team, "memberCount", Value::from(maximum))?
-                    .field_value();
+                let (bound_column, bound) = self.organization_query_field(
+                    EntityRole::Team,
+                    "memberCount",
+                    Value::from(maximum),
+                )?;
                 actual < maximum
-                    && count_compare(&team, &column, &bound)?.is_some_and(|order| order.is_lt())
+                    && count_compare(&team, &bound_column, &bound)?
+                        .is_some_and(|order| order.is_lt())
             }
             None => true,
         };
@@ -351,6 +348,7 @@ impl EphemeralStore {
         };
         Ok(PreparedTeamSeats {
             source,
+            selector,
             count: initial_count,
             column,
             actual,
@@ -368,27 +366,23 @@ impl EphemeralStore {
         if deleted == 0 {
             return Ok(());
         }
-        let team_id = self.organization_query(EntityRole::Team, "id", team_id.clone())?;
-        let minimum =
-            self.organization_query(EntityRole::Team, "memberCount", Value::from(deleted))?;
-        let column = self
-            .field_config(EntityRole::Team)?
-            .record_storage_key("memberCount")
-            .to_owned();
+        let team_id = self.organization_query_field(EntityRole::Team, "id", team_id.clone())?;
+        let (column, minimum) =
+            self.organization_query_field(EntityRole::Team, "memberCount", Value::from(deleted))?;
         let source = self.operation(|op| {
             let selected = op
                 .capture_table(EntityRole::Team)?
                 .select_refs(|row| {
                     crate::memory_query::matches_all([0, 1], |clause| {
                         if clause == 0 {
-                            return Ok(row
-                                .field("id")?
-                                .unwrap_or_default()
-                                .strict_equals(&team_id.field_value()));
+                            return super::organization_rows::matches(
+                                row,
+                                std::slice::from_ref(&team_id),
+                            );
                         }
                         Ok(crate::query::field_compare(
                             &row.field(&column)?.unwrap_or_default(),
-                            &minimum.field_value(),
+                            &minimum,
                         )?
                         .is_some_and(|order| !order.is_lt()))
                     })

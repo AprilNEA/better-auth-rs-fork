@@ -15,18 +15,6 @@ pub(super) fn id(fields: &FieldMap) -> crate::SchemaValue<String> {
     crate::SchemaValue::from_field(fields.get("id").cloned().unwrap_or_default())
 }
 
-pub(super) fn view<T: FromFieldMap>(fields: &FieldMap, schema: &UserConfig) -> AuthResult<T> {
-    let mut logical: FieldMap = schema
-        .fields()
-        .keys()
-        .map(|name| (name.clone(), value(fields, schema, name)))
-        .collect();
-    if let Some(id) = fields.get("id") {
-        let _ = logical.insert("id".into(), id.clone());
-    }
-    T::from_field_values(logical)
-}
-
 pub(super) fn field(row: &RowRef<FieldMap>, schema: &UserConfig, name: &str) -> AuthResult<Value> {
     Ok(row
         .field(schema.record_storage_key(name))?
@@ -40,6 +28,16 @@ pub(super) fn matches(row: &RowRef<FieldMap>, selectors: &[(String, Value)]) -> 
             expected,
         ))
     })
+}
+
+pub(super) fn select_one(
+    table: &TableRef<FieldMap>,
+    selectors: &[(String, Value)],
+) -> AuthResult<Option<RowRef<FieldMap>>> {
+    Ok(table
+        .select_refs(|row| matches(row, selectors))?
+        .into_iter()
+        .next())
 }
 
 /// Organization tables store physical fields. Typed values are read-only business views.

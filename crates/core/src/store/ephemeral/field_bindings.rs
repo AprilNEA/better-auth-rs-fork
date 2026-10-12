@@ -16,39 +16,49 @@ pub(super) fn memory_json_query_value(value: Value, original: &Value) -> AuthRes
 }
 
 impl EphemeralStore {
-    pub(super) fn organization_query(
+    pub(super) fn memory_query_field(
+        &self,
+        role: EntityRole,
+        configured: &UserConfig,
+        name: &str,
+        value: Value,
+    ) -> AuthResult<(String, Value)> {
+        let fields = self.model_fields.runtime_fields(role, configured)?;
+        let name = if name == "_id" { "id" } else { name };
+        let model = crate::plugin_runtime::ModelFields::native_model_name(role)?;
+        let (logical, physical) = if name == "id" {
+            (
+                "id",
+                crate::store::schema::resolve_field_name(
+                    fields
+                        .fields()
+                        .get("id")
+                        .and_then(|field| field.field_name.as_deref()),
+                    "id",
+                ),
+            )
+        } else {
+            let (logical, field) =
+                crate::user_query::declared_field(name, &fields).ok_or_else(|| {
+                    AuthError::config(format!("Field {name} not found in model {model}"))
+                })?;
+            (
+                logical,
+                crate::store::schema::resolve_field_name(field.field_name.as_deref(), logical),
+            )
+        };
+        self.model_fields.begin_id_query(role)?;
+        let value = self.memory_field_query(&fields, logical, value)?;
+        Ok((physical.to_owned(), value))
+    }
+
+    pub(super) fn organization_query_field(
         &self,
         role: EntityRole,
         name: &str,
         value: Value,
-    ) -> AuthResult<crate::SchemaValue<String>> {
-        self.model_fields.begin_id_query(role)?;
-        if matches!(name, "id" | "_id") {
-            return self
-                .memory_primary_id_query(&value)
-                .map(crate::SchemaValue::from_field);
-        }
-        let schema = self
-            .model_fields
-            .runtime_fields(role, &self.field_config(role)?)?;
-        let model = crate::plugin_runtime::ModelFields::native_model_name(role)?;
-        let (logical, _) = crate::user_query::declared_field(name, &schema)
-            .ok_or_else(|| AuthError::config(format!("Field {name} not found in model {model}")))?;
-        let value = if logical == "id" {
-            self.memory_primary_id_query(&value)?
-        } else {
-            self.memory_field_query(&schema, logical, value)?
-        };
-        Ok(crate::SchemaValue::from_field(value))
-    }
-
-    pub(super) fn organization_reference_query(
-        &self,
-        role: EntityRole,
-        name: &str,
-        value: &crate::SchemaValue<String>,
-    ) -> AuthResult<crate::SchemaValue<String>> {
-        self.organization_query(role, name, value.field_value())
+    ) -> AuthResult<(String, Value)> {
+        self.memory_query_field(role, &self.field_config(role)?, name, value)
     }
 
     fn uses_serial_reference(&self, field: &UserFieldConfig) -> bool {
@@ -79,6 +89,9 @@ impl EphemeralStore {
         name: &str,
         value: Value,
     ) -> AuthResult<Value> {
+        if name == "id" {
+            return self.memory_primary_id_query(&value);
+        }
         let field = schema.fields().get(name);
         let original_json = field
             .is_some_and(|field| matches!(field.field_type, UserFieldType::Json))
@@ -116,16 +129,7 @@ impl EphemeralStore {
         name: &str,
         value: Value,
     ) -> AuthResult<(String, Value)> {
-        self.model_fields.begin_id_query(EntityRole::Session)?;
-        let schema = crate::store::session_create_schema(&self.session_config, &FieldMap::new());
-        if !schema.fields().contains_key(name) {
-            return Err(AuthError::config(format!("Unknown session field: {name}")));
-        }
-        let value = if name == "id" {
-            self.memory_primary_id_query(&value)?
-        } else {
-            self.memory_field_query(&schema, name, value)?
-        };
-        Ok((schema.record_storage_key(name).to_owned(), value))
+        let schema = crate::store::session_field_schema(&self.session_config, &FieldMap::new());
+        self.memory_query_field(EntityRole::Session, &schema, name, value)
     }
 }

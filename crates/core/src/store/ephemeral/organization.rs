@@ -29,33 +29,17 @@ impl OrganizationStore for EphemeralStore {
             .remove(0))
     }
     async fn delete_organization_records(&self, id: &str) -> AuthResult<()> {
-        let member_schema = self.field_config(EntityRole::Member)?;
         let member_org =
-            self.organization_query(EntityRole::Member, "organizationId", Value::from(id))?;
-        let _ = self.delete_organization_rows(
-            EntityRole::Member,
-            &[(
-                member_schema.record_storage_key("organizationId").into(),
-                member_org.field_value(),
-            )],
-        )?;
-        let invitation_schema = self.field_config(EntityRole::Invitation)?;
-        let invitation_org =
-            self.organization_query(EntityRole::Invitation, "organizationId", Value::from(id))?;
-        let _ = self.delete_organization_rows(
+            self.organization_query_field(EntityRole::Member, "organizationId", Value::from(id))?;
+        let _ = self.delete_organization_rows(EntityRole::Member, &[member_org])?;
+        let invitation_org = self.organization_query_field(
             EntityRole::Invitation,
-            &[(
-                invitation_schema
-                    .record_storage_key("organizationId")
-                    .into(),
-                invitation_org.field_value(),
-            )],
+            "organizationId",
+            Value::from(id),
         )?;
-        let id = self.organization_query(EntityRole::Organization, "id", Value::from(id))?;
-        let _ = self.delete_organization_rows(
-            EntityRole::Organization,
-            &[("id".into(), id.field_value())],
-        )?;
+        let _ = self.delete_organization_rows(EntityRole::Invitation, &[invitation_org])?;
+        let id = self.organization_query_field(EntityRole::Organization, "id", Value::from(id))?;
+        let _ = self.delete_organization_rows(EntityRole::Organization, &[id])?;
         Ok(())
     }
 
@@ -72,13 +56,12 @@ impl OrganizationStore for EphemeralStore {
         Ok(())
     }
     async fn create_organization(&self, input: CreateOrganization) -> AuthResult<Organization> {
-        let schema = self.field_config(EntityRole::Organization)?;
-        let slug =
-            self.organization_query(EntityRole::Organization, "slug", input.slug.field_value())?;
-        let selector = [(
-            schema.record_storage_key("slug").to_owned(),
-            slug.field_value(),
-        )];
+        let slug = self.organization_query_field(
+            EntityRole::Organization,
+            "slug",
+            input.slug.field_value(),
+        )?;
+        let selector = [slug];
         if !self
             .select_organization_rows(EntityRole::Organization, &selector)?
             .is_empty()
@@ -123,11 +106,9 @@ impl OrganizationStore for EphemeralStore {
         self.get_organization_by_id_value(&Value::from(id)).await
     }
     async fn get_organization_by_id_value(&self, id: &Value) -> AuthResult<Option<Organization>> {
-        let id = self
-            .organization_query(EntityRole::Organization, "id", id.clone())?
-            .field_value();
+        let id = self.organization_query_field(EntityRole::Organization, "id", id.clone())?;
         let row = self
-            .select_organization_rows(EntityRole::Organization, &[("id".into(), id)])?
+            .select_organization_rows(EntityRole::Organization, &[id])?
             .into_iter()
             .next();
         match row {
@@ -146,13 +127,9 @@ impl OrganizationStore for EphemeralStore {
         &self,
         slug: &Value,
     ) -> AuthResult<Option<Organization>> {
-        let schema = self.field_config(EntityRole::Organization)?;
-        let slug = self.organization_query(EntityRole::Organization, "slug", slug.clone())?;
+        let slug = self.organization_query_field(EntityRole::Organization, "slug", slug.clone())?;
         let row = self
-            .select_organization_rows(
-                EntityRole::Organization,
-                &[(schema.record_storage_key("slug").into(), slug.field_value())],
-            )?
+            .select_organization_rows(EntityRole::Organization, &[slug])?
             .into_iter()
             .next();
         match row {
@@ -164,19 +141,23 @@ impl OrganizationStore for EphemeralStore {
         }
     }
     async fn list_organizations_by_ids(&self, ids: &[String]) -> AuthResult<Vec<Organization>> {
-        let ids = ids
-            .iter()
-            .map(|id| {
-                self.organization_query(EntityRole::Organization, "id", Value::from(id.as_str()))
-            })
-            .collect::<AuthResult<Vec<_>>>()?;
+        let (column, ids) = self.organization_query_field(
+            EntityRole::Organization,
+            "id",
+            ids.iter()
+                .map(|id| Value::from(id.as_str()))
+                .collect::<Vec<_>>()
+                .into(),
+        )?;
         let rows = self.operation(|op| {
             op.capture_table(EntityRole::Organization)?
                 .select_refs(|row| {
-                    let actual = row.field("id")?.unwrap_or_default();
-                    Ok(ids
-                        .iter()
-                        .any(|id| id.field_value().same_value_zero(&actual)))
+                    crate::memory_query::matches(
+                        row.field(&column)?.as_ref(),
+                        &ids,
+                        crate::WhereOperator::In,
+                        crate::WhereMode::Sensitive,
+                    )
                 })
         })?;
         self.output_record_refs(EntityRole::Organization, rows)
@@ -195,9 +176,7 @@ impl OrganizationStore for EphemeralStore {
         id: &Value,
         update: UpdateOrganization,
     ) -> AuthResult<Organization> {
-        let id = self
-            .organization_query(EntityRole::Organization, "id", id.clone())?
-            .field_value();
+        let id = self.organization_query_field(EntityRole::Organization, "id", id.clone())?;
         let mut patch = FieldMap::new();
         if let Some(name) = update.name {
             let _ = patch.insert("name".into(), Value::from(name));
@@ -223,7 +202,7 @@ impl OrganizationStore for EphemeralStore {
         let source = self
             .patch_organization_rows(
                 EntityRole::Organization,
-                &[("id".into(), id)],
+                &[id],
                 patch.apply(FieldMap::new()),
                 false,
             )?

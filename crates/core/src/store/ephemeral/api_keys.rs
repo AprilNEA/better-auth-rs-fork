@@ -287,19 +287,28 @@ impl ApiKeyStore for EphemeralStore {
     }
 
     async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
-        self.model_fields.begin_id_query(EntityRole::ApiKey)?;
-        let schema = self.model_fields.plugin_fields(EntityRole::ApiKey);
-        let column = schema.record_storage_key("expiresAt");
+        self.delete_expired_api_keys_with_clock(now).await
+    }
+}
+
+impl EphemeralStore {
+    pub(super) async fn delete_expired_api_keys_with_clock(
+        &self,
+        clock: impl FnOnce() -> FieldDate + Send,
+    ) -> AuthResult<usize> {
         self.raw("apikey", "deleteMany", |op| {
-            let current: FieldValue = now().into();
+            let current =
+                self.plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
+            let absent =
+                self.plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
             let table = op.capture_table(EntityRole::ApiKey)?;
             let selected = table.select_refs(|key| {
                 crate::memory_query::matches_all(
                     [
                         (&current, crate::WhereOperator::Lt),
-                        (&FieldValue::Null, crate::WhereOperator::Ne),
+                        (&absent, crate::WhereOperator::Ne),
                     ],
-                    |(value, operator)| {
+                    |((column, value), operator)| {
                         crate::memory_query::matches(
                             key.field(column)?.as_ref(),
                             value,

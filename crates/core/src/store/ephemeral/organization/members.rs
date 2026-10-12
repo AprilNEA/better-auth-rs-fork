@@ -9,60 +9,30 @@ impl MemberStore for EphemeralStore {
         organization_id: &str,
         user_id: &str,
     ) -> AuthResult<Option<crate::store::MemberUser>> {
-        let organization_id = self.organization_query(
-            EntityRole::Member,
-            "organizationId",
-            Value::from(organization_id),
-        )?;
-        let user_id =
-            self.organization_query(EntityRole::Member, "userId", Value::from(user_id))?;
-        self.read_member_user(
-            |row| {
-                Ok(row
-                    .organization_id
-                    .field_value()
-                    .strict_equals(&organization_id.field_value())
-                    && row
-                        .user_id
-                        .field_value()
-                        .strict_equals(&user_id.field_value()))
-            },
-            false,
-        )
-        .await
+        self.get_member_with_user_value(&organization_id.into(), &user_id.into())
+            .await
     }
     async fn get_member_with_user_value(
         &self,
         organization_id: &Value,
         user_id: &Value,
     ) -> AuthResult<Option<crate::store::MemberUser>> {
-        let organization_id = self.organization_query(
+        let organization_id = self.organization_query_field(
             EntityRole::Member,
             "organizationId",
             organization_id.clone(),
         )?;
-        let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
-        self.read_member_user(
-            |row| {
-                Ok(row
-                    .organization_id
-                    .field_value()
-                    .strict_equals(&organization_id.field_value())
-                    && row
-                        .user_id
-                        .field_value()
-                        .strict_equals(&user_id.field_value()))
-            },
-            false,
-        )
-        .await
+        let user_id =
+            self.organization_query_field(EntityRole::Member, "userId", user_id.clone())?;
+        self.read_member_user(&[organization_id, user_id], false)
+            .await
     }
     async fn get_member_by_id_with_user(
         &self,
         id: &str,
     ) -> AuthResult<Option<crate::store::MemberUser>> {
-        let id = self.organization_query(EntityRole::Member, "id", Value::from(id))?;
-        self.read_member_user(|row| Ok(row.id == id), true).await
+        let id = self.organization_query_field(EntityRole::Member, "id", Value::from(id))?;
+        self.read_member_user(&[id], true).await
     }
 
     async fn insert_member(&self, mut record: Member) -> AuthResult<Member> {
@@ -113,29 +83,17 @@ impl MemberStore for EphemeralStore {
         organization_id: &Value,
         user_id: &Value,
     ) -> AuthResult<Option<Member>> {
-        let organization_id = self.organization_query(
+        let organization_id = self.organization_query_field(
             EntityRole::Member,
             "organizationId",
             organization_id.clone(),
         )?;
-        let user_id = self.organization_query(EntityRole::Member, "userId", user_id.clone())?;
-        let schema = self.field_config(EntityRole::Member)?;
+        let user_id =
+            self.organization_query_field(EntityRole::Member, "userId", user_id.clone())?;
         let selected = self
             .raw("member", "findOne", |_| {
                 Ok(self
-                    .select_organization_rows(
-                        EntityRole::Member,
-                        &[
-                            (
-                                schema.record_storage_key("organizationId").into(),
-                                organization_id.field_value(),
-                            ),
-                            (
-                                schema.record_storage_key("userId").into(),
-                                user_id.field_value(),
-                            ),
-                        ],
-                    )?
+                    .select_organization_rows(EntityRole::Member, &[organization_id, user_id])?
                     .into_iter()
                     .next())
             })
@@ -146,14 +104,11 @@ impl MemberStore for EphemeralStore {
             .pop())
     }
     async fn get_member_by_id(&self, id: &str) -> AuthResult<Option<Member>> {
-        let id = self.organization_query(EntityRole::Member, "id", Value::from(id))?;
+        let id = self.organization_query_field(EntityRole::Member, "id", Value::from(id))?;
         let selected = self
             .raw("member", "findOne", |_| {
                 Ok(self
-                    .select_organization_rows(
-                        EntityRole::Member,
-                        &[("id".into(), id.field_value())],
-                    )?
+                    .select_organization_rows(EntityRole::Member, &[id])?
                     .into_iter()
                     .next())
             })
@@ -176,7 +131,7 @@ impl MemberStore for EphemeralStore {
         id: &Value,
         role: &str,
     ) -> AuthResult<Option<Member>> {
-        let id = self.organization_query(EntityRole::Member, "id", id.clone())?;
+        let id = self.organization_query_field(EntityRole::Member, "id", id.clone())?;
         let patch = self
             .prepare_record_patch(
                 EntityRole::Member,
@@ -188,7 +143,7 @@ impl MemberStore for EphemeralStore {
             .raw("member", "update", |_| {
                 self.patch_organization_rows(
                     EntityRole::Member,
-                    &[("id".into(), id.field_value())],
+                    &[id],
                     patch.apply(FieldMap::new()),
                     false,
                 )
@@ -242,17 +197,11 @@ impl MemberStore for EphemeralStore {
             .await
     }
     async fn list_organization_members_value(&self, org: &Value) -> AuthResult<Vec<Member>> {
-        let org = self.organization_query(EntityRole::Member, "organizationId", org.clone())?;
-        let schema = self.field_config(EntityRole::Member)?;
+        let org =
+            self.organization_query_field(EntityRole::Member, "organizationId", org.clone())?;
         let rows = self
             .raw("member", "findMany", |_| {
-                self.select_organization_rows(
-                    EntityRole::Member,
-                    &[(
-                        schema.record_storage_key("organizationId").into(),
-                        org.field_value(),
-                    )],
-                )
+                self.select_organization_rows(EntityRole::Member, &[org])
             })
             .await?;
         self.output_record_refs(EntityRole::Member, rows).await
@@ -273,53 +222,34 @@ impl MemberStore for EphemeralStore {
         .await
     }
     async fn count_organization_members(&self, org: &str) -> AuthResult<i64> {
-        let schema = self.field_config(EntityRole::Member)?;
         let org =
-            self.organization_query(EntityRole::Member, "organizationId", Value::from(org))?;
+            self.organization_query_field(EntityRole::Member, "organizationId", Value::from(org))?;
         Ok(self
-            .select_organization_rows(
-                EntityRole::Member,
-                &[(
-                    schema.record_storage_key("organizationId").into(),
-                    org.field_value(),
-                )],
-            )?
+            .select_organization_rows(EntityRole::Member, &[org])?
             .len() as i64)
     }
 
     async fn count_organization_members_value(&self, org: &Value) -> AuthResult<i64> {
-        let schema = self.field_config(EntityRole::Member)?;
-        let org = self.organization_query(EntityRole::Member, "organizationId", org.clone())?;
+        let org =
+            self.organization_query_field(EntityRole::Member, "organizationId", org.clone())?;
         Ok(self
-            .select_organization_rows(
-                EntityRole::Member,
-                &[(
-                    schema.record_storage_key("organizationId").into(),
-                    org.field_value(),
-                )],
-            )?
+            .select_organization_rows(EntityRole::Member, &[org])?
             .len() as i64)
     }
 
     async fn count_organization_owners(&self, org: &str) -> AuthResult<i64> {
         let schema = self.field_config(EntityRole::Member)?;
         let org =
-            self.organization_query(EntityRole::Member, "organizationId", Value::from(org))?;
+            self.organization_query_field(EntityRole::Member, "organizationId", Value::from(org))?;
         self.operation(|_| {
-            self.select_organization_rows(
-                EntityRole::Member,
-                &[(
-                    schema.record_storage_key("organizationId").into(),
-                    org.field_value(),
-                )],
-            )?
-            .iter()
-            .try_fold(0, |count, member| {
-                let role = crate::SchemaValue::<String>::from_field(
-                    super::super::organization_rows::field(member, &schema, "role")?,
-                );
-                Ok(count + i64::from(role.typed()?.split(',').any(|role| role == "owner")))
-            })
+            self.select_organization_rows(EntityRole::Member, &[org])?
+                .iter()
+                .try_fold(0, |count, member| {
+                    let role = crate::SchemaValue::<String>::from_field(
+                        super::super::organization_rows::field(member, &schema, "role")?,
+                    );
+                    Ok(count + i64::from(role.typed()?.split(',').any(|role| role == "owner")))
+                })
         })
     }
 }

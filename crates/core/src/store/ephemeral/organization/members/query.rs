@@ -18,7 +18,7 @@ fn declared_field<'a>(schema: &'a UserConfig, field: &str) -> AuthResult<&'a str
 
 impl EphemeralStore {
     fn bind_member_query(&self, params: &ListOrganizationMembersParams) -> AuthResult<MemberQuery> {
-        let organization_id = self.organization_query(
+        let (organization_field, organization_id) = self.organization_query_field(
             EntityRole::Member,
             "organizationId",
             params.organization_id.field_value(),
@@ -27,9 +27,9 @@ impl EphemeralStore {
             .model_fields
             .runtime_fields(EntityRole::Member, &self.field_config(EntityRole::Member)?)?;
         let mut clauses = vec![(
-            schema.record_storage_key("organizationId").to_owned(),
+            organization_field,
             crate::WhereOperator::Eq,
-            organization_id.field_value(),
+            organization_id,
         )];
         if let Some(field) = params
             .filter_field
@@ -40,18 +40,9 @@ impl EphemeralStore {
             let operator =
                 crate::query::where_operator(params.filter_operator.as_deref().unwrap_or("eq"));
             crate::query::validate_where_operand(operator, expected)?;
-            let field = declared_field(&schema, field)?;
-            self.model_fields.begin_id_query(EntityRole::Member)?;
-            let expected = if field == "id" {
-                self.memory_primary_id_query(expected)?
-            } else {
-                self.memory_field_query(&schema, field, expected.clone())?
-            };
-            clauses.push((
-                schema.record_storage_key(field).to_owned(),
-                operator,
-                expected,
-            ));
+            let (field, expected) =
+                self.organization_query_field(EntityRole::Member, field, expected.clone())?;
+            clauses.push((field, operator, expected));
         }
         Ok(MemberQuery { schema, clauses })
     }
@@ -93,9 +84,15 @@ impl EphemeralStore {
                         crate::memory_sort::sort(&mut members, descending, |member| {
                             // The Memory adapter resolves sort fields only when its comparator runs.
                             let field = declared_field(&query.schema, field)?;
-                            Ok(member
-                                .field(query.schema.record_storage_key(field))?
-                                .unwrap_or_default())
+                            let column = crate::store::schema::resolve_field_name(
+                                query
+                                    .schema
+                                    .fields()
+                                    .get(field)
+                                    .and_then(|field| field.field_name.as_deref()),
+                                field,
+                            );
+                            Ok(member.field(column)?.unwrap_or_default())
                         })?;
                     }
                     Ok(crate::query::paginate_memory(

@@ -21,7 +21,8 @@ impl EphemeralStore {
     pub(super) async fn joined_user_teams(&self, user_id: &Value) -> AuthResult<Vec<crate::Team>> {
         let member_schema = self.field_config(EntityRole::TeamMember)?;
         let team_schema = self.field_config(EntityRole::Team)?;
-        let user_id = self.organization_query(EntityRole::TeamMember, "userId", user_id.clone())?;
+        let user_id =
+            self.organization_query_field(EntityRole::TeamMember, "userId", user_id.clone())?;
         let runtime = self.model_fields.organization_join_schema();
         let join = crate::store::ResolvedJoin::resolve(
             (EntityRole::TeamMember, "teamMember", &member_schema),
@@ -34,10 +35,7 @@ impl EphemeralStore {
             let rows = op
                 .capture_table(EntityRole::TeamMember)?
                 .select_refs(|row| {
-                    Ok(
-                        super::organization_rows::field(row, &member_schema, "userId")?
-                            .strict_equals(&user_id.field_value()),
-                    )
+                    super::organization_rows::matches(row, std::slice::from_ref(&user_id))
                 })?
                 .into_iter()
                 .map(RecordSource::Live)

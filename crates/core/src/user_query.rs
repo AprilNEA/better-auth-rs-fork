@@ -233,7 +233,6 @@ pub fn bind_filter(field: &UserFieldConfig, value: &Value) -> AuthResult<Value> 
 fn additional_filter<'a>(
     params: &ListUsersParams,
     fields: &'a UserConfig,
-    on_field: &mut impl FnMut() -> AuthResult<()>,
 ) -> AuthResult<Option<(&'a str, &'a UserFieldConfig, Value)>> {
     let Some(value) = params.filter_value.as_ref() else {
         return Ok(None);
@@ -248,13 +247,11 @@ fn additional_filter<'a>(
         .filter(|name| !name.is_empty())
         .unwrap_or("email");
     if name == "_id" || UserView::NATIVE_FIELDS.contains(&name) {
-        on_field()?;
         return Ok(None);
     }
     let (logical, field) = declared_field(name, fields).ok_or_else(|| {
         crate::AuthError::internal(format!("Field {name} not found in model user"))
     })?;
-    on_field()?;
     if logical == "_id" || UserView::NATIVE_FIELDS.contains(&logical) {
         return Ok(None);
     }
@@ -387,51 +384,13 @@ pub struct PreparedUserQuery<'a> {
     params: &'a ListUsersParams,
     fields: &'a UserConfig,
     filter: Option<(&'a str, &'a UserFieldConfig, Value)>,
-    memory_filter: Option<Value>,
-    memory_search: Option<Value>,
+    memory_filter: Option<(String, Value)>,
+    memory_search: Option<(String, Value)>,
 }
 
 impl<'a> PreparedUserQuery<'a> {
     /// Resolve and bind Where fields without validating the sort declaration.
     pub fn new(params: &'a ListUsersParams, fields: &'a UserConfig) -> AuthResult<Self> {
-        Self::prepare(params, fields, || Ok(()))
-    }
-
-    /// Resolve query fields in Where order and retain each successful lookup in the adapter runtime.
-    #[doc(hidden)]
-    pub fn for_adapter(
-        params: &'a ListUsersParams,
-        fields: &'a UserConfig,
-        runtime: &crate::plugin_runtime::ModelFields,
-    ) -> AuthResult<Self> {
-        Self::prepare(params, fields, || {
-            runtime.begin_id_query(crate::store::schema::EntityRole::User)
-        })
-    }
-
-    /// Restore input policies when an adapter repeats this validated Where query for a count.
-    #[doc(hidden)]
-    pub fn begin_adapter_count(
-        &self,
-        runtime: &crate::plugin_runtime::ModelFields,
-    ) -> AuthResult<()> {
-        if self.params.filter_value.is_some()
-            || self
-                .params
-                .search_value
-                .as_deref()
-                .is_some_and(|value| !value.is_empty())
-        {
-            runtime.begin_id_query(crate::store::schema::EntityRole::User)?;
-        }
-        Ok(())
-    }
-
-    fn prepare(
-        params: &'a ListUsersParams,
-        fields: &'a UserConfig,
-        mut on_field: impl FnMut() -> AuthResult<()>,
-    ) -> AuthResult<Self> {
         if let Some(value) = params
             .search_value
             .as_deref()
@@ -456,9 +415,8 @@ impl<'a> PreparedUserQuery<'a> {
                     "Field {name} not found in model user"
                 )));
             }
-            on_field()?;
         }
-        let filter = additional_filter(params, fields, &mut on_field)?;
+        let filter = additional_filter(params, fields)?;
         Ok(Self {
             params,
             fields,
@@ -468,42 +426,49 @@ impl<'a> PreparedUserQuery<'a> {
         })
     }
 
-    /// Bind Memory search and filter values with the adapter's complete field policy.
-    pub fn bind_memory_filter(
-        mut self,
-        mut bind: impl FnMut(&str, Value) -> AuthResult<Value>,
+    pub(crate) fn for_memory_adapter(
+        params: &'a ListUsersParams,
+        fields: &'a UserConfig,
+        mut bind: impl FnMut(&str, Value) -> AuthResult<(String, Value)>,
     ) -> AuthResult<Self> {
-        if let Some(value) = self
-            .params
+        let mut query = Self {
+            params,
+            fields,
+            filter: None,
+            memory_filter: None,
+            memory_search: None,
+        };
+        if let Some(value) = params
             .search_value
             .as_deref()
             .filter(|value| !value.is_empty())
         {
-            let name = self
-                .params
+            crate::query::validate_where_operand(
+                crate::query::where_operator(
+                    params.search_operator.as_deref().unwrap_or("contains"),
+                ),
+                &Value::from(value),
+            )?;
+            let name = params
                 .search_field
                 .as_deref()
                 .filter(|name| !name.is_empty())
                 .unwrap_or("email");
-            let declared = declared_field(name, self.fields);
-            let name = declared.map_or(name, |(logical, _)| logical);
-            self.memory_search = Some(bind(name, Value::from(value))?);
+            query.memory_search = Some(bind(name, Value::from(value))?);
         }
-        let name = self
-            .params
-            .filter_field
-            .as_deref()
-            .filter(|name| !name.is_empty())
-            .unwrap_or("email");
-        let declared = declared_field(name, self.fields);
-        let name = declared.map_or(name, |(logical, _)| logical);
-        self.memory_filter = self
-            .params
-            .filter_value
-            .clone()
-            .map(|value| bind(name, value))
-            .transpose()?;
-        Ok(self)
+        if let Some(value) = params.filter_value.as_ref() {
+            crate::query::validate_where_operand(
+                crate::query::where_operator(params.filter_operator.as_deref().unwrap_or("eq")),
+                value,
+            )?;
+            let name = params
+                .filter_field
+                .as_deref()
+                .filter(|name| !name.is_empty())
+                .unwrap_or("email");
+            query.memory_filter = Some(bind(name, value.clone())?);
+        }
+        Ok(query)
     }
 
     fn memory_value(
@@ -518,8 +483,12 @@ impl<'a> PreparedUserQuery<'a> {
     }
 
     fn memory_storage_name<'n>(&'n self, name: &'n str) -> &'n str {
+        Self::storage_name(self.fields, name)
+    }
+
+    fn storage_name<'n>(fields: &'n UserConfig, name: &'n str) -> &'n str {
         let name = if name == "_id" { "id" } else { name };
-        declared_field(name, self.fields).map_or(name, |(logical, field)| {
+        declared_field(name, fields).map_or(name, |(logical, field)| {
             resolve_field_name(field.field_name.as_deref(), logical)
         })
     }
@@ -545,33 +514,42 @@ impl<'a> PreparedUserQuery<'a> {
                 .as_deref()
                 .filter(|name| !name.is_empty())
                 .unwrap_or("email");
+            let (field, expected) = self.memory_search.as_ref().map_or(
+                (self.memory_storage_name(field), expected),
+                |(name, value)| (name.as_str(), value),
+            );
             (
                 field,
-                self.memory_search.as_ref().unwrap_or(expected),
+                expected,
                 self.params.search_operator.as_deref().unwrap_or("contains"),
             )
         });
         let filter = self
             .memory_filter
             .as_ref()
+            .map(|(_, value)| value)
             .or_else(|| self.filter.as_ref().map(|(_, _, value)| value))
             .or(self.params.filter_value.as_ref())
             .map(|expected| {
+                let field = self
+                    .params
+                    .filter_field
+                    .as_deref()
+                    .filter(|name| !name.is_empty())
+                    .unwrap_or("email");
+                let field = self.memory_filter.as_ref().map_or_else(
+                    || self.memory_storage_name(field),
+                    |(name, _)| name.as_str(),
+                );
                 (
-                    self.params
-                        .filter_field
-                        .as_deref()
-                        .filter(|name| !name.is_empty())
-                        .unwrap_or("email"),
+                    field,
                     expected,
                     self.params.filter_operator.as_deref().unwrap_or("eq"),
                 )
             });
         crate::memory_query::matches_all(
             search.into_iter().chain(filter),
-            |(name, expected, operator)| {
-                matches_memory_value(&field(self.memory_storage_name(name))?, expected, operator)
-            },
+            |(name, expected, operator)| matches_memory_value(&field(name)?, expected, operator),
         )
     }
 
@@ -599,16 +577,19 @@ impl<'a> PreparedUserQuery<'a> {
                 selected.push(user);
             }
         }
-        self.page_memory(selected, |user, name| self.memory_value(record(user), name))
+        self.page_memory(selected, self.fields, |user, name| {
+            self.memory_value(record(user), name)
+        })
     }
 
     pub(crate) fn page_memory<T>(
         &self,
         mut selected: Vec<T>,
+        fields: &UserConfig,
         field: impl Fn(&T, &str) -> AuthResult<Value>,
     ) -> AuthResult<(Vec<T>, usize)> {
         if selected.len() > 1 {
-            self.validate_sort()?;
+            self.validate_sort_fields(fields)?;
         }
         if let Some(name) = self
             .params
@@ -624,7 +605,7 @@ impl<'a> PreparedUserQuery<'a> {
                 .unwrap_or("asc")
                 != "asc";
             crate::memory_sort::sort(&mut selected, descending, |user| {
-                field(user, self.memory_storage_name(name))
+                field(user, Self::storage_name(fields, name))
             })?;
         }
         let total = selected.len();
@@ -641,6 +622,10 @@ impl<'a> PreparedUserQuery<'a> {
 
     /// Validate a nonempty sort declaration before a SQL adapter executes its query.
     pub fn validate_sort(&self) -> AuthResult<()> {
+        self.validate_sort_fields(self.fields)
+    }
+
+    fn validate_sort_fields(&self, fields: &UserConfig) -> AuthResult<()> {
         if let Some(name) = self
             .params
             .sort_by
@@ -648,7 +633,7 @@ impl<'a> PreparedUserQuery<'a> {
             .filter(|name| !name.is_empty())
             && name != "_id"
             && !UserView::NATIVE_FIELDS.contains(&name)
-            && declared_field(name, self.fields).is_none()
+            && declared_field(name, fields).is_none()
         {
             return Err(crate::AuthError::internal(format!(
                 "Field {name} not found in model user"

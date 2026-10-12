@@ -7,7 +7,7 @@ impl EphemeralStore {
         id: &Value,
         subject: Option<(&Value, &Value)>,
     ) -> AuthResult<()> {
-        let id = self.organization_query(EntityRole::Member, "id", id.clone())?;
+        let id = self.organization_query_field(EntityRole::Member, "id", id.clone())?;
         let (organization_id, user_id) = match subject {
             Some((organization_id, user_id)) if user_id.is_truthy() => (
                 crate::SchemaValue::from_field(organization_id.clone()),
@@ -15,7 +15,14 @@ impl EphemeralStore {
             ),
             Some((organization_id, _)) => {
                 let member = self
-                    .operation(|op| op.capture_table(EntityRole::Member)?.get(&id))?
+                    .operation(|op| {
+                        super::organization_rows::select_one(
+                            &op.capture_table(EntityRole::Member)?,
+                            std::slice::from_ref(&id),
+                        )?
+                        .map(|row| row.shallow_fields())
+                        .transpose()
+                    })?
                     .ok_or_else(|| AuthError::better_auth("Member not found"))?;
                 let member = self.output_member(member).await?;
                 (
@@ -24,8 +31,14 @@ impl EphemeralStore {
                 )
             }
             None => {
-                let Some(member) =
-                    self.operation(|op| op.capture_table(EntityRole::Member)?.get(&id))?
+                let Some(member) = self.operation(|op| {
+                    super::organization_rows::select_one(
+                        &op.capture_table(EntityRole::Member)?,
+                        std::slice::from_ref(&id),
+                    )?
+                    .map(|row| row.shallow_fields())
+                    .transpose()
+                })?
                 else {
                     return Ok(());
                 };
@@ -34,27 +47,27 @@ impl EphemeralStore {
             }
         };
         self.operation(|op| {
-            let mut members = op.capture_table(EntityRole::Member)?;
-            let _ = members.remove(&id)?;
-            op.replace_table(EntityRole::Member, members)
+            let members = op.capture_table(EntityRole::Member)?;
+            let removed =
+                super::organization_rows::select_one(&members, std::slice::from_ref(&id))?;
+            op.replace_table(
+                EntityRole::Member,
+                members.without_refs(&removed.into_iter().collect::<Vec<_>>())?,
+            )
         })?;
         if !self.model_fields.organization_teams_enabled() {
             return Ok(());
         }
-        let organization_id = self.organization_reference_query(
+        let organization_id = self.organization_query_field(
             EntityRole::Team,
             "organizationId",
-            &organization_id,
+            organization_id.field_value(),
         )?;
-        let schema = self.field_config(EntityRole::Team)?;
         let user_id = user_id.field_value();
         let teams = self.operation(|op| {
             op.capture_table(EntityRole::Team)?
                 .select_refs(|row| {
-                    Ok(
-                        super::organization_rows::field(row, &schema, "organizationId")?
-                            .strict_equals(&organization_id.field_value()),
-                    )
+                    super::organization_rows::matches(row, std::slice::from_ref(&organization_id))
                 })?
                 .into_iter()
                 .map(|row| row.shallow_fields())

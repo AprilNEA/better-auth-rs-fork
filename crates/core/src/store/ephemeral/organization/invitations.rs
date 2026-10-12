@@ -41,11 +41,9 @@ impl InvitationStore for EphemeralStore {
         self.get_invitation_by_id_value(&id.into()).await
     }
     async fn get_invitation_by_id_value(&self, id: &Value) -> AuthResult<Option<Invitation>> {
-        let id = self
-            .organization_query(EntityRole::Invitation, "id", id.clone())?
-            .field_value();
+        let id = self.organization_query_field(EntityRole::Invitation, "id", id.clone())?;
         let row = self
-            .select_organization_rows(EntityRole::Invitation, &[("id".into(), id)])?
+            .select_organization_rows(EntityRole::Invitation, &[id])?
             .into_iter()
             .next();
         match row {
@@ -87,9 +85,7 @@ impl InvitationStore for EphemeralStore {
         id: &Value,
         status: InvitationStatus,
     ) -> AuthResult<Option<Invitation>> {
-        let id = self
-            .organization_query(EntityRole::Invitation, "id", id.clone())?
-            .field_value();
+        let id = self.organization_query_field(EntityRole::Invitation, "id", id.clone())?;
         let patch = self
             .prepare_increment_one_patch(
                 EntityRole::Invitation,
@@ -103,7 +99,7 @@ impl InvitationStore for EphemeralStore {
             .raw("invitation", "incrementOne", |_| {
                 self.patch_organization_rows(
                     EntityRole::Invitation,
-                    &[("id".into(), id)],
+                    &[id],
                     patch.apply(FieldMap::new()),
                     true,
                 )
@@ -130,9 +126,7 @@ impl InvitationStore for EphemeralStore {
         id: &Value,
         expires_at: DateTime<Utc>,
     ) -> AuthResult<Invitation> {
-        let id = self
-            .organization_query(EntityRole::Invitation, "id", id.clone())?
-            .field_value();
+        let id = self.organization_query_field(EntityRole::Invitation, "id", id.clone())?;
         let patch = self
             .prepare_record_patch(
                 EntityRole::Invitation,
@@ -145,7 +139,7 @@ impl InvitationStore for EphemeralStore {
         let source = self
             .patch_organization_rows(
                 EntityRole::Invitation,
-                &[("id".into(), id)],
+                &[id],
                 patch.apply(FieldMap::new()),
                 false,
             )?
@@ -163,15 +157,9 @@ impl InvitationStore for EphemeralStore {
         &self,
         org: &Value,
     ) -> AuthResult<Vec<Invitation>> {
-        let org = self.organization_query(EntityRole::Invitation, "organizationId", org.clone())?;
-        let schema = self.field_config(EntityRole::Invitation)?;
-        let rows = self.select_organization_rows(
-            EntityRole::Invitation,
-            &[(
-                schema.record_storage_key("organizationId").into(),
-                org.field_value(),
-            )],
-        )?;
+        let org =
+            self.organization_query_field(EntityRole::Invitation, "organizationId", org.clone())?;
+        let rows = self.select_organization_rows(EntityRole::Invitation, &[org])?;
         let rows = crate::query::paginate_memory(
             rows,
             Some(self.config.advanced.database.find_many_limit()),
@@ -208,15 +196,9 @@ impl EphemeralStore {
             ("organizationId", organization_id.clone()),
             ("status", "pending".into()),
         ]);
-        let schema = self.field_config(EntityRole::Invitation)?;
         selectors
             .into_iter()
-            .map(|(name, value)| {
-                let value = self
-                    .organization_query(EntityRole::Invitation, name, value)?
-                    .field_value();
-                Ok((schema.record_storage_key(name).to_owned(), value))
-            })
+            .map(|(name, value)| self.organization_query_field(EntityRole::Invitation, name, value))
             .collect()
     }
 

@@ -38,6 +38,23 @@ fn stored(store: &EphemeralStore, role: EntityRole) -> AuthResult<FieldMap> {
         .ok_or_else(|| AuthError::internal("Physical fixture row is missing"))
 }
 
+fn fresh_id_alias_store(role: EntityRole, rows: Vec<FieldMap>) -> AuthResult<EphemeralStore> {
+    let store = EphemeralStore::new(test_config());
+    let mut fields = OrganizationFields::default();
+    let _ = model_fields(&mut fields, role)
+        .fields_mut()
+        .insert("id".into(), mapped("lookup"));
+    store.configure_organization_fields(fields)?;
+    store.operation(|op| {
+        let table = op.create_table(role)?;
+        for row in rows {
+            let _ = table.push(row)?;
+        }
+        Ok(())
+    })?;
+    Ok(store)
+}
+
 async fn create(
     store: &EphemeralStore,
     role: EntityRole,
@@ -365,5 +382,211 @@ async fn mapped_updates_preserve_physical_rows_across_transaction_commit_and_rol
     assert_eq!(physical["storedName"], Value::from("accepted"));
     assert_eq!(physical["slug"], before["slug"]);
     assert!(!physical.contains_key("name"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn fresh_organization_id_aliases_select_and_update_the_bound_physical_row() -> AuthResult<()>
+{
+    for (role, primary, _) in MODELS {
+        let baseline = EphemeralStore::new(test_config());
+        let expected = create(&baseline, role, FieldMap::new()).await?;
+        let canonical = expected["id"].decode::<String>()?;
+        let mut selected = stored(&baseline, role)?;
+        let _ = selected.insert("lookup".into(), "requested-alias".into());
+        let mut decoy = selected.clone();
+        let _ = decoy.insert("id".into(), "requested-alias".into());
+        let _ = decoy.insert("lookup".into(), "unrelated-alias".into());
+        let _ = decoy.insert(primary.into(), "decoy".into());
+        let before = vec![selected.clone(), decoy.clone()];
+        let store = fresh_id_alias_store(role, before.clone())?;
+        assert_eq!(read(&store, role, "requested-alias").await?, expected);
+        assert_eq!(read(&store, role, &canonical).await?, expected);
+        assert_eq!(store.storage_rows(role)?, before);
+
+        let store = fresh_id_alias_store(role, before)?;
+        let changed = update(&store, role, "requested-alias").await?;
+        assert_eq!(changed["id"], expected["id"]);
+        assert_eq!(changed[primary], Value::from("accepted"));
+        assert_eq!(read(&store, role, &canonical).await?, changed);
+        let after = store.storage_rows(role)?;
+        assert_eq!(after.len(), 2);
+        assert_eq!(after[1], decoy);
+        assert_eq!(after[0]["id"], selected["id"]);
+        assert_eq!(after[0]["lookup"], selected["lookup"]);
+        assert_eq!(after[0][primary], Value::from("accepted"));
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn organization_id_list_binds_one_alias_for_the_complete_in_operand() -> AuthResult<()> {
+    let baseline = EphemeralStore::new(test_config());
+    let _ = create(&baseline, EntityRole::Organization, FieldMap::new()).await?;
+    let mut first = stored(&baseline, EntityRole::Organization)?;
+    let _ = first.insert("id".into(), "first-id".into());
+    let _ = first.insert("lookup".into(), "first-alias".into());
+    let mut second = first.clone();
+    let _ = second.insert("id".into(), "second-id".into());
+    let _ = second.insert("lookup".into(), "second-alias".into());
+    let store = fresh_id_alias_store(
+        EntityRole::Organization,
+        vec![first.clone(), second.clone()],
+    )?;
+    let selected = store
+        .list_organizations_by_ids(&["first-alias".into(), "second-alias".into()])
+        .await?;
+    assert_eq!(
+        selected
+            .iter()
+            .map(|row| row.id.field_value())
+            .collect::<Vec<_>>(),
+        vec!["first-id".into(), "second-id".into()]
+    );
+    assert_eq!(
+        store.storage_rows(EntityRole::Organization)?,
+        vec![first, second]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_join_retains_the_first_user_id_alias_in_both_join_modes() -> AuthResult<()> {
+    for native in [false, true] {
+        let mut config = (*test_config()).clone();
+        config.advanced.database.joins = Some(native);
+        let _ = config
+            .user
+            .fields_mut()
+            .insert("id".into(), mapped("lookup"));
+        let store = EphemeralStore::new(Arc::new(config));
+        let now = Value::from(Utc::now());
+        let user: FieldMap = [
+            ("id".into(), "canonical-user".into()),
+            ("lookup".into(), "user-alias".into()),
+            ("name".into(), "Alias owner".into()),
+            ("email".into(), "alias@example.com".into()),
+            ("emailVerified".into(), false.into()),
+            ("image".into(), Value::Null),
+            ("createdAt".into(), now.clone()),
+            ("updatedAt".into(), now.clone()),
+        ]
+        .into();
+        let member: FieldMap = [
+            ("id".into(), "member".into()),
+            ("organizationId".into(), "organization".into()),
+            ("userId".into(), "user-alias".into()),
+            ("role".into(), "member".into()),
+            ("createdAt".into(), now),
+        ]
+        .into();
+        store.operation(|op| {
+            let _ = op.create_table(EntityRole::User)?.push(user.clone())?;
+            let _ = op.create_table(EntityRole::Member)?.push(member.clone())?;
+            Ok(())
+        })?;
+        let joined = store
+            .get_member_with_user("organization", "user-alias")
+            .await?
+            .unwrap();
+        assert_eq!(joined.member.field_values()?, member);
+        assert_eq!(joined.user.id, "canonical-user");
+        assert_eq!(joined.user.name, "Alias owner");
+        assert_eq!(store.storage_rows(EntityRole::User)?, vec![user]);
+        assert_eq!(store.storage_rows(EntityRole::Member)?, vec![member]);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn team_alias_change_during_reservation_cannot_commit_a_seat_or_membership() -> AuthResult<()>
+{
+    use crate::user_fields::{FieldTransforms, UserFieldTransform};
+    let baseline = EphemeralStore::new(test_config());
+    let _ = create(&baseline, EntityRole::Team, FieldMap::new()).await?;
+    let mut team = stored(&baseline, EntityRole::Team)?;
+    let _ = team.insert("lookup".into(), "team-alias".into());
+    let store = fresh_id_alias_store(EntityRole::Team, vec![team.clone()])?;
+    let mut fields = store.organization_fields()?;
+    let writer = store.clone();
+    let _ = fields.team.fields_mut().insert(
+        "memberCount".into(),
+        UserFieldConfig {
+            field_type: UserFieldType::Number,
+            transform: Some(FieldTransforms {
+                input: Some(UserFieldTransform::new(move |value| {
+                    writer.operation(|op| {
+                        let row = op
+                            .capture_table(EntityRole::Team)?
+                            .select_refs(|_| Ok(true))?
+                            .remove(0);
+                        row.apply_patch([("lookup".into(), "changed-alias".into())].into())
+                    })?;
+                    Ok(value)
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    store.configure_organization_fields(fields)?;
+    let result = store
+        .add_team_member_value(&"team-alias".into(), &"member".into(), Some(1))
+        .await;
+    assert!(matches!(result, Err(AuthError::Conflict(_))));
+    let _ = team.insert("lookup".into(), "changed-alias".into());
+    assert_eq!(store.storage_rows(EntityRole::Team)?, vec![team]);
+    assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn invitation_alias_change_after_claim_restores_status_without_committing_members()
+-> AuthResult<()> {
+    use crate::user_fields::{FieldTransforms, UserFieldTransform};
+    let baseline = EphemeralStore::new(test_config());
+    let _ = create(&baseline, EntityRole::Invitation, FieldMap::new()).await?;
+    let mut invitation = stored(&baseline, EntityRole::Invitation)?;
+    let _ = invitation.insert("lookup".into(), "invitation-alias".into());
+    let store = fresh_id_alias_store(EntityRole::Invitation, vec![invitation.clone()])?;
+    let mut fields = store.organization_fields()?;
+    let writer = store.clone();
+    let _ = fields.invitation.fields_mut().insert(
+        "status".into(),
+        UserFieldConfig {
+            transform: Some(FieldTransforms {
+                output: Some(UserFieldTransform::new(move |value| {
+                    writer.operation(|op| {
+                        let row = op
+                            .capture_table(EntityRole::Invitation)?
+                            .select_refs(|_| Ok(true))?
+                            .remove(0);
+                        row.apply_patch([("lookup".into(), "changed-alias".into())].into())
+                    })?;
+                    Ok(value)
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    );
+    store.configure_organization_fields(fields)?;
+    let result = store
+        .accept_invitation_with_teams_values(
+            &"invitation-alias".into(),
+            &"recipient".into(),
+            None,
+            false,
+            crate::store::TeamMemberLimits::Fixed(None),
+        )
+        .await;
+    assert!(matches!(result, Err(AuthError::Conflict(_))));
+    let _ = invitation.insert("lookup".into(), "changed-alias".into());
+    assert_eq!(
+        store.storage_rows(EntityRole::Invitation)?,
+        vec![invitation]
+    );
+    assert!(store.storage_rows(EntityRole::Member)?.is_empty());
+    assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
     Ok(())
 }

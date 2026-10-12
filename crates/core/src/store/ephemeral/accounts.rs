@@ -44,19 +44,6 @@ impl EphemeralStore {
             .await
     }
 
-    fn account_field_selector(
-        &self,
-        fields: &crate::user_fields::UserConfig,
-        name: &str,
-        value: Value,
-    ) -> AuthResult<(String, Value)> {
-        if name == "id" {
-            return Ok(("id".into(), self.memory_primary_id_query(&value)?));
-        }
-        let value = self.memory_field_query(fields, name, value)?;
-        Ok((fields.record_storage_key(name).to_owned(), value))
-    }
-
     pub(super) fn account_matches_selectors(
         record: &RowRef<FieldMap>,
         selectors: &[(String, Value)],
@@ -74,11 +61,15 @@ impl EphemeralStore {
         provider: &Value,
         account_id: &Value,
     ) -> AuthResult<[(String, Value); 2]> {
-        self.model_fields.begin_id_query(EntityRole::Account)?;
         let fields = self.config.account.field_schema();
         Ok([
-            self.account_field_selector(&fields, "providerId", provider.clone())?,
-            self.account_field_selector(&fields, "accountId", account_id.clone())?,
+            self.memory_query_field(EntityRole::Account, &fields, "providerId", provider.clone())?,
+            self.memory_query_field(
+                EntityRole::Account,
+                &fields,
+                "accountId",
+                account_id.clone(),
+            )?,
         ])
     }
 
@@ -101,9 +92,9 @@ impl EphemeralStore {
     }
 
     async fn user_account_records(&self, user_id: &Value) -> AuthResult<Vec<RecordSource>> {
-        self.model_fields.begin_id_query(EntityRole::Account)?;
         let fields = self.config.account.field_schema();
-        let selectors = [self.account_field_selector(&fields, "userId", user_id.clone())?];
+        let selectors =
+            [self.memory_query_field(EntityRole::Account, &fields, "userId", user_id.clone())?];
         let records: Vec<_> = self
             .raw("account", "findMany", |op| {
                 Ok(crate::query::paginate_memory(
@@ -244,12 +235,16 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
         &self,
         user_id: &Value,
     ) -> AuthResult<Option<AccountView>> {
-        self.model_fields.begin_id_query(EntityRole::Account)?;
         let fields = self.config.account.field_schema();
         let selectors = [
-            self.account_field_selector(&fields, "userId", user_id.clone())?,
-            self.account_field_selector(&fields, "providerId", "credential".into())?,
-            self.account_field_selector(&fields, "accountId", user_id.clone())?,
+            self.memory_query_field(EntityRole::Account, &fields, "userId", user_id.clone())?,
+            self.memory_query_field(
+                EntityRole::Account,
+                &fields,
+                "providerId",
+                "credential".into(),
+            )?,
+            self.memory_query_field(EntityRole::Account, &fields, "accountId", user_id.clone())?,
         ];
         let record = self
             .raw("account", "findOne", |op| {
@@ -315,8 +310,12 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             }
         }
         crate::store::database_hooks::await_adapter_lookup().await;
-        self.model_fields.begin_id_query(EntityRole::Account)?;
-        let id = self.memory_primary_id_query(id)?;
+        let (column, id) = self.memory_query_field(
+            EntityRole::Account,
+            &self.config.account.field_schema(),
+            "id",
+            id.clone(),
+        )?;
         let patch = self
             .account_storage_fields(prepared.into_fields(), false)
             .await?;
@@ -324,7 +323,7 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             .raw("account", "update", |op| {
                 let records = op.capture_table(EntityRole::Account)?.select_refs(|row| {
                     Ok(crate::query::field_matches_equality(
-                        &row.field("id")?.unwrap_or_default(),
+                        &row.field(&column)?.unwrap_or_default(),
                         &id,
                     ))
                 })?;
@@ -369,11 +368,12 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             }
         }
         crate::store::database_hooks::await_adapter_lookup().await;
-        self.model_fields.begin_id_query(EntityRole::Account)?;
         let fields = self.config.account.field_schema();
         let selectors = selectors
             .iter()
-            .map(|(name, value)| self.account_field_selector(&fields, name, value.clone()))
+            .map(|(name, value)| {
+                self.memory_query_field(EntityRole::Account, &fields, name, value.clone())
+            })
             .collect::<AuthResult<Vec<_>>>()?;
         let patch = self
             .account_storage_fields(prepared.into_fields(), false)
@@ -407,15 +407,19 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
     async fn delete_account_value(&self, id: &Value) -> AuthResult<()> {
         // Upstream single-delete catches the read and output projection before hooks and writes.
         let snapshot: AuthResult<Option<AccountView>> = async {
-            self.model_fields.begin_id_query(EntityRole::Account)?;
-            let id = self.memory_primary_id_query(id)?;
+            let (column, id) = self.memory_query_field(
+                EntityRole::Account,
+                &self.config.account.field_schema(),
+                "id",
+                id.clone(),
+            )?;
             let record = self
                 .raw("account", "findMany", |op| {
                     Ok(op
                         .capture_table(EntityRole::Account)?
                         .select_refs(|row| {
                             Ok(crate::query::field_matches_equality(
-                                &row.field("id")?.unwrap_or_default(),
+                                &row.field(&column)?.unwrap_or_default(),
                                 &id,
                             ))
                         })?
@@ -453,13 +457,17 @@ impl AccountStore<StatelessSchema> for EphemeralStore {
             }
         }
         crate::store::database_hooks::await_adapter_lookup().await;
-        self.model_fields.begin_id_query(EntityRole::Account)?;
-        let id = self.memory_primary_id_query(id)?;
+        let (column, id) = self.memory_query_field(
+            EntityRole::Account,
+            &self.config.account.field_schema(),
+            "id",
+            id.clone(),
+        )?;
         self.raw("account", "delete", |op| {
             let table = op.capture_table(EntityRole::Account)?;
             let selected = table.select_refs(|row| {
                 Ok(crate::query::field_matches_equality(
-                    &row.field("id")?.unwrap_or_default(),
+                    &row.field(&column)?.unwrap_or_default(),
                     &id,
                 ))
             })?;
@@ -496,9 +504,9 @@ impl EphemeralStore {
                 }
             }
         }
-        self.model_fields.begin_id_query(EntityRole::Account)?;
         let schema = self.config.account.field_schema();
-        let selectors = [self.account_field_selector(&schema, "userId", user_id.clone())?];
+        let selectors =
+            [self.memory_query_field(EntityRole::Account, &schema, "userId", user_id.clone())?];
         self.raw("account", "deleteMany", |op| {
             let table = op.capture_table(EntityRole::Account)?;
             let selected =

@@ -53,8 +53,12 @@ impl EphemeralStore {
     ) -> AuthResult<Option<UserAccounts>> {
         let native = self.config.advanced.database.joins == Some(true);
         let (mut user, accounts) = if native {
-            self.model_fields.begin_id_query(EntityRole::User)?;
-            let (email_field, email) = self.user_field_selector("email", email)?;
+            let (email_field, email) = self.memory_query_field(
+                EntityRole::User,
+                &self.user_schema(),
+                "email",
+                email.clone(),
+            )?;
             let selected = self
                 .raw("user", "findOne", |op| {
                     let users = op
@@ -154,11 +158,7 @@ impl EphemeralStore {
             (EntityRole::Account, "account", &fields),
             &self.model_fields,
         )?;
-        let value = if logical == "id" {
-            self.memory_primary_id_query(&value)?
-        } else {
-            self.memory_field_query(&fields, &logical, value)?
-        };
+        let value = self.memory_field_query(&fields, &logical, value)?;
         self.raw(
             "account",
             if relation.many { "findMany" } else { "findOne" },
@@ -308,11 +308,7 @@ impl EphemeralStore {
             (EntityRole::User, "user", &self.config.user),
             &self.model_fields,
         )?;
-        let value = if logical == "id" {
-            self.memory_primary_id_query(&value)?
-        } else {
-            self.memory_field_query(&self.user_schema(), &logical, value)?
-        };
+        let value = self.memory_field_query(&self.user_schema(), &logical, value)?;
         self.raw(
             "user",
             if relation.many { "findMany" } else { "findOne" },
