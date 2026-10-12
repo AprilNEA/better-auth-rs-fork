@@ -353,7 +353,13 @@ async fn test_view_backup_codes_rejects_invalid_stored_json() {
         .view_backup_codes(user.id.typed().unwrap(), &ctx)
         .await
         .unwrap_err();
-    assert_eq!(err.to_string(), "Invalid backup code");
+    test_helpers::assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "INVALID_BACKUP_CODE",
+        "Invalid backup code",
+    );
 }
 
 #[test]

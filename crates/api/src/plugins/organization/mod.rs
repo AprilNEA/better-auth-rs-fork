@@ -445,28 +445,23 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for OrganizationPlugin {
         ) || (req.is_server_only()
             && better_auth_core::hooks::current_request_hook_context()
                 .is_some_and(|context| context.operation_id.as_deref() == Some("addMember")));
-        if member_endpoint || req.path() == "/organization/get-full-organization" {
+        if response.status >= 400
+            || member_endpoint
+            || req.path() == "/organization/get-full-organization"
+            || !req.path().starts_with("/organization/")
+        {
             return Ok(());
         }
         if !response.is_json() || response.body.is_empty() {
             return Ok(());
         }
         if let better_auth_core::ResponseBody::Native(value) = &mut response.body {
-            fields::shape_native_session_teams(value, self.config.teams.enabled)?;
-            if response.status < 400 && req.path().starts_with("/organization/") {
-                fields::filter_native_response(req.path(), value, &self.config.schema)?;
-            }
+            fields::filter_native_response(req.path(), value, &self.config.schema)?;
             return Ok(());
         }
         let mut value = serde_json::from_slice(&response.body.bytes()?)?;
-        let changed = fields::shape_session_teams(&mut value, self.config.teams.enabled)?;
-        if response.status < 400 && req.path().starts_with("/organization/") {
-            let mut value = serde_json::from_str(value.get())?;
-            fields::filter_response(req.path(), &mut value, &self.config.schema);
-            response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&value)?);
-        } else if changed {
-            response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&value)?);
-        }
+        fields::filter_response(req.path(), &mut value, &self.config.schema);
+        response.body = better_auth_core::ResponseBody::Bytes(serde_json::to_vec(&value)?);
         Ok(())
     }
 

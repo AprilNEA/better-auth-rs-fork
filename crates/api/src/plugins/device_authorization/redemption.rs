@@ -1,7 +1,7 @@
 use super::{
     ACCESS_DENIED, AUTHORIZATION_PENDING, DEVICE_STATUS_APPROVED, DEVICE_STATUS_DENIED,
     DEVICE_STATUS_PENDING, EXPIRED_DEVICE_CODE, INVALID_DEVICE_CODE, INVALID_DEVICE_CODE_STATUS,
-    POLLING_TOO_FREQUENTLY, USER_NOT_FOUND, device_error_response,
+    POLLING_TOO_FREQUENTLY, USER_NOT_FOUND, device_error,
 };
 use crate::plugins::endpoint_context::EndpointContext;
 use better_auth_core::{
@@ -67,7 +67,11 @@ where
         None => endpoint.auth.database.as_ref(),
     };
     let Some(device_code) = store.get_device_code_by_device_code(code).await? else {
-        return Err(device_error_response(400, "invalid_grant", INVALID_DEVICE_CODE)?.into());
+        return Err(device_error(
+            "BAD_REQUEST",
+            "invalid_grant",
+            INVALID_DEVICE_CODE,
+        ));
     };
     let authorization = authorize(&device_code, endpoint).await?;
     let last_polled_at = device_code.last_polled_at.field_value();
@@ -76,7 +80,11 @@ where
         let elapsed = Utc::now().timestamp_millis() as f64
             - better_auth_core::query::field_date(&last_polled_at)?.milliseconds();
         if elapsed < better_auth_core::query::field_number(&polling_interval)? {
-            return Err(device_error_response(400, "slow_down", POLLING_TOO_FREQUENTLY)?.into());
+            return Err(device_error(
+                "BAD_REQUEST",
+                "slow_down",
+                POLLING_TOO_FREQUENTLY,
+            ));
         }
     }
     let _ = store
@@ -90,24 +98,38 @@ where
         .await?;
     if device_code.expires_at.is_before(Utc::now())? {
         store.delete_device_code(&device_code.id).await?;
-        return Err(device_error_response(400, "expired_token", EXPIRED_DEVICE_CODE)?.into());
+        return Err(device_error(
+            "BAD_REQUEST",
+            "expired_token",
+            EXPIRED_DEVICE_CODE,
+        ));
     }
     let status = device_code.status.field_value();
     if status.strict_equals(&DEVICE_STATUS_PENDING.into()) {
-        return Err(
-            device_error_response(400, "authorization_pending", AUTHORIZATION_PENDING)?.into(),
-        );
+        return Err(device_error(
+            "BAD_REQUEST",
+            "authorization_pending",
+            AUTHORIZATION_PENDING,
+        ));
     }
     if status.strict_equals(&DEVICE_STATUS_DENIED.into()) {
         store.delete_device_code(&device_code.id).await?;
-        return Err(device_error_response(400, "access_denied", ACCESS_DENIED)?.into());
+        return Err(device_error("BAD_REQUEST", "access_denied", ACCESS_DENIED));
     }
     if !status.strict_equals(&DEVICE_STATUS_APPROVED.into()) {
-        return Err(device_error_response(500, "server_error", INVALID_DEVICE_CODE_STATUS)?.into());
+        return Err(device_error(
+            "INTERNAL_SERVER_ERROR",
+            "server_error",
+            INVALID_DEVICE_CODE_STATUS,
+        ));
     }
     let user_id = device_code.user_id.field_value();
     if !user_id.is_truthy() {
-        return Err(device_error_response(500, "server_error", INVALID_DEVICE_CODE_STATUS)?.into());
+        return Err(device_error(
+            "INTERNAL_SERVER_ERROR",
+            "server_error",
+            INVALID_DEVICE_CODE_STATUS,
+        ));
     }
     let user_id = SchemaValue::from_field(user_id);
     let redemption_context = prepare(&device_code, &authorization.context, endpoint).await?;
@@ -122,7 +144,11 @@ where
         }
     };
     let Some(user) = user else {
-        return Err(device_error_response(500, "server_error", USER_NOT_FOUND)?.into());
+        return Err(device_error(
+            "INTERNAL_SERVER_ERROR",
+            "server_error",
+            USER_NOT_FOUND,
+        ));
     };
     let user = endpoint.auth.internal_user_view(&user).await?;
     let claimed = store
@@ -130,7 +156,11 @@ where
         .await?;
     let Some(claimed_device_code) = claimed.filter(|row| row.user_id.field_value().is_truthy())
     else {
-        return Err(device_error_response(400, "invalid_grant", INVALID_DEVICE_CODE)?.into());
+        return Err(device_error(
+            "BAD_REQUEST",
+            "invalid_grant",
+            INVALID_DEVICE_CODE,
+        ));
     };
     Ok(DeviceCodeRedemptionResult {
         claimed_device_code,

@@ -319,7 +319,13 @@ async fn native_pending_totp_accepts_null_but_rejects_explicit_false() {
             .unwrap();
         let result = plugin.handle_verify_totp(&request, &fixture.ctx).await;
         if verified == Some(false) {
-            assert_eq!(result.unwrap_err().to_string(), "TOTP not enabled");
+            test_helpers::assert_coded_api_error(
+                &result.unwrap_err(),
+                "BAD_REQUEST",
+                400,
+                "TOTP_NOT_ENABLED",
+                "TOTP not enabled",
+            );
             assert_eq!(fixture.record().await.verified.field_value(), false.into());
             assert!(
                 fixture

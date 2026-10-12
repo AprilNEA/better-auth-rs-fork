@@ -91,7 +91,8 @@ impl<S: AuthSchema> BeforeEndpointHook<S> for NativeSessionHook {
     }
 }
 
-pub(crate) async fn dispatch<S, F, Fut>(
+async fn dispatch_with_transport<S, F, Fut>(
+    http: bool,
     request: &AuthRequest,
     context: &AuthContext<S>,
     handler: F,
@@ -107,17 +108,39 @@ where
         .ok_or_else(|| AuthError::config("Native Session fixture dispatcher is missing"))?;
     let mut input = request.clone();
     let mut scope = better_auth_core::RequestHookContext::from_request(request)?;
-    scope.is_http = true;
-    let response = better_auth_core::with_request_hook_context_value(
+    scope.is_http = http;
+    better_auth_core::with_request_hook_context_value(
         scope,
-        dispatcher.run(&mut input, true, context, None, handler),
+        dispatcher.run(&mut input, http, context, None, handler),
     )
-    .await?;
-    if response.is_api_error()? {
-        Err(AuthError::from_returned_response(response)?)
-    } else {
-        Ok(response)
-    }
+    .await
+}
+
+pub(crate) async fn dispatch<S, F, Fut>(
+    request: &AuthRequest,
+    context: &AuthContext<S>,
+    handler: F,
+) -> AuthResult<AuthResponse>
+where
+    S: AuthSchema,
+    F: FnOnce(AuthRequest) -> Fut,
+    Fut: Future<Output = AuthResult<AuthResponse>>,
+{
+    dispatch_with_transport(false, request, context, handler).await
+}
+
+pub(crate) async fn dispatch_http_plugin<S: AuthSchema>(
+    request: &AuthRequest,
+    context: &AuthContext<S>,
+    plugin: &impl AuthPlugin<S>,
+) -> AuthResult<Option<AuthResponse>> {
+    dispatch_with_transport(true, request, context, |request| async move {
+        plugin.on_request(&request, context).await?.ok_or_else(|| {
+            AuthError::internal("Native Session fixture did not match a plugin endpoint")
+        })
+    })
+    .await
+    .map(Some)
 }
 
 pub(crate) async fn dispatch_plugin<S: AuthSchema>(

@@ -21,7 +21,7 @@ use crate::plugins::{
     endpoint_context::EndpointContext,
     test_helpers::{
         create_test_config, initialize_test_context,
-        native_session::{NativeSessionHook, dispatch_plugin},
+        native_session::{NativeSessionHook, dispatch_http_plugin},
     },
     user_admission::{UserValidationData, UserValidationRejection, ValidateUserInfo},
 };
@@ -94,7 +94,9 @@ impl Fixture {
         request: &AuthRequest,
         plugin: &AdminPlugin,
     ) -> AuthResult<AuthResponse> {
-        Ok(dispatch_plugin(request, &self.ctx, plugin).await?.unwrap())
+        Ok(dispatch_http_plugin(request, &self.ctx, plugin)
+            .await?
+            .unwrap())
     }
 }
 

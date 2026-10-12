@@ -44,9 +44,3 @@ pub(super) struct DeviceCodeResponse {
 pub(super) struct DeviceActionResponse {
     pub success: bool,
 }
-
-#[derive(Debug, Serialize)]
-pub(super) struct DeviceErrorResponse {
-    pub error: String,
-    pub error_description: String,
-}

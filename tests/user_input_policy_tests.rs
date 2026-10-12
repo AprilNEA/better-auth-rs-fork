@@ -171,6 +171,10 @@ fn denied(result: AuthResult<FieldMap>, name: &str) -> AuthResult<()> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract asserts protected-field behavior while propagating setup and field-access errors"
+)]
 async fn native_user_input_declarations_preserve_default_protection() -> AuthResult<()> {
     let auth = native(builder(config())).build().await?;
     let context = auth.context();
@@ -197,6 +201,10 @@ async fn native_user_input_declarations_preserve_default_protection() -> AuthRes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract asserts declaration precedence and callback order while propagating setup errors"
+)]
 async fn user_input_replacements_follow_real_plugin_order_and_stop_at_callback_errors()
 -> AuthResult<()> {
     for late in [false, true] {
@@ -295,6 +303,10 @@ async fn user_input_replacements_follow_real_plugin_order_and_stop_at_callback_e
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract asserts replacement defaults and zero callbacks while propagating setup errors"
+)]
 async fn protected_replacement_defaults_override_native_guards_without_callbacks() -> AuthResult<()>
 {
     let trace = Trace::default();

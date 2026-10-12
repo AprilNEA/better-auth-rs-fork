@@ -15,9 +15,15 @@ async fn invalid_sign_out_body_preserves_session_without_oauth_plugin() {
     )
     .await;
     let plugin = SessionManagementPlugin::new();
-    for body in [
-        serde_json::json!({"disableRedirect": null}),
-        serde_json::json!({"state": 5}),
+    for (body, message) in [
+        (
+            serde_json::json!({"disableRedirect": null}),
+            "[body.disableRedirect] Invalid input: expected boolean, received null",
+        ),
+        (
+            serde_json::json!({"state": 5}),
+            "[body.state] Invalid input: expected string, received number",
+        ),
     ] {
         let req = test_helpers::create_auth_json_request_no_query(
             HttpMethod::Post,
@@ -25,17 +31,21 @@ async fn invalid_sign_out_body_preserves_session_without_oauth_plugin() {
             Some(session.token.typed().unwrap()),
             Some(body),
         );
-        let response = plugin.on_request(&req, &ctx).await.unwrap().unwrap();
-        assert_eq!(response.status, 400);
-        let body: serde_json::Value =
-            serde_json::from_slice(response.body.bytes().unwrap().as_ref()).unwrap();
-        assert_eq!(body["code"], "VALIDATION_ERROR");
-        assert!(
+        let error = plugin.on_request(&req, &ctx).await.unwrap_err();
+        assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterCall));
+        assert!(!error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+        assert_eq!(error.status_value().unwrap(), 400.into());
+        assert_eq!(error.status_code().unwrap(), 400);
+        assert_eq!(
+            error.body_value().unwrap().json().unwrap(),
+            Some(serde_json::json!({"message": message, "code": "VALIDATION_ERROR"}))
+        );
+        assert_eq!(
             ctx.database
                 .get_session(session.token.typed().unwrap())
                 .await
-                .unwrap()
-                .is_some()
+                .unwrap(),
+            Some(session.clone())
         );
     }
 }

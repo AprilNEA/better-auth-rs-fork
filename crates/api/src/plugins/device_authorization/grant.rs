@@ -1,5 +1,5 @@
 use super::{
-    DeviceAuthorizationPlugin, DeviceAuthorizationRequest, INVALID_CLIENT_ID, device_error_response,
+    DeviceAuthorizationPlugin, DeviceAuthorizationRequest, INVALID_CLIENT_ID, device_error,
 };
 use crate::plugins::endpoint_context::{EndpointContext, WithCallbacks};
 use better_auth_core::{
@@ -171,14 +171,16 @@ impl DeviceAuthorizationPlugin {
                     .as_deref()
                     .filter(|value| !value.is_empty())
                 else {
-                    return Err(missing_client()?);
+                    return Err(missing_client());
                 };
                 if self.config.validate_client.is_none()
                     || !self.validate_client_id(client_id).await?
                 {
-                    return Err(
-                        device_error_response(400, "invalid_client", INVALID_CLIENT_ID)?.into(),
-                    );
+                    return Err(device_error(
+                        "BAD_REQUEST",
+                        "invalid_client",
+                        INVALID_CLIENT_ID,
+                    ));
                 }
                 DeviceGrantAuthorization {
                     client_id: client_id.to_owned(),
@@ -187,14 +189,14 @@ impl DeviceAuthorizationPlugin {
             }
         };
         if authorization.client_id.is_empty() {
-            return Err(missing_client()?);
+            return Err(missing_client());
         }
         Ok(authorization)
     }
 }
 
-fn missing_client() -> AuthResult<AuthError> {
-    Ok(device_error_response(400, "invalid_request", "client_id is required")?.into())
+fn missing_client() -> AuthError {
+    device_error("BAD_REQUEST", "invalid_request", "client_id is required")
 }
 
 pub(super) fn validate_fields(fields: &UserConfig) -> AuthResult<()> {

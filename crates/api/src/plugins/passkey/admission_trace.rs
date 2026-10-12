@@ -1,19 +1,13 @@
 use super::*;
 use std::{
     future::Future,
-    sync::{
-        Once,
-        atomic::{AtomicBool, AtomicU64, Ordering},
-    },
+    sync::atomic::{AtomicU64, Ordering},
 };
-use tracing::{Event, Metadata, Subscriber, field::Visit, level_filters::LevelFilter, span};
+use tracing::{
+    Event, Metadata, Subscriber, field::Visit, instrument::WithSubscriber,
+    level_filters::LevelFilter, span,
+};
 
-tokio::task_local! {
-    static ACTIVE_TRACE: Arc<AdmissionTrace>;
-}
-
-static SUBSCRIBER: Once = Once::new();
-static SUBSCRIBER_READY: AtomicBool = AtomicBool::new(false);
 static NEXT_SPAN: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Default)]
@@ -29,14 +23,7 @@ impl AdmissionTrace {
         self: &Arc<Self>,
         operation: F,
     ) -> impl Future<Output = F::Output> + use<F> {
-        // Keep callsite interest valid when another test first emits a span without a capture scope.
-        SUBSCRIBER.call_once(|| {
-            tracing::subscriber::set_global_default(DatabaseSpans)
-                .expect("API unit tests must share the admission trace subscriber");
-            SUBSCRIBER_READY.store(true, Ordering::Release);
-            tracing::callsite::rebuild_interest_cache();
-        });
-        ACTIVE_TRACE.scope(self.clone(), operation)
+        operation.with_subscriber(DatabaseSpans(self.clone()))
     }
 }
 
@@ -68,7 +55,7 @@ impl DatabaseHooks<StatelessSchema> for AdmissionTrace {
     }
 }
 
-struct DatabaseSpans;
+struct DatabaseSpans(Arc<AdmissionTrace>);
 struct SpanFields<'a>(&'a AdmissionTrace);
 
 impl Visit for SpanFields<'_> {
@@ -96,18 +83,11 @@ impl Subscriber for DatabaseSpans {
     }
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
-        // Dispatch registration precedes global publication; keep callsites disabled until publication completes.
-        Some(if SUBSCRIBER_READY.load(Ordering::Acquire) {
-            LevelFilter::TRACE
-        } else {
-            LevelFilter::OFF
-        })
+        Some(LevelFilter::TRACE)
     }
 
     fn new_span(&self, attributes: &span::Attributes<'_>) -> span::Id {
-        if let Ok(trace) = ACTIVE_TRACE.try_with(Arc::clone) {
-            attributes.record(&mut SpanFields(&trace));
-        }
+        attributes.record(&mut SpanFields(&self.0));
         span::Id::from_u64(NEXT_SPAN.fetch_add(1, Ordering::Relaxed) + 1)
     }
 
@@ -120,29 +100,41 @@ impl Subscriber for DatabaseSpans {
 
 #[tokio::test]
 async fn unscoped_first_span_preserves_parallel_capture_isolation() {
-    fn database_span(name: &str) {
-        let _span = tracing::info_span!("admission trace regression", "otel.name" = name);
+    async fn database_operation(model: &str, operation: &str) {
+        better_auth_core::observability::database::with_database_operation(
+            &test_helpers::create_test_config(),
+            model,
+            operation,
+            async { Ok(()) },
+        )
+        .await
+        .expect("database trace regression operation should succeed");
     }
 
     let first = Arc::<AdmissionTrace>::default();
-    let pending = first.capture(async { database_span("db create session") });
-    std::thread::spawn(|| database_span("db findOne user"))
-        .join()
-        .expect("unscoped span thread must complete");
+    let pending = first.capture(database_operation("session", "create"));
+    std::thread::spawn(|| {
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .expect("unscoped span runtime should build")
+            .block_on(database_operation("user", "findOne"));
+    })
+    .join()
+    .expect("unscoped span thread must complete");
     pending.await;
     assert_eq!(*first.events.lock().unwrap(), ["db create session"]);
 
     let second = Arc::<AdmissionTrace>::default();
     tokio::join!(
         first.capture(async {
-            database_span("db findOne passkey");
+            database_operation("passkey", "findOne").await;
             tokio::task::yield_now().await;
-            database_span("db update passkey");
+            database_operation("passkey", "update").await;
         }),
         second.capture(async {
-            database_span("db findOne user");
+            database_operation("user", "findOne").await;
             tokio::task::yield_now().await;
-            database_span("db update user");
+            database_operation("user", "update").await;
         }),
     );
     assert_eq!(

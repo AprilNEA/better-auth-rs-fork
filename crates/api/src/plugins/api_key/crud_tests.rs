@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::test_helpers::assert_coded_api_error;
 use better_auth_core::AuthUser;
 use better_auth_core::{AuthConfig, CreateSession, CreateUser, HttpMethod};
 use chrono::{Duration, Utc};
@@ -165,13 +166,12 @@ async fn http_requests_cannot_impersonate_users_or_change_server_permissions() {
         "/api-key/update",
         json!({"keyId":key.api_key.id,"permissions":null}),
     );
-    assert_eq!(
-        plugin
-            .handle_update(&update, &ctx)
-            .await
-            .unwrap_err()
-            .to_string(),
-        ApiKeyErrorCode::ServerOnlyProperty.message()
+    assert_coded_api_error(
+        &plugin.handle_update(&update, &ctx).await.unwrap_err(),
+        "BAD_REQUEST",
+        400,
+        "SERVER_ONLY_PROPERTY",
+        "The property you're trying to set can only be set from the server auth instance only.",
     );
     let update = request(&token, "/api-key/update", json!({"keyId":"missing"}));
     assert_eq!(
@@ -229,13 +229,12 @@ async fn metadata_can_be_cleared_and_disabled_metadata_is_ignored_on_update() {
         "/api-key/update",
         json!({"keyId":key.api_key.id,"metadata":null}),
     );
-    assert_eq!(
-        disabled
-            .handle_update(&update, &ctx)
-            .await
-            .unwrap_err()
-            .to_string(),
-        ApiKeyErrorCode::NoValuesToUpdate.message()
+    assert_coded_api_error(
+        &disabled.handle_update(&update, &ctx).await.unwrap_err(),
+        "BAD_REQUEST",
+        400,
+        "NO_VALUES_TO_UPDATE",
+        "No values to update.",
     );
 }
 

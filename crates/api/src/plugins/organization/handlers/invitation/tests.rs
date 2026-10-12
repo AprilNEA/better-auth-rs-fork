@@ -1,7 +1,8 @@
 use super::*;
 use crate::plugins::organization::OrganizationPlugin;
 use crate::plugins::test_helpers::{
-    create_test_config, create_test_context_with_plugins, create_user_and_session,
+    assert_coded_api_error, create_test_config, create_test_context_with_plugins,
+    create_user_and_session,
 };
 use better_auth_core::{CreateMember, CreateOrganization, CreateUser};
 use chrono::Duration;
@@ -113,6 +114,11 @@ async fn resend_renews_existing_invitation_when_pending_limit_is_reached() {
     )
     .await
     .unwrap_err();
-    assert_eq!(error.status_code().unwrap(), 403);
-    assert!(error.to_string().contains("Invitation limit reached"));
+    assert_coded_api_error(
+        &error,
+        "FORBIDDEN",
+        403,
+        "INVITATION_LIMIT_REACHED",
+        "Invitation limit reached",
+    );
 }

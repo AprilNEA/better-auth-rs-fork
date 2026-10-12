@@ -637,8 +637,13 @@ async fn test_verify_password_invalid_password() {
     );
 
     let err = plugin.handle_verify_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code().unwrap(), 400);
-    assert_eq!(err.to_string(), "Invalid password");
+    test_helpers::assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "INVALID_PASSWORD",
+        "Invalid password",
+    );
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.ts :: verifyPassword returns
@@ -660,8 +665,13 @@ async fn test_verify_password_oauth_only_user_returns_invalid_password() {
     );
 
     let err = plugin.handle_verify_password(&req, &ctx).await.unwrap_err();
-    assert_eq!(err.status_code().unwrap(), 400);
-    assert_eq!(err.to_string(), "Invalid password");
+    test_helpers::assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "INVALID_PASSWORD",
+        "Invalid password",
+    );
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/password.test.ts :: verifyPassword

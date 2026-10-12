@@ -18,7 +18,7 @@ use crate::plugins::test_helpers::{create_test_config, initialize_test_context};
 #[tokio::test]
 async fn anonymous_signin_uses_the_injected_native_session_before_database_state() -> AuthResult<()>
 {
-    use crate::plugins::test_helpers::native_session::{NativeSessionHook, dispatch_plugin};
+    use crate::plugins::test_helpers::native_session::{NativeSessionHook, dispatch_http_plugin};
     use better_auth_core::{
         AuthPlugin,
         store::{StatelessSchema, schema::EntityRole},
@@ -63,7 +63,7 @@ async fn anonymous_signin_uses_the_injected_native_session_before_database_state
         "/sign-in/anonymous",
         serde_json::json!({}),
     )?;
-    let response = dispatch_plugin(&request, &context, &plugin)
+    let response = dispatch_http_plugin(&request, &context, &plugin)
         .await?
         .ok_or_else(|| AuthError::internal("Anonymous sign-in did not return a response"))?;
     assert_eq!(response.status, 400);

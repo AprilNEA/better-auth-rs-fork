@@ -24,6 +24,36 @@ pub(super) fn json_body(response: &AuthResponse) -> Value {
     serde_json::from_slice(&value.bytes().unwrap()).unwrap()
 }
 
+pub(super) fn assert_device_error(
+    error: &AuthError,
+    status: &str,
+    http_status: u16,
+    code: &str,
+    description: &str,
+) {
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value().unwrap(), status.into());
+    assert_eq!(error.status_code().unwrap(), http_status);
+    let fields = error
+        .body_value()
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .snapshot_fields()
+        .unwrap();
+    assert_eq!(
+        fields.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["error", "error_description"]
+    );
+    assert_eq!(
+        fields,
+        FieldMap::from([
+            ("error".into(), code.into()),
+            ("error_description".into(), description.into()),
+        ])
+    );
+}
+
 #[tokio::test]
 async fn generated_code_configuration_checks_storage_limits_at_initialization() {
     let ctx = test_helpers::create_test_context().await;
@@ -184,12 +214,14 @@ async fn test_device_code_rejects_invalid_client() {
         })),
     );
 
-    let response = plugin.handle_device_code(&request, &ctx).await.unwrap();
-    let body = json_body(&response);
-
-    assert_eq!(response.status, 400);
-    assert_eq!(body["error"], "invalid_client");
-    assert_eq!(body["error_description"], INVALID_CLIENT_ID);
+    let error = plugin.handle_device_code(&request, &ctx).await.unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_client",
+        INVALID_CLIENT_ID,
+    );
 }
 
 // Upstream source: packages/better-auth/src/plugins/device-authorization/device-authorization.test.ts :: callback/generator coverage; adapted to the Rust plugin builder API.
@@ -255,15 +287,17 @@ async fn test_device_token_pending_returns_authorization_pending() {
 
     let token_request =
         device_token_request(create_body["device_code"].as_str().unwrap(), "test-client");
-    let token_response = plugin
+    let error = plugin
         .handle_device_token(&token_request, &ctx)
         .await
-        .unwrap();
-    let token_body = json_body(&token_response);
-
-    assert_eq!(token_response.status, 400);
-    assert_eq!(token_body["error"], "authorization_pending");
-    assert_eq!(token_body["error_description"], AUTHORIZATION_PENDING);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "authorization_pending",
+        AUTHORIZATION_PENDING,
+    );
 }
 
 // Upstream source: packages/better-auth/src/plugins/device-authorization/device-authorization.test.ts :: "should return expired_token for expired device codes".
@@ -289,18 +323,20 @@ async fn test_device_token_expired_returns_error_and_deletes_record() {
         .await
         .unwrap();
 
-    let response = plugin
+    let error = plugin
         .handle_device_token(
             &device_token_request(stored.device_code.typed().unwrap(), "test-client"),
             &ctx,
         )
         .await
-        .unwrap();
-    let body = json_body(&response);
-
-    assert_eq!(response.status, 400);
-    assert_eq!(body["error"], "expired_token");
-    assert_eq!(body["error_description"], EXPIRED_DEVICE_CODE);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "expired_token",
+        EXPIRED_DEVICE_CODE,
+    );
     assert!(
         ctx.database
             .get_device_code_by_device_code(stored.device_code.typed().unwrap())
@@ -316,18 +352,20 @@ async fn test_device_token_invalid_device_code_returns_invalid_grant() {
     let plugin = DeviceAuthorizationPlugin::new();
     let ctx = test_helpers::create_test_context().await;
 
-    let response = plugin
+    let error = plugin
         .handle_device_token(
             &device_token_request("invalid-device-code", "test-client"),
             &ctx,
         )
         .await
-        .unwrap();
-    let body = json_body(&response);
-
-    assert_eq!(response.status, 400);
-    assert_eq!(body["error"], "invalid_grant");
-    assert_eq!(body["error_description"], INVALID_DEVICE_CODE);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_grant",
+        INVALID_DEVICE_CODE,
+    );
 }
 
 // Upstream source: packages/better-auth/src/plugins/device-authorization/device-authorization.test.ts :: "should enforce rate limiting with slow_down error".
@@ -352,18 +390,26 @@ async fn test_device_token_rate_limits_with_slow_down() {
     let first = plugin
         .handle_device_token(&device_token_request(device_code, "test-client"), &ctx)
         .await
-        .unwrap();
-    assert_eq!(json_body(&first)["error"], "authorization_pending");
+        .unwrap_err();
+    assert_device_error(
+        &first,
+        "BAD_REQUEST",
+        400,
+        "authorization_pending",
+        AUTHORIZATION_PENDING,
+    );
 
     let second = plugin
         .handle_device_token(&device_token_request(device_code, "test-client"), &ctx)
         .await
-        .unwrap();
-    let second_body = json_body(&second);
-
-    assert_eq!(second.status, 400);
-    assert_eq!(second_body["error"], "slow_down");
-    assert_eq!(second_body["error_description"], POLLING_TOO_FREQUENTLY);
+        .unwrap_err();
+    assert_device_error(
+        &second,
+        "BAD_REQUEST",
+        400,
+        "slow_down",
+        POLLING_TOO_FREQUENTLY,
+    );
 }
 
 #[tokio::test]
@@ -397,19 +443,19 @@ async fn test_device_token_zero_interval_skips_future_poll_timestamp() {
             })
             .await
             .unwrap();
-        let response = plugin
+        let error = plugin
             .handle_device_token(
                 &device_token_request(row.device_code.typed().unwrap(), "test-client"),
                 &ctx,
             )
             .await
-            .unwrap();
-        assert_eq!(response.status, 400);
-        assert_eq!(
-            json_body(&response),
-            serde_json::json!({
-                "error": expected_error, "error_description": expected_description,
-            })
+            .unwrap_err();
+        assert_device_error(
+            &error,
+            "BAD_REQUEST",
+            400,
+            expected_error,
+            expected_description,
         );
         let remaining = ctx
             .database
@@ -475,15 +521,17 @@ async fn test_device_verify_invalid_user_code_returns_error() {
     let plugin = DeviceAuthorizationPlugin::new();
     let ctx = test_helpers::create_test_context().await;
 
-    let response = plugin
+    let error = plugin
         .handle_device_verify(&device_verify_request("INVALID"), &ctx)
         .await
-        .unwrap();
-    let body = json_body(&response);
-
-    assert_eq!(response.status, 400);
-    assert_eq!(body["error"], "invalid_request");
-    assert_eq!(body["error_description"], INVALID_USER_CODE);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_request",
+        INVALID_USER_CODE,
+    );
 }
 
 // Upstream source: packages/better-auth/src/plugins/device-authorization/device-authorization.test.ts :: approval flow, scope preservation, and OAuth-compliant token response.
@@ -594,15 +642,17 @@ async fn test_device_approve_rejects_unclaimed_code() {
         Some(session.token.typed().unwrap()),
         Some(serde_json::json!({ "userCode": user_code })),
     );
-    let approve_response = plugin
+    let error = plugin
         .handle_device_approve(&approve_request, &ctx)
         .await
-        .unwrap();
-    let approve_body = json_body(&approve_response);
-
-    assert_eq!(approve_response.status, 400);
-    assert_eq!(approve_body["error"], "invalid_request");
-    assert_eq!(approve_body["error_description"], DEVICE_CODE_NOT_CLAIMED);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_request",
+        DEVICE_CODE_NOT_CLAIMED,
+    );
 
     let stored = ctx
         .database
@@ -654,15 +704,11 @@ async fn test_device_deny_flow_returns_access_denied_and_deletes_record() {
         .unwrap();
     assert_eq!(json_body(&deny_response)["success"], true);
 
-    let token_response = plugin
+    let error = plugin
         .handle_device_token(&device_token_request(&device_code, "test-client"), &ctx)
         .await
-        .unwrap();
-    let token_body = json_body(&token_response);
-
-    assert_eq!(token_response.status, 400);
-    assert_eq!(token_body["error"], "access_denied");
-    assert_eq!(token_body["error_description"], ACCESS_DENIED);
+        .unwrap_err();
+    assert_device_error(&error, "BAD_REQUEST", 400, "access_denied", ACCESS_DENIED);
     assert!(
         ctx.database
             .get_device_code_by_device_code(&device_code)
@@ -705,16 +751,16 @@ async fn test_device_approve_requires_authentication_and_blocks_double_processin
         None,
         Some(serde_json::json!({ "userCode": user_code.clone() })),
     );
-    let unauthenticated_response = plugin
+    let error = plugin
         .handle_device_approve(&unauthenticated_request, &ctx)
         .await
-        .unwrap();
-    let unauthenticated_body = json_body(&unauthenticated_response);
-    assert_eq!(unauthenticated_response.status, 401);
-    assert_eq!(unauthenticated_body["error"], "unauthorized");
-    assert_eq!(
-        unauthenticated_body["error_description"],
-        AUTHENTICATION_REQUIRED
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "UNAUTHORIZED",
+        401,
+        "unauthorized",
+        AUTHENTICATION_REQUIRED,
     );
 
     let approve_request = test_helpers::create_auth_json_request_no_query(
@@ -729,16 +775,16 @@ async fn test_device_approve_requires_authentication_and_blocks_double_processin
         .unwrap();
     assert_eq!(json_body(&first_response)["success"], true);
 
-    let second_response = plugin
+    let error = plugin
         .handle_device_approve(&approve_request, &ctx)
         .await
-        .unwrap();
-    let second_body = json_body(&second_response);
-    assert_eq!(second_response.status, 400);
-    assert_eq!(second_body["error"], "invalid_request");
-    assert_eq!(
-        second_body["error_description"],
-        DEVICE_CODE_ALREADY_PROCESSED
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_request",
+        DEVICE_CODE_ALREADY_PROCESSED,
     );
 }
 
@@ -788,22 +834,28 @@ async fn test_device_approve_allows_only_one_concurrent_decision() {
         plugin.handle_device_approve(&second_request, &ctx),
     );
 
-    let first_response = first_response.unwrap();
-    let second_response = second_response.unwrap();
-
-    let success_count = [first_response.status, second_response.status]
-        .into_iter()
-        .filter(|status| *status == 200)
-        .count();
+    let mut success_count = 0;
+    let mut already_processed_count = 0;
+    for result in [first_response, second_response] {
+        match result {
+            Ok(response) => {
+                assert_eq!(response.status, 200);
+                assert_eq!(json_body(&response), serde_json::json!({"success": true}));
+                success_count += 1;
+            }
+            Err(error) => {
+                assert_device_error(
+                    &error,
+                    "BAD_REQUEST",
+                    400,
+                    "invalid_request",
+                    DEVICE_CODE_ALREADY_PROCESSED,
+                );
+                already_processed_count += 1;
+            }
+        }
+    }
     assert_eq!(success_count, 1);
-
-    let already_processed_count = [json_body(&first_response), json_body(&second_response)]
-        .into_iter()
-        .filter(|body| {
-            body["error"] == "invalid_request"
-                && body["error_description"] == DEVICE_CODE_ALREADY_PROCESSED
-        })
-        .count();
     assert_eq!(already_processed_count, 1);
 }
 
@@ -825,22 +877,23 @@ async fn test_device_token_rejects_client_id_mismatch() {
         .unwrap();
     let create_body = json_body(&create_response);
 
-    let response = plugin
+    let error = plugin
         .handle_device_token(
             &device_token_request(create_body["device_code"].as_str().unwrap(), "client-b"),
             &ctx,
         )
         .await
-        .unwrap();
-    let body = json_body(&response);
-
-    assert_eq!(response.status, 400);
-    assert_eq!(body["error"], "invalid_grant");
-    assert_eq!(body["error_description"], CLIENT_ID_MISMATCH);
+        .unwrap_err();
+    assert_device_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "invalid_grant",
+        CLIENT_ID_MISMATCH,
+    );
 }
 
-// Deliberate hardening divergence from the current TS runtime: exactly one
-// poller may redeem an approved device code.
+// Upstream source: packages/better-auth/src/plugins/device-authorization/routes.ts :: redeemDeviceCode consumes the approved record atomically.
 #[tokio::test]
 async fn test_device_token_allows_only_one_concurrent_redemption() {
     let plugin = DeviceAuthorizationPlugin::new();
@@ -888,18 +941,33 @@ async fn test_device_token_allows_only_one_concurrent_redemption() {
         plugin.handle_device_token(&second_request, &ctx),
     );
 
-    let first_response = first_response.unwrap();
-    let second_response = second_response.unwrap();
-
-    let success_count = [first_response.status, second_response.status]
-        .into_iter()
-        .filter(|status| *status == 200)
-        .count();
+    let mut success_count = 0;
+    let mut invalid_grant_count = 0;
+    for result in [first_response, second_response] {
+        match result {
+            Ok(response) => {
+                assert_eq!(response.status, 200);
+                success_count += 1;
+            }
+            Err(error) => {
+                assert_device_error(
+                    &error,
+                    "BAD_REQUEST",
+                    400,
+                    "invalid_grant",
+                    INVALID_DEVICE_CODE,
+                );
+                invalid_grant_count += 1;
+            }
+        }
+    }
     assert_eq!(success_count, 1);
-
-    let invalid_grant_count = [json_body(&first_response), json_body(&second_response)]
-        .into_iter()
-        .filter(|body| body["error"] == "invalid_grant")
-        .count();
     assert_eq!(invalid_grant_count, 1);
+    assert!(
+        ctx.database
+            .get_device_code_by_device_code(&device_code)
+            .await
+            .unwrap()
+            .is_none()
+    );
 }

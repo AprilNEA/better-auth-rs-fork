@@ -309,7 +309,13 @@ async fn native_secret_errors_restore_attempts_after_strict_verified_check() -> 
         .await
         .unwrap_err();
         if verified.strict_equals(&false.into()) {
-            assert_eq!(error.to_string(), "TOTP not enabled");
+            crate::plugins::test_helpers::assert_coded_api_error(
+                &error,
+                "BAD_REQUEST",
+                400,
+                "TOTP_NOT_ENABLED",
+                "TOTP not enabled",
+            );
         } else {
             assert!(
                 matches!(error, AuthError::Internal(message) if message == "hex string expected, got number")

@@ -3,8 +3,9 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth::config::{FieldTransforms, UserFieldConfig, UserFieldTransform, UserFieldType};
 use better_auth::server_api::EndpointInput;
 use better_auth_core::{
-    ApiErrorClass, AuthInitContext, AuthPlugin, AuthRoute, CookieCacheConfig, CookieCacheVersion,
-    FieldDate, FieldMap, FieldValue, FromFieldMap, HttpMethod, SessionView, UserView,
+    ApiErrorClass, AuthInitContext, AuthPlugin, AuthRoute, CookieCacheConfig, FieldDate, FieldMap,
+    FieldValue, FromFieldMap, HttpMethod, SessionView, UserView,
+    config::CookieCacheVersion,
     session::NativeSessionData,
     store::{
         EphemeralStore, SecondaryStorage,

@@ -59,7 +59,7 @@ fn finish<T: DeserializeOwned + Serialize + Send + Sync + 'static>(
             .collect::<Vec<_>>()
             .join("; ");
         return Err(if code {
-            super::device_error_response(400, "invalid_request", &message)?.into()
+            super::device_error("BAD_REQUEST", "invalid_request", &message)
         } else {
             json_body::validation_error(&message)
         });
@@ -188,12 +188,11 @@ pub(super) fn normalize_code(
                 .map(|(_, value)| value.to_string());
             let value = values.next();
             if values.next().is_some() {
-                return Err(super::device_error_response(
-                    400,
+                return Err(super::device_error(
+                    "BAD_REQUEST",
                     "invalid_request",
                     &format!("{field} must not be repeated"),
-                )?
-                .into());
+                ));
             }
             match field {
                 "client_id" => body.client_id = value,

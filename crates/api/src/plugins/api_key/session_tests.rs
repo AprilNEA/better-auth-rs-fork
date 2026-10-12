@@ -517,8 +517,13 @@ async fn test_resolve_configuration_without_default_is_an_error() {
         .build();
 
     let err = plugin.resolve_configuration(None).unwrap_err();
-    assert_eq!(err.status_code().unwrap(), 400);
-    assert_eq!(err.to_string(), "No default api-key configuration found.");
+    assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "NO_DEFAULT_API_KEY_CONFIGURATION_FOUND",
+        "No default api-key configuration found.",
+    );
 }
 
 // Upstream reference: @better-auth/api-key :: configIdMatches treats a missing
@@ -549,10 +554,12 @@ async fn test_create_for_organization_requires_organization_id() {
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
 
-    assert_eq!(err.status_code().unwrap(), 400);
-    assert_eq!(
-        err.to_string(),
-        "Organization ID is required for organization-owned API keys."
+    assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "ORGANIZATION_ID_REQUIRED",
+        "Organization ID is required for organization-owned API keys.",
     );
 }
 
@@ -574,9 +581,12 @@ async fn test_create_for_organization_requires_the_organization_plugin() {
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
 
-    assert_eq!(
-        err.to_string(),
-        "Organization plugin is required for organization-owned API keys. Please install and configure the organization plugin."
+    assert_coded_api_error(
+        &err,
+        "INTERNAL_SERVER_ERROR",
+        500,
+        "ORGANIZATION_PLUGIN_REQUIRED",
+        "Organization plugin is required for organization-owned API keys. Please install and configure the organization plugin.",
     );
 }
 
@@ -606,8 +616,11 @@ async fn test_create_for_organization_rejects_non_member() {
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
 
-    assert_eq!(
-        err.to_string(),
-        "You are not a member of the organization that owns this API key."
+    assert_coded_api_error(
+        &err,
+        "FORBIDDEN",
+        403,
+        "USER_NOT_MEMBER_OF_ORGANIZATION",
+        "You are not a member of the organization that owns this API key.",
     );
 }

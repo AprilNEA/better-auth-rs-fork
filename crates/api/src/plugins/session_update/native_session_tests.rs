@@ -356,12 +356,18 @@ async fn device_primitive_users_reach_state_guards_without_claiming_or_disclosin
             "/device/approve",
             json!({"userCode":"ABCD2345"}),
         )?;
-        let response = dispatch_plugin(&req, &fixture.ctx, &plugin).await?.unwrap();
-        assert_eq!(response.status, 400);
-        assert_eq!(body(&response)["error"], "invalid_request");
+        let error = dispatch_plugin(&req, &fixture.ctx, &plugin)
+            .await
+            .unwrap_err();
+        assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+        assert_eq!(error.status_value()?, "BAD_REQUEST".into());
+        assert_eq!(error.status_code()?, 400);
         assert_eq!(
-            body(&response)["error_description"],
-            "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"
+            error.body_value()?.json()?,
+            Some(json!({
+                "error": "invalid_request",
+                "error_description": "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying",
+            }))
         );
         let device = fixture
             .ctx
@@ -380,9 +386,19 @@ async fn device_primitive_users_reach_state_guards_without_claiming_or_disclosin
         "/device/deny",
         json!({"userCode":"ABCD2345"}),
     )?;
-    let response = dispatch_plugin(&req, &fixture.ctx, &plugin).await?.unwrap();
-    assert_eq!(response.status, 403);
-    assert_eq!(body(&response)["error"], "access_denied");
+    let error = dispatch_plugin(&req, &fixture.ctx, &plugin)
+        .await
+        .unwrap_err();
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, "FORBIDDEN".into());
+    assert_eq!(error.status_code()?, 403);
+    assert_eq!(
+        error.body_value()?.json()?,
+        Some(json!({
+            "error": "access_denied",
+            "error_description": "You are not authorized to deny this device authorization",
+        }))
+    );
     assert_eq!(
         fixture
             .ctx
@@ -402,11 +418,18 @@ async fn device_primitive_users_reach_state_guards_without_claiming_or_disclosin
         "/device/approve",
         json!({"userCode":"ABCD2345"}),
     )?;
-    let response = dispatch_plugin(&req, &fixture.ctx, &plugin).await?.unwrap();
-    assert_eq!(response.status, 400);
+    let error = dispatch_plugin(&req, &fixture.ctx, &plugin)
+        .await
+        .unwrap_err();
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, "BAD_REQUEST".into());
+    assert_eq!(error.status_code()?, 400);
     assert_eq!(
-        body(&response)["error_description"],
-        "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying"
+        error.body_value()?.json()?,
+        Some(json!({
+            "error": "invalid_request",
+            "error_description": "Device code has not been claimed by a verifying session; call `GET /device` with the `user_code` while signed in before approving or denying",
+        }))
     );
     let device = fixture
         .ctx

@@ -1,4 +1,5 @@
 use super::*;
+use crate::plugins::test_helpers::assert_coded_api_error;
 use better_auth_core::AuthUser;
 use better_auth_core::wire::{SessionView, UserView};
 use better_auth_core::{
@@ -638,7 +639,13 @@ async fn test_config_validation_prefix_length() {
         None,
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
-    assert!(err.to_string().contains("prefix length"));
+    assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "INVALID_PREFIX_LENGTH",
+        "The prefix length is either too large or too small.",
+    );
 
     // Too long prefix
     let req2 = create_auth_request(
@@ -649,7 +656,13 @@ async fn test_config_validation_prefix_length() {
         None,
     );
     let err2 = plugin.handle_create(&req2, &ctx).await.unwrap_err();
-    assert!(err2.to_string().contains("prefix length"));
+    assert_coded_api_error(
+        &err2,
+        "BAD_REQUEST",
+        400,
+        "INVALID_PREFIX_LENGTH",
+        "The prefix length is either too large or too small.",
+    );
 }
 
 // Upstream reference: packages/better-auth/src/plugins/api-key/api-key.test.ts :: describe("api-key"); adapted to the Rust API key plugin handlers.
@@ -667,7 +680,13 @@ async fn test_config_require_name() {
         None,
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
-    assert!(err.to_string().contains("name is required"));
+    assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "NAME_REQUIRED",
+        "API Key name is required.",
+    );
 }
 
 // Upstream reference: packages/better-auth/src/plugins/api-key/api-key.test.ts :: describe("api-key"); adapted to the Rust API key plugin handlers.
@@ -684,7 +703,13 @@ async fn test_config_metadata_disabled() {
         None,
     );
     let err = plugin.handle_create(&req, &ctx).await.unwrap_err();
-    assert!(err.to_string().contains("Metadata is disabled"));
+    assert_coded_api_error(
+        &err,
+        "BAD_REQUEST",
+        400,
+        "METADATA_DISABLED",
+        "Metadata is disabled.",
+    );
 }
 
 // Upstream reference: packages/better-auth/src/plugins/api-key/api-key.test.ts :: describe("api-key"); adapted to the Rust API key plugin handlers.
@@ -738,11 +763,22 @@ async fn test_update_with_expires_in() {
 #[tokio::test]
 async fn test_refill_logic() {
     let result = ApiKeyPlugin::validate_refill(Some(60_000.0), None);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("refillAmount"));
+    assert_coded_api_error(
+        &result.unwrap_err(),
+        "BAD_REQUEST",
+        400,
+        "REFILL_INTERVAL_AND_AMOUNT_REQUIRED",
+        "refillInterval is required when refillAmount is provided",
+    );
 
     let result = ApiKeyPlugin::validate_refill(None, Some(10.0));
-    assert!(result.is_err());
+    assert_coded_api_error(
+        &result.unwrap_err(),
+        "BAD_REQUEST",
+        400,
+        "REFILL_AMOUNT_AND_INTERVAL_REQUIRED",
+        "refillAmount is required when refillInterval is provided",
+    );
 
     let result = ApiKeyPlugin::validate_refill(Some(60_000.0), Some(10.0));
     assert!(result.is_ok());

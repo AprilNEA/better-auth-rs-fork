@@ -37,10 +37,7 @@ mod native_tests;
 #[cfg(test)]
 mod tests;
 
-use types::{
-    DeviceActionRequest, DeviceActionResponse, DeviceCodeResponse, DeviceErrorResponse,
-    DeviceTokenRequest,
-};
+use types::{DeviceActionRequest, DeviceActionResponse, DeviceCodeResponse, DeviceTokenRequest};
 
 const DEVICE_GRANT_TYPE: &str = "urn:ietf:params:oauth:grant-type:device_code";
 const DEVICE_STATUS_PENDING: &str = "pending";
@@ -283,15 +280,18 @@ impl DeviceAuthorizationPlugin {
             self.authorize_request(&body, &endpoint).await?
         } else {
             let Some(client_id) = body.client_id.as_ref() else {
-                return Err(device_error_response(
-                    400,
+                return Err(device_error(
+                    "BAD_REQUEST",
                     "invalid_request",
                     "client_id is required",
-                )?
-                .into());
+                ));
             };
             if !self.validate_client_id(client_id).await? {
-                return device_error_response(400, "invalid_client", INVALID_CLIENT_ID);
+                return Err(device_error(
+                    "BAD_REQUEST",
+                    "invalid_client",
+                    INVALID_CLIENT_ID,
+                ));
             }
             DeviceGrantAuthorization {
                 client_id: client_id.clone(),
@@ -356,11 +356,11 @@ impl DeviceAuthorizationPlugin {
             .with_header("Cache-Control", "no-store")
             .with_header("Pragma", "no-cache"));
         }
-        device_error_response(
-            500,
+        Err(device_error(
+            "INTERNAL_SERVER_ERROR",
             "server_error",
             "Failed to generate a unique device code",
-        )
+        ))
     }
 
     async fn handle_device_token<S: better_auth_core::AuthSchema>(
@@ -371,7 +371,11 @@ impl DeviceAuthorizationPlugin {
         let body: DeviceTokenRequest = request::read(req, request::token)?;
 
         if !self.validate_client_id(&body.client_id).await? {
-            return device_error_response(400, "invalid_grant", INVALID_CLIENT_ID);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_grant",
+                INVALID_CLIENT_ID,
+            ));
         }
 
         let endpoint = EndpointContext::new(
@@ -390,12 +394,11 @@ impl DeviceAuthorizationPlugin {
                     if stored_client_id.is_truthy()
                         && !stored_client_id.strict_equals(&client_id.clone().into())
                     {
-                        return Err(device_error_response(
-                            400,
+                        return Err(device_error(
+                            "BAD_REQUEST",
                             "invalid_grant",
                             CLIENT_ID_MISMATCH,
-                        )?
-                        .into());
+                        ));
                     }
                     if let Some(grant) = grant {
                         grant
@@ -422,7 +425,11 @@ impl DeviceAuthorizationPlugin {
         .await
         .map_err(SessionIssueError::into_auth_error)?;
         let Some(issued) = issued else {
-            return device_error_response(500, "server_error", FAILED_TO_CREATE_SESSION);
+            return Err(device_error(
+                "INTERNAL_SERVER_ERROR",
+                "server_error",
+                FAILED_TO_CREATE_SESSION,
+            ));
         };
         let session = FieldMap::from(issued.session.clone());
         let token = session.get("token").cloned().unwrap_or_default();
@@ -466,15 +473,27 @@ impl DeviceAuthorizationPlugin {
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
         let Some(user_code) = req.query_string("user_code")?.map(str::to_owned) else {
-            return device_error_response(400, "invalid_request", INVALID_REQUEST);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                INVALID_REQUEST,
+            ));
         };
 
         let Some(mut device_code) = find_device_code_by_user_code(ctx, &user_code).await? else {
-            return device_error_response(400, "invalid_request", INVALID_USER_CODE);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                INVALID_USER_CODE,
+            ));
         };
 
         if device_code.expires_at.is_before(Utc::now())? {
-            return device_error_response(400, "expired_token", EXPIRED_USER_CODE);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "expired_token",
+                EXPIRED_USER_CODE,
+            ));
         }
 
         let session = match ctx.require_native_session(req).await {
@@ -556,7 +575,11 @@ impl DeviceAuthorizationPlugin {
         let session = match ctx.require_native_session(req).await {
             Ok(session) => session,
             Err(AuthError::Unauthenticated) | Err(AuthError::SessionNotFound) => {
-                return device_error_response(401, "unauthorized", AUTHENTICATION_REQUIRED);
+                return Err(device_error(
+                    "UNAUTHORIZED",
+                    "unauthorized",
+                    AUTHENTICATION_REQUIRED,
+                ));
             }
             Err(error) => return Err(error),
         };
@@ -564,11 +587,19 @@ impl DeviceAuthorizationPlugin {
         let body: DeviceActionRequest = request::read(req, request::action)?;
 
         let Some(device_code) = find_device_code_by_user_code(ctx, &body.user_code).await? else {
-            return device_error_response(400, "invalid_request", INVALID_USER_CODE);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                INVALID_USER_CODE,
+            ));
         };
 
         if device_code.expires_at.is_before(Utc::now())? {
-            return device_error_response(400, "expired_token", EXPIRED_USER_CODE);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "expired_token",
+                EXPIRED_USER_CODE,
+            ));
         }
 
         if !device_code
@@ -576,16 +607,28 @@ impl DeviceAuthorizationPlugin {
             .field_value()
             .strict_equals(&DEVICE_STATUS_PENDING.into())
         {
-            return device_error_response(400, "invalid_request", DEVICE_CODE_ALREADY_PROCESSED);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                DEVICE_CODE_ALREADY_PROCESSED,
+            ));
         }
 
         let claimed_user_id = device_code.user_id.field_value();
         if !claimed_user_id.is_truthy() {
-            return device_error_response(400, "invalid_request", DEVICE_CODE_NOT_CLAIMED);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                DEVICE_CODE_NOT_CLAIMED,
+            ));
         }
 
         if !session.user_property("id")?.strict_equals(&claimed_user_id) {
-            return device_error_response(403, "access_denied", decision.forbidden_message());
+            return Err(device_error(
+                "FORBIDDEN",
+                "access_denied",
+                decision.forbidden_message(),
+            ));
         }
 
         let updated = ctx
@@ -602,7 +645,11 @@ impl DeviceAuthorizationPlugin {
             .await?;
 
         if !updated {
-            return device_error_response(400, "invalid_request", DEVICE_CODE_ALREADY_PROCESSED);
+            return Err(device_error(
+                "BAD_REQUEST",
+                "invalid_request",
+                DEVICE_CODE_ALREADY_PROCESSED,
+            ));
         }
 
         AuthResponse::json(None, &DeviceActionResponse { success: true })
@@ -636,12 +683,11 @@ impl DeviceAuthorizationPlugin {
 
 fn validate_generated_code(code: String, label: &str) -> AuthResult<String> {
     if code.chars().count() > 191 {
-        return Err(device_error_response(
-            400,
+        return Err(device_error(
+            "BAD_REQUEST",
             "invalid_request",
             &format!("Generated {label} code must be at most 191 characters"),
-        )?
-        .into());
+        ));
     }
     Ok(code)
 }
@@ -868,16 +914,13 @@ fn default_generate_user_code(length: usize) -> String {
         .collect()
 }
 
-fn device_error_response(
-    status: u16,
-    error: &str,
-    error_description: &str,
-) -> AuthResult<AuthResponse> {
-    AuthResponse::json(
+fn device_error(status: &'static str, error: &str, error_description: &str) -> AuthError {
+    AuthError::from_status(
         status,
-        &DeviceErrorResponse {
-            error: error.to_string(),
-            error_description: error_description.to_string(),
-        },
+        FieldMap::from([
+            ("error".into(), error.into()),
+            ("error_description".into(), error_description.into()),
+        ])
+        .into(),
     )
 }

@@ -6,7 +6,7 @@
 )]
 
 use super::{
-    tests::{device_token_request, json_body},
+    tests::{assert_device_error, device_token_request, json_body},
     *,
 };
 use crate::plugins::test_helpers::create_test_config;
@@ -431,11 +431,12 @@ async fn cancelled_session_has_device_error_while_hook_error_propagates() -> Tes
         let result = fixture.redeem().await;
         match outcome {
             SessionOutcome::Cancel => {
-                let response = result?;
-                assert_eq!(response.status, 500);
-                assert_eq!(
-                    json_body(&response),
-                    serde_json::json!({"error":"server_error","error_description":FAILED_TO_CREATE_SESSION})
+                assert_device_error(
+                    &result.unwrap_err(),
+                    "INTERNAL_SERVER_ERROR",
+                    500,
+                    "server_error",
+                    FAILED_TO_CREATE_SESSION,
                 );
             }
             SessionOutcome::Error => assert!(

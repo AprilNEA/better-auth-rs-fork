@@ -318,12 +318,23 @@ async fn generation_error_keeps_callback_effects_without_hashing_persisting_or_f
     let _ = response
         .headers
         .insert("access-control-expose-headers", "original");
+    let callback_headers = request.response_headers_value()?;
     let error = plugin
         .after_request(&request, &mut response, &ctx)
         .await
         .err()
         .unwrap();
-    assert_eq!(error.to_string(), "Generator rejected");
+    assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+    assert_eq!(error.status_value()?, 400.into());
+    assert_eq!(error.status_code()?, 400);
+    assert_eq!(error.message_value()?, "Generator rejected".into());
+    assert_eq!(
+        error.body_value()?,
+        FieldValue::from(FieldMap::from([(
+            "message".into(),
+            "Generator rejected".into(),
+        )])),
+    );
     assert_eq!(observations.lock().unwrap().len(), 1);
     assert_eq!(legacy_calls.load(Ordering::SeqCst), 0);
     assert_eq!(hash_calls.load(Ordering::SeqCst), 0);
@@ -341,7 +352,9 @@ async fn generation_error_keeps_callback_effects_without_hashing_persisting_or_f
             .map(String::as_str),
         Some("original")
     );
-    let pending = request.take_response_headers()?;
+    let captured = error.captured_headers_value().unwrap();
+    assert!(captured.strict_equals(&callback_headers));
+    let pending = better_auth_core::Headers::from_field_value(&captured)?;
     assert_eq!(
         pending.get("set-ott").map(String::as_str),
         Some("callback-token")
@@ -356,6 +369,7 @@ async fn generation_error_keeps_callback_effects_without_hashing_persisting_or_f
         pending.get("x-ott-callback").map(String::as_str),
         Some("retained")
     );
+    assert!(request.take_response_headers()?.is_empty());
     assert_eq!(
         FieldMap::from(request.new_session()?.unwrap()),
         FieldMap::from(data)

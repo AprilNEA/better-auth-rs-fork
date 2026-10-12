@@ -337,47 +337,6 @@ impl Case {
     }
 
     pub(super) fn expected(self) -> (&'static str, u16, FieldValue) {
-        if self == Self::MemberRoleUnknown {
-            return (
-                "BAD_REQUEST",
-                400,
-                FieldMap::from([
-                    ("code".into(), "ROLE_NOT_FOUND".into()),
-                    ("message".into(), "ROLE_NOT_FOUND: unknown".into()),
-                ])
-                .into(),
-            );
-        }
-        if self.role_permissions() {
-            let (code, message) = if self == Self::RoleCreateMissingPermissions {
-                (
-                    "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_ROLE",
-                    "You are not allowed to create a role",
-                )
-            } else {
-                (
-                    "YOU_ARE_NOT_ALLOWED_TO_UPDATE_A_ROLE",
-                    "You are not allowed to update a role",
-                )
-            };
-            return (
-                "FORBIDDEN",
-                403,
-                FieldMap::from([
-                    ("message".into(), message.into()),
-                    ("code".into(), code.into()),
-                    (
-                        "missingPermissions".into(),
-                        vec![
-                            FieldValue::from("organization:delete"),
-                            FieldValue::from("organization:update"),
-                        ]
-                        .into(),
-                    ),
-                ])
-                .into(),
-            );
-        }
         let (name, status, message, code) = match self {
             Self::InvitationSession | Self::TeamSession | Self::SlugSession => {
                 ("UNAUTHORIZED", 401, "Unauthorized", Some("UNAUTHORIZED"))
@@ -439,10 +398,46 @@ impl Case {
             | Self::MemberRoleEmptyBeforeOrganization
             | Self::MemberRoleEmptyArray
             | Self::MemberRoleWhitespace => return ("BAD_REQUEST", 400, FieldValue::Undefined),
-            Self::MemberRoleUnknown
-            | Self::RoleCreateMissingPermissions
-            | Self::RoleUpdateMissingPermissions => {
-                unreachable!("Explicit ordered bodies returned above")
+            Self::MemberRoleUnknown => {
+                return (
+                    "BAD_REQUEST",
+                    400,
+                    FieldMap::from([
+                        ("code".into(), "ROLE_NOT_FOUND".into()),
+                        ("message".into(), "ROLE_NOT_FOUND: unknown".into()),
+                    ])
+                    .into(),
+                );
+            }
+            Self::RoleCreateMissingPermissions | Self::RoleUpdateMissingPermissions => {
+                let (code, message) = if self == Self::RoleCreateMissingPermissions {
+                    (
+                        "YOU_ARE_NOT_ALLOWED_TO_CREATE_A_ROLE",
+                        "You are not allowed to create a role",
+                    )
+                } else {
+                    (
+                        "YOU_ARE_NOT_ALLOWED_TO_UPDATE_A_ROLE",
+                        "You are not allowed to update a role",
+                    )
+                };
+                return (
+                    "FORBIDDEN",
+                    403,
+                    FieldMap::from([
+                        ("message".into(), message.into()),
+                        ("code".into(), code.into()),
+                        (
+                            "missingPermissions".into(),
+                            vec![
+                                FieldValue::from("organization:delete"),
+                                FieldValue::from("organization:update"),
+                            ]
+                            .into(),
+                        ),
+                    ])
+                    .into(),
+                );
             }
             Self::UpdateOrganization
             | Self::OrgDeleteEmpty

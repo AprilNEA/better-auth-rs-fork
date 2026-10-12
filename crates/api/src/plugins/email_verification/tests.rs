@@ -1274,9 +1274,36 @@ async fn test_verify_email_rejects_untrusted_callback_url() {
     );
     let req =
         test_helpers::create_auth_request(HttpMethod::Get, "/verify-email", None, None, query);
-    let response = plugin.handle_verify_email(&req, &ctx).await.unwrap();
-
+    let error = plugin.handle_verify_email(&req, &ctx).await.unwrap_err();
+    test_helpers::assert_coded_api_error(
+        &error,
+        "FORBIDDEN",
+        403,
+        "INVALID_CALLBACK_URL",
+        "Invalid callbackURL",
+    );
+    let response = test_helpers::finalize_response(&ctx, &req, error.to_auth_response());
     assert_eq!(response.status, 403);
+    assert_eq!(
+        response.body.bytes().unwrap(),
+        br#"{"message":"Invalid callbackURL","code":"INVALID_CALLBACK_URL"}"#,
+    );
+    assert!(response.headers.get("set-cookie").is_none());
+    assert!(req.new_session().unwrap().is_none());
+    let stored = ctx
+        .database
+        .get_user_by_email("redirect-guard@test.com")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!stored.email_verified.is_truthy().unwrap());
+    assert!(
+        ctx.database
+            .get_user_sessions(stored.id.typed().unwrap())
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }
 
 // Upstream reference: packages/better-auth/src/api/routes/email-verification.ts :: `use: [originCheck((ctx) => ctx.query.callbackURL)]` on the verifyEmail endpoint.

@@ -178,7 +178,11 @@ impl EmailVerificationPlugin {
             && !ctx.config.advanced.disable_origin_check
             && !ctx.is_redirect_target_trusted(url)
         {
-            return Err(AuthError::forbidden("Invalid callbackURL"));
+            return Err(AuthError::from_code(
+                "FORBIDDEN",
+                "INVALID_CALLBACK_URL",
+                "Invalid callbackURL",
+            ));
         }
 
         let query = VerifyEmailQuery {

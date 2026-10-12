@@ -591,7 +591,7 @@ run_stage() {
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test native_endpoint_tests \
         --test required_headers_tests --test device_request_validation_tests \
-        --test organization_body_schema_tests --test user_input_policy_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests --test protected_function_tests \
         --test admin_error_construction_tests -- -D warnings || errors_status=1
       cargo test --locked -p better-auth-core --lib -- \
         error:: session:: query:: http_body:: user_fields::organization::tests:: \
@@ -601,11 +601,11 @@ run_stage() {
       cargo test --locked -p better-auth-api --features axum --lib || errors_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests -- organization_errors_preserve_constructor_provenance \
-        organization_role_business_consumes_ || errors_status=1
+        organization_role_business_consumes_ team_routes_preserve_scope_public_clone_and_page_guards || errors_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test native_endpoint_tests --test admin_error_construction_tests --test organization_native_tests \
         --test required_headers_tests --test device_request_validation_tests \
-        --test organization_body_schema_tests --test user_input_policy_tests \
+        --test organization_body_schema_tests --test user_input_policy_tests --test protected_function_tests \
         --test organization_query_limits_tests --test username_runtime_tests || errors_status=1
       return "$errors_status"
       ;;
@@ -1097,7 +1097,7 @@ run_stage() {
       cargo clippy --locked -p better-auth-core -p better-auth-api -- -D warnings || validation_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test required_headers_tests --test device_request_validation_tests \
-        --test organization_body_schema_tests --test user_input_policy_tests -- -D warnings || validation_status=1
+        --test organization_body_schema_tests --test user_input_policy_tests --test protected_function_tests -- -D warnings || validation_status=1
       cargo test --locked -p better-auth-core --lib -- \
         error:: query:: http_body:: user_fields::organization::tests:: plugin::tests::async_body_dispatch:: \
         plugin::tests::response_status:: plugin::tests::response_values:: || validation_status=1
@@ -1105,7 +1105,7 @@ run_stage() {
         plugins::oauth::signin::error_tests:: || validation_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test required_headers_tests --test device_request_validation_tests \
-        --test organization_body_schema_tests --test user_input_policy_tests || validation_status=1
+        --test organization_body_schema_tests --test user_input_policy_tests --test protected_function_tests || validation_status=1
       return "$validation_status"
       ;;
     device-validation)

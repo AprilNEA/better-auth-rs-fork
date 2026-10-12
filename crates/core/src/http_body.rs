@@ -165,7 +165,7 @@ mod tests {
                 serde_json::to_vec(&json!({"message": message, "code": code})).unwrap()
             );
             assert_eq!(
-                response.headers.get("content-type"),
+                response.headers.get("content-type").map(String::as_str),
                 Some("application/json")
             );
             assert_eq!(request.body.as_deref(), Some(bytes));

@@ -253,7 +253,13 @@ async fn authenticator_enrollment_can_restart_only_until_verified() {
     )
     .await
     .unwrap_err();
-    assert_eq!(unverified.to_string(), "TOTP not enabled");
+    test_helpers::assert_coded_api_error(
+        &unverified,
+        "BAD_REQUEST",
+        400,
+        "TOTP_NOT_ENABLED",
+        "TOTP not enabled",
+    );
     let secret = decrypt_value(&ctx.config.secret, &second_record.secret).unwrap();
     let code = build_totp(&config, &secret, None, &user.email.field_value(), &ctx)
         .unwrap()
