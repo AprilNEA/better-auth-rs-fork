@@ -587,12 +587,17 @@ run_stage() {
         ./compat-tests/reference-server/contracts/session-secondary-native-capture.test.ts \
         ./compat-tests/reference-server/contracts/safe-json-native-capture.test.ts \
         ./compat-tests/reference-server/contracts/oauth-logout-native-capture.test.ts \
-        ./compat-tests/reference-server/contracts/secondary-native-write-undefined-capture.test.ts || cache_status=1
+        ./compat-tests/reference-server/contracts/secondary-native-write-undefined-capture.test.ts \
+        ./compat-tests/reference-server/contracts/verification-consume-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/verification-native-read-write-capture.test.ts \
+        ./compat-tests/reference-server/contracts/json-parse-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/verification-otp-consumer-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/verification-auth-consumer-native-capture.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --features better-auth-core/redis-cache --lib -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        request_runtime::concurrent:: utils::json::runtime:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
-        plugins::api_key:: plugins::jwt:: plugins::oauth::logout::native_tests:: || cache_status=1
+        plugins::api_key:: plugins::jwt:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: || cache_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test secondary_storage_hooks_tests --test session_initial_defaults_tests || cache_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || cache_status=1

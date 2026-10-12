@@ -225,16 +225,35 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
         identifier: &str,
         update: crate::store::database_hooks::VerificationUpdate,
     ) -> AuthResult<Option<crate::wire::VerificationView>> {
+        self.update_verification_value(identifier, update)
+            .await?
+            .map(|value| crate::VerificationView::from_fields(value.enumerable_fields()?))
+            .transpose()
+    }
+    async fn update_verification_value(
+        &self,
+        identifier: &str,
+        update: crate::store::database_hooks::VerificationUpdate,
+    ) -> AuthResult<Option<crate::FieldValue>> {
         self.runtime
-            .update_verification_in_transaction(identifier, update, Some(self.inner.as_ref()))
+            .update_verification_value_in_transaction(identifier, update, Some(self.inner.as_ref()))
             .await
     }
     async fn get_verification_including_expired(
         &self,
         identifier: &str,
     ) -> AuthResult<Option<crate::wire::VerificationView>> {
+        self.find_verification_value(identifier)
+            .await?
+            .map(|value| crate::VerificationView::from_fields(value.enumerable_fields()?))
+            .transpose()
+    }
+    async fn find_verification_value(
+        &self,
+        identifier: &str,
+    ) -> AuthResult<Option<crate::FieldValue>> {
         self.runtime
-            .find_verification_in_transaction(identifier, Some(self.inner.as_ref()))
+            .find_verification_value_in_transaction(identifier, Some(self.inner.as_ref()))
             .await
     }
     async fn delete_expired_verifications(&self) -> AuthResult<usize> {

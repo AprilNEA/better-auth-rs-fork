@@ -10,8 +10,13 @@ export function jsonParserHostStackPaths(document) {
     if (node.type === "object" && Array.isArray(node.ownKeys) && Array.isArray(node.properties)
       && node.ownKeys.includes("sourceURL") && node.ownKeys.includes("message")) {
       for (const [index, [name, descriptor]] of node.properties.entries()) {
-        if (name === "stack" && Object.hasOwn(descriptor, "value") && typeof descriptor.value === "string") {
-          paths.add(`${path}${observationPointer(["properties", index, 1, "value"])}`);
+        if (name !== "stack" || !Object.hasOwn(descriptor, "value")) continue;
+        const valuePath = `${path}${observationPointer(["properties", index, 1, "value"])}`;
+        if (typeof descriptor.value === "string") {
+          paths.add(valuePath);
+        } else if (descriptor.value?.type === "utf16" && Array.isArray(descriptor.value.value)
+          && descriptor.value.value.every(unit => Number.isInteger(unit) && unit >= 0 && unit <= 65535)) {
+          paths.add(`${valuePath}/value`);
         }
       }
     }

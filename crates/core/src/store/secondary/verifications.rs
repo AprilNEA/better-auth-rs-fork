@@ -144,11 +144,11 @@ impl<S: AuthSchema> SecondaryStore<S> {
         Ok(Some(verification))
     }
 
-    pub(super) async fn find_verification_in_transaction(
+    pub(super) async fn find_verification_value_in_transaction(
         &self,
         identifier: &str,
         transaction: Option<&dyn crate::store::AuthTransaction<S>>,
-    ) -> AuthResult<Option<VerificationView>> {
+    ) -> AuthResult<Option<FieldValue>> {
         let identifiers = self.verification_identifiers(identifier).await?;
         for candidate in &identifiers {
             if let Some(cached) = self.cached_verification(candidate).await? {
@@ -161,16 +161,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let mut found = None;
         for candidate in &identifiers {
             found = match transaction {
-                Some(transaction) => {
-                    transaction
-                        .get_verification_including_expired(candidate)
-                        .await?
-                }
-                None => {
-                    self.inner
-                        .get_verification_including_expired(candidate)
-                        .await?
-                }
+                Some(transaction) => transaction.find_verification_value(candidate).await?,
+                None => self.inner.find_verification_value(candidate).await?,
             };
             if found.is_some() {
                 break;
@@ -193,12 +185,12 @@ impl<S: AuthSchema> SecondaryStore<S> {
         }))
     }
 
-    pub(super) async fn update_verification_in_transaction(
+    pub(super) async fn update_verification_value_in_transaction(
         &self,
         identifier: &str,
         update: VerificationUpdate,
         transaction: Option<&dyn crate::store::AuthTransaction<S>>,
-    ) -> AuthResult<Option<VerificationView>> {
+    ) -> AuthResult<Option<FieldValue>> {
         let identifier = self
             .config
             .verification
@@ -207,38 +199,51 @@ impl<S: AuthSchema> SecondaryStore<S> {
             .await?
             .0;
         if let Some(cached) = self.cached_verification(&identifier).await? {
-            let old_expiry = cached.expires_at.clone();
-            let mut fields = cached.fields()?;
+            let mut fields = cached.enumerable_fields()?;
             fields.extend(update.fields()?);
-            let record = VerificationView::from_fields(fields)?;
+            let updated = FieldValue::from(fields);
             // Upstream uses a nullish fallback for TTL while preserving the null in the cached JSON.
-            let expiry =
-                if record.expires_at.is_undefined() || record.expires_at.field_value().is_null() {
-                    &old_expiry
-                } else {
-                    &record.expires_at
-                };
-            let seconds = expiry.converted_cache_ttl(self.now())?;
+            let expiry = updated.model_property("expiresAt")?;
+            let expiry = if expiry.is_undefined() || expiry.is_null() {
+                cached.model_property("expiresAt")?
+            } else {
+                expiry
+            };
+            let expiry = if matches!(expiry, FieldValue::Date(_)) {
+                expiry
+            } else {
+                crate::query::field_date(&expiry)?.into()
+            };
+            let seconds =
+                crate::SchemaValue::<crate::FieldDate>::from_field(expiry).cache_ttl(self.now())?;
             if seconds > 0.0 {
                 self.secondary()?
                     .set_native(
                         &format!("verification:{identifier}").into(),
-                        &FieldValue::from(record.fields()?).stringify_native()?,
+                        &updated.stringify_native()?,
                         Some(seconds),
                     )
                     .await?;
             }
             if !self.database_verifications() {
-                return Ok(Some(record));
+                return Ok(Some(updated));
             }
         }
         if self.database_verifications() {
             match transaction {
-                Some(transaction) => transaction.update_verification(&identifier, update).await,
-                None => self.inner.update_verification(&identifier, update).await,
+                Some(transaction) => {
+                    transaction
+                        .update_verification_value(&identifier, update)
+                        .await
+                }
+                None => {
+                    self.inner
+                        .update_verification_value(&identifier, update)
+                        .await
+                }
             }
         } else {
-            Ok(Some(VerificationView::from_fields(update.fields()?)?))
+            Ok(Some(update.fields()?.into()))
         }
     }
 
@@ -275,17 +280,15 @@ impl<S: AuthSchema> SecondaryStore<S> {
         Ok(())
     }
 
-    async fn cached_verification(&self, identifier: &str) -> AuthResult<Option<VerificationView>> {
+    async fn cached_verification(&self, identifier: &str) -> AuthResult<Option<FieldValue>> {
         let Some(storage) = &self.storage else {
             return Ok(None);
         };
-        cache::decode(
-            storage
-                .get_native(&format!("verification:{identifier}").into())
-                .await?,
-        )?
-        .map(|value| cache::verification(&value))
-        .transpose()
+        let value = storage
+            .get_native(&format!("verification:{identifier}").into())
+            .await?
+            .filter(FieldValue::is_truthy);
+        cache::decode(value)
     }
 
     async fn verification_identifiers(&self, identifier: &str) -> AuthResult<Vec<String>> {
@@ -379,7 +382,14 @@ impl<S: AuthSchema> VerificationStore<S> for SecondaryStore<S> {
         &self,
         identifier: &str,
     ) -> AuthResult<Option<VerificationView>> {
-        self.find_verification_in_transaction(identifier, None)
+        self.find_verification_value(identifier)
+            .await?
+            .map(|value| VerificationView::from_fields(value.enumerable_fields()?))
+            .transpose()
+    }
+
+    async fn find_verification_value(&self, identifier: &str) -> AuthResult<Option<FieldValue>> {
+        self.find_verification_value_in_transaction(identifier, None)
             .await
     }
 
@@ -420,7 +430,18 @@ impl<S: AuthSchema> VerificationStore<S> for SecondaryStore<S> {
         identifier: &str,
         update: VerificationUpdate,
     ) -> AuthResult<Option<VerificationView>> {
-        self.update_verification_in_transaction(identifier, update, None)
+        self.update_verification_value(identifier, update)
+            .await?
+            .map(|value| VerificationView::from_fields(value.enumerable_fields()?))
+            .transpose()
+    }
+
+    async fn update_verification_value(
+        &self,
+        identifier: &str,
+        update: VerificationUpdate,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.update_verification_value_in_transaction(identifier, update, None)
             .await
     }
 
@@ -431,7 +452,7 @@ impl<S: AuthSchema> VerificationStore<S> for SecondaryStore<S> {
         expires_at: Option<DateTime<Utc>>,
     ) -> AuthResult<()> {
         let _ = self
-            .update_verification(
+            .update_verification_value(
                 identifier,
                 VerificationUpdate {
                     value: value.map(Into::into).unwrap_or_default(),

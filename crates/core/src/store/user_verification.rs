@@ -37,13 +37,12 @@ pub async fn revoke_unproven_account_access<S: AuthSchema>(
     if !reserved {
         let deadline = Utc::now() + Duration::seconds(2);
         while Utc::now() < deadline {
-            let Some(lock) = store
-                .get_verification_including_expired(&identifier)
-                .await?
-            else {
+            let Some(lock) = store.find_verification_value(&identifier).await? else {
                 break;
             };
-            if lock.expires_at.is_before_or_equal(Utc::now())? {
+            if SchemaValue::<crate::FieldDate>::from_field(lock.model_property("expiresAt")?)
+                .is_before_or_equal(Utc::now())?
+            {
                 store.delete_verification_by_identifier(&identifier).await?;
                 break;
             }

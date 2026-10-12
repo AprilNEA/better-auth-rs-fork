@@ -53,6 +53,10 @@ impl NativeObservation {
             FieldValue::Number(value) if *value == 0.0 && value.is_sign_negative() => {
                 json!({"type":"number","value":"-0"})
             }
+            FieldValue::Utf16String(value) => match value.to_utf8() {
+                Ok(value) => value.into(),
+                Err(_) => json!({"type":"utf16","value":value.as_utf16()}),
+            },
             FieldValue::Array(array) => Json::Array(
                 (0..array.len()?)
                     .map(|index| {

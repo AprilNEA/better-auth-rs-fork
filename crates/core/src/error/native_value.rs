@@ -2,6 +2,10 @@ use super::{ApiErrorClass, ApiErrorInit, AuthError, AuthResult, native};
 use crate::FieldValue;
 
 impl AuthError {
+    pub(crate) fn syntax_error(message: FieldValue) -> Self {
+        Self::from_thrown(native::runtime_error("SyntaxError", message))
+    }
+
     /// Move an error into a native callback value without applying HTTP error sanitization.
     /// Existing thrown values retain their identity and do not evaluate properties.
     /// Typed errors expose their category and message; they have no JavaScript stack metadata.

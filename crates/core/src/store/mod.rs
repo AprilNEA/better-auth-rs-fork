@@ -320,12 +320,30 @@ pub trait AuthTransaction<S: AuthSchema>:
         identifier: &str,
         update: database_hooks::VerificationUpdate,
     ) -> AuthResult<Option<crate::wire::VerificationView>>;
+    /// Preserve the updated native record through cache callbacks and return it without projection.
+    async fn update_verification_value(
+        &self,
+        identifier: &str,
+        update: database_hooks::VerificationUpdate,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.update_verification(identifier, update)
+            .await?
+            .map(|record| record.fields().map(FieldValue::from))
+            .transpose()
+    }
 
     /// Read the latest verification, including expired values, inside the active transaction.
     async fn get_verification_including_expired(
         &self,
         identifier: &str,
     ) -> AuthResult<Option<crate::wire::VerificationView>>;
+    /// Read a native verification without applying an expiry gate or projecting a cached root.
+    async fn find_verification_value(&self, identifier: &str) -> AuthResult<Option<FieldValue>> {
+        self.get_verification_including_expired(identifier)
+            .await?
+            .map(|record| record.fields().map(FieldValue::from))
+            .transpose()
+    }
     /// Consume the latest verification and remove older matches through this transaction.
     async fn consume_verification_including_expired(
         &self,
@@ -1282,6 +1300,18 @@ pub trait VerificationStore<S: AuthSchema>: Send + Sync {
         identifier: &str,
         update: database_hooks::VerificationUpdate,
     ) -> AuthResult<Option<crate::wire::VerificationView>>;
+    /// Preserve the updated native record through cache callbacks and return it without projection.
+    /// Existing stores retain their typed implementation through the default bridge.
+    async fn update_verification_value(
+        &self,
+        identifier: &str,
+        update: database_hooks::VerificationUpdate,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.update_verification(identifier, update)
+            .await?
+            .map(|record| record.fields().map(FieldValue::from))
+            .transpose()
+    }
 
     /// Reserve an identifier with the upstream deterministic SHA-256 primary key.
     async fn reserve_verification_value(
@@ -1337,6 +1367,14 @@ pub trait VerificationStore<S: AuthSchema>: Send + Sync {
         &self,
         identifier: &str,
     ) -> AuthResult<Option<crate::wire::VerificationView>>;
+    /// Read a native verification without applying an expiry gate or projecting a cached root.
+    /// Existing stores retain their typed implementation through the default bridge.
+    async fn find_verification_value(&self, identifier: &str) -> AuthResult<Option<FieldValue>> {
+        self.get_verification_including_expired(identifier)
+            .await?
+            .map(|record| record.fields().map(FieldValue::from))
+            .transpose()
+    }
     /// Update every record matching an identifier without consuming the verification.
     async fn update_verification_by_identifier(
         &self,

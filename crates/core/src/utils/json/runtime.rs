@@ -8,18 +8,24 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod native_revival_tests;
 
 pub(crate) fn parse_field_json(text: &str) -> AuthResult<FieldValue> {
-    let value: &RawValue = serde_json::from_str(text)?;
-    let text = value.get();
+    let value: &RawValue = serde_json::from_str(text).map_err(|error| {
+        super::syntax::error(&text.encode_utf16().collect::<Vec<_>>())
+            .unwrap_or_else(|| error.into())
+    })?;
+    parse_validated_json(value.get())
+}
+
+fn parse_validated_json(text: &str) -> AuthResult<FieldValue> {
     match text.as_bytes().first() {
         Some(b'"') => Ok(serde_json::from_str::<Utf16String>(text)?.into()),
         Some(b'[') => serde_json::from_str::<Vec<&RawValue>>(text)?
             .into_iter()
-            .map(|value| parse_field_json(value.get()))
+            .map(|value| parse_validated_json(value.get()))
             .collect::<AuthResult<Vec<_>>>()
             .map(Into::into),
         Some(b'{') => serde_json::from_str::<indexmap::IndexMap<String, &RawValue>>(text)?
             .into_iter()
-            .map(|(key, value)| Ok((key, parse_field_json(value.get())?)))
+            .map(|(key, value)| Ok((key, parse_validated_json(value.get())?)))
             .collect::<AuthResult<FieldMap>>()
             .map(Into::into),
         Some(b'n') => Ok(FieldValue::Null),
@@ -67,7 +73,12 @@ fn utf16_json_source(text: &Utf16String) -> AuthResult<String> {
 pub fn parse_native_json(value: &FieldValue) -> AuthResult<FieldValue> {
     match value {
         FieldValue::String(text) => FieldValue::parse_json(text),
-        _ => FieldValue::parse_json(&utf16_json_source(&value.display_utf16()?)?),
+        _ => {
+            let text = value.display_utf16()?;
+            utf16_json_source(&text)
+                .and_then(|source| FieldValue::parse_json(&source))
+                .map_err(|error| super::syntax::error(text.as_utf16()).unwrap_or(error))
+        }
     }
 }
 

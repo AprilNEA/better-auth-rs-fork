@@ -1,4 +1,4 @@
-use crate::{AuthError, AuthResult, FieldDate, FieldMap, FieldValue, FromFieldMap};
+use crate::{AuthResult, FieldMap, FieldValue, FromFieldMap};
 
 #[cfg(test)]
 mod tests;
@@ -20,23 +20,6 @@ pub(super) fn parse(value: Option<FieldValue>) -> AuthResult<Option<FieldValue>>
         })
         .transpose()
         .map(|value| value.filter(FieldValue::is_truthy))
-}
-
-fn object(value: &FieldValue) -> AuthResult<FieldMap> {
-    value
-        .as_object()
-        .ok_or_else(|| AuthError::internal("Secondary storage record must be an object"))?
-        .snapshot_fields()
-}
-
-fn revive_dates(fields: &mut FieldMap) {
-    for name in ["expiresAt", "createdAt", "updatedAt"] {
-        if let Some(FieldValue::String(text)) = fields.get(name)
-            && let Some(date) = crate::utils::json::parse_json_date(text)
-        {
-            let _ = fields.insert(name.into(), FieldDate::from(date).into());
-        }
-    }
 }
 
 pub(super) fn dated_fields(
@@ -62,12 +45,6 @@ pub(super) fn user(cached: &FieldValue) -> AuthResult<crate::UserView> {
         || cached.model_property("user"),
         &["createdAt", "updatedAt"],
     )?)
-}
-
-pub(super) fn verification(value: &FieldValue) -> AuthResult<crate::VerificationView> {
-    let mut fields = object(value)?;
-    revive_dates(&mut fields);
-    crate::VerificationView::from_fields(fields)
 }
 
 pub(super) fn consumed_verification(

@@ -300,7 +300,7 @@ impl Root {
             expected: Arc::downgrade(&expected),
         });
         let fields = FieldObject::from_source(properties.clone());
-        let value = match kind {
+        let value: FieldValue = match kind {
             "date" => {
                 FieldDate::from_milliseconds_with_properties((NOW + offset) as f64, fields).into()
             }

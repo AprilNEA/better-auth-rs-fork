@@ -35,6 +35,20 @@ test("JSON parser replay retains Error metadata and exact stack descriptor bound
     change(actual);
     expect(() => assertJsonParseNativeReplay(actual, expected)).toThrow();
   }
+  const utf16 = fixture.cases.find(captured => captured.name === "surrogate-token" && captured.mode === "direct");
+  const movedStack = structuredClone(utf16);
+  property(movedStack, "stack").value.value.push(32);
+  expect(() => assertJsonParseNativeReplay(movedStack, utf16)).not.toThrow();
+  for (const change of [
+    record => { property(record, "stack").value.type = "array"; },
+    record => { property(record, "stack").value.value[0] = "wrong-unit"; },
+    record => { property(record, "stack").enumerable = true; },
+    record => { property(record, "message").value.value[0] += 1; },
+  ]) {
+    const actual = structuredClone(utf16);
+    change(actual);
+    expect(() => assertJsonParseNativeReplay(actual, utf16)).toThrow();
+  }
 });
 
 test("shared replay checks deep observations without using the call stack", () => {
