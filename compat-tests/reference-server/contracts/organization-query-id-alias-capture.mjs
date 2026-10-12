@@ -264,3 +264,54 @@ export async function captureInvitationClaimStatusPolicies(onCase = () => {}) {
   }
   return { version: "1.7.6", backend: "memory", cases };
 }
+
+export async function captureInvitationClaimSelectorValues(onCase = () => {}) {
+  const cases = [];
+  for (const column of ["id", "lookup"]) {
+    for (const kind of ["nan", "object"]) {
+      const memory = storage();
+      const selected = {
+        ...row("invitation", "canonical-invitation", "pending"),
+        [column]: "invitation-alias",
+      };
+      const replacement = kind === "nan"
+        ? NaN
+        : { marker: "claimed-object", ownUndefined: undefined };
+      memory.invitation.push(selected);
+      const events = [];
+      const current = await context(memory, { invitation: {
+        id: { type: "string", fieldName: column },
+        claimLookup: { type: "string", fieldName: column, onUpdate() {
+          events.push(["onUpdate", "invitation.claimLookup", observeValue(replacement)]);
+          return replacement;
+        } },
+      } });
+      let returned;
+      const identities = () => ({
+        originalRows: memory.invitation.map(record => record === selected),
+        originalValues: memory.invitation.map(record => Object.is(record[column], replacement)),
+        returnedLookupIsReplacement: Object.is(returned?.claimLookup, replacement),
+      });
+      const input = { invitationId: "invitation-alias", status: "accepted", fromStatus: "pending" };
+      const claim = await observedStep(memory, events, input, async () => {
+        returned = await current.org.updateInvitation(input);
+        return returned;
+      });
+      claim.identities = identities();
+      // A separate transaction preserves Memory's object-ID reconciliation boundary in the capture.
+      const transaction = await observedStep(
+        memory, events, { operation: "read-only-adapter-transaction" },
+        () => current.adapter.transaction(async () => true),
+      );
+      transaction.identities = identities();
+      const captured = {
+        scenario: `invitation-own-selector-${column}-${kind}`,
+        column, kind, surface: "getOrgAdapter.updateInvitation + adapter.transaction",
+        steps: [claim, transaction],
+      };
+      cases.push(captured);
+      await onCase(captured);
+    }
+  }
+  return { version: "1.7.6", backend: "memory", cases };
+}

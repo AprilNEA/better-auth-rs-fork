@@ -55,6 +55,10 @@ impl LogSink for Recorder {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "The synchronous logger must fail the contract when an argument cannot be observed."
+)]
 fn log_value(argument: &LogArgument<'_>) -> Value {
     match argument {
         LogArgument::Text(text) => Value::String((*text).into()),

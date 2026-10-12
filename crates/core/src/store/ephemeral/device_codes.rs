@@ -57,12 +57,10 @@ impl DeviceCodeConsumption {
             .chain(self.selected_field.iter())
             .chain(self.ownership_field.iter())
         {
-            let same = match (origin.live.field(name)?, origin.before.get(name)) {
-                (Some(actual), Some(before)) => actual.same_value_zero(before),
-                (None, None) => true,
-                _ => false,
-            };
-            if !same {
+            if !super::rows::same_field_value(
+                origin.live.field(name)?.as_ref(),
+                origin.before.get(name),
+            ) {
                 return Ok(false);
             }
         }

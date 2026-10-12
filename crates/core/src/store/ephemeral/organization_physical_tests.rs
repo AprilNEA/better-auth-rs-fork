@@ -659,3 +659,216 @@ async fn invitation_claim_accepts_its_own_selector_update() -> AuthResult<()> {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn invitation_claim_accepts_its_own_nan_selector() -> AuthResult<()> {
+    for column in ["id", "lookup"] {
+        let baseline = EphemeralStore::new(test_config());
+        let _ = create(&baseline, EntityRole::Invitation, FieldMap::new()).await?;
+        let mut invitation = stored(&baseline, EntityRole::Invitation)?;
+        let _ = invitation.insert(column.into(), "invitation-alias".into());
+        let store = fresh_id_alias_store(EntityRole::Invitation, vec![invitation.clone()])?;
+        let mut fields = store.organization_fields()?;
+        let _ = fields
+            .invitation
+            .fields_mut()
+            .insert("id".into(), mapped(column));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        let _ = fields.invitation.fields_mut().insert(
+            "claimLookup".into(),
+            UserFieldConfig {
+                on_update: Some(Arc::new(move || {
+                    observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Ok(f64::NAN.into())
+                })),
+                ..mapped(column)
+            },
+        );
+        store.configure_organization_fields(fields)?;
+        let (member, accepted, session) = store
+            .accept_invitation_with_teams_values(
+                &"invitation-alias".into(),
+                &"recipient".into(),
+                None,
+                false,
+                crate::store::TeamMemberLimits::Fixed(None),
+            )
+            .await?;
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(accepted.status, InvitationStatus::Accepted);
+        if column == "id" {
+            assert_eq!(accepted.id, "NaN");
+            assert_eq!(
+                accepted.additional_fields["claimLookup"],
+                Value::from("NaN")
+            );
+        } else {
+            assert_eq!(accepted.id.field_value(), invitation["id"]);
+            assert!(
+                accepted.additional_fields["claimLookup"]
+                    .as_f64()
+                    .is_some_and(f64::is_nan)
+            );
+        }
+        let mut rows = store.storage_rows(EntityRole::Invitation)?;
+        assert_eq!(rows.len(), 1);
+        let mut row = rows.remove(0);
+        assert!(matches!(row.remove(column), Some(Value::Number(value)) if value.is_nan()));
+        let _ = invitation.remove(column);
+        let _ = invitation.insert("status".into(), "accepted".into());
+        assert_eq!(row, invitation);
+        assert_eq!(member.organization_id, "organization");
+        assert_eq!(member.user_id, "recipient");
+        assert_eq!(member.role, "member");
+        assert_eq!(
+            store.storage_rows(EntityRole::Member)?,
+            vec![member.field_values()?]
+        );
+        assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+        assert!(session.is_none());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn invitation_claim_rejects_null_selector_deletion_or_undefined() -> AuthResult<()> {
+    use crate::user_fields::{FieldTransforms, UserFieldTransform};
+    for erase in [false, true] {
+        let baseline = EphemeralStore::new(test_config());
+        let _ = create(&baseline, EntityRole::Invitation, FieldMap::new()).await?;
+        let mut invitation = stored(&baseline, EntityRole::Invitation)?;
+        let _ = invitation.insert("lookup".into(), "invitation-alias".into());
+        let store = fresh_id_alias_store(EntityRole::Invitation, vec![invitation.clone()])?;
+        let mut fields = store.organization_fields()?;
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        let _ = fields.invitation.fields_mut().insert(
+            "claimLookup".into(),
+            UserFieldConfig {
+                on_update: Some(Arc::new(move || {
+                    Ok(
+                        if observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+                            Value::Null
+                        } else {
+                            Value::Undefined
+                        },
+                    )
+                })),
+                ..mapped("lookup")
+            },
+        );
+        let writer = store.clone();
+        let _ = fields.invitation.fields_mut().insert(
+            "status".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(UserFieldTransform::new(move |value| {
+                        if value.strict_equals(&"accepted".into()) {
+                            writer.operation(|op| {
+                                let row = op
+                                    .capture_table(EntityRole::Invitation)?
+                                    .row_at(0)?
+                                    .ok_or_else(|| {
+                                        AuthError::internal("Claimed invitation is missing")
+                                    })?;
+                                if erase {
+                                    let _ = row.delete_field("lookup")?;
+                                } else {
+                                    let _ = row.set_field("lookup".into(), Value::Undefined)?;
+                                }
+                                Ok(())
+                            })?;
+                        }
+                        Ok(value)
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        store.configure_organization_fields(fields)?;
+        let result = store
+            .accept_invitation_with_teams_values(
+                &"invitation-alias".into(),
+                &"recipient".into(),
+                None,
+                false,
+                crate::store::TeamMemberLimits::Fixed(None),
+            )
+            .await;
+        assert!(matches!(result, Err(AuthError::Conflict(_))));
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        if erase {
+            let _ = invitation.remove("lookup");
+        } else {
+            let _ = invitation.insert("lookup".into(), Value::Undefined);
+        }
+        assert_eq!(
+            store.storage_rows(EntityRole::Invitation)?,
+            vec![invitation]
+        );
+        assert!(store.storage_rows(EntityRole::Member)?.is_empty());
+        assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn invitation_claim_rejects_equal_content_ownership_replacements() -> AuthResult<()> {
+    use crate::user_fields::{FieldTransforms, UserFieldTransform};
+    for column in ["teamId", "organizationId", "role"] {
+        let marker = || Value::from(FieldMap::from([("owner".into(), "same-content".into())]));
+        let baseline = EphemeralStore::new(test_config());
+        let _ = create(&baseline, EntityRole::Invitation, FieldMap::new()).await?;
+        let mut invitation = stored(&baseline, EntityRole::Invitation)?;
+        let _ = invitation.insert("lookup".into(), "invitation-alias".into());
+        let _ = invitation.insert(column.into(), marker());
+        let store = fresh_id_alias_store(EntityRole::Invitation, vec![invitation.clone()])?;
+        let mut fields = store.organization_fields()?;
+        let replacement = marker();
+        let changed = replacement.clone();
+        let writer = store.clone();
+        let _ = fields.invitation.fields_mut().insert(
+            "status".into(),
+            UserFieldConfig {
+                transform: Some(FieldTransforms {
+                    output: Some(UserFieldTransform::new(move |value| {
+                        if value.strict_equals(&"accepted".into()) {
+                            writer.operation(|op| {
+                                let row = op
+                                    .capture_table(EntityRole::Invitation)?
+                                    .row_at(0)?
+                                    .ok_or_else(|| {
+                                        AuthError::internal("Claimed invitation is missing")
+                                    })?;
+                                row.apply_patch([(column.into(), changed.clone())].into())
+                            })?;
+                        }
+                        Ok(value)
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        store.configure_organization_fields(fields)?;
+        let result = store
+            .accept_invitation_with_teams_values(
+                &"invitation-alias".into(),
+                &"recipient".into(),
+                None,
+                false,
+                crate::store::TeamMemberLimits::Fixed(None),
+            )
+            .await;
+        assert!(matches!(result, Err(AuthError::Conflict(_))));
+        let _ = invitation.insert(column.into(), replacement.clone());
+        let rows = store.storage_rows(EntityRole::Invitation)?;
+        assert_eq!(rows, vec![invitation]);
+        assert!(rows[0][column].strict_equals(&replacement));
+        assert!(store.storage_rows(EntityRole::Member)?.is_empty());
+        assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+    }
+    Ok(())
+}

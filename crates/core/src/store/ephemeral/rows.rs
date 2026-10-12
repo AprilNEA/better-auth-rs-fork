@@ -7,6 +7,15 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::operation::MemoryGate;
 
+/// Snapshot guards retain property presence and native identity, including unchanged NaN values.
+pub(super) fn same_field_value(actual: Option<&FieldValue>, before: Option<&FieldValue>) -> bool {
+    match (actual, before) {
+        (Some(actual), Some(before)) => actual.same_value_zero(before),
+        (None, None) => true,
+        _ => false,
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct RowCell<T> {
     pub(super) value: T,

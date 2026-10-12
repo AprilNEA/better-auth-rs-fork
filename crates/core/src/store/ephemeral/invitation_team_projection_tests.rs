@@ -382,7 +382,17 @@ async fn pending_team_scope_patch_is_used_by_the_next_scoped_lookup() -> AuthRes
             TeamMemberLimits::Resolver(&limits),
         )
         .await;
-    assert!(matches!(result, Err(AuthError::BadRequest(message)) if message == "Team not found"));
+    let error = result.err().ok_or_else(|| {
+        AuthError::internal("The changed team scope did not reject the next lookup")
+    })?;
+    assert_eq!(error.status_value()?, Value::from("BAD_REQUEST"));
+    assert_eq!(
+        error.body_value()?,
+        Value::from(FieldMap::from([
+            ("message".into(), "Team not found".into()),
+            ("code".into(), "TEAM_NOT_FOUND".into()),
+        ]))
+    );
     assert_eq!(
         events_snapshot(&events)?,
         vec![

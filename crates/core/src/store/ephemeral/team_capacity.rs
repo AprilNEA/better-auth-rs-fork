@@ -99,11 +99,7 @@ impl PreparedTeamSeats {
 
     pub(super) fn is_current(&self, teams: &TableRef<FieldMap>, actual: usize) -> AuthResult<bool> {
         let team = self.current(teams)?;
-        let unchanged = match (team.get(&self.column), &self.count) {
-            (Some(current), Some(original)) => current.same_value_zero(original),
-            (None, None) => true,
-            _ => false,
-        };
+        let unchanged = super::rows::same_field_value(team.get(&self.column), self.count.as_ref());
         Ok(actual == self.actual && unchanged)
     }
 

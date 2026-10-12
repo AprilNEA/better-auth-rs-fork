@@ -125,7 +125,17 @@ async fn acceptance_consumes_projected_fields_and_keeps_the_original_claim_for_c
             [("2".into(), Value::Number(2.0))]
         );
         if maximum == 0 {
-            assert!(matches!(result, Err(AuthError::Forbidden(_))));
+            let error = result.err().ok_or_else(|| {
+                AuthError::internal("The zero-capacity team did not reject acceptance")
+            })?;
+            assert_eq!(error.status_value()?, Value::from("FORBIDDEN"));
+            assert_eq!(
+                error.body_value()?,
+                Value::from(FieldMap::from([
+                    ("message".into(), "Team member limit reached".into()),
+                    ("code".into(), "TEAM_MEMBER_LIMIT_REACHED".into()),
+                ]))
+            );
         } else {
             let (member, accepted, cookie) = result?;
             assert_eq!(accepted.id, "1");

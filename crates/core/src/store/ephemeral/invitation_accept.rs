@@ -10,7 +10,7 @@ struct InvitationClaim {
     row: super::rows::RowRef<FieldMap>,
     fields: FieldMap,
     schema: crate::user_fields::UserConfig,
-    selector: (String, Value),
+    selector_column: String,
 }
 
 fn validate_membership_allocations(
@@ -32,6 +32,13 @@ fn validate_membership_allocations(
 }
 
 impl InvitationClaim {
+    fn unchanged(&self, column: &str) -> AuthResult<bool> {
+        Ok(super::rows::same_field_value(
+            self.row.field(column)?.as_ref(),
+            self.fields.get(column),
+        ))
+    }
+
     fn validate(
         &self,
         invitations: &TableRef<FieldMap>,
@@ -40,18 +47,14 @@ impl InvitationClaim {
         if !invitations.contains_ref(&self.row)? {
             return Err(AuthError::bad_request("Invitation not found"));
         }
-        if !super::organization_rows::matches(&self.row, std::slice::from_ref(&self.selector))? {
+        if !self.unchanged(&self.selector_column)? {
             return Err(AuthError::conflict(changed_message));
         }
-        if !super::organization_rows::field(&self.row, &self.schema, "status")?
-            .same_value_zero(&organization_value(&self.fields, &self.schema, "status"))
-        {
+        if !self.unchanged(self.schema.record_storage_key("status"))? {
             return Err(AuthError::bad_request("Invitation not found"));
         }
         for name in ["teamId", "organizationId", "role"] {
-            if super::organization_rows::field(&self.row, &self.schema, name)?
-                != organization_value(&self.fields, &self.schema, name)
-            {
+            if !self.unchanged(self.schema.record_storage_key(name))? {
                 return Err(AuthError::conflict(changed_message));
             }
         }
@@ -100,12 +103,11 @@ impl EphemeralStore {
                 })?;
             row.apply_patch(patch.apply(FieldMap::new()))?;
             let fields = row.shallow_fields()?;
-            let selector_value = fields.get(&bound_id.0).cloned().unwrap_or_default();
             Ok(InvitationClaim {
                 row,
                 fields,
                 schema,
-                selector: (bound_id.0, selector_value),
+                selector_column: bound_id.0,
             })
         })?;
         // Claim output follows the committed claim and precedes the compensation boundary.
@@ -152,8 +154,7 @@ impl EphemeralStore {
                 .capture_table(EntityRole::Invitation)?
                 .contains_ref(&claim.row)?
                 && super::organization_rows::matches(&claim.row, &[status])?
-                && super::organization_rows::field(&claim.row, &claim.schema, "status")?
-                    .same_value_zero(&organization_value(&claim.fields, &claim.schema, "status"))
+                && claim.unchanged(claim.schema.record_storage_key("status"))?
             {
                 claim.row.apply_patch(patch.apply(FieldMap::new()))?;
                 Ok(Some(claim.row.shallow_fields()?))
