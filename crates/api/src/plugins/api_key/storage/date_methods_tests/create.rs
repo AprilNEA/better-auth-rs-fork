@@ -20,6 +20,18 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         "api-key-create-date-identity"
     }
 
+    fn routes(&self) -> Vec<better_auth_core::AuthRoute> {
+        Vec::new()
+    }
+
+    async fn on_request(
+        &self,
+        _: &better_auth_core::AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<better_auth_core::AuthResponse>> {
+        Ok(None)
+    }
+
     fn schema(&self, fields: &mut ModelFields) -> AuthResult<()> {
         fields.register_model_fields(
             EntityRole::ApiKey,

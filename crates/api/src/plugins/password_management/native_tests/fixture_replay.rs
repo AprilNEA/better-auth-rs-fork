@@ -327,7 +327,10 @@ async fn query_case(case: &Json) -> AuthResult<()> {
         Some(body),
     );
     let result = plugin
-        .on_request(&request, &context.initialize_request_context().await?)
+        .on_request(
+            &request,
+            context.initialize_request_context().await?.as_ref(),
+        )
         .await
         .and_then(|response| {
             response.ok_or_else(|| {

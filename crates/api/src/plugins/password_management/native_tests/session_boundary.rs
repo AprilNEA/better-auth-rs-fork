@@ -185,7 +185,10 @@ async fn native_session_owner_reaches_revocation_and_preserves_committed_failure
             .into(),
         }))?;
         let error = plugin
-            .on_request(&request, &context.initialize_request_context().await?)
+            .on_request(
+                &request,
+                context.initialize_request_context().await?.as_ref(),
+            )
             .await
             .err()
             .unwrap();
@@ -229,8 +232,8 @@ async fn native_session_owner_reaches_revocation_and_preserves_committed_failure
                 .get_user_accounts_value(&7.into())
                 .await?
                 .into_iter()
-                .map(FieldMap::from)
-                .collect::<Vec<_>>(),
+                .map(|account| account.field_values())
+                .collect::<AuthResult<Vec<_>>>()?,
             vec![expected]
         );
         assert!(raw_context.database.get_session("target").await?.is_none());

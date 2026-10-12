@@ -124,7 +124,10 @@ async fn check_authoritative_user<S: AuthSchema>(
             user: FieldMap::from([("id".into(), "stale-owner".into())]).into(),
         }))?;
         let response = plugin
-            .on_request(&request, &context.initialize_request_context().await?)
+            .on_request(
+                &request,
+                context.initialize_request_context().await?.as_ref(),
+            )
             .await?
             .unwrap();
         let mut expected_user = FieldMap::from(raw.user_view(&user).await?);
@@ -163,8 +166,8 @@ async fn check_authoritative_user<S: AuthSchema>(
                 .get_user_accounts(user.id.typed()?)
                 .await?
                 .into_iter()
-                .map(FieldMap::from)
-                .collect::<Vec<_>>(),
+                .map(|account| account.field_values())
+                .collect::<AuthResult<Vec<_>>>()?,
             vec![expected_account]
         );
         assert_eq!(

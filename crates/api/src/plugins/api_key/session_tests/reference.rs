@@ -20,6 +20,18 @@ impl AuthPlugin<StatelessSchema> for Projection {
         "api-key-session-reference"
     }
 
+    fn routes(&self) -> Vec<better_auth_core::AuthRoute> {
+        Vec::new()
+    }
+
+    async fn on_request(
+        &self,
+        _: &better_auth_core::AuthRequest,
+        _: &better_auth_core::AuthContext<StatelessSchema>,
+    ) -> AuthResult<Option<better_auth_core::AuthResponse>> {
+        Ok(None)
+    }
+
     fn schema(&self, fields: &mut ModelFields) -> AuthResult<()> {
         let reference = self.reference.clone();
         let events = self.events.clone();

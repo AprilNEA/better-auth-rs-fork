@@ -67,7 +67,11 @@ impl<S: AuthSchema> PasswordHasher for MutatingHasher<S> {
             .get_user_accounts(self.user_id.typed()?)
             .await?;
         assert_eq!(records.len(), 1);
-        *self.after_callback.lock().unwrap() = records.into_iter().next().map(FieldMap::from);
+        *self.after_callback.lock().unwrap() = records
+            .into_iter()
+            .next()
+            .map(|account| account.field_values())
+            .transpose()?;
         Ok(result)
     }
 }
@@ -167,7 +171,7 @@ async fn check_selected_account<S: AuthSchema>(
         Some(json!({"currentPassword":PASSWORD,"newPassword":PASSWORD})),
     );
     let response = password
-        .on_request(&req, &context.initialize_request_context().await?)
+        .on_request(&req, context.initialize_request_context().await?.as_ref())
         .await?
         .unwrap();
     assert_eq!(
@@ -197,8 +201,8 @@ async fn check_selected_account<S: AuthSchema>(
             .get_user_accounts(user.id.typed()?)
             .await?
             .into_iter()
-            .map(FieldMap::from)
-            .collect::<Vec<_>>(),
+            .map(|account| account.field_values())
+            .collect::<AuthResult<Vec<_>>>()?,
         vec![expected]
     );
     assert_eq!(

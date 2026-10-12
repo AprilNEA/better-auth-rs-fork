@@ -15,7 +15,7 @@ use crate::plugins::{
     username::{UsernameConfig, UsernamePlugin},
 };
 use better_auth_core::{
-    AuthSchema, CreateAccount, CreateUser, FieldFunction, FieldMap, FieldValue,
+    AuthRecordFields, AuthSchema, CreateAccount, CreateUser, FieldFunction, FieldMap, FieldValue,
     store::{AuthStore, EphemeralStore, StatelessSchema},
     user_fields::{FieldTransforms, UserFieldConfig, UserFieldTransform},
 };
@@ -136,8 +136,8 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
         .get_user_accounts(user.id.typed()?)
         .await?
         .into_iter()
-        .map(FieldMap::from)
-        .collect::<Vec<_>>();
+        .map(|account| account.field_values())
+        .collect::<AuthResult<Vec<_>>>()?;
     let stored_sessions = raw
         .database
         .get_user_sessions(user.id.typed()?)
@@ -276,8 +276,8 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
                     .get_user_accounts(user.id.typed()?)
                     .await?
                     .into_iter()
-                    .map(FieldMap::from)
-                    .collect::<Vec<_>>(),
+                    .map(|account| account.field_values())
+                    .collect::<AuthResult<Vec<_>>>()?,
                 stored_accounts,
                 "{path}"
             );
@@ -326,7 +326,7 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
                 Some(json!({"password":PASSWORD})),
             );
             let response = verify
-                .on_request(&req, &context.initialize_request_context().await?)
+                .on_request(&req, context.initialize_request_context().await?.as_ref())
                 .await?
                 .unwrap();
             assert_eq!(response.body.json()?, Some(json!({"status":true})));
@@ -351,7 +351,7 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
             .iter()
             .find(|plugin| plugin.name() == *name)
             .unwrap()
-            .on_request(&req, &context.initialize_request_context().await?)
+            .on_request(&req, context.initialize_request_context().await?.as_ref())
             .await
             .err()
             .unwrap();
@@ -388,7 +388,7 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
             .iter()
             .find(|plugin| plugin.name() == "phone-number")
             .unwrap()
-            .on_request(&req, &context.initialize_request_context().await?)
+            .on_request(&req, context.initialize_request_context().await?.as_ref())
             .await
             .err()
             .unwrap();
@@ -439,7 +439,7 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
             Some(json!({"password":password})),
         );
         let error = plugin
-            .on_request(&req, &context.initialize_request_context().await?)
+            .on_request(&req, context.initialize_request_context().await?.as_ref())
             .await
             .err()
             .unwrap();
@@ -461,8 +461,8 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
             .get_user_accounts(user.id.typed()?)
             .await?
             .into_iter()
-            .map(FieldMap::from)
-            .collect::<Vec<_>>(),
+            .map(|account| account.field_values())
+            .collect::<AuthResult<Vec<_>>>()?,
         stored_accounts
     );
     assert_eq!(
