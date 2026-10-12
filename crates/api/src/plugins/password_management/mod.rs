@@ -20,6 +20,8 @@ pub(super) mod types;
 #[cfg(test)]
 mod duration_tests;
 #[cfg(test)]
+mod native_tests;
+#[cfg(test)]
 mod tests;
 
 use handlers::*;

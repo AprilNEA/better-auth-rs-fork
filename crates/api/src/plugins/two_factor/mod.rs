@@ -22,7 +22,6 @@ use better_auth_core::{
 
 use crate::plugins::helpers::{
     SessionIssueError, admit_session_for_id, delete_session_cookies, get_cookie,
-    get_credential_account,
 };
 
 use super::StatusResponse;

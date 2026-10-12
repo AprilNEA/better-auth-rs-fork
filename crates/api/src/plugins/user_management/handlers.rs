@@ -207,12 +207,11 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
         .filter(|password| !password.is_empty())
     {
         ctx.password_policy.validate_max_length(password)?;
-        let account = super::super::helpers::get_credential_account(
+        let stored_hash = super::super::helpers::get_credential_password_hash(
             ctx,
             SchemaValue::from_field(data.user_property("id")?),
         )
         .await?
-        .filter(|account| account.password.field_value().is_truthy())
         .ok_or_else(|| {
             AuthError::from_code(
                 "BAD_REQUEST",
@@ -220,21 +219,18 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
                 "Credential account not found",
             )
         })?;
-        let stored_hash = account.password.typed()?.as_deref().ok_or_else(|| {
-            AuthError::from_code(
-                "BAD_REQUEST",
-                "CREDENTIAL_ACCOUNT_NOT_FOUND",
-                "Credential account not found",
-            )
+        password_utils::verify_password_native(
+            ctx.password_policy.hasher.as_ref(),
+            password,
+            &stored_hash,
+        )
+        .await
+        .map_err(|error| match error {
+            AuthError::InvalidCredentials => {
+                AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
+            }
+            error => error,
         })?;
-        password_utils::verify_password(ctx.password_policy.hasher.as_ref(), password, stored_hash)
-            .await
-            .map_err(|error| match error {
-                AuthError::InvalidCredentials => {
-                    AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
-                }
-                error => error,
-            })?;
     }
 
     if let Some(token) = body.token.as_deref().filter(|token| !token.is_empty()) {

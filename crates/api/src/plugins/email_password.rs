@@ -312,8 +312,8 @@ impl EmailPasswordPlugin {
 async fn load_credential_password_hash(
     user: &impl AuthUser,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<String> {
-    super::helpers::get_credential_password_hash(ctx, user)
+) -> AuthResult<better_auth_core::FieldValue> {
+    super::helpers::get_credential_password_hash(ctx, user.id().into_owned())
         .await?
         .ok_or(AuthError::InvalidCredentials)
 }
@@ -324,8 +324,12 @@ async fn verify_user_password(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<()> {
     let stored_hash = load_credential_password_hash(user, ctx).await?;
-    password_utils::verify_password(ctx.password_policy.hasher.as_ref(), password, &stored_hash)
-        .await
+    password_utils::verify_password_native(
+        ctx.password_policy.hasher.as_ref(),
+        password,
+        &stored_hash,
+    )
+    .await
 }
 
 enum CredentialSignIn<'a> {
@@ -427,30 +431,15 @@ pub(crate) async fn sign_in_core(
     let credential = accounts
         .into_iter()
         .find(|account| account.provider_id == "credential" && account.account_id == user.id);
-    let hash = credential
-        .map(|account| {
-            if account.password.is_truthy()? {
-                account
-                    .password
-                    .typed()
-                    .cloned()
-                    .map(|value| value.unwrap_or_default())
-            } else {
-                Ok(String::new())
-            }
-        })
-        .transpose()?
-        .ok_or(AuthError::InvalidCredentials);
-    let stored_hash = match hash {
-        Ok(hash) if !hash.is_empty() => hash,
-        Ok(_) | Err(AuthError::InvalidCredentials) => {
-            _ = password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.password)
-                .await?;
-            return Err(AuthError::InvalidCredentials);
-        }
-        Err(error) => return Err(error),
+    let Some(stored_hash) = credential
+        .map(|account| account.password.into_field_value())
+        .filter(better_auth_core::FieldValue::is_truthy)
+    else {
+        _ = password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.password)
+            .await?;
+        return Err(AuthError::InvalidCredentials);
     };
-    password_utils::verify_password(
+    password_utils::verify_password_native(
         ctx.password_policy.hasher.as_ref(),
         &body.password,
         &stored_hash,

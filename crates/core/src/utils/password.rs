@@ -4,7 +4,7 @@
 //! Lives in `better-auth-core` so that any crate in the workspace (plugins,
 //! integrations, etc.) can reuse these primitives without duplicating logic.
 
-use std::sync::Arc;
+use std::{borrow::Cow, sync::Arc};
 
 use async_trait::async_trait;
 use serde::Serialize;
@@ -14,6 +14,7 @@ mod algorithms;
 mod tests;
 pub use algorithms::{Argon2PasswordHasher, ScryptPasswordHasher};
 
+use crate::FieldValue;
 use crate::error::{AuthError, AuthResult};
 use crate::plugin::AuthContext;
 use crate::schema::AuthSchema;
@@ -33,6 +34,26 @@ pub trait PasswordHasher: Send + Sync {
     async fn hash(&self, password: &str) -> AuthResult<String>;
     /// Verify a password against a hash string. Returns `true` if the password matches.
     async fn verify(&self, hash: &str, password: &str) -> AuthResult<bool>;
+
+    /// Verify a projected hash without narrowing the field before callback invocation.
+    /// Override this method when the verifier accepts replacement field types or native results.
+    /// Existing typed implementations decode their string argument at this boundary.
+    async fn verify_native(&self, hash: &FieldValue, password: &str) -> AuthResult<FieldValue> {
+        let hash = match hash {
+            FieldValue::String(hash) => Cow::Borrowed(hash.as_str()),
+            FieldValue::Utf16String(hash) => Cow::Owned(hash.to_utf8().map_err(|error| {
+                AuthError::internal(format!(
+                    "Cannot represent password hash as a Rust string: {error}"
+                ))
+            })?),
+            _ => {
+                return Err(AuthError::internal(
+                    "The string password verifier requires a string hash",
+                ));
+            }
+        };
+        self.verify(&hash, password).await.map(Into::into)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -60,11 +81,20 @@ pub async fn verify_password(
     password: &str,
     hash: &str,
 ) -> AuthResult<()> {
+    verify_password_native(hasher, password, &hash.into()).await
+}
+
+/// Verify a projected credential and apply the endpoint's truthiness check to the native result.
+pub async fn verify_password_native(
+    hasher: Option<&Arc<dyn PasswordHasher>>,
+    password: &str,
+    hash: &FieldValue,
+) -> AuthResult<()> {
     let valid = match hasher {
-        Some(hasher) => hasher.verify(hash, password).await?,
-        None => ScryptPasswordHasher.verify(hash, password).await?,
+        Some(hasher) => hasher.verify_native(hash, password).await?,
+        None => ScryptPasswordHasher.verify_native(hash, password).await?,
     };
-    if valid {
+    if valid.is_truthy() {
         Ok(())
     } else {
         Err(AuthError::InvalidCredentials)

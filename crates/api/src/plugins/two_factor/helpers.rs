@@ -125,12 +125,14 @@ pub(super) async fn verify_user_password(
     allow_passwordless: bool,
     hash_missing_password: bool,
 ) -> AuthResult<()> {
-    let account = get_credential_account(ctx, SchemaValue::from_field(user_id.clone())).await?;
-    let stored_hash = match account.filter(|account| account.password.field_value().is_truthy()) {
-        Some(account) => account.password.typed()?.clone(),
-        None => None,
-    };
-    if allow_passwordless && stored_hash.as_deref().is_none_or(str::is_empty) {
+    use crate::plugins::helpers::get_credential_password_hash;
+
+    let user_id = SchemaValue::<String>::from_field(user_id.clone());
+    if allow_passwordless
+        && get_credential_password_hash(ctx, user_id.clone())
+            .await?
+            .is_none()
+    {
         return Ok(());
     }
     let password = password
@@ -145,7 +147,7 @@ pub(super) async fn verify_user_password(
             "Password too long",
         ));
     }
-    let Some(stored_hash) = stored_hash.filter(|hash| !hash.is_empty()) else {
+    let Some(stored_hash) = get_credential_password_hash(ctx, user_id).await? else {
         if hash_missing_password {
             _ = better_auth_core::hash_password(ctx.password_policy.hasher.as_ref(), password)
                 .await?;
@@ -156,7 +158,7 @@ pub(super) async fn verify_user_password(
             "Invalid password",
         ));
     };
-    match better_auth_core::verify_password(
+    match better_auth_core::verify_password_native(
         ctx.password_policy.hasher.as_ref(),
         password,
         &stored_hash,

@@ -240,17 +240,17 @@ pub(crate) async fn update_password(
 }
 
 /// Resolve the user's stored password hash from the credential account.
-pub async fn get_credential_password_hash(
-    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-    user: &impl AuthUser,
-) -> AuthResult<Option<String>> {
-    let Some(account) = get_credential_account(ctx, user.id().into_owned()).await? else {
+pub async fn get_credential_password_hash<S: better_auth_core::AuthSchema>(
+    ctx: &AuthContext<S>,
+    user_id: impl Into<better_auth_core::SchemaValue<String>>,
+) -> AuthResult<Option<better_auth_core::FieldValue>> {
+    let Some(account) = get_credential_account(ctx, user_id).await? else {
         return Ok(None);
     };
     if !account.password.is_truthy()? {
         return Ok(None);
     }
-    Ok(account.password.typed()?.clone())
+    Ok(Some(account.password.into_field_value()))
 }
 
 /// Whether the user currently has a password set.
@@ -258,7 +258,9 @@ pub async fn user_has_password(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     user: &impl AuthUser,
 ) -> AuthResult<bool> {
-    Ok(get_credential_password_hash(ctx, user).await?.is_some())
+    Ok(get_credential_password_hash(ctx, user.id().into_owned())
+        .await?
+        .is_some())
 }
 
 /// Apply the configured default admin role when the input has no role property.

@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
-use better_auth_core::utils::password::{hash_password, verify_password};
+use better_auth_core::utils::password::hash_password;
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, AuthSchema, AuthSession,
@@ -593,17 +593,21 @@ impl PhoneNumberPlugin {
         let account = get_credential_account(ctx, user.id().into_owned())
             .await?
             .ok_or_else(invalid_credentials)?;
-        if account.password.is_absent() {
+        let hash = account.password.into_field_value();
+        if !hash.is_truthy() {
             return Err(AuthError::from_code(
                 "UNAUTHORIZED",
                 "UNEXPECTED_ERROR",
                 "Unexpected error",
             ));
         }
-        let hash = account.password.typed()?.as_deref().ok_or_else(|| {
-            AuthError::from_code("UNAUTHORIZED", "UNEXPECTED_ERROR", "Unexpected error")
-        })?;
-        match verify_password(ctx.password_policy.hasher.as_ref(), password, hash).await {
+        match better_auth_core::verify_password_native(
+            ctx.password_policy.hasher.as_ref(),
+            password,
+            &hash,
+        )
+        .await
+        {
             Err(AuthError::InvalidCredentials) => return Err(invalid_credentials()),
             result => result?,
         }

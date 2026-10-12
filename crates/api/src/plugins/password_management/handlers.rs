@@ -253,8 +253,9 @@ pub(crate) async fn change_password_core(
     )?;
     ctx.password_policy
         .validate_max_length(&body.current_password)?;
-    let stored_hash = get_credential_password_hash(ctx, user)
+    let credential_account = get_credential_account(ctx, user.id().into_owned())
         .await?
+        .filter(|account| account.password.field_value().is_truthy())
         .ok_or_else(|| {
             AuthError::from_code(
                 "BAD_REQUEST",
@@ -266,10 +267,10 @@ pub(crate) async fn change_password_core(
         password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.new_password)
             .await?;
     if config.require_current_password {
-        password_utils::verify_password(
+        password_utils::verify_password_native(
             ctx.password_policy.hasher.as_ref(),
             &body.current_password,
-            &stored_hash,
+            &credential_account.password.field_value(),
         )
         .await
         .map_err(|error| match error {
@@ -280,19 +281,10 @@ pub(crate) async fn change_password_core(
         })?;
     }
 
-    let credential_account = get_credential_account(ctx, user.id().into_owned())
-        .await?
-        .ok_or_else(|| {
-            AuthError::from_code(
-                "BAD_REQUEST",
-                "CREDENTIAL_ACCOUNT_NOT_FOUND",
-                "Credential account not found",
-            )
-        })?;
     let _ = ctx
         .database
-        .update_account(
-            credential_account.id.typed()?,
+        .update_account_by_id_value(
+            &credential_account.id.field_value(),
             UpdateAccount {
                 password: (Some(password_hash))
                     .map(|value| better_auth_core::SchemaValue::Typed(Some(value)))
@@ -344,13 +336,13 @@ pub(crate) async fn verify_password_core(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<StatusResponse> {
     ctx.password_policy.validate_max_length(&body.password)?;
-    let stored_hash = get_credential_password_hash(ctx, user)
+    let stored_hash = get_credential_password_hash(ctx, user.id().into_owned())
         .await?
         .ok_or_else(|| {
             AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
         })?;
 
-    password_utils::verify_password(
+    password_utils::verify_password_native(
         ctx.password_policy.hasher.as_ref(),
         &body.password,
         &stored_hash,

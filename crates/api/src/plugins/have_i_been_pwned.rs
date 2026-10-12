@@ -229,6 +229,14 @@ impl PasswordHasher for CheckedHasher {
     async fn verify(&self, hash: &str, password: &str) -> AuthResult<bool> {
         self.inner.verify(hash, password).await
     }
+
+    async fn verify_native(
+        &self,
+        hash: &better_auth_core::FieldValue,
+        password: &str,
+    ) -> AuthResult<better_auth_core::FieldValue> {
+        self.inner.verify_native(hash, password).await
+    }
 }
 
 #[async_trait]

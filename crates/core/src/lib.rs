@@ -135,6 +135,7 @@ pub use types::{
 };
 pub use utils::password::{
     Argon2PasswordHasher, PasswordHasher, ScryptPasswordHasher, hash_password, verify_password,
+    verify_password_native,
 };
 #[doc(hidden)]
 pub use uuid;

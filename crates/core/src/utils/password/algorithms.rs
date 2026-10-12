@@ -6,7 +6,7 @@ use subtle::ConstantTimeEq;
 use unicode_normalization::UnicodeNormalization;
 
 use super::PasswordHasher;
-use crate::{AuthError, AuthResult};
+use crate::{AuthError, AuthResult, FieldValue};
 
 /// Better Auth's default NFKC-normalized scrypt password format.
 #[derive(Debug, Clone, Copy, Default)]
@@ -40,17 +40,50 @@ impl PasswordHasher for ScryptPasswordHasher {
     }
 
     async fn verify(&self, hash: &str, password: &str) -> AuthResult<bool> {
-        let mut parts = hash.split(':');
-        let (Some(salt), Some(key)) = (parts.next(), parts.next()) else {
-            return Err(AuthError::PasswordHash("Invalid password hash".into()));
-        };
-        if salt.is_empty() || key.is_empty() {
-            return Err(AuthError::PasswordHash("Invalid password hash".into()));
+        Ok(self
+            .verify_native(&hash.into(), password)
+            .await?
+            .is_truthy())
+    }
+
+    async fn verify_native(&self, hash: &FieldValue, password: &str) -> AuthResult<FieldValue> {
+        let [salt, key] = hash
+            .split_method(&":".into(), "hash")?
+            .destructure::<2>("hash.split(\":\")")?;
+        if !salt.is_truthy() || !key.is_truthy() {
+            return Err(AuthError::internal("Invalid password hash"));
         }
-        let (salt, key, password) = (salt.to_owned(), key.to_owned(), password.to_owned());
+        let salt = match salt {
+            FieldValue::String(salt) => salt,
+            // UTF-8 encoding replaces unpaired surrogates at the KDF byte boundary.
+            FieldValue::Utf16String(salt) => String::from_utf16_lossy(salt.as_utf16()),
+            salt => {
+                let received = match salt {
+                    FieldValue::Bool(value) => format!("type boolean ({value})"),
+                    FieldValue::Number(_) => format!(
+                        "type number ({})",
+                        salt.display_utf16()?
+                            .to_utf8()
+                            .map_err(|error| AuthError::internal(error.to_string()))?
+                    ),
+                    FieldValue::Function(_) => "a function".into(),
+                    FieldValue::Array(_) => "an instance of Array".into(),
+                    FieldValue::Date(_) => "an instance of Date".into(),
+                    _ => "an instance of Object".into(),
+                };
+                return Err(AuthError::type_error(format!(
+                    "The \"salt\" argument must be of type string, ArrayBuffer, Buffer, TypedArray, or DataView. Received {received}"
+                )));
+            }
+        };
+        let password = password.to_owned();
         tokio::task::spawn_blocking(move || {
             let computed = derive_key(&password, &salt)?;
-            Ok(bool::from(computed.as_bytes().ct_eq(key.as_bytes())))
+            let valid = match &key {
+                FieldValue::String(key) => bool::from(computed.as_bytes().ct_eq(key.as_bytes())),
+                _ => FieldValue::from(computed).strict_equals(&key),
+            };
+            Ok(valid.into())
         })
         .await
         .map_err(|error| {

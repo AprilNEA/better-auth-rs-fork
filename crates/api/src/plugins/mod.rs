@@ -178,6 +178,11 @@ pub(crate) mod test_helpers {
         let mut init = AuthInitContext::new(config, database.clone())?;
         init.initialize_request_context().await?;
         for plugin in plugins {
+            if let Some(hasher) = plugin.password_hasher() {
+                init.password_policy.hasher = Some(hasher);
+            }
+        }
+        for plugin in plugins {
             plugin.on_init(&mut init).await?;
         }
         let config = init.config.clone();
