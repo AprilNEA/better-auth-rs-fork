@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { APIError } from "@better-auth/core/error";
+import type { AuthContext } from "@better-auth/core";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { createAuthMiddleware } from "better-auth/api";
@@ -18,6 +19,7 @@ for (const name of ["missing", "null", "false", "number", "string", "array", "em
     const blocker = new APIError("CONFLICT", { message: "following hook" });
     const child = { ownUndefined: undefined, date: new Date(NaN) };
     let written: unknown;
+    let retained!: AuthContext;
     const observed = ["dynamic", "get-provider", "get-callback", "convert-provider", "convert-callback", "set-callback"].includes(name);
     const input = (() => {
       switch (name) {
@@ -72,6 +74,7 @@ for (const name of ["missing", "null", "false", "number", "string", "array", "em
     const expectedURL = `${baseURL}/callback/${expectedProvider}/oauth-proxy?callbackURL=${encodeURIComponent(expectedCallback)}`;
     const auth = betterAuth({
       baseURL: origin, secret, database: memoryAdapter(database), telemetry: { enabled: false },
+      hooks: { before: createAuthMiddleware(async ctx => { retained = ctx.context; }) },
       plugins: [oAuthProxy({ currentURL: origin, productionURL: production }), {
         id: "observe-proxy-input",
         hooks: { before: [{ matcher: ctx => ctx.path === "/sign-in/social", handler: createAuthMiddleware(async ctx => {
@@ -91,6 +94,9 @@ for (const name of ["missing", "null", "false", "number", "string", "array", "em
     catch (error) { caught = error; }
     const fails = ["get-provider", "get-callback", "convert-provider", "convert-callback", "set-callback"].includes(name);
     expect(caught).toBe(fails ? sentinel : blocker);
+    const redirected = rewritten || ["convert-provider", "convert-callback", "set-callback"].includes(name);
+    expect(retained.baseURL).toBe(redirected ? `${production}/api/auth` : baseURL);
+    expect((await auth.$context).baseURL).toBe(baseURL);
     const reads = ["get:provider", "get:callbackURL", "toString:provider", "toString:callbackURL", "set:callbackURL"];
     const last = name === "get-provider" ? 1 : name === "get-callback" ? 2
       : name === "convert-provider" ? 3 : name === "convert-callback" ? 4 : 5;
