@@ -1,0 +1,44 @@
+{
+  "version": "1.7.6",
+  "status": "successful upstream source audit; Rust function and descriptor reflection remains unpaired",
+  "run": "38205738415",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38205738415",
+  "commit": "b24990f750f2e24b619c8a23221f4963af2d0ca5",
+  "artifactName": "focused-check-reference-contracts-b24990f750f2e24b619c8a23221f4963af2d0ca5-1",
+  "artifactId": "11727257093",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38205738415.log",
+    "bytes": 94159,
+    "sha256": "85e6249c8b7c36a5fabc9dc7747689b74a871a0c905a1fd255a2e76eb38511b9"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-reference-native-capture.mjs",
+      "bytes": 5872,
+      "sha256": "52ccd4d780432065191e58ca70f48a76bfcc2747c80708d0968682d51d0c2406"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-reference-native-capture.test.ts",
+      "bytes": 405,
+      "sha256": "46420a04befd3adfbd1f5b3a3e9ceb23a8ce01b1f3d00915e2a5bd26c4027706"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/api-key-reference-native-audit-1.7.6.json",
+    "bytes": 276629,
+    "sha256": "439891d869fad8b7024128ecf5ad7426d679c48d76202b0b7d4f77333f7f3b88"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1086,
+      "bytes": 92922,
+      "sha256": "25643b791ae52a5a4da83ad5e91035ef4b5438b4b90689c0c328ee32b121c82b"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { assertObservationReplay } from "./observation-replay.mjs";
 import { withClock } from "./email-verification-duration-capture.mjs";
 import { writeObservation } from "./write-observation.mjs";
+import { createSecondaryRuntimeObserver } from "./secondary-native-runtime.mjs";
 import {
   assertSecondaryNativeVersions, createSecondaryNativeObserver, secondaryNativeNow as now, secondaryNativeVersion,
 } from "./secondary-native-shared.mjs";
@@ -77,6 +78,7 @@ function updateChain(native, rootKind, references) {
 
 async function captureCase(scenario) {
   const native = createSecondaryNativeObserver();
+  const runtime = createSecondaryRuntimeObserver(native);
   const owner = user();
   const target = session("target", 60_000);
   const retained = retainedReference();
@@ -180,14 +182,17 @@ async function captureCase(scenario) {
     secondaryStorage: storage, databaseHooks: { session: hooks },
   }).$context;
   const snapshot = () => native.snapshot({ database, cache: [...cache], roots });
+  const runtimeSnapshot = () => ({ database: runtime.value(database), cache: runtime.value([...cache]),
+    rootData: Object.fromEntries(Object.entries(roots).map(([name, root]) => [name, runtime.ownValues(root)])) });
   const initialIndex = cache.get(indexKey);
   const before = snapshot();
+  const runtimeBefore = runtimeSnapshot();
   active = true;
   const input = scenario.operation === "create" ? { userId: "owner", dontRememberMe: false, override: session("created", 30_000), overrideAll: true }
     : scenario.operation === "update" ? { token: "target", data: { ipAddress: "updated-ip", expiresAt: date(120_000), updatedAt: date(1000) } }
     : scenario.operation === "refresh" ? { user: { ...owner, name: "Refreshed", native: function refreshedChild() {}, seenAt: date(-8000) } }
     : scenario.operation === "delete" ? { token: "target" } : { userId: "owner" };
-  const outcome = await native.outcome(() => {
+  const operation = () => {
     switch (scenario.operation) {
       case "create": return context.internalAdapter.createSession(input.userId, input.dontRememberMe, input.override, input.overrideAll);
       case "update": return context.internalAdapter.updateSession(input.token, input.data);
@@ -196,8 +201,10 @@ async function captureCase(scenario) {
       case "refresh": return context.internalAdapter.refreshUserSessions(input.user);
       default: throw new Error(`Unknown session secondary operation: ${scenario.operation}`);
     }
-  }, original);
+  };
+  const outcome = await native.outcome(() => runtime.capture(operation, original), original);
   const after = snapshot();
+  const runtimeAfter = { ...runtimeSnapshot(), indexSameOriginal: cache.get(indexKey) === initialIndex };
   assert.equal(outcome.returned, !scenario.failure, JSON.stringify(outcome));
   if (scenario.failure) {
     assert.equal(outcome.sameOriginal, true);
@@ -234,7 +241,9 @@ async function captureCase(scenario) {
     }
   }
   for (const event of native.events) if (Object.hasOwn(event, "sameReceiver")) assert.equal(event.sameReceiver, true);
-  return { scenario, input: native.snapshot(input), before, outcome, events: native.events, after, functions: native.functions };
+  return { scenario, input: native.snapshot(input), before, outcome, events: native.events, after, functions: native.functions,
+    runtime: { input: runtime.value(input), before: runtimeBefore, outcome: runtime.outcome,
+      events: runtime.events, after: runtimeAfter, functionIds: runtime.functionIds } };
 }
 
 export async function captureSessionSecondaryNative() {

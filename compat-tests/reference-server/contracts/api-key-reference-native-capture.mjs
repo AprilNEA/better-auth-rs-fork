@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { writeObservation } from "./write-observation.mjs";
+import { createSecondaryRuntimeObserver } from "./secondary-native-runtime.mjs";
 import {
   assertSecondaryNativeVersions, createSecondaryNativeObserver, secondaryNativeNow,
   secondaryNativeVersion, withSecondarySourceExports,
@@ -21,6 +22,7 @@ export const apiKeyReferenceNativeCases = [
 
 async function captureCase(scenario, source) {
   const native = createSecondaryNativeObserver();
+  const runtime = createSecondaryRuntimeObserver(native);
   const id = ["key"];
   const key = { id, key: "hash", referenceId: "owner", configId: "default",
     createdAt: new Date(secondaryNativeNow), updatedAt: new Date(secondaryNativeNow) };
@@ -73,11 +75,15 @@ async function captureCase(scenario, source) {
       return scenario.operation === "remove" ? dynamic : scenario.result === "truthy" ? {} : "";
     };
   } });
+  const runtimeBefore = runtime.value({ record: key, cache: [...values] });
   const before = native.snapshot({ record: key, cache: [...values], dynamic });
-  const outcome = await native.outcome(() => scenario.operation === "put"
+  const operation = () => scenario.operation === "put"
     ? source.setApiKeyInStorage({}, key, storage, undefined, { fallbackToDatabase: false })
-    : source.deleteApiKeyFromStorage({}, key, storage, { fallbackToDatabase: false }), original);
+    : source.deleteApiKeyFromStorage({}, key, storage, { fallbackToDatabase: false });
+  const outcome = await native.outcome(() => runtime.capture(operation, original), original);
   const after = native.snapshot({ record: key, cache: [...values], originalIndex: index, dynamic });
+  const runtimeAfter = runtime.value({ record: key, cache: [...values], originalIndex: index,
+    indexSameOriginal: values.get(referenceKey) === index });
   assert.equal(outcome.returned, !scenario.failure);
   const serialized = JSON.stringify({ ...key, createdAt: key.createdAt.toISOString(), updatedAt: key.updatedAt.toISOString(),
     expiresAt: null, lastRefillAt: null, lastRequest: null });
@@ -95,7 +101,8 @@ async function captureCase(scenario, source) {
     assert.deepEqual(writes, [...previous, ["set", referenceKey, expected, undefined]]);
   }
   if (scenario.operation === "remove" && scenario.failure !== "getter") assert.deepEqual(predicateResults, [false, true, true]);
-  return { scenario, before, outcome, events: native.events, after, functions: native.functions };
+  return { scenario, before, outcome, events: native.events, after, functions: native.functions,
+    runtime: { before: runtimeBefore, outcome: runtime.outcome, events: runtime.events, after: runtimeAfter, functionIds: runtime.functionIds } };
 }
 
 export async function captureApiKeyReferenceNative() {
