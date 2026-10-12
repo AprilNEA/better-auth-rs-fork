@@ -588,6 +588,8 @@ Generated catalog tests use separate SQLite, server, and plugin test targets. Th
 
 A focused `consumer-schema` profile executes every test in the selected targets, including ignored database contracts. Server targets require the PostgreSQL and MySQL test URLs provided by CI.
 
+The `shared-column` CI stage checks declaration collisions through the same record runner on Memory, SQLite, PostgreSQL, and MySQL. Each backend retains its complete frozen results, callback events, driver errors, and persisted rows. The PostgreSQL and MySQL tests require the test URLs and isolated-schema permissions provided by CI. The `all` stage also executes these server contracts. Driver error metadata and PostgreSQL parameter protocol differences remain acceptance failures until their production boundaries match the captured behavior.
+
 The shared-declaration consumer compares all 11 SQLite model catalogs with the matching Organization-options fixture, including columns, indexes, and foreign keys. The source replay compares the complete captured JSON bytes and retains the separate final-declaration fixture. Organization and RateLimit server checks rebuild the frozen upstream DDL in an isolated PostgreSQL schema or MySQL database. The checks compare generated columns, indexes, foreign keys, and constraints against that reconstruction on the same backend. These checks retain backend-specific observations and do not normalize SQL text or substitute one configuration boundary for another.
 
 Internal behavior tests also use a bundled schema. Dual-server and client SDK compatibility checks compare behavior with the TypeScript reference server.

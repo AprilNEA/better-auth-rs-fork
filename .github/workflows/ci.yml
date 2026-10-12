@@ -50,6 +50,7 @@ on:
           - memory-sorting
           - memory-query
           - sql-cleanup
+          - shared-column
           - memory-joins
           - oauth-profile
           - organization-fields

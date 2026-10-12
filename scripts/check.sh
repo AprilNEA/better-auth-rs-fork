@@ -22,6 +22,7 @@ run_stage() {
       cargo build --workspace --locked --tests --profile test --features axum,seaorm2,redis-cache --keep-going
       cargo test --workspace --locked --features axum,seaorm2,redis-cache --no-fail-fast
       cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --ignored --test-threads=1
+      cargo test --locked -p better-auth-seaorm --lib store::plugin_records::shared_column_contract_tests:: -- --ignored --test-threads=1
       ;;
     id-input)
       cargo fmt --all -- --check
@@ -49,6 +50,17 @@ run_stage() {
       cargo clippy --locked --features axum,seaorm2,redis-cache --test auth_entity_plugin_alias_tests -- -D warnings || cleanup_status=1
       cargo test --locked --features axum,seaorm2,redis-cache --test auth_entity_plugin_alias_tests || cleanup_status=1
       return "$cleanup_status"
+      ;;
+    shared-column)
+      cargo fmt --all -- --check
+      local column_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/shared-column-capture.test.ts \
+        ./compat-tests/reference-server/contracts/shared-column-server-capture.test.ts || column_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-seaorm --lib -- -D warnings || column_status=1
+      cargo test --locked -p better-auth-core --lib shared_column_contract_tests:: || column_status=1
+      cargo test --locked -p better-auth-seaorm --lib shared_column_contract_tests:: -- --include-ignored --test-threads=1 || column_status=1
+      return "$column_status"
       ;;
     rustls) cargo check -p better-auth --locked --no-default-features --features rustls,axum,seaorm2,redis-cache ;;
     rustdoc) RUSTDOCFLAGS="-D warnings" cargo doc --workspace --locked --no-deps --features axum,seaorm2,redis-cache ;;
