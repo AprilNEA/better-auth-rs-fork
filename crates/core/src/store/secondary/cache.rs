@@ -2,6 +2,8 @@ use crate::{AuthResult, FieldMap, FieldValue, FromFieldMap};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod verification_contract;
 
 pub(super) fn decode(value: Option<FieldValue>) -> AuthResult<Option<FieldValue>> {
     value

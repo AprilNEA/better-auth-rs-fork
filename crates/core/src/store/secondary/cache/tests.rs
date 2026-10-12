@@ -10,8 +10,6 @@ use std::sync::Arc;
 
 #[path = "session_records.rs"]
 mod session_records;
-#[path = "verification_contract.rs"]
-mod verification_contract;
 #[path = "verification_records.rs"]
 mod verification_records;
 

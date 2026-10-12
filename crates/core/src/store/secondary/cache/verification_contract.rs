@@ -7,6 +7,7 @@
 use crate::observability::{LogArgument, LogLevel, LogSink};
 use crate::store::database_hooks::{DatabaseHookContext, DatabaseHookControl, DatabaseHooks};
 use crate::store::schema::EntityRole;
+use crate::store::secondary::SecondaryStore;
 use crate::store::{EphemeralStore, SecondaryStorage, StatelessSchema, VerificationStore};
 use crate::{AuthConfig, AuthContext, AuthError, AuthResult, FieldMap, FieldValue};
 use async_trait::async_trait;
@@ -276,7 +277,7 @@ async fn capture(name: &str) -> AuthResult<Json> {
     let inner = Arc::new(
         EphemeralStore::new(config.clone()).with_hooks(vec![Arc::new(Hooks(observer.clone()))]),
     );
-    let store = super::SecondaryStore::new(
+    let store = SecondaryStore::new(
         inner.clone(),
         cache.clone(),
         config.clone(),
