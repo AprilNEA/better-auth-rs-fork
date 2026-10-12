@@ -12,6 +12,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 
 mod deletion;
+#[cfg(test)]
+mod logging_tests;
 
 pub(super) fn active_sessions_key(user_id: &FieldValue) -> AuthResult<FieldValue> {
     let user_id = user_id.display_utf16()?;
@@ -68,7 +70,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                         && !runtime.config.session.preserve_session_in_database()
                     {
                         if let Err(error) = result {
-                            crate::observability::logger::current().error(
+                            runtime.config.logger().error(
                                 "Failed to mirror committed session to secondary storage",
                                 &[crate::observability::LogArgument::Error(&error)],
                             );
@@ -327,7 +329,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 .delete_cached_sessions_value(&user_id, &references)
                 .await
             {
-                crate::observability::logger::current().error(
+                runtime.config.logger().error(
                     "Failed to delete committed user sessions from secondary storage",
                     &[crate::observability::LogArgument::Error(&error)],
                 );

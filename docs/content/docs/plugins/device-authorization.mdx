@@ -145,7 +145,7 @@ Device ownership queries share the Memory comparison implementation and raw `In`
 
 With Serial ID generation, a reference to `id` uses the shared numeric reference conversion. Query null converts to zero, while stored null remains null. Candidate arrays convert each value independently. Json binding on Memory, SQLite, and MySQL retains the original object, array, Date, or null operand for serialization after reference conversion. SQLite Date binding likewise uses the original top-level Date; dates inside candidate arrays retain numeric reference conversion. Reference declarations do not authorize the caller or change the native DeviceCode user binding.
 
-Custom adapters calling `ModelFields::device_code_ownership_query` must consume its three-item result: the bound condition, field policy, and original operand. Apply adapter-specific Json and Date conversion with that original operand.
+Custom adapters can lower each ownership variant with `DeviceCodeOwnership::query()` and pass the resulting condition through their shared field-query policy. The Device-specific declaration and conversion helpers have been removed. Memory reuses the same query policy as other plugin records; SeaORM reuses generic field binding and physical-column resolution. Declaration replacement, reference targets, field aliases, and runtime ID conversion follow those shared policies.
 
 The following predicates remain unsupported:
 
@@ -156,7 +156,7 @@ The accepted Memory, SQLite, PostgreSQL, and MySQL contracts include 90 ordinary
 
 The reference contract compares complete Device values, field callbacks, consumed records, rollback restoration, and the original rollback error allocation. Rust also checks that the complete owner view remains unchanged. Raw User, Session, Account, and Verification table snapshots, plus complete Device table enumeration inside the transaction, remain upstream-only observations because the public Rust Store does not expose those reads. MySQL syntax errors retain both complete driver messages in CI. Their SQL excerpts differ because SQLx and mysql2 use different statement forms; the exact excerpts remain unpaired.
 
-The `ClientId`, `FieldEquals`, `FieldIn`, and `FieldNotIn` variants remain available. `FieldEquals` accepts `scope` or a declared String, Number, or Boolean field and a scalar or null operand. `FieldIn` and `FieldNotIn` accept `scope` or declared String or Number fields, with null, string, or number candidates. All three variants accept String references to `id` with the same validation and Serial conversion as `Where`.
+The `ClientId`, `FieldEquals`, `FieldIn`, and `FieldNotIn` variants remain available. Each variant uses the same declaration and operand conversion as its corresponding `Where` condition. Device ownership adds no field-type or reference-target allowlist. The adapter still validates operands and applies its own database conversions. Original identifier, device-code, client, user, and approved-status guards remain mandatory, and consumption remains atomic.
 
 ## Atomic consumption and transactions
 

@@ -123,20 +123,32 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
             config,
             Default::default(),
         )?;
+        let (caller_logger, mut caller_logs) = mpsc::unbounded_channel();
+        let mut caller_config = crate::AuthConfig::default();
+        caller_config.logger.log = Some(Arc::new(Logs(caller_logger)));
+        let caller_config = Arc::new(caller_config);
+        let caller = crate::AuthContext::new(
+            caller_config.clone(),
+            Arc::new(EphemeralStore::new(caller_config)),
+        );
         let update_id = id.clone();
         let update = tokio::spawn(async move {
-            let patch = UpdateUser {
-                name: Some("Updated".into()).into(),
-                ..Default::default()
-            };
-            if committed {
-                transaction(&store, move |tx| {
-                    Box::pin(async move { tx.update_user(&update_id, patch).await })
+            caller
+                .with_endpoint_context(|_| async move {
+                    let patch = UpdateUser {
+                        name: Some("Updated".into()).into(),
+                        ..Default::default()
+                    };
+                    if committed {
+                        transaction(&store, move |tx| {
+                            Box::pin(async move { tx.update_user(&update_id, patch).await })
+                        })
+                        .await
+                    } else {
+                        store.update_user(&update_id, patch).await
+                    }
                 })
                 .await
-            } else {
-                store.update_user(&update_id, patch).await
-            }
         });
 
         for token in ["rejected-session", "pending-session"] {
@@ -159,6 +171,7 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
             )
         );
         assert!(logs.try_recv().is_err());
+        assert!(caller_logs.try_recv().is_err());
         assert!(writes.try_recv().is_err());
         let encoded = cache
             .values
@@ -188,6 +201,7 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
             .await?
             .ok_or("Missing updated user")?;
         assert_eq!(stored.name.typed()?.as_deref(), Some("Updated"));
+        assert!(caller_logs.try_recv().is_err());
     }
     Ok(())
 }

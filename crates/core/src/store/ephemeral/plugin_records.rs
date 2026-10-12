@@ -27,18 +27,28 @@ impl EphemeralStore {
         name: &str,
         value: FieldValue,
     ) -> AuthResult<FieldValue> {
+        self.plugin_query_field(role, name, value)
+            .map(|(_, value)| value)
+    }
+
+    pub(super) fn plugin_query_field(
+        &self,
+        role: EntityRole,
+        name: &str,
+        value: FieldValue,
+    ) -> AuthResult<(String, FieldValue)> {
         self.model_fields.begin_id_query(role)?;
+        let name = if name == "_id" { "id" } else { name };
         if name == "id" {
-            self.memory_primary_id_query(&value)
-        } else {
-            let fields = self.model_fields.plugin_fields(role);
-            if !fields.fields().contains_key(name) {
-                return Err(AuthError::config(format!(
-                    "Unknown plugin field {role:?}.{name}"
-                )));
-            }
-            self.memory_field_query(&fields, name, value)
+            return Ok((name.to_owned(), self.memory_primary_id_query(&value)?));
         }
+        let fields = self.model_fields.plugin_fields(role).adapter_fields(&[]);
+        let (logical, field) = crate::user_query::declared_field(name, &fields)
+            .ok_or_else(|| AuthError::config(format!("Unknown plugin field {role:?}.{name}")))?;
+        let physical =
+            crate::store::schema::resolve_field_name(field.field_name.as_deref(), logical);
+        let value = self.memory_field_query(&fields, logical, value)?;
+        Ok((physical.to_owned(), value))
     }
 
     pub(super) async fn project_plugin_refs(

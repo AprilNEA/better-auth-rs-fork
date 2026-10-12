@@ -30,12 +30,17 @@ pub(crate) use reference_values::load_reference_values;
 #[path = "device_where_reference_defaults.rs"]
 mod reference_defaults;
 pub(crate) use reference_defaults::load_reference_defaults;
+#[path = "device_where_reference_declarations.rs"]
+mod reference_declarations;
+pub(crate) use reference_declarations::load_reference_declarations;
 
 type Trace = Arc<Mutex<Vec<Value>>>;
 
 pub(crate) struct RunConfig<'a> {
     pub(crate) auth: AuthConfig,
     pub(crate) owner_ref_type: UserFieldType,
+    pub(crate) owner_ref_target: &'a str,
+    pub(crate) replacement: Option<&'a Value>,
     pub(crate) owner_id: Option<&'a str>,
 }
 
@@ -93,12 +98,16 @@ struct CapturedError {
     message: String,
 }
 
-struct Fields(UserConfig);
+struct Fields {
+    fields: UserConfig,
+    name: &'static str,
+    declaration: Option<Value>,
+}
 
 #[async_trait::async_trait]
 impl<S: AuthSchema> AuthPlugin<S> for Fields {
     fn name(&self) -> &'static str {
-        "device-where-fields"
+        self.name
     }
     fn routes(&self) -> Vec<AuthRoute> {
         Vec::new()
@@ -107,7 +116,11 @@ impl<S: AuthSchema> AuthPlugin<S> for Fields {
         &self,
         context: &mut better_auth_core::plugin_runtime::ModelFields,
     ) -> AuthResult<()> {
-        context.register_model_fields(EntityRole::DeviceCode, self.0.clone())
+        context.register_model_fields(EntityRole::DeviceCode, self.fields.clone())?;
+        if let Some(expected) = &self.declaration {
+            reference_declarations::assert_declaration(context, expected)?;
+        }
+        Ok(())
     }
     async fn on_request(
         &self,
@@ -131,7 +144,7 @@ pub(crate) fn config(serial: bool) -> AuthConfig {
     clippy::expect_used,
     reason = "The fixture must retain every callback in declaration order"
 )]
-fn policies(trace: &Trace, owner_ref_type: &UserFieldType) -> UserConfig {
+fn policies(trace: &Trace, options: &RunConfig<'_>) -> UserConfig {
     UserConfig {
         additional_fields: Some(
             FIELDS
@@ -152,7 +165,7 @@ fn policies(trace: &Trace, owner_ref_type: &UserFieldType) -> UserConfig {
                         name.into(),
                         UserFieldConfig {
                             field_type: if name == "ownerRef" {
-                                owner_ref_type.clone()
+                                options.owner_ref_type.clone()
                             } else {
                                 field_type
                             },
@@ -160,7 +173,7 @@ fn policies(trace: &Trace, owner_ref_type: &UserFieldType) -> UserConfig {
                             required: Some(false),
                             references: (name == "ownerRef").then(|| UserFieldReference {
                                 model: "user".into(),
-                                field: "id".into(),
+                                field: options.owner_ref_target.into(),
                                 ..Default::default()
                             }),
                             transform: Some(FieldTransforms {
@@ -174,6 +187,54 @@ fn policies(trace: &Trace, owner_ref_type: &UserFieldType) -> UserConfig {
                 .collect(),
         ),
     }
+}
+
+async fn build<S: AuthSchema>(
+    raw: Arc<dyn AuthStore<S>>,
+    trace: &Trace,
+    options: &RunConfig<'_>,
+) -> AuthResult<BetterAuth<S>> {
+    let mut fields = policies(trace, options);
+    let replacement = if options.replacement.is_some() {
+        fields.fields_mut().insert(
+            "ownerRef".into(),
+            UserFieldConfig {
+                field_type: UserFieldType::Json,
+                field_name: Some("retired_owner_ref".into()),
+                required: Some(true),
+                default_value: Some("retired-default".into()),
+                transform: Some(FieldTransforms {
+                    input: Some(UserFieldTransform::new(|_| {
+                        Err(AuthError::internal(
+                            "A replaced declaration must not run its input transform",
+                        ))
+                    })),
+                    output: None,
+                }),
+                ..Default::default()
+            },
+        )
+    } else {
+        None
+    };
+    let mut auth = BetterAuth::new(options.auth.clone())
+        .store_arc(raw)
+        .plugin(DeviceAuthorizationPlugin::new())
+        .plugin(Fields {
+            fields,
+            name: "device-where-fields",
+            declaration: None,
+        });
+    if let Some(replacement) = replacement {
+        auth = auth.plugin(Fields {
+            fields: UserConfig {
+                additional_fields: Some([("ownerRef".into(), replacement)].into()),
+            },
+            name: "device-where-reference-replacement",
+            declaration: options.replacement.cloned(),
+        });
+    }
+    auth.build().await
 }
 
 #[expect(
@@ -407,26 +468,15 @@ pub(crate) async fn run<S: AuthSchema>(
     cases: &[&Case],
     options: RunConfig<'_>,
 ) -> AuthResult<()> {
-    let RunConfig {
-        auth: config,
-        owner_ref_type,
-        owner_id,
-    } = options;
-    let serial = matches!(config.advanced.database.generate_id(), IdGeneration::Serial);
+    let serial = matches!(
+        options.auth.advanced.database.generate_id(),
+        IdGeneration::Serial
+    );
+    let owner_id = options.owner_id;
     let trace = Trace::default();
     let storage_trace = Trace::default();
-    let auth = BetterAuth::new(config.clone())
-        .store_arc(raw.clone())
-        .plugin(DeviceAuthorizationPlugin::new())
-        .plugin(Fields(policies(&trace, &owner_ref_type)))
-        .build()
-        .await?;
-    let reader = BetterAuth::new(config)
-        .store_arc(raw)
-        .plugin(DeviceAuthorizationPlugin::new())
-        .plugin(Fields(policies(&storage_trace, &owner_ref_type)))
-        .build()
-        .await?;
+    let auth = build(raw.clone(), &trace, &options).await?;
+    let reader = build(raw, &storage_trace, &options).await?;
     let mut owner_input = CreateUser::new()
         .with_name("Where owner")
         .with_email("owner@device-where.test");

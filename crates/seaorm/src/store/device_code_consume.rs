@@ -3,7 +3,7 @@ use super::plugin_models::Entity;
 use super::record_bindings::Binding;
 use super::value_filter::QueryPredicate;
 use super::{SeaOrmStore, map_db_err};
-use crate::{SeaOrmPluginModel, schema::AuthSchema};
+use crate::schema::AuthSchema;
 use better_auth_core::{
     AuthError, AuthResult, DeviceCode, DeviceCodeOwnership, FieldValue, store::schema::EntityRole,
 };
@@ -34,35 +34,30 @@ impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSc
         expected: &DeviceCode,
         ownership: &DeviceCodeOwnership,
     ) -> AuthResult<Option<QueryResult>> {
-        let policy = self.config().advanced.database.generate_id();
         let selected_id =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "id", expected.id.field_value())?;
-        let (mut query, field, original) = self
-            .model_fields
-            .device_code_ownership_query(ownership, policy)?;
+        let query = ownership.query();
+        better_auth_core::query::validate_where_operand(query.operator, &query.value)?;
+        let ownership_value =
+            self.bind_plugin_query_field(EntityRole::DeviceCode, &query.field, query.value)?;
         let backend = connection.get_database_backend();
-        query.value =
-            super::value_filter::adapter_query_value(query.value, &original, field, backend)?;
         let approved =
             self.bind_plugin_query_field(EntityRole::DeviceCode, "status", "approved".into())?;
         let (id_column, selected_id) =
             self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, selected_id)?;
-        let fields = self
-            .model_fields
-            .plugin_fields(EntityRole::DeviceCode)
-            .adapter_fields(&[]);
-        query.field =
-            super::value_filter::query_field_name(EntityRole::DeviceCode, &fields, &query.field)?
-                .1
-                .to_owned();
-        let ownership_column = P::DeviceCode::column(&query.field)?;
+        let (ownership_column, ownership_value) = self
+            .resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, ownership_value)?;
         let (status_column, approved) =
             self.resolve_plugin_query_field::<P::DeviceCode>(EntityRole::DeviceCode, approved)?;
         let user = self.plugin_column::<P::DeviceCode>(EntityRole::DeviceCode, "userId")?;
         let selected_id = QueryPredicate::equals(id_column, selected_id).parse()?;
-        let ownership =
-            QueryPredicate::new(ownership_column, query.operator, query.mode, query.value)
-                .parse()?;
+        let ownership = QueryPredicate::new(
+            ownership_column,
+            query.operator,
+            query.mode,
+            ownership_value,
+        )
+        .parse()?;
         let approved = QueryPredicate::equals(status_column, approved).parse()?;
         let selected_id = selected_id.encode(backend)?;
         let ownership = ownership.encode(backend)?;

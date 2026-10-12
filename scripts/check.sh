@@ -622,6 +622,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
         ./compat-tests/reference-server/contracts/hook-matcher-input.test.ts \
@@ -646,6 +647,7 @@ run_stage() {
       cargo test --locked -p better-auth-core --lib -- \
         error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
         request_runtime:: observability::logger:: observability::telemetry:: \
+        store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
         plugin::tests::response_status:: response_body::http_tests:: types::response:: \
@@ -1062,6 +1064,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/native-json-driver.test.ts \
         ./compat-tests/reference-server/consumer-contracts/native-json-driver.test.ts \
         ./compat-tests/reference-server/contracts/device-where.test.ts \
+        ./compat-tests/reference-server/contracts/device-reference-declarations.test.ts \
+        ./compat-tests/reference-server/contracts/device-ownership-references.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-where.test.ts \
         ./compat-tests/reference-server/contracts/device-where-transactions.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-where-transactions.test.ts \

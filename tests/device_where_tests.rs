@@ -43,6 +43,8 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
             contract::RunConfig {
                 auth: config,
                 owner_ref_type: UserFieldType::String,
+                owner_ref_target: "id",
+                replacement: None,
                 owner_id: (!serial).then_some("ordinary-owner"),
             },
         )
@@ -57,6 +59,8 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
             contract::RunConfig {
                 auth: config,
                 owner_ref_type: group.owner_ref_type.field_type(),
+                owner_ref_target: "id",
+                replacement: None,
                 owner_id: (!group.serial).then_some("ordinary-owner"),
             },
         )
@@ -71,7 +75,25 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
             contract::RunConfig {
                 auth: config,
                 owner_ref_type: group.owner_ref_type.field_type(),
+                owner_ref_target: "id",
+                replacement: None,
                 owner_id: Some(&group.owner_id),
+            },
+        )
+        .await?;
+    }
+    for group in contract::load_reference_declarations("memory")? {
+        let config = contract::config(group.serial);
+        contract::run(
+            Arc::new(EphemeralStore::new(Arc::new(config.clone()))),
+            "memory",
+            &group.cases.iter().collect::<Vec<_>>(),
+            contract::RunConfig {
+                auth: config,
+                owner_ref_type: group.field_type()?,
+                owner_ref_target: &group.owner_ref_target,
+                replacement: Some(&group.declaration),
+                owner_id: (!group.serial).then_some("ordinary-owner"),
             },
         )
         .await?;
@@ -107,6 +129,8 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                 contract::RunConfig {
                     auth: config,
                     owner_ref_type: UserFieldType::String,
+                    owner_ref_target: "id",
+                    replacement: None,
                     owner_id: None,
                 },
             )
@@ -122,6 +146,8 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                 contract::RunConfig {
                     auth: config.clone(),
                     owner_ref_type: UserFieldType::String,
+                    owner_ref_target: "id",
+                    replacement: None,
                     owner_id: Some(owner_id),
                 },
             )
@@ -135,11 +161,32 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                     contract::RunConfig {
                         auth: config.clone(),
                         owner_ref_type: group.owner_ref_type.field_type(),
+                        owner_ref_target: "id",
+                        replacement: None,
                         owner_id: Some(&group.owner_id),
                     },
                 )
                 .await?;
                 store.delete_user(&group.owner_id).await?;
+            }
+            for group in contract::load_reference_declarations(backend)?
+                .into_iter()
+                .filter(|group| !group.serial)
+            {
+                contract::run(
+                    store.clone(),
+                    backend,
+                    &group.cases.iter().collect::<Vec<_>>(),
+                    contract::RunConfig {
+                        auth: config.clone(),
+                        owner_ref_type: group.field_type()?,
+                        owner_ref_target: &group.owner_ref_target,
+                        replacement: Some(&group.declaration),
+                        owner_id: Some(owner_id),
+                    },
+                )
+                .await?;
+                store.delete_user(owner_id).await?;
             }
         }
     }
@@ -153,6 +200,29 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
             contract::RunConfig {
                 auth: config,
                 owner_ref_type: group.owner_ref_type.field_type(),
+                owner_ref_target: "id",
+                replacement: None,
+                owner_id: None,
+            },
+        )
+        .await?;
+        fixture::drop_serial(&database).await?;
+    }
+    for group in contract::load_reference_declarations(backend)?
+        .into_iter()
+        .filter(|group| group.serial)
+    {
+        let config = contract::config(group.serial);
+        let store = fixture::setup_serial(config.clone(), database.clone()).await?;
+        contract::run(
+            Arc::new(store),
+            backend,
+            &group.cases.iter().collect::<Vec<_>>(),
+            contract::RunConfig {
+                auth: config,
+                owner_ref_type: group.field_type()?,
+                owner_ref_target: &group.owner_ref_target,
+                replacement: Some(&group.declaration),
                 owner_id: None,
             },
         )

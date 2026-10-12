@@ -24,5 +24,9 @@ for (const backend of ["memory", "sqlite"]) {
       }
     }
     expect(cases.length).toBe(8);
+    const fixture = await Bun.file(new URL("../../../tests/fixtures/device-ownership-references-1.7.6.json", import.meta.url)).json();
+    expect(fixture.version).toBe("1.7.6");
+    expect(fixture.backends.map(group => group.backend)).toStrictEqual(["memory", "sqlite"]);
+    expect({ backend, cases }).toStrictEqual(fixture.backends.find(group => group.backend === backend));
   });
 }

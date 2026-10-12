@@ -14,6 +14,9 @@ use better_auth_core::{
 };
 use chrono::{DateTime, Utc};
 
+#[path = "device_ownership_references.rs"]
+mod references;
+
 const CASES: [(&str, &str, &str, &str); 8] = [
     (
         "tenant-match-after-prepare",
@@ -139,6 +142,19 @@ async fn setup<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
     model_fields: UserConfig,
 ) -> AuthResult<(BetterAuth<S>, Arc<Observation>)> {
+    setup_with_initial(
+        raw,
+        model_fields,
+        [("tenantKey".into(), "tenant-before".into())].into(),
+    )
+    .await
+}
+
+async fn setup_with_initial<S: AuthSchema>(
+    raw: Arc<dyn AuthStore<S>>,
+    model_fields: UserConfig,
+    initial_fields: FieldMap,
+) -> AuthResult<(BetterAuth<S>, Arc<Observation>)> {
     let auth = BetterAuth::new(config())
         .store_arc(raw)
         .plugin(DeviceAuthorizationPlugin::new())
@@ -177,9 +193,7 @@ async fn setup<S: AuthSchema>(
             polling_interval: Some(5000.0),
             client_id: Some("ordinary-client".into()),
             scope: Some("initial".into()).into(),
-            additional_fields: [("tenantKey".into(), "tenant-before".into())]
-                .into_iter()
-                .collect(),
+            additional_fields: initial_fields,
         })
         .await?;
     assert!(!owner.id.typed()?.is_empty());
@@ -196,11 +210,31 @@ async fn setup<S: AuthSchema>(
     ))
 }
 
+struct Redemption {
+    field: &'static str,
+    target: &'static str,
+    prepared_fields: FieldMap,
+}
+
+impl From<(&'static str, &'static str)> for Redemption {
+    fn from((field, target): (&'static str, &'static str)) -> Self {
+        Self {
+            field,
+            target,
+            prepared_fields: [("tenantKey".into(), "tenant-after".into())].into(),
+        }
+    }
+}
+
 async fn redeem<S: AuthSchema>(
     context: &AuthContext<S>,
     transaction: Option<&dyn AuthTransaction<S>>,
     observation: Arc<Observation>,
-    (field, target): (&'static str, &'static str),
+    Redemption {
+        field,
+        target,
+        prepared_fields,
+    }: Redemption,
 ) -> AuthResult<Value> {
     let mut endpoint = EndpointContext::native(None, None, FieldValue::Null, context);
     endpoint.transaction = transaction;
@@ -244,9 +278,7 @@ async fn redeem<S: AuthSchema>(
                         &row.id,
                         UpdateDeviceCode {
                             scope: Some("prepared".into()).into(),
-                            additional_fields: [("tenantKey".into(), "tenant-after".into())]
-                                .into_iter()
-                                .collect(),
+                            additional_fields: prepared_fields,
                             ..Default::default()
                         },
                     )
@@ -275,20 +307,37 @@ async fn contract<S: AuthSchema>(
     raw: Arc<dyn AuthStore<S>>,
     backend: &str,
     (name, mode, field, target): (&'static str, &'static str, &'static str, &'static str),
+    reference: Option<&str>,
 ) -> AuthResult<()> {
-    let (auth, observation) = setup(raw, ownership_fields()).await?;
+    let mut redemption = Redemption::from((field, target));
+    let (auth, observation) = if let Some(reference) = reference {
+        let mut fields = ownership_fields();
+        required(
+            fields.fields_mut().get_mut("tenantKey"),
+            "Expected the ownership field",
+        )?
+        .references = Some(UserFieldReference {
+            model: "user".into(),
+            field: reference.into(),
+            ..Default::default()
+        });
+        let initial_fields: FieldMap =
+            [("tenantKey".into(), "owner@device-ownership.test".into())].into();
+        redemption.prepared_fields = initial_fields.clone();
+        setup_with_initial(raw, fields, initial_fields).await?
+    } else {
+        setup(raw, ownership_fields()).await?
+    };
     let before = observation.device(&observation.seeded)?;
     let result = if mode == "transaction" {
         let context = auth.context().clone();
         let active = observation.clone();
         transaction(auth.store().as_ref(), move |transaction| {
-            Box::pin(
-                async move { redeem(&context, Some(transaction), active, (field, target)).await },
-            )
+            Box::pin(async move { redeem(&context, Some(transaction), active, redemption).await })
         })
         .await
     } else {
-        redeem(auth.context(), None, observation.clone(), (field, target)).await
+        redeem(auth.context(), None, observation.clone(), redemption).await
     };
     let (result, error) = match result {
         Ok(value) => (value, Value::Null),
@@ -313,8 +362,11 @@ async fn contract<S: AuthSchema>(
         "insideRemaining": required(trace_lock(&observation.inside_remaining)?.clone(), "Expected the transaction storage observation")?,
         "remaining": remaining,
     });
-    let fixture: Value =
-        serde_json::from_str(include_str!("../fixtures/device-ownership-1.7.6.json"))?;
+    let fixture: Value = serde_json::from_str(if reference.is_some() {
+        include_str!("../fixtures/device-ownership-references-1.7.6.json")
+    } else {
+        include_str!("../fixtures/device-ownership-1.7.6.json")
+    })?;
     assert_eq!(fixture.get("version"), Some(&json!("1.7.6")));
     let captured_backend = required(
         fixture.get("backends").and_then(Value::as_array),
@@ -351,7 +403,7 @@ async fn contract<S: AuthSchema>(
             "consumeOneResult"
         ]
     );
-    // Rust exposes typed consumption. Bun compares both adapter-only events against the complete 22-case fixture.
+    // Rust exposes typed consumption. Bun compares both adapter-only events against the complete source fixtures.
     // Keep every semantic callback, result, error and storage value in this paired comparison.
     events.truncate(3);
     assert_eq!(observed, expected, "{backend}/{name}/{mode}");
@@ -361,7 +413,7 @@ async fn contract<S: AuthSchema>(
 #[tokio::test]
 async fn memory_device_ownership_equality_matches_upstream() -> AuthResult<()> {
     for case in CASES {
-        contract(memory(), "memory", case).await?;
+        contract(memory(), "memory", case, None).await?;
     }
     Ok(())
 }
@@ -370,7 +422,7 @@ async fn memory_device_ownership_equality_matches_upstream() -> AuthResult<()> {
 async fn sqlite_device_ownership_equality_matches_upstream() -> AuthResult<()> {
     for case in CASES {
         let (store, _) = device_fixture::sqlite(config()).await;
-        contract(Arc::new(store), "sqlite", case).await?;
+        contract(Arc::new(store), "sqlite", case, None).await?;
     }
     Ok(())
 }
@@ -396,7 +448,7 @@ async fn memory_device_ownership_change_before_commit_preserves_external_record(
             transaction(store.as_ref(), move |transaction| {
                 Box::pin(async move {
                     let result =
-                        redeem(&context, Some(transaction), active, (field, target)).await?;
+                        redeem(&context, Some(transaction), active, (field, target).into()).await?;
                     consumed
                         .send(())
                         .map_err(|_| AuthError::internal("Field callback receiver closed"))?;
@@ -458,9 +510,9 @@ async fn memory_device_ownership_change_before_commit_preserves_external_record(
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "The contract must assert rejection errors and complete Device record preservation"
+    reason = "The contract must assert query errors, mismatches, and complete Device record preservation"
 )]
-async fn unsupported_device_ownership_conditions_leave_the_entire_record_stored() -> AuthResult<()>
+async fn device_ownership_equality_uses_declared_fields_and_preserves_mismatches() -> AuthResult<()>
 {
     let mut policies = ownership_fields();
     let fields = required(
@@ -494,30 +546,14 @@ async fn unsupported_device_ownership_conditions_leave_the_entire_record_stored(
         .get_device_code_by_device_code(observation.seeded.device_code.typed()?)
         .await?
         .ok_or_else(|| AuthError::internal("Expected the stored model record"))?;
-    let unsupported_type =
-        "DeviceCode FieldEquals supports only declared string, number, and boolean fields";
-    let non_scalar =
-        "DeviceCode FieldEquals requires a scalar null, string, number, or boolean value";
-    for (field, value, message) in [
-        (
-            "unregistered",
-            json!("tenant-before"),
-            "DeviceCode ownership field unregistered is not registered",
-        ),
-        ("tenantKey", json!(["tenant-before"]), non_scalar),
-        ("tenantKey", json!({"value": "tenant-before"}), non_scalar),
-        (
-            "activatedAt",
-            json!("2030-01-01T00:00:00.000Z"),
-            unsupported_type,
-        ),
-        (
-            "referenceKey",
-            json!(observation.owner.id.typed()?),
-            "DeviceCode ownership reference fields require the String type and an id target",
-        ),
+    for (field, value) in [
+        ("unregistered", json!("tenant-before")),
+        ("tenantKey", json!(["tenant-before"])),
+        ("tenantKey", json!({"value": "tenant-before"})),
+        ("activatedAt", json!("2030-01-01T00:00:00.000Z")),
+        ("referenceKey", json!(observation.owner.id.typed()?)),
     ] {
-        let error = auth
+        let result = auth
             .store()
             .consume_device_code(
                 &before,
@@ -526,16 +562,22 @@ async fn unsupported_device_ownership_conditions_leave_the_entire_record_stored(
                     value: FieldValue::from_json(value)?,
                 },
             )
-            .await
-            .err()
-            .ok_or_else(|| AuthError::internal("Expected the model operation to fail"))?;
-        assert!(matches!(error, AuthError::Config(ref actual) if actual == message));
+            .await;
+        if field == "unregistered" {
+            assert!(matches!(result, Err(AuthError::Config(ref message))
+                if message == "Unknown plugin field DeviceCode.unregistered"));
+        } else {
+            assert_eq!(
+                result?, None,
+                "{field} must retain the adapter's equality semantics"
+            );
+        }
         assert_eq!(
             auth.store()
                 .get_device_code_by_device_code(before.device_code.typed()?)
                 .await?,
             Some(before.clone()),
-            "Rejected ownership condition {field} must preserve the complete stored record"
+            "Unmatched ownership condition {field} must preserve the complete stored record"
         );
     }
     Ok(())
@@ -619,10 +661,10 @@ async fn memory_device_ownership_set_change_conflicts_even_when_both_values_matc
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "The contract must assert rejection before callbacks and complete Device record preservation"
+    reason = "The contract must assert callback order and complete Device records after query conversion"
 )]
-async fn memory_device_ownership_sets_reject_unsupported_fields_before_callbacks() -> AuthResult<()>
-{
+async fn memory_device_ownership_sets_use_shared_conversion_and_preserve_callback_order()
+-> AuthResult<()> {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     let calls = Arc::new(AtomicUsize::new(0));
@@ -671,33 +713,17 @@ async fn memory_device_ownership_sets_reject_unsupported_fields_before_callbacks
             ..Default::default()
         },
     );
-    let (auth, observation) = setup(memory(), policies).await?;
-    let before = observation.seeded.clone();
-    let unsupported_type = "DeviceCode field sets support only declared string and number fields";
-    let non_scalar = "DeviceCode field sets require scalar null, string, or number candidates";
-    for (field, value, message) in [
-        (
-            "unregistered",
-            json!("tenant-before"),
-            "DeviceCode ownership field unregistered is not registered",
-        ),
-        ("tenantKey", json!(["tenant-before"]), non_scalar),
-        ("tenantKey", json!({"value":"tenant-before"}), non_scalar),
-        ("tenantKey", json!(true), non_scalar),
-        (
-            "activatedAt",
-            json!("2030-01-01T00:00:00Z"),
-            unsupported_type,
-        ),
-        ("details", Value::Null, unsupported_type),
-        ("labels", json!("tenant-before"), unsupported_type),
-        ("scores", json!(1), unsupported_type),
-        ("enabledFlag", json!("true"), unsupported_type),
-        (
-            "referenceKey",
-            json!("owner"),
-            "DeviceCode ownership reference fields require the String type and an id target",
-        ),
+    for (field, value) in [
+        ("unregistered", json!("tenant-before")),
+        ("tenantKey", json!(["tenant-before"])),
+        ("tenantKey", json!({"value":"tenant-before"})),
+        ("tenantKey", json!(true)),
+        ("activatedAt", json!("2030-01-01T00:00:00Z")),
+        ("details", Value::Null),
+        ("labels", json!("tenant-before")),
+        ("scores", json!(1)),
+        ("enabledFlag", json!("true")),
+        ("referenceKey", json!("owner")),
     ] {
         for ownership in [
             DeviceCodeOwnership::FieldIn {
@@ -709,20 +735,33 @@ async fn memory_device_ownership_sets_reject_unsupported_fields_before_callbacks
                 values: vec![FieldValue::from_json(value.clone())?],
             },
         ] {
+            let (auth, observation) = setup(memory(), policies.clone()).await?;
+            let before = observation.seeded.clone();
             calls.store(0, Ordering::SeqCst);
-            let error = auth
-                .store()
-                .consume_device_code(&before, &ownership)
-                .await
-                .err()
-                .ok_or_else(|| AuthError::internal("Expected the model operation to fail"))?;
-            assert!(matches!(error, AuthError::Config(ref actual) if actual == message));
-            assert_eq!(calls.load(Ordering::SeqCst), 0);
+            let result = auth.store().consume_device_code(&before, &ownership).await;
+            let consumed = match field {
+                "unregistered" => {
+                    assert!(matches!(result, Err(AuthError::Config(ref message))
+                        if message == "Unknown plugin field DeviceCode.unregistered"));
+                    false
+                }
+                "details" => {
+                    assert!(matches!(result, Err(AuthError::Internal(ref message))
+                        if message == "Value must be an array"));
+                    false
+                }
+                _ => {
+                    let consumed = matches!(ownership, DeviceCodeOwnership::FieldNotIn { .. });
+                    assert_eq!(result?, consumed.then(|| before.clone()), "{field}");
+                    consumed
+                }
+            };
+            assert_eq!(calls.load(Ordering::SeqCst), usize::from(consumed));
             assert_eq!(
                 auth.store()
                     .get_device_code_by_device_code(before.device_code.typed()?)
                     .await?,
-                Some(before.clone())
+                (!consumed).then(|| before.clone())
             );
         }
     }

@@ -296,12 +296,10 @@ impl DeviceCodeStore for EphemeralStore {
         expected: &DeviceCode,
         ownership: &crate::DeviceCodeOwnership,
     ) -> AuthResult<Option<DeviceCode>> {
-        let (mut query, field, original) = self
-            .model_fields
-            .device_code_ownership_query(ownership, self.config.advanced.database.generate_id())?;
-        if matches!(field.field_type, crate::user_fields::UserFieldType::Json) {
-            query.value = super::field_bindings::memory_json_query_value(query.value, &original)?;
-        }
+        let mut query = ownership.query();
+        crate::query::validate_where_operand(query.operator, &query.value)?;
+        (query.field, query.value) =
+            self.plugin_query_field(EntityRole::DeviceCode, &query.field, query.value)?;
         let approved =
             self.plugin_query_value(EntityRole::DeviceCode, "status", "approved".into())?;
         let (bindings, unchanged) = expected.consumption_bindings()?;

@@ -34,7 +34,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 .flatten()
                 .unwrap_or_default();
             if !session.is_truthy() {
-                crate::observability::logger::current()
+                self.config
+                    .logger()
                     .error("Session not found in secondary storage", &[]);
                 return Ok(());
             }
@@ -92,7 +93,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
                     storage.delete_native(&key).await?;
                 }
             } else {
-                crate::observability::logger::current()
+                self.config
+                    .logger()
                     .error("Active sessions list not found in secondary storage", &[]);
             }
         }

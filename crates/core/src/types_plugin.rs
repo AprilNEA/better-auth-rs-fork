@@ -198,33 +198,28 @@ pub use device::DeviceCode;
 pub enum DeviceCodeOwnership {
     /// Require the stored client binding to equal this client identifier.
     ClientId(String),
-    /// Match native `scope` or a declared string, number, or boolean field.
-    /// String fields may reference `id`; other references are not supported.
+    /// Match a declared field through the selected adapter's query conversions.
     /// This condition uses `eq`, `AND`, and case-sensitive comparison.
-    /// Other connectors and field types are not supported by this variant.
+    /// Other connectors are not supported by this variant.
     FieldEquals {
-        /// Native `scope`, a registered logical field name, or a configured storage field name.
+        /// A registered logical field name or configured storage field name.
         field: String,
-        /// Scalar null, string, number, or boolean query value.
+        /// Native query value, preserving object identity until adapter conversion.
         value: crate::FieldValue,
     },
     /// Require membership in a candidate set with `AND` and case-sensitive comparison.
     FieldIn {
-        /// Native `scope`, or a registered string or number field.
-        /// String fields may reference `id` and use the configured ID policy.
-        /// Configured storage field names are accepted.
+        /// A registered logical field name or configured storage field name.
         field: String,
-        /// Null, string, or number candidates.
+        /// Native candidates converted by the selected adapter.
         /// An empty set does not match in Memory or SQLite and produces a PostgreSQL or MySQL syntax error.
         values: Vec<crate::FieldValue>,
     },
     /// Exclude a candidate set with `AND` and the selected adapter's null semantics.
     FieldNotIn {
-        /// Native `scope`, or a registered string or number field.
-        /// String fields may reference `id` and use the configured ID policy.
-        /// Configured storage field names are accepted.
+        /// A registered logical field name or configured storage field name.
         field: String,
-        /// Null, string, or number candidates.
+        /// Native candidates converted by the selected adapter.
         /// An empty set matches in Memory or SQLite and produces a PostgreSQL or MySQL syntax error.
         values: Vec<crate::FieldValue>,
     },
@@ -232,10 +227,10 @@ pub enum DeviceCodeOwnership {
     Where(DeviceCodeWhere),
 }
 
-/// A DeviceCode ownership condition over scope or a declared field.
-/// String, JSON, and Date fields that reference `id` use the configured ID policy.
+/// A DeviceCode ownership condition over a declared field.
+/// Fields that reference `id` use the configured ID policy regardless of their declared type.
 /// Adapter-specific Date and JSON conversion retains the original operand after Serial conversion.
-/// Other reference field types and non-`id` targets are not supported.
+/// References to other fields retain that field declaration's ordinary query conversions.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeviceCodeWhere {
     /// Native `scope`, a registered logical field name, or a configured storage field name.

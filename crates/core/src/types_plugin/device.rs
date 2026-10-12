@@ -1,7 +1,32 @@
 use crate::{
-    AuthError, AuthRecordFields, AuthResult, FieldDate, FieldMap, FieldValue, SchemaValue,
+    AuthError, AuthRecordFields, AuthResult, DeviceCodeOwnership, DeviceCodeWhere, FieldDate,
+    FieldMap, FieldValue, SchemaValue, WhereMode, WhereOperator,
     entity::record_fields::ClonedFields,
 };
+
+impl DeviceCodeOwnership {
+    /// Express an ownership condition through the adapter's shared field query policy.
+    #[doc(hidden)]
+    pub fn query(&self) -> DeviceCodeWhere {
+        match self {
+            Self::ClientId(client) => DeviceCodeWhere::new("clientId", client.clone()),
+            Self::FieldEquals { field, value } => DeviceCodeWhere::new(field, value.clone()),
+            Self::FieldIn { field, values } | Self::FieldNotIn { field, values } => {
+                DeviceCodeWhere {
+                    field: field.clone(),
+                    operator: if matches!(self, Self::FieldIn { .. }) {
+                        WhereOperator::In
+                    } else {
+                        WhereOperator::NotIn
+                    },
+                    value: values.clone().into(),
+                    mode: WhereMode::Sensitive,
+                }
+            }
+            Self::Where(query) => query.clone(),
+        }
+    }
+}
 
 /// Device authorization fields after adapter output projection.
 #[derive(Clone, Default)]

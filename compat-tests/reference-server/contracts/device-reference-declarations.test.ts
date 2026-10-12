@@ -12,5 +12,7 @@ for (const backend of ["memory", "sqlite", "postgres", "mysql"]) {
     expect(observation.groups.map(group => [group.ownerRefType, group.ownerRefTarget, group.cases.length])).toStrictEqual([
       ["number", "id", 10], ["boolean", "id", 5], ["string[]", "id", 5], ["number[]", "id", 5], ["string", "email", 5],
     ]);
+    const fixture = await Bun.file(new URL(`../../../tests/fixtures/device-reference-declarations-${backend}-1.7.6.json`, import.meta.url)).json();
+    expect(observation).toStrictEqual(fixture);
   });
 }
