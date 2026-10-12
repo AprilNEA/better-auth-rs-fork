@@ -44,6 +44,8 @@ mod session_delete;
 mod session_output;
 mod session_write;
 mod sessions;
+#[cfg(test)]
+mod shared_column_tests;
 mod team_capacity;
 mod team_details;
 mod team_invitation;

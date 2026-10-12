@@ -12,6 +12,8 @@ use organization_model::generate as gen_organization_model;
 mod adapter_record;
 #[path = "field_aliases.rs"]
 mod field_aliases;
+#[path = "field_bindings.rs"]
+mod field_bindings;
 #[path = "identity.rs"]
 mod identity;
 #[path = "plugin_model.rs"]
@@ -119,12 +121,16 @@ pub(crate) fn derive_auth_entity(input: &DeriveInput) -> TokenStream {
     let core = registry::core_field_names(role);
     let plugin = registry::plugin_field_names(role);
     let plugin_record = plugin_model::record_name(role).is_some();
+    let bindings = match field_bindings::FieldBindings::new(fields) {
+        Ok(bindings) => bindings,
+        Err(error) => return error.to_compile_error(),
+    };
 
     if let Some(missing) = registry::core_fields(role).iter().find(|required| {
         !(required.adapter_private.is_some()
             || plugin_record && required.name != "id"
             || row_presence && required.name == "active")
-            && !idents.iter().any(|ident| ident == required.name)
+            && bindings.get(required.name).is_none()
     }) {
         return syn::Error::new_spanned(
             &input.ident,

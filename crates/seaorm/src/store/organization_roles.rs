@@ -78,11 +78,13 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
             );
         }
         for field in better_auth_core::store::schema::core_fields(EntityRole::OrganizationRole) {
-            let column = O::OrganizationRole::column(field.name)?;
-            if let Some(name) = O::OrganizationRole::core_field_name(&column)
-                && let Some(value) = input.additional_fields.remove(name)
-            {
-                let _ = core.entry(name.to_owned()).or_insert(value);
+            let _ = O::OrganizationRole::column(field.name)?;
+            let name = better_auth_core::store::schema::canonical_field_name(
+                EntityRole::OrganizationRole,
+                field.name,
+            );
+            if let Some(value) = input.additional_fields.remove(&name) {
+                let _ = core.entry(name).or_insert(value);
             }
         }
         models::active::<O::OrganizationRole>(

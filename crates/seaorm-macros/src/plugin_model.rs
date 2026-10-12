@@ -117,6 +117,7 @@ pub(super) fn generate(
     });
     let ident = &input.ident;
     let logical = quote!(#core_root::FieldMap::from_iter([#(#raw_output)*]));
+    let physical_lookup = field_aliases::physical_lookup(seaorm_root);
     Ok(quote! {
         impl #seaorm_root::SeaOrmPluginModel for #ident {
             type Record = #record;
@@ -127,11 +128,7 @@ pub(super) fn generate(
             #passkey_storage
             #two_factor_storage
             fn column(name: &str) -> #core_root::AuthResult<Column> {
-                if let Some(column) = <Column as #seaorm_root::sea_orm::Iterable>::iter()
-                    .find(|column| #seaorm_root::sea_orm::IdenStatic::as_str(column) == name)
-                {
-                    return Ok(column);
-                }
+                #physical_lookup
                 match name { #(#columns)* _ => Err(#core_root::AuthError::config(format!("Unknown plugin model column: {name}"))) }
             }
             fn core_field_name(column: &Column) -> Option<&'static str> {

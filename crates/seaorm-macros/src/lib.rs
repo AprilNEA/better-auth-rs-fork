@@ -22,6 +22,8 @@ use syn::{DeriveInput, parse_macro_input};
 /// IDs use the declared field types. Absent IDs remain unset for database defaults.
 /// Mark additional fields that reference an ID with `#[auth(reference)]` to parse string identifiers into integer or UUID storage.
 /// Use `#[auth(reference = false)]` to keep a native field independent of the registry's ID-reference conversion.
+/// Account, Verification, and Organization fields may use repeated `#[auth(alias = "native_field")]` attributes when native names share one column.
+/// Aliases bind typed accessors and projected record slots; runtime field policies remain configured separately.
 ///
 /// ```ignore
 /// #[derive(DeriveEntityModel, AuthEntity)]

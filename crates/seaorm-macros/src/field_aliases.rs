@@ -58,7 +58,18 @@ pub(super) fn field_aliases(
             }
         }
     }
+    aliases.extend(super::field_bindings::FieldOptions::parse_attributes(attrs)?.aliases);
     aliases.sort();
     aliases.dedup();
     Ok(aliases)
+}
+
+pub(super) fn physical_lookup(seaorm: &TokenStream) -> TokenStream {
+    quote! {
+        if let Some(column) = <Column as #seaorm::sea_orm::Iterable>::iter()
+            .find(|column| #seaorm::sea_orm::IdenStatic::as_str(column) == name)
+        {
+            return Ok(column);
+        }
+    }
 }

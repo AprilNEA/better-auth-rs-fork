@@ -23,6 +23,7 @@ pub(super) fn generate(
     };
     let record = format_ident!("{record}");
     let core_fields = registry::core_field_names(role);
+    let bindings = field_bindings::FieldBindings::new(fields)?;
     let private_columns = registry::core_fields(role)
         .iter()
         .filter_map(|definition| {
@@ -32,22 +33,14 @@ pub(super) fn generate(
         })
         .map(|(definition, logical)| {
             let name = definition.name;
-            let column = fields.named.iter().find_map(|field| {
-                field
-                    .ident
-                    .as_ref()
-                    .filter(|ident| *ident == name)
-                    .map(|_| {
-                        format_ident!(
-                            "{}",
-                            serde_rename_rule::RenameRule::PascalCase.apply_to_field(name)
-                        )
-                    })
-            });
+            let column = bindings
+                .get(name)
+                .map(|_| bindings.column(name))
+                .transpose()?;
             let value = column.map_or_else(|| quote!(None), |column| quote!(Some(Column::#column)));
-            quote!(#name | #logical => Ok(#value),)
+            Ok(quote!(#name | #logical => Ok(#value),))
         })
-        .collect::<Vec<_>>();
+        .collect::<syn::Result<Vec<_>>>()?;
     let rename_rule = serde_serialized_name(&input.attrs, "rename_all")?
         .map(|rule| {
             serde_rename_rule::RenameRule::from_rename_all_str(&rule)
@@ -55,8 +48,9 @@ pub(super) fn generate(
         })
         .transpose()?;
     let mut columns = Vec::new();
+    let mut column_aliases = std::collections::BTreeSet::new();
     let mut references = Vec::new();
-    let mut serialized_columns = Vec::new();
+    let mut stored_values = Vec::new();
     let mut core_columns = Vec::new();
     let mut core_names = Vec::new();
     let mut core_values = Vec::new();
@@ -81,14 +75,16 @@ pub(super) fn generate(
         } else {
             serialized.clone()
         };
-        let aliases = field_aliases::field_aliases(&name, &serialized, &field.attrs)?;
-        columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
-        serialized_columns.push(quote!(Column::#column => #serialized,));
+        let mut aliases = field_aliases::field_aliases(&name, &serialized, &field.attrs)?;
+        aliases.retain(|alias| column_aliases.insert(alias.clone()));
+        if !aliases.is_empty() {
+            columns.push(quote!(#(#aliases)|* => Ok(Column::#column),));
+        }
+        let stored_value = adapter_record::field_value(ident, seaorm_root);
+        stored_values.push(quote!(Column::#column => #stored_value,));
         if is_core {
             core_columns.push(quote!(Column::#column));
             core_names.push(quote!(Column::#column => Some(#public_name),));
-            let value = adapter_record::field_value(ident, seaorm_root);
-            core_values.push(quote!((#public_name.to_owned(), #value)));
         } else {
             core_names.push(quote!(Column::#column => None,));
         }
@@ -99,12 +95,18 @@ pub(super) fn generate(
         } else {
             adapter_record::decode_field(field, seaorm_root)
         };
-        assignments.push(quote!(#(#aliases)|* => active.#ident = #seaorm_root::sea_orm::ActiveValue::Set(#decoded),));
-        if is_core {
+        assignments.push(quote!(Column::#column => active.#ident = #seaorm_root::sea_orm::ActiveValue::Set(#decoded),));
+    }
+    for definition in registry::core_fields(role) {
+        let name = definition.name;
+        let public_name = registry::canonical_field_name(role, name);
+        if let Some(field) = bindings.get(name) {
+            let value = adapter_record::field_value(bindings.ident(name)?, seaorm_root);
+            core_values.push(quote!((#public_name.to_owned(), #value)));
             if name == "member_count" {
                 continue;
             }
-            if matches!(name.as_str(), "auth_updated_at" | "membership_key") {
+            if definition.adapter_private.is_some() || name == "membership_key" {
                 output_values.push(quote! {
                     if !fields.fields().contains_key(#public_name) {
                         let _ = projected.remove(#public_name);
@@ -112,7 +114,8 @@ pub(super) fn generate(
                 });
                 continue;
             }
-            if matches!(name.as_str(), "created_at" | "updated_at" | "expires_at") {
+            let ident = format_ident!("{name}");
+            if matches!(name, "created_at" | "updated_at" | "expires_at") {
                 output_values.push(quote! {
                     let value = projected.remove(#public_name);
                     let #ident = if fields.fields().get(#public_name).is_some_and(|field| !matches!(field.field_type, #core_root::user_fields::UserFieldType::Date)) {
@@ -122,7 +125,7 @@ pub(super) fn generate(
                     };
                 });
             } else {
-                let reference = reference.then(|| quote! {
+                let reference = identity::is_reference(role, field)?.then(|| quote! {
                     if !fields.fields().contains_key(#public_name) {
                         if let Some(value) = value.as_mut().filter(|value| !value.is_null()) {
                             *value = #core_root::FieldValue::String(#core_root::SchemaValue::<String>::from_field(value.clone()).display_string()?);
@@ -141,25 +144,15 @@ pub(super) fn generate(
         }
     }
     let ident = &input.ident;
+    let physical_lookup = field_aliases::physical_lookup(seaorm_root);
     let record_fields = quote! {
-            let model = #core_root::entity::AuthRecordFields::field_values(self)?;
             let core = #core_root::FieldMap::from_iter([#(#core_values),*]);
             let mut storage = #core_root::FieldMap::new();
             for (name, field) in fields.fields() {
                 if name == "id" { continue; }
                 let storage_name = #core_root::store::schema::resolve_field_name(field.field_name.as_deref(), name);
-                let column = Self::column(storage_name)?;
-                let value = if let Some(core_name) = Self::core_field_name(&column) {
-                    core.get(core_name)
-                } else {
-                    let serialized_name = match column {
-                        #(#serialized_columns)*
-                    };
-                    model.get(serialized_name)
-                };
-                if let Some(value) = value {
-                    let _ = storage.insert(storage_name.to_owned(), value.clone());
-                }
+                let value = match Self::column(storage_name)? { #(#stored_values)* };
+                let _ = storage.insert(storage_name.to_owned(), value);
             }
             Ok(#core_root::user_fields::AdapterRecord::new(core, storage))
     };
@@ -170,6 +163,7 @@ pub(super) fn generate(
             type ActiveModel = ActiveModel;
             type Column = Column;
             fn column(name: &str) -> #core_root::AuthResult<Column> {
+                #physical_lookup
                 match name { #(#columns)* _ => Err(#core_root::AuthError::config(format!("Unknown organization model column: {name}"))) }
             }
             fn private_column(name: &str) -> #core_root::AuthResult<Option<Column>> {
@@ -194,7 +188,7 @@ pub(super) fn generate(
             }
             fn apply_fields(active: &mut ActiveModel, fields: #core_root::FieldMap) -> #core_root::AuthResult<()> {
                 for (name, value) in fields {
-                    match name.as_str() { #(#assignments)* _ => return Err(#core_root::AuthError::config(format!("Unknown organization model field: {name}"))) }
+                    match Self::column(&name)? { #(#assignments)* }
                 }
                 Ok(())
             }

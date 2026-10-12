@@ -4,14 +4,9 @@ pub(super) fn field_type<'a>(
     fields: &'a syn::FieldsNamed,
     name: &str,
 ) -> syn::Result<&'a syn::Type> {
-    fields
-        .named
-        .iter()
-        .find(|field| field.ident.as_ref().is_some_and(|ident| ident == name))
-        .map(|field| &field.ty)
-        .ok_or_else(|| {
-            syn::Error::new_spanned(fields, format!("missing required auth field `{name}`"))
-        })
+    Ok(&field_bindings::FieldBindings::new(fields)?
+        .require(name)?
+        .ty)
 }
 
 pub(super) fn string_view(ty: &syn::Type, name: &str) -> TokenStream {
@@ -25,24 +20,7 @@ pub(super) fn string_view(ty: &syn::Type, name: &str) -> TokenStream {
 }
 
 pub(super) fn is_reference(role: EntityRole, field: &syn::Field) -> syn::Result<bool> {
-    let mut configured = None;
-    for attr in field
-        .attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("auth"))
-    {
-        attr.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("reference") {
-                return Err(meta.error("expected `reference`"));
-            }
-            configured = Some(if meta.input.peek(syn::Token![=]) {
-                meta.value()?.parse::<syn::LitBool>()?.value
-            } else {
-                true
-            });
-            Ok(())
-        })?;
-    }
+    let configured = field_bindings::FieldOptions::parse(field)?.reference;
     let table = match role {
         EntityRole::Session => "sessions",
         EntityRole::Account => "accounts",

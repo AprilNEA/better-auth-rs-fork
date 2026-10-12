@@ -4,7 +4,7 @@ use better_auth_core::{
     AuthError, AuthResult, id::AdapterIdInput, plugin_runtime::ModelFields, user_fields::UserConfig,
 };
 use better_auth_core::{FieldMap, FieldValue, FromFieldMap};
-use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, IdenStatic, QueryFilter, Select};
+use sea_orm::{ColumnTrait, ConnectionTrait, DbBackend, QueryFilter, Select};
 
 use super::plugin_rows::{self, SqlRow};
 use super::value_filter::{self, QueryPredicate};
@@ -271,9 +271,9 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
             }
         })
         .map(|(name, value)| {
-            let column = M::column(&name)?;
+            let _ = M::column(&name)?;
             Ok((
-                M::core_field_name(&column).unwrap_or(&name).to_owned(),
+                better_auth_core::store::schema::canonical_field_name(role, &name),
                 value,
             ))
         })

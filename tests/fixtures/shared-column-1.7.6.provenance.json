@@ -1,0 +1,78 @@
+{
+  "contract": "shared-physical-column",
+  "version": "1.7.6",
+  "status": "source capture and repeated-process equality passed; complete Rust replay remains open",
+  "run": "38240935097",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38240935097",
+  "commit": "f61f1a4a22f2a84aaa988994a083b6ad3f509a95",
+  "runConclusion": "success",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38240935097-clean.log",
+    "bytes": 457129,
+    "sha256": "1d5ce0fde8162cf2148cc0548ae59170d47452b6f42a7e26deba639a7b81e533"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/shared-column-capture.mjs",
+      "bytes": 8324,
+      "sha256": "b89f13b8b6b3a611df80d254a80327426af47d2eefcc06393a1dc32987d44fef"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/shared-column-capture.test.ts",
+      "bytes": 1519,
+      "sha256": "bd9458b21048a0282af34a54267f1e3cfaabdc8736bd2e42a24223303f0bc75b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/device-where-capture.mjs",
+      "bytes": 12999,
+      "sha256": "788f20e7c9bc382c8c863cbfe180024f7090c7909a04138be687094e89b33ae6"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/sqlite-catalog.ts",
+      "bytes": 2260,
+      "sha256": "f53afd791c4e687d9da4d4c9722956374bcf1dd6547e26add4bda91d1d2ce2cc"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2677,
+      "sha256": "1076a75618059a6ca6fb12fb32fa53fe9443d375ecd96f540bf58cc28612d70b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/shared-column-1.7.6.json",
+    "bytes": 1083089,
+    "sha256": "9e0b8ec1371cc276b2d7eb32897fe8535f8c788a7d77ba486a13bf9eff690a42"
+  },
+  "models": 10,
+  "casesPerBackend": 30,
+  "backends": [
+    "memory",
+    "sqlite"
+  ],
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1053,
+      "bytes": 203476,
+      "sha256": "ef5dc4e65bcc15a5c3248ebb301e022fb2719fe1c16ed77ba8afa2786fb89703"
+    },
+    {
+      "line": 30,
+      "byteOffset": 204626,
+      "bytes": 252317,
+      "sha256": "5e7c52872023283bde8983a631bd17fa12f6fd008921df4ccc26386071f78ada"
+    }
+  ],
+  "extraction": "Retain each complete backend observation in source order. Preserve configuration, declaration order, input, output, callback events, error identity, storage, catalog rows, and raw DDL. Format as JSON.",
+  "normalizations": [],
+  "configurationBoundary": {
+    "core": "BetterAuthOptions.additionalFields",
+    "organization": "organization(options.schema).additionalFields",
+    "teamMember": "late plugin.schema fields"
+  }
+}
