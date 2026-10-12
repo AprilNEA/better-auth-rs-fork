@@ -10,6 +10,8 @@ use std::sync::Arc;
 
 #[path = "session_records.rs"]
 mod session_records;
+#[path = "verification_records.rs"]
+mod verification_records;
 
 const NOW: i64 = 4_102_444_800_000;
 const EXPIRY: i64 = NOW + 3_600_000;
@@ -291,6 +293,29 @@ async fn verification_cache_preserves_native_fields_through_update_and_atomic_co
         assert!(
             store
                 .consume_verification_including_expired("malformed")
+                .await?
+                .is_none()
+        );
+    }
+    for value in [FieldValue::Undefined, FieldValue::Null] {
+        cache
+            .set_native(&"verification:native-empty".into(), &value, None)
+            .await?;
+        assert_eq!(
+            cache
+                .get_native(&"verification:native-empty".into())
+                .await?,
+            Some(value)
+        );
+        assert!(
+            store
+                .consume_verification_including_expired("native-empty")
+                .await?
+                .is_none()
+        );
+        assert!(
+            cache
+                .get_native(&"verification:native-empty".into())
                 .await?
                 .is_none()
         );

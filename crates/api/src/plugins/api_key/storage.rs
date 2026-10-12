@@ -116,7 +116,7 @@ fn ttl(key: &ApiKey) -> AuthResult<Option<u64>> {
     Ok((seconds > 0.0).then_some(seconds as u64))
 }
 
-fn serialize(key: &ApiKey) -> AuthResult<String> {
+fn serialize(key: &ApiKey) -> AuthResult<FieldValue> {
     let mut fields = key.field_values()?;
     for (name, optional) in [
         ("createdAt", false),
@@ -144,9 +144,7 @@ fn serialize(key: &ApiKey) -> AuthResult<String> {
         };
         let _ = fields.insert(name.into(), value);
     }
-    FieldValue::from(fields)
-        .stringify()?
-        .ok_or_else(|| AuthError::internal("API key cache serialization omitted the record"))
+    FieldValue::from(fields).stringify_native()
 }
 
 fn deserialize(value: Option<FieldValue>) -> Option<ApiKey> {
@@ -630,7 +628,7 @@ async fn list_in_batch(
             storage
                 .set_native(
                     &batch.observe(cache_key("api-key:by-ref:", reference))?,
-                    &batch.observe(reference::stringify(&ids))?,
+                    &batch.observe(ids.stringify_native())?,
                     None,
                 )
                 .await,
@@ -727,8 +725,8 @@ mod tests {
             assert_eq!(key.enabled.is_truthy()?, truthy);
             assert_eq!(key.rate_limit_enabled.is_truthy()?, truthy);
             let serialized = serialize(&key)?;
-            let stored: Value = serde_json::from_str(&serialized)?;
-            let restored = deserialize(Some(FieldValue::String(serialized)))
+            let stored: Value = serde_json::from_str(&serialized.decode::<String>()?)?;
+            let restored = deserialize(Some(serialized))
                 .ok_or_else(|| AuthError::internal("The serialized cache entry must decode"))?;
             assert_eq!(restored.enabled.field_value(), expected);
             assert_eq!(restored.rate_limit_enabled.field_value(), expected);
@@ -757,13 +755,13 @@ mod tests {
         );
         let serialized = serialize(&key).unwrap();
         let fields: BTreeMap<String, Box<serde_json::value::RawValue>> =
-            serde_json::from_str(&serialized).unwrap();
+            serde_json::from_str(&serialized.decode::<String>().unwrap()).unwrap();
         assert_eq!(fields.get("start").unwrap().get(), r#""\ud83d""#);
         assert_eq!(
             fields.get("metadata").unwrap().get(),
             r#"{"purpose":"device"}"#
         );
-        let restored = deserialize(Some(FieldValue::String(serialized))).unwrap();
+        let restored = deserialize(Some(serialized)).unwrap();
         assert_eq!(restored.start, key.start);
         assert_eq!(restored.metadata, key.metadata);
         assert!(deserialize(Some(FieldValue::String("malformed".into()))).is_none());

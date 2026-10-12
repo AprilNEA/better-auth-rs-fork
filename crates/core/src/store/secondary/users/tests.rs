@@ -41,7 +41,7 @@ impl SecondaryStorage for GatedStorage {
     async fn set_native(
         &self,
         key: &crate::FieldValue,
-        value: &str,
+        value: &crate::FieldValue,
         seconds: Option<f64>,
     ) -> AuthResult<()> {
         self.values.set_native(key, value, seconds).await?;

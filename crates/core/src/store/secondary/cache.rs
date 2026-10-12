@@ -29,12 +29,6 @@ fn object(value: &FieldValue) -> AuthResult<FieldMap> {
         .snapshot_fields()
 }
 
-pub(super) fn stringify(value: &FieldValue) -> AuthResult<String> {
-    value
-        .stringify()?
-        .ok_or_else(|| AuthError::internal("Secondary storage record cannot be undefined"))
-}
-
 fn revive_dates(fields: &mut FieldMap) {
     for name in ["expiresAt", "createdAt", "updatedAt"] {
         if let Some(FieldValue::String(text)) = fields.get(name)
@@ -74,6 +68,31 @@ pub(super) fn verification(value: &FieldValue) -> AuthResult<crate::Verification
     let mut fields = object(value)?;
     revive_dates(&mut fields);
     crate::VerificationView::from_fields(fields)
+}
+
+pub(super) fn consumed_verification(
+    raw: Option<FieldValue>,
+) -> AuthResult<Option<crate::VerificationView>> {
+    let Some(raw) = raw.filter(FieldValue::is_truthy) else {
+        return Ok(None);
+    };
+    let candidate = match raw {
+        FieldValue::String(_) | FieldValue::Utf16String(_) => {
+            crate::utils::json::safe_parse_field(&raw)?
+        }
+        FieldValue::Object(_) | FieldValue::Array(_) | FieldValue::Date(_) => raw,
+        _ => return Ok(None),
+    };
+    if !candidate.is_truthy() {
+        return Ok(None);
+    }
+    let expires_at = crate::query::field_date(&candidate.model_property("expiresAt")?)?;
+    if !expires_at.milliseconds().is_finite() {
+        return Ok(None);
+    }
+    let mut fields = candidate.enumerable_fields()?;
+    let _ = fields.insert("expiresAt".into(), expires_at.into());
+    crate::VerificationView::from_fields(fields).map(Some)
 }
 
 pub(super) fn session_envelope(session: FieldMap, user: Option<crate::UserView>) -> FieldValue {

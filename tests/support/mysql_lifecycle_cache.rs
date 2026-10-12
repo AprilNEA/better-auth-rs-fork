@@ -45,10 +45,15 @@ impl SecondaryStorage for Cache {
         Ok(value)
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let entry = Entry {
             key: key.decode()?,
-            value: value.to_owned(),
+            value: value.decode()?,
             ttl,
         };
         self.trace.cache_set(entry.clone());

@@ -42,8 +42,8 @@ fn cache_preserves_declared_order_and_drops_undefined_only_at_json_serialization
 
     let encoded = serialize(&key)?;
     let expected = r#"{"requestCount":{"source":"output"},"metadata":{"source":"output"},"id":"metadata-key","key":"private-hash","createdAt":"1970-01-01T00:00:00.000Z","updatedAt":"1970-01-01T00:00:00.000Z","expiresAt":null,"lastRefillAt":null,"lastRequest":null}"#;
-    assert_eq!(encoded, expected);
-    let restored = deserialize(Some(encoded.clone().into()))
+    assert_eq!(encoded, FieldValue::from(expected));
+    let restored = deserialize(Some(encoded.clone()))
         .ok_or_else(|| AuthError::internal("Expected the API key cache record"))?;
     let restored_fields = restored.field_values()?;
     assert_eq!(
@@ -75,7 +75,7 @@ fn cache_preserves_declared_order_and_drops_undefined_only_at_json_serialization
     );
     assert_eq!(restored.created_at.typed()?.milliseconds(), 0.0);
     assert_eq!(restored.updated_at.typed()?.milliseconds(), 0.0);
-    assert_eq!(serialize(&restored)?, expected);
+    assert_eq!(serialize(&restored)?, FieldValue::from(expected));
 
     let public = ApiKeyView::try_from_api_key(&restored)?;
     assert_eq!(

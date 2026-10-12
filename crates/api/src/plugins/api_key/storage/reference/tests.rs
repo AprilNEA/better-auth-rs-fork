@@ -20,12 +20,14 @@ use super::*;
 
 mod native_contract;
 mod native_methods;
+mod native_write_contract;
+mod native_writes;
 
 const INDEX: &str = "api-key:by-ref:owner";
 
 #[derive(Debug, PartialEq)]
 enum Write {
-    Set(FieldValue, String),
+    Set(FieldValue, FieldValue),
     Delete(FieldValue),
 }
 
@@ -75,16 +77,21 @@ impl SecondaryStorage for Cache {
             .cloned())
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, _: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        _: Option<f64>,
+    ) -> AuthResult<()> {
         let _ = self
             .values
             .lock()
             .unwrap()
-            .insert(key.display_utf16()?.as_utf16().to_vec(), value.into());
+            .insert(key.display_utf16()?.as_utf16().to_vec(), value.clone());
         self.writes
             .lock()
             .unwrap()
-            .push(Write::Set(key.clone(), value.into()));
+            .push(Write::Set(key.clone(), value.clone()));
         Ok(())
     }
 

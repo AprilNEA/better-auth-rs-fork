@@ -103,7 +103,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
             self.secondary()?
                 .set_native(
                     &active_sessions_key(&user_id)?,
-                    &references::encode(&references)?,
+                    &references.stringify_native()?,
                     Some(seconds),
                 )
                 .await?;
@@ -116,7 +116,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
         if seconds > 0.0 {
             let value = cache::session_envelope(session.clone(), user);
             self.secondary()?
-                .set_native(&token, &cache::stringify(&value)?, Some(seconds))
+                .set_native(&token, &value.stringify_native()?, Some(seconds))
                 .await?;
         }
         Ok(())
@@ -142,7 +142,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
         expires_at: FieldValue,
         now: DateTime<Utc>,
     ) -> AuthResult<()> {
-        let encoded = references::encode(references)?;
+        let encoded = references.stringify_native()?;
         let seconds =
             crate::SchemaValue::<crate::FieldDate>::from_field(expires_at).cache_ttl(now)?;
         self.secondary()?
@@ -184,7 +184,11 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 ("user".into(), cached.model_property("user")?),
             ]);
             self.secondary()?
-                .set_native(token, &cache::stringify(&envelope.into())?, Some(seconds))
+                .set_native(
+                    token,
+                    &FieldValue::from(envelope).stringify_native()?,
+                    Some(seconds),
+                )
                 .await?;
             let key = active_sessions_key(&updated.user_id.field_value())?;
             let current = cache::decode(self.secondary()?.get_native(&key).await?)?

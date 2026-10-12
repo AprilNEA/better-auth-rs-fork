@@ -176,7 +176,7 @@ impl SecondaryStorage for MissingIncrement {
     async fn set_native(
         &self,
         _: &better_auth_core::FieldValue,
-        _: &str,
+        _: &better_auth_core::FieldValue,
         _: Option<f64>,
     ) -> AuthResult<()> {
         Ok(())
@@ -198,7 +198,7 @@ impl SecondaryStorage for CounterStorage {
     async fn set_native(
         &self,
         _: &better_auth_core::FieldValue,
-        _: &str,
+        _: &better_auth_core::FieldValue,
         _: Option<f64>,
     ) -> AuthResult<()> {
         Ok(())

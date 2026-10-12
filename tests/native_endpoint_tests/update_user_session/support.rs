@@ -264,7 +264,12 @@ impl SecondaryStorage for Cache {
         lock(&self.state)?.events.push(format!("cache.get:{key}"));
         Ok(lock(&self.values)?.get(key).cloned().map(Value::String))
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let key = key
             .as_str()
             .ok_or_else(|| AuthError::internal("Expected native string cache key"))?;
@@ -272,7 +277,7 @@ impl SecondaryStorage for Cache {
         let expected = (EXPIRES - chrono::Utc::now().timestamp_millis() as f64) / 1_000.0;
         assert!((expected - 1.0..=expected + 1.0).contains(&ttl));
         lock(&self.state)?.events.push(format!("cache.set:{key}"));
-        let _ = lock(&self.values)?.insert(key.into(), value.into());
+        let _ = lock(&self.values)?.insert(key.into(), value.decode()?);
         Ok(())
     }
     async fn delete(&self, _: &str) -> AuthResult<()> {

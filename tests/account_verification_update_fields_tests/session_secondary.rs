@@ -23,15 +23,24 @@ impl SecondaryStorage for Cache {
             .cloned()
             .map(Value::String))
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let key = key
             .as_str()
             .ok_or_else(|| AuthError::internal("Contract cache keys must remain strings"))?;
         self.writes
             .lock()
             .unwrap()
-            .push((key.into(), value.into(), ttl));
-        let _ = self.values.lock().unwrap().insert(key.into(), value.into());
+            .push((key.into(), value.decode()?, ttl));
+        let _ = self
+            .values
+            .lock()
+            .unwrap()
+            .insert(key.into(), value.decode()?);
         Ok(())
     }
     async fn delete(&self, key: &str) -> AuthResult<()> {

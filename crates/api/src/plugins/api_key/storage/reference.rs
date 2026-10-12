@@ -104,12 +104,6 @@ fn next(value: FieldValue, id: &FieldValue, insert: bool) -> AuthResult<FieldVal
     Err(AuthError::type_error("ids is not iterable"))
 }
 
-pub(super) fn stringify(value: &FieldValue) -> AuthResult<String> {
-    value
-        .stringify()?
-        .ok_or_else(|| AuthError::internal("API key reference serialization omitted the value"))
-}
-
 pub(super) async fn modify_reference(
     storage: &dyn SecondaryStorage,
     key: &ApiKey,
@@ -139,7 +133,9 @@ pub(super) async fn modify_reference(
     if property(&value, "length")?.strict_equals(&0.0.into()) {
         storage.delete_native(&index).await
     } else {
-        storage.set_native(&index, &stringify(&value)?, None).await
+        storage
+            .set_native(&index, &value.stringify_native()?, None)
+            .await
     }
 }
 

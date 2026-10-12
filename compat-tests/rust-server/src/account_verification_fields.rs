@@ -98,13 +98,18 @@ impl SecondaryStorage for Cache {
         event(&self.0, "cache.get", json!(key))?;
         Ok(self.0.lock().unwrap().entries.get(key).cloned())
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, _: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        _: Option<f64>,
+    ) -> AuthResult<()> {
         event(&self.0, "cache.set", key.json()?)?;
         self.0
             .lock()
             .unwrap()
             .entries
-            .insert(key.clone(), json!(value));
+            .insert(key.clone(), value.decode()?);
         Ok(())
     }
     async fn delete(&self, key: &str) -> AuthResult<()> {

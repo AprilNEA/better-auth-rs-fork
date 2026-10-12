@@ -439,9 +439,7 @@ impl DeviceAuthorizationPlugin {
                 ("user".into(), issued.user),
                 ("session".into(), session.clone().into()),
             ]));
-            let value = envelope
-                .stringify()?
-                .ok_or_else(|| AuthError::internal("Session cache object is undefined"))?;
+            let value = envelope.stringify_native()?;
             storage
                 .set_native(&token, &value, Some(device_session_ttl(&session)?))
                 .await?;

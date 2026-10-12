@@ -5,7 +5,8 @@
 )]
 
 use super::*;
-use crate::{AuthError, FieldFunction, FieldObject, FieldObjectSource, FieldPropertyDescriptor};
+use crate::field_value::{FieldObjectSource, FieldPropertyDescriptor};
+use crate::{AuthError, FieldFunction, FieldObject};
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -36,8 +37,7 @@ async fn session_writes_preserve_complete_existing_index_entries() -> AuthResult
         .set_native(
             &index,
             &FieldValue::from(vec![late.clone().into(), early.clone().into()])
-                .stringify()?
-                .unwrap(),
+                .stringify_native()?,
             None,
         )
         .await?;
@@ -106,11 +106,7 @@ async fn session_writes_preserve_complete_existing_index_entries() -> AuthResult
     let mut changed = expected.as_array().unwrap().snapshot()?;
     changed.push(concurrent.clone().into());
     cache
-        .set_native(
-            &index,
-            &FieldValue::from(changed).stringify()?.unwrap(),
-            None,
-        )
+        .set_native(&index, &FieldValue::from(changed).stringify_native()?, None)
         .await?;
     store
         .queue_cached_user_session_deletion_value(owner, selected, None)
@@ -136,7 +132,7 @@ async fn index_failure_preserves_the_preceding_session_write() -> AuthResult<()>
         .await?;
     let before =
         crate::utils::json::parse_native_json(&encoded(&cache, &"current".into()).await?.into())?;
-    cache.set_native(&index, "{}", None).await?;
+    cache.set_native(&index, &"{}".into(), None).await?;
     let error = store
         .update_session_fields(
             "current",
@@ -200,7 +196,12 @@ impl SecondaryStorage for NativeCache {
         }
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let _ = self
             .native
             .lock()

@@ -69,7 +69,7 @@ async fn native_snapshot_keeps_secondary_key_identity_and_database_relationships
     });
     cache
         .values
-        .set_native(&token, &cached.to_string(), None)
+        .set_native(&token, &cached.to_string().into(), None)
         .await?;
     let store = SecondaryStore::new(inner.clone(), cache, config.clone(), Default::default())?;
     let (cached_session, cached_relation) = store
@@ -222,7 +222,12 @@ impl SecondaryStorage for Storage {
         self.values.get_native(key).await
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         record(&self.events, "set", key)?;
         self.values.set_native(key, value, ttl).await
     }

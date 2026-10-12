@@ -304,11 +304,8 @@ async fn original_getter_and_method_errors_preserve_completed_cache_writes_and_d
             assert!(cache.value(INDEX).unwrap().strict_equals(&index));
             let expected = if insert {
                 let serialized = super::super::super::serialize(&key).unwrap();
-                assert_eq!(cache.value("api-key:hash"), Some(serialized.clone().into()));
-                assert_eq!(
-                    cache.value("api-key:by-id:key"),
-                    Some(serialized.clone().into())
-                );
+                assert_eq!(cache.value("api-key:hash"), Some(serialized.clone()));
+                assert_eq!(cache.value("api-key:by-id:key"), Some(serialized.clone()));
                 vec![
                     Write::Set("api-key:hash".into(), serialized.clone()),
                     Write::Set("api-key:by-id:key".into(), serialized),

@@ -38,18 +38,11 @@ impl<S: AuthSchema> SecondaryStore<S> {
         for identifier in &identifiers {
             let raw = self
                 .secondary()?
-                .get_and_delete(&format!("verification:{identifier}"))
-                .await?
-                .map(FieldValue::from_json)
-                .transpose()?;
-            let Some(value) = cache::decode(raw)? else {
+                .get_and_delete_native(&format!("verification:{identifier}").into())
+                .await?;
+            let Some(record) = cache::consumed_verification(raw)? else {
                 continue;
             };
-            let mut record = cache::verification(&value)?;
-            record.expires_at = record.expires_at.converted_date()?;
-            if record.expires_at.date_milliseconds()?.is_nan() {
-                continue;
-            }
             for other in identifiers.iter().filter(|other| *other != identifier) {
                 self.secondary()?
                     .delete(&format!("verification:{other}"))
@@ -230,7 +223,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 self.secondary()?
                     .set_native(
                         &format!("verification:{identifier}").into(),
-                        &cache::stringify(&record.fields()?.into())?,
+                        &FieldValue::from(record.fields()?).stringify_native()?,
                         Some(seconds),
                     )
                     .await?;
@@ -274,7 +267,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
             storage
                 .set_native(
                     &format!("verification:{identifier}").into(),
-                    &cache::stringify(&fields.into())?,
+                    &FieldValue::from(fields).stringify_native()?,
                     Some(seconds),
                 )
                 .await?;

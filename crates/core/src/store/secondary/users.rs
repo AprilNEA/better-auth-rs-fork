@@ -108,7 +108,7 @@ impl<S: AuthSchema> SecondaryStore<S> {
             ("user".into(), user.clone()),
         ]));
         self.secondary()?
-            .set_native(token, &cache::stringify(&envelope)?, Some(seconds))
+            .set_native(token, &envelope.stringify_native()?, Some(seconds))
             .await?;
         Ok(())
     }

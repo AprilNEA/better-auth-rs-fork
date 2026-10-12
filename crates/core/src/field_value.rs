@@ -414,6 +414,11 @@ impl FieldValue {
     pub fn stringify(&self) -> AuthResult<Option<String>> {
         json::stringify(self)
     }
+
+    /// Preserve the String or Undefined result when passing JSON serialization to a native callback.
+    pub fn stringify_native(&self) -> AuthResult<Self> {
+        Ok(self.stringify()?.map_or(Self::Undefined, Self::String))
+    }
 }
 
 fn string_fields(units: impl Iterator<Item = u16>) -> FieldMap {

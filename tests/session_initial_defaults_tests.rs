@@ -308,7 +308,7 @@ impl SecondaryStorage for ObservedCache {
     async fn set_native(
         &self,
         key: &FieldValue,
-        value: &str,
+        value: &FieldValue,
         ttl_seconds: Option<f64>,
     ) -> AuthResult<()> {
         let _ = self.writes.fetch_add(1, Ordering::SeqCst);

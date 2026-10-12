@@ -113,19 +113,25 @@ impl SecondaryStorage for Storage {
         Ok(Some(value))
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let key = key.display_utf16()?.to_utf8().unwrap();
         let mut observer = self.observer.lock().unwrap();
+        let observed = observer.observe(value)?;
         let ttl = observer.observe(&ttl.map_or(FieldValue::Undefined, FieldValue::from))?;
         observer.record(
             "cache.set",
             [
                 ("key".into(), key.clone().into()),
-                ("value".into(), value.into()),
+                ("value".into(), observed),
                 ("ttl".into(), ttl),
             ],
         );
-        let _ = self.cache.lock().unwrap().insert(key, value.into());
+        let _ = self.cache.lock().unwrap().insert(key, value.clone());
         Ok(())
     }
 

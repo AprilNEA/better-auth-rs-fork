@@ -166,9 +166,10 @@ impl SecondaryStorage for Storage {
     async fn set_native(
         &self,
         key: &better_auth_core::FieldValue,
-        value: &str,
+        value: &better_auth_core::FieldValue,
         _: Option<f64>,
     ) -> AuthResult<()> {
+        let value: String = value.decode()?;
         let key = key
             .as_str()
             .expect("API-key batch storage receives string-formatted index keys");
@@ -177,10 +178,10 @@ impl SecondaryStorage for Storage {
         } else {
             Mode::Refill
         };
-        self.run(key, mode, Some(value), |state| {
+        self.run(key, mode, Some(&value), |state| {
             if state.mode == Some(Mode::Refill) && key.starts_with("api-key:by-ref:") {
                 state.index_writes.push((
-                    serde_json::from_str(value).unwrap(),
+                    serde_json::from_str(&value).unwrap(),
                     state.completed,
                     state.active,
                 ));
@@ -488,7 +489,7 @@ async fn cache_writes_return_original_error_before_retained_peer_without_publish
             for first_by_id in [false, true] {
                 let storage = Arc::new(Storage::default());
                 let key = super::deserialize(Some(r#"{"id":"written","key":"hash","referenceId":"owner","createdAt":"2030-01-02T03:04:05.000Z","updatedAt":"2030-01-02T03:04:05.000Z"}"#.into())).unwrap();
-                let encoded = super::serialize(&key).unwrap();
+                let encoded: String = super::serialize(&key).unwrap().decode().unwrap();
                 let mut calls = storage.arm(Mode::Refill);
                 {
                     let mut state = storage.0.lock().unwrap();
@@ -633,7 +634,7 @@ async fn cache_removal_returns_first_error_before_retained_reference_and_record_
             for first_row in [1, 2] {
                 let storage = Arc::new(Storage::default());
                 let key = super::deserialize(Some(r#"{"id":"removed","key":"hash","referenceId":"owner","createdAt":"2030-01-02T03:04:05.000Z","updatedAt":"2030-01-02T03:04:05.000Z"}"#.into())).unwrap();
-                let encoded = super::serialize(&key).unwrap();
+                let encoded: String = super::serialize(&key).unwrap().decode().unwrap();
                 let cache_keys = ["api-key:hash", "api-key:by-id:removed", "api-key:by-ref:owner"];
                 {
                     let mut state = storage.0.lock().unwrap();

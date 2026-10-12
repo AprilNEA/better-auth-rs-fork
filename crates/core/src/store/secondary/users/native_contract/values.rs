@@ -196,9 +196,11 @@ impl Values {
             events.record("sort:compare", [("result".into(), result)]);
             Ok(returned.clone())
         });
-        let entries = sorted.value.as_array().unwrap().clone();
+        let receiver = sorted.receiver();
         sorted.method("at", move |arguments| {
             assert_eq!(arguments, &[FieldValue::from(-1)]);
+            let receiver = receiver.upgrade().unwrap();
+            let entries = receiver.get().unwrap().as_array().unwrap();
             Ok(entries.get(entries.len()? - 1)?.unwrap_or_default())
         });
         self.keep("root", root);
@@ -282,14 +284,14 @@ impl Values {
     }
 }
 
-struct Root {
-    value: FieldValue,
+pub(super) struct Root {
+    pub(super) value: FieldValue,
     expected: Arc<OnceLock<FieldValue>>,
     properties: Arc<Properties>,
 }
 
 impl Root {
-    fn new(kind: &str, offset: i64, observer: Observer) -> Self {
+    pub(super) fn new(kind: &str, offset: i64, observer: Observer) -> Self {
         let expected = Arc::new(OnceLock::new());
         let properties = Arc::new(Properties {
             data: Mutex::default(),
@@ -321,7 +323,11 @@ impl Root {
         self.properties.data.lock().unwrap().extend(data);
     }
 
-    fn method(
+    pub(super) fn receiver(&self) -> Weak<OnceLock<FieldValue>> {
+        Arc::downgrade(&self.expected)
+    }
+
+    pub(super) fn method(
         &self,
         name: &str,
         callback: impl Fn(&[FieldValue]) -> AuthResult<FieldValue> + Send + Sync + 'static,

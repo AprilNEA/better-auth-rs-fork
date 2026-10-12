@@ -108,12 +108,17 @@ impl SecondaryStorage for Backend {
             })
             .map(|entry| Value::String(entry.value.clone())))
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         self.check("set")?;
         let _ = self.entries.lock().unwrap().insert(
             key.clone(),
             Entry {
-                value: value.into(),
+                value: value.decode()?,
                 ttl,
                 expires: ttl.map(|ttl| Utc::now().timestamp_millis() as f64 + ttl * 1_000.0),
             },

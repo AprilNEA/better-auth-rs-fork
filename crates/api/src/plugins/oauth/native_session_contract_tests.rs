@@ -256,8 +256,14 @@ impl SecondaryStorage for Cache {
         Ok(self.read(key).map(Value::String))
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
-        let fields = FieldValue::parse_json(value)?;
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
+        let serialized: String = value.decode()?;
+        let fields = FieldValue::parse_json(&serialized)?;
         let ttl = if key.as_str().unwrap().starts_with("verification:") {
             let expires = text(&fields, "expiresAt")
                 .parse::<DateTime<Utc>>()
@@ -285,7 +291,7 @@ impl SecondaryStorage for Cache {
             .rows
             .lock()
             .unwrap()
-            .insert(key.as_str().unwrap().into(), value.into());
+            .insert(key.as_str().unwrap().into(), serialized);
         Ok(())
     }
 

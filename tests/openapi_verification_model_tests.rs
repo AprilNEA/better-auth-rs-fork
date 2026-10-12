@@ -68,7 +68,7 @@ impl SecondaryStorage for UnusedSecondaryStorage {
     async fn set_native(
         &self,
         _: &better_auth_core::FieldValue,
-        _: &str,
+        _: &better_auth_core::FieldValue,
         _: Option<f64>,
     ) -> AuthResult<()> {
         Err(AuthError::internal(

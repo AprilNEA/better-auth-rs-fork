@@ -51,10 +51,15 @@ impl SecondaryStorage for Cache {
         Ok(value)
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         SecondaryStorage::set_native(&self.inner, key, value, ttl).await?;
         self.events
-            .push(json!({"kind":"secondary.set","key":key.json()?,"value":value,"ttl":ttl.map(FieldValue::Number).unwrap_or(FieldValue::Undefined).json()?}))?;
+            .push(json!({"kind":"secondary.set","key":key.json()?,"value":value.decode::<serde_json::Value>()?,"ttl":ttl.map(FieldValue::Number).unwrap_or(FieldValue::Undefined).json()?}))?;
         let mut entries = self
             .entries
             .lock()
@@ -63,10 +68,10 @@ impl SecondaryStorage for Cache {
             .iter_mut()
             .find(|entry| entry.0.same_value_zero(key))
         {
-            entry.1 = value.into();
+            entry.1 = value.decode()?;
             entry.2 = ttl;
         } else {
-            entries.push((key.clone(), value.into(), ttl));
+            entries.push((key.clone(), value.decode()?, ttl));
         }
         Ok(())
     }

@@ -555,7 +555,7 @@ impl SecondaryStorage for ControlledSecondaryStorage {
     async fn set_native(
         &self,
         key: &better_auth::FieldValue,
-        value: &str,
+        value: &better_auth::FieldValue,
         ttl: Option<f64>,
     ) -> AuthResult<()> {
         SecondaryStorage::set_native(&self.cache, key, value, ttl).await

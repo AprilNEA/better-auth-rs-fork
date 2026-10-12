@@ -60,10 +60,15 @@ impl SecondaryStorage for Storage {
         self.values.get(key).await
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         self.events
             .lock()
-            .push(json!(["set", key.json()?, value, ttl]));
+            .push(json!(["set", key.json()?, value.decode::<Value>()?, ttl]));
         self.values.set_native(key, value, ttl).await
     }
 

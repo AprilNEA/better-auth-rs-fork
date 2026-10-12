@@ -147,11 +147,8 @@ impl FieldValue {
         }
     }
 
-    pub(crate) fn sort_method(
-        &self,
-        comparator: &FieldFunction,
-        expression: &str,
-    ) -> AuthResult<Self> {
+    /// Invoke `sort(comparator)` with native method dispatch and fallible comparison.
+    pub fn sort_method(&self, comparator: &FieldFunction, expression: &str) -> AuthResult<Self> {
         match (self, self.method_property("sort")?) {
             (_, Some(Self::Function(method))) => {
                 method.call_with(self, &[comparator.clone().into()])
@@ -193,7 +190,8 @@ impl FieldValue {
         }
     }
 
-    pub(crate) fn get_time_method(&self, expression: &str) -> AuthResult<Self> {
+    /// Invoke `getTime()` and retain the native result until the caller's numeric boundary.
+    pub fn get_time_method(&self, expression: &str) -> AuthResult<Self> {
         match (self, self.method_property("getTime")?) {
             (_, Some(Self::Function(method))) => method.call_with(self, &[]),
             (Self::Date(date), None) => Ok(date.milliseconds().into()),

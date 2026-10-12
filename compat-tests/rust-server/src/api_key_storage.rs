@@ -135,7 +135,12 @@ impl SecondaryStorage for Storage {
             })
             .map(|entry| Value::String(entry.value.clone())))
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         Self::check(&self.state.lock().unwrap(), "set", key)?;
         if Self::is_api_key(key)? {
             let mut blocked = self.blocked.subscribe();
@@ -149,7 +154,7 @@ impl SecondaryStorage for Storage {
         let _ = self.state.lock().unwrap().entries.insert(
             key.clone(),
             Entry {
-                value: value.into(),
+                value: value.decode()?,
                 ttl,
                 expires: ttl
                     .map(|ttl| chrono::Utc::now().timestamp_millis() as f64 + ttl * 1_000.0),

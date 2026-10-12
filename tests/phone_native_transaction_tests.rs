@@ -34,7 +34,12 @@ impl SecondaryStorage for Cache {
     async fn get(&self, key: &str) -> AuthResult<Option<Value>> {
         self.inner.get(key).await
     }
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         self.inner.set_native(key, value, ttl).await
     }
     async fn delete(&self, key: &str) -> AuthResult<()> {

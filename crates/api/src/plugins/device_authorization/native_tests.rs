@@ -93,7 +93,12 @@ impl SecondaryStorage for Storage {
         self.inner.get(key).await
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         let published = self
             .request
             .lock()
@@ -105,7 +110,7 @@ impl SecondaryStorage for Storage {
         let fail = self.fail_published && published.is_some();
         self.writes.lock().unwrap().push(Write {
             key: key.clone(),
-            value: value.into(),
+            value: value.decode()?,
             ttl,
             published,
         });

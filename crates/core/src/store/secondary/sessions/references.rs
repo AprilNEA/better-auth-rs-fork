@@ -1,6 +1,6 @@
 use crate::{AuthError, AuthResult, FieldArray, FieldFunction, FieldMap, FieldValue};
 
-pub(super) fn empty() -> FieldValue {
+pub(in crate::store::secondary) fn empty() -> FieldValue {
     FieldArray::new().into()
 }
 
@@ -8,7 +8,7 @@ pub(super) fn new(token: FieldValue, expires_at: FieldValue) -> FieldValue {
     FieldMap::from([("token".into(), token), ("expiresAt".into(), expires_at)]).into()
 }
 
-pub(super) fn filter(
+pub(in crate::store::secondary) fn filter(
     value: &FieldValue,
     keep: impl Fn(&FieldValue) -> AuthResult<bool> + Send + Sync + 'static,
 ) -> AuthResult<FieldValue> {
@@ -100,8 +100,4 @@ pub(super) fn last_expiration(value: &FieldValue) -> AuthResult<FieldValue> {
     } else {
         last.model_property("expiresAt")
     }
-}
-
-pub(super) fn encode(value: &FieldValue) -> AuthResult<String> {
-    super::cache::stringify(value)
 }

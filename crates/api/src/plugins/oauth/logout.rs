@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
-use better_auth_core::{AuthContext, AuthRequest, AuthResponse, AuthResult, FieldValue};
+use better_auth_core::{
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, FieldFunction, FieldValue,
+};
 use url::Url;
 
 use crate::plugins::json_body::{self, SignOutBody};
@@ -77,35 +79,41 @@ async fn provider_logout_url(
             account.provider_id == name.as_str() && provider.config.end_session_endpoint.is_some()
         })
     });
-    let mut date_error = None;
-    accounts.sort_by(|left, right| {
-        if date_error.is_some() {
-            return std::cmp::Ordering::Equal;
-        }
-        match right.updated_at.date_milliseconds().and_then(|right| {
-            left.updated_at
-                .date_milliseconds()
-                .map(|left| (right, left))
-        }) {
-            // JavaScript Array.sort treats a NaN comparator result as zero.
-            Ok((right, left)) => right
-                .partial_cmp(&left)
-                .unwrap_or(std::cmp::Ordering::Equal),
-            Err(error) => {
-                date_error = Some(error);
-                std::cmp::Ordering::Equal
-            }
-        }
-    });
-    if let Some(error) = date_error {
-        return Err(error);
-    }
+    let accounts: FieldValue = accounts
+        .into_iter()
+        .map(|account| account.internal_fields().map(FieldValue::from))
+        .collect::<AuthResult<Vec<_>>>()?
+        .into();
+    let sorted = accounts.sort_method(
+        &FieldFunction::contextual(|_, arguments| {
+            let right = arguments
+                .get(1)
+                .unwrap_or(&FieldValue::Undefined)
+                .model_property("updatedAt")?
+                .get_time_method("b.updatedAt")?;
+            let left = arguments
+                .first()
+                .unwrap_or(&FieldValue::Undefined)
+                .model_property("updatedAt")?
+                .get_time_method("a.updatedAt")?;
+            // Subtraction converts values only after both getTime calls have completed.
+            Ok((better_auth_core::query::field_number(&right)?
+                - better_auth_core::query::field_number(&left)?)
+            .into())
+        }),
+        "logoutAccounts",
+    )?;
     let mut seen = HashSet::new();
-    for account in accounts {
+    let sorted = sorted
+        .as_array()
+        .ok_or_else(|| AuthError::internal("Account sorting must return its native array"))?;
+    for account in sorted.iter()? {
+        let account = account?;
+        let account_provider_id = account.model_property("providerId")?;
         let Some((provider_id, provider)) = config
             .providers
             .iter()
-            .find(|(name, _)| account.provider_id == name.as_str())
+            .find(|(name, _)| account_provider_id.strict_equals(&name.as_str().into()))
         else {
             continue;
         };
@@ -116,8 +124,13 @@ async fn provider_logout_url(
             continue;
         }
         let url = (|| -> AuthResult<Option<Url>> {
-            let id_token = if account.id_token.is_truthy()? {
-                Some(account.id_token.display_string()?)
+            let id_token = account.model_property("idToken")?;
+            let id_token = if id_token.is_truthy() {
+                Some(id_token.display_utf16()?.to_utf8().map_err(|error| {
+                    AuthError::internal(format!(
+                        "Rust strings cannot represent unpaired UTF-16 surrogates: {error}"
+                    ))
+                })?)
             } else {
                 None
             };
@@ -141,6 +154,10 @@ async fn provider_logout_url(
     }
     Ok(None)
 }
+
+#[cfg(test)]
+#[path = "logout_native_tests.rs"]
+mod native_tests;
 
 fn end_session_url(
     provider: &OAuthProvider,

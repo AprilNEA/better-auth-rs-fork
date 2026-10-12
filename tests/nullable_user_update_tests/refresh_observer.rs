@@ -200,9 +200,14 @@ impl SecondaryStorage for Cache {
         Ok(value)
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         self.recorder
-            .push(json!({"kind": "cache.set.start", "key": key.json()?, "value": value, "ttl": ttl.map(FieldValue::Number).unwrap_or(FieldValue::Undefined).json()?}));
+            .push(json!({"kind": "cache.set.start", "key": key.json()?, "value": value.decode::<Value>()?, "ttl": ttl.map(FieldValue::Number).unwrap_or(FieldValue::Undefined).json()?}));
         {
             let mut values = self
                 .values
@@ -212,11 +217,11 @@ impl SecondaryStorage for Cache {
                 .iter_mut()
                 .find(|entry| entry.key.same_value_zero(key))
             {
-                entry.value = value.into();
+                entry.value = value.decode()?;
             } else {
                 values.push(Entry {
                     key: key.clone(),
-                    value: value.into(),
+                    value: value.decode()?,
                 });
             }
         }

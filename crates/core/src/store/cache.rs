@@ -23,16 +23,16 @@ pub trait SecondaryStorage: Send + Sync {
     async fn set(&self, key: &str, value: &str, ttl_seconds: Option<u64>) -> AuthResult<()> {
         self.set_native(
             &key.into(),
-            value,
+            &value.into(),
             ttl_seconds.map(|seconds| seconds as f64),
         )
         .await
     }
-    /// Preserve projected keys and numeric TTLs until the backend applies its own storage contract.
+    /// Preserve projected keys, serialized values, and TTLs until the backend applies its storage contract.
     async fn set_native(
         &self,
         key: &FieldValue,
-        value: &str,
+        value: &FieldValue,
         ttl_seconds: Option<f64>,
     ) -> AuthResult<()>;
     async fn delete(&self, key: &str) -> AuthResult<()>;
@@ -47,6 +47,18 @@ pub trait SecondaryStorage: Send + Sync {
     }
     /// Atomically return and delete a value. Verification consumption requires this guarantee.
     async fn get_and_delete(&self, key: &str) -> AuthResult<Option<serde_json::Value>>;
+    /// Atomically consume a native value without changing the backend's read/delete guarantee.
+    async fn get_and_delete_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
+        let FieldValue::String(key) = key else {
+            return Err(AuthError::config(
+                "Secondary storage must support native keys for atomic consumption",
+            ));
+        };
+        self.get_and_delete(key)
+            .await?
+            .map(FieldValue::from_json)
+            .transpose()
+    }
     /// Atomically increment a counter. Apply the TTL only when the counter does not exist.
     async fn increment(&self, _key: &str, _ttl_seconds: f64) -> AuthResult<f64> {
         Err(AuthError::config(
@@ -129,7 +141,7 @@ impl Hash for CacheKey {
 
 #[derive(Debug, Clone)]
 struct CacheEntry {
-    value: String,
+    value: FieldValue,
     expires_at: Option<f64>,
 }
 
@@ -163,7 +175,7 @@ impl CacheAdapter for MemoryCacheAdapter {
         let expires_at =
             Utc::now().timestamp_millis() as f64 + expires_in.num_milliseconds() as f64;
         let entry = CacheEntry {
-            value: value.to_string(),
+            value: value.into(),
             expires_at: Some(expires_at),
         };
 
@@ -187,7 +199,7 @@ impl CacheAdapter for MemoryCacheAdapter {
 
         if let Some(entry) = data.get(&CacheKey::from(key)) {
             if entry.expires_at.is_none_or(|expires| expires > now) {
-                Ok(Some(entry.value.clone()))
+                entry.value.decode().map(Some)
             } else {
                 Ok(None)
             }
@@ -260,7 +272,7 @@ impl SecondaryStorage for MemoryCacheAdapter {
                     .expires_at
                     .is_none_or(|expires| expires > Utc::now().timestamp_millis() as f64)
             })
-            .map(|entry| FieldValue::String(entry.value.clone())))
+            .map(|entry| entry.value.clone()))
     }
 
     async fn delete_native(&self, key: &FieldValue) -> AuthResult<()> {
@@ -280,22 +292,22 @@ impl SecondaryStorage for MemoryCacheAdapter {
         let now = Utc::now().timestamp_millis() as f64;
         data.retain(|_, entry| entry.expires_at.is_none_or(|expires| expires > now));
         if let Some(entry) = data.get_mut(&CacheKey::from(key)) {
-            let count = entry
-                .value
+            let value: String = entry.value.decode()?;
+            let count = value
                 .parse::<i64>()
                 .map_err(|error| {
                     AuthError::internal(format!("Invalid secondary counter: {error}"))
                 })?
                 .checked_add(1)
                 .ok_or_else(|| AuthError::internal("Secondary counter overflow"))?;
-            entry.value = count.to_string();
+            entry.value = count.to_string().into();
             return Ok(count as f64);
         }
         let expires_at = now + ttl_seconds * 1_000.0;
         let _ = data.insert(
             key.into(),
             CacheEntry {
-                value: "1".to_owned(),
+                value: "1".into(),
                 expires_at: Some(expires_at),
             },
         );
@@ -303,30 +315,38 @@ impl SecondaryStorage for MemoryCacheAdapter {
     }
 
     async fn get_and_delete(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
+        self.get_and_delete_native(&key.into())
+            .await?
+            .map(|value| value.decode())
+            .transpose()
+    }
+
+    async fn get_and_delete_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
         let mut data = self
             .data
             .lock()
             .map_err(|_| AuthError::internal("Cache lock poisoned"))?;
         Ok(data
-            .remove(&CacheKey::from(key))
+            .remove(&CacheKey(key.clone()))
             .filter(|entry| {
                 entry
                     .expires_at
                     .is_none_or(|expires| expires > Utc::now().timestamp_millis() as f64)
             })
-            .map(|entry| serde_json::Value::String(entry.value)))
+            .map(|entry| entry.value))
     }
 
     async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
-        CacheAdapter::get(self, key)
-            .await
-            .map(|value| value.map(serde_json::Value::String))
+        self.get_native(&key.into())
+            .await?
+            .map(|value| value.decode())
+            .transpose()
     }
 
     async fn set_native(
         &self,
         key: &FieldValue,
-        value: &str,
+        value: &FieldValue,
         ttl_seconds: Option<f64>,
     ) -> AuthResult<()> {
         let expires_at =
@@ -338,7 +358,7 @@ impl SecondaryStorage for MemoryCacheAdapter {
         let _ = data.insert(
             CacheKey(key.clone()),
             CacheEntry {
-                value: value.to_owned(),
+                value: value.clone(),
                 expires_at,
             },
         );
@@ -449,12 +469,20 @@ pub mod redis_adapter {
         }
 
         async fn get_and_delete(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
+            self.get_and_delete_native(&key.into())
+                .await?
+                .map(|value| value.decode())
+                .transpose()
+        }
+
+        async fn get_and_delete_native(&self, key: &FieldValue) -> AuthResult<Option<FieldValue>> {
             let mut connection = self.connection.clone();
+            let key = String::from_utf16_lossy(key.display_utf16()?.as_utf16());
             let value: Option<String> = redis::cmd("GETDEL")
                 .arg(key)
                 .query_async(&mut connection)
                 .await?;
-            Ok(value.map(serde_json::Value::String))
+            Ok(value.map(FieldValue::String))
         }
 
         async fn get(&self, key: &str) -> AuthResult<Option<serde_json::Value>> {
@@ -466,11 +494,16 @@ pub mod redis_adapter {
         async fn set_native(
             &self,
             key: &FieldValue,
-            value: &str,
+            value: &FieldValue,
             ttl_seconds: Option<f64>,
         ) -> AuthResult<()> {
             let mut connection = self.connection.clone();
             let key = String::from_utf16_lossy(key.display_utf16()?.as_utf16());
+            let FieldValue::String(value) = value else {
+                return Err(AuthError::type_error(
+                    "Redis secondary storage requires a string value",
+                ));
+            };
             let mut command = redis::cmd("SET");
             let _ = command.arg(key).arg(value);
             if let Some(seconds) = ttl_seconds {
@@ -492,6 +525,9 @@ pub mod redis_adapter {
 pub use redis_adapter::RedisAdapter;
 
 #[cfg(test)]
+mod native_value_tests;
+
+#[cfg(test)]
 mod tests {
     use super::{CacheAdapter, MemoryCacheAdapter, SecondaryStorage};
 
@@ -511,7 +547,9 @@ mod tests {
             FieldValue::from(crate::Utf16String::from_units(vec![0xd800])),
         ];
         for (index, key) in keys.iter().enumerate() {
-            cache.set_native(key, &index.to_string(), None).await?;
+            cache
+                .set_native(key, &index.to_string().into(), None)
+                .await?;
         }
         assert!(
             cache
@@ -531,7 +569,7 @@ mod tests {
         cache.delete_native(&object.clone()).await?;
         assert!(cache.get_native(&object).await?.is_none());
         cache
-            .set_native(&FieldValue::Undefined, "expired", Some(0.0))
+            .set_native(&FieldValue::Undefined, &"expired".into(), Some(0.0))
             .await?;
         assert!(cache.get_native(&FieldValue::Undefined).await?.is_none());
         assert_eq!(
@@ -592,6 +630,12 @@ mod tests {
                 .unwrap(),
             expiration
         );
+        assert_eq!(connection.get::<_, i64>(&key).await.unwrap(), 17);
+        let error = cache
+            .set_native(&key.clone().into(), &crate::FieldValue::Undefined, None)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("requires a string value"));
         assert_eq!(connection.get::<_, i64>(&key).await.unwrap(), 17);
         let _: bool = connection.pexpire(&key, 0).await.unwrap();
         assert_eq!(cache.increment(&key, 0.5).await.unwrap(), 1.0);

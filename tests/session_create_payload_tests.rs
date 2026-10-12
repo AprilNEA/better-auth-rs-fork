@@ -212,11 +212,20 @@ impl SecondaryStorage for RecordingStorage {
         Ok(value)
     }
 
-    async fn set_native(&self, key: &FieldValue, value: &str, ttl: Option<f64>) -> AuthResult<()> {
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
         self.inner.set_native(key, value, ttl).await?;
         emit(
             &self.events,
-            Event::Set(key.clone(), serde_json::from_str(value)?, ttl),
+            Event::Set(
+                key.clone(),
+                serde_json::from_str(&value.decode::<String>()?)?,
+                ttl,
+            ),
         )
     }
 

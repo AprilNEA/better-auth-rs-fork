@@ -57,7 +57,7 @@ impl SecondaryStorage for Cache {
     async fn set_native(
         &self,
         key: &better_auth_core::FieldValue,
-        value: &str,
+        value: &better_auth_core::FieldValue,
         ttl: Option<f64>,
     ) -> AuthResult<()> {
         self.events.lock().unwrap().push("cache.set");

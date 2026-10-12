@@ -214,7 +214,7 @@ impl SecondaryStorage for Events {
     async fn set_native(
         &self,
         key: &better_auth_core::FieldValue,
-        value: &str,
+        value: &better_auth_core::FieldValue,
         _: Option<f64>,
     ) -> AuthResult<()> {
         self.record(
@@ -230,7 +230,7 @@ impl SecondaryStorage for Events {
             .lock()
             .unwrap()
             .cache
-            .insert(key.clone(), value.into());
+            .insert(key.clone(), value.decode()?);
         Ok(())
     }
     async fn delete(&self, key: &str) -> AuthResult<()> {

@@ -5,21 +5,20 @@
 )]
 
 use super::*;
+use crate::field_value::{FieldObjectSource, FieldPropertyDescriptor};
 use crate::store::database_hooks::{
     DatabaseHookContext, DatabaseHookControl, DatabaseHookUpdate, DatabaseHooks,
 };
 use crate::store::schema::EntityRole;
 use crate::store::{EphemeralStore, SecondaryStorage, SessionStore, StatelessSchema};
-use crate::{
-    AuthConfig, FieldArray, FieldFunction, FieldObject, FieldObjectSource, FieldPropertyDescriptor,
-    FromFieldMap,
-};
+use crate::{AuthConfig, FieldArray, FieldFunction, FieldObject, FromFieldMap};
 use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
 
 #[path = "../../../../../../tests/support/secondary_native_observation.rs"]
 mod observation;
 mod storage;
+mod undefined_writes;
 mod values;
 
 use observation::{NativeObservation, assert_replay};
@@ -141,13 +140,8 @@ impl DatabaseHooks<StatelessSchema> for Hooks {
     }
 }
 
-fn snapshot(
-    inner: &EphemeralStore,
-    cache: &Storage,
-    values: &values::Values,
-    observer: &Observer,
-) -> AuthResult<Json> {
-    let database: FieldValue = [
+fn database_rows(inner: &EphemeralStore) -> AuthResult<FieldValue> {
+    Ok([
         ("user", EntityRole::User),
         ("session", EntityRole::Session),
         ("account", EntityRole::Account),
@@ -166,7 +160,16 @@ fn snapshot(
         ))
     })
     .collect::<AuthResult<FieldMap>>()?
-    .into();
+    .into())
+}
+
+fn snapshot(
+    inner: &EphemeralStore,
+    cache: &Storage,
+    values: &values::Values,
+    observer: &Observer,
+) -> AuthResult<Json> {
+    let database = database_rows(inner)?;
     let cache = cache.snapshot();
     let mut observer = observer.lock().unwrap();
     let _ = observer.observe(
