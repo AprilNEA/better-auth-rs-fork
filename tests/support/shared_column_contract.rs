@@ -11,6 +11,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 
+#[path = "observation_replay.rs"]
+mod replay;
+
 mod values {
     use super::core as better_auth;
     include!(concat!(
@@ -260,10 +263,13 @@ pub(super) async fn run(adapter: &impl Adapter, case: &Value, trace: &Trace) -> 
                 })
                 .collect::<AuthResult<_>>()?,
         );
-        assert_eq!(
-            actual, *operation,
-            "Complete shared-column operation for {} {}",
-            case["model"], case["mode"]
+        replay::assert_replay(
+            &actual,
+            operation,
+            &format!(
+                "shared-column/{}/{}/{}",
+                case["model"], case["mode"], operation["name"]
+            ),
         );
     }
     Ok(())

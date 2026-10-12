@@ -1,0 +1,70 @@
+{
+  "contract": "selected-user-property",
+  "version": "1.7.6",
+  "status": "Source assertions and repeated-process byte equality passed. Rust acceptance remains pending.",
+  "run": "38244774582",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38244774582",
+  "commit": "f47f3f22017d47a037f9210811804e62ecda2330",
+  "runConclusion": "success",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38244774582-clean.log",
+    "bytes": 823399,
+    "sha256": "ac8771964179c0e0d75c58e773b0e39a21391ced8eb0f6a7c20e09e5287b767d"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/selected-user-property-capture.mjs",
+      "bytes": 6321,
+      "sha256": "6fb7b8409e266062c17b9bc41713b22291366120aaee698afef10d139fcd2bd9"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/selected-user-property-capture.test.ts",
+      "bytes": 966,
+      "sha256": "ec79ff4462c271b53e7b63dd50cd9dc52e27e08451e529de743fcb01f70c57e5"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/email-verification-duration-capture.mjs",
+      "bytes": 11739,
+      "sha256": "03d3f3001d5db30af7dabf494b20b6f41a4d939919b3cda75e5aaa96bd6bf805"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2919,
+      "sha256": "ee3865321448cd61b3e0cbdbb444e0711702b9f59898e5adc5f94006a377d43b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/selected-user-property-1.7.6.json",
+    "bytes": 821283,
+    "sha256": "116bb86b477a1a15d836e689f09722a55a5e933b9e53f04dec1f7d10105f6153"
+  },
+  "cases": 20,
+  "record": {
+    "line": 28,
+    "byteOffset": 1060,
+    "bytes": 821282,
+    "sha256": "2bc740deee030683a43a4fd318ec5b656a32d2a3888bc9bf1b33400bf617e5fb"
+  },
+  "extraction": "Preserve the complete observation in source order and append its terminating newline.",
+  "normalizations": [],
+  "boundaries": [
+    "Object, Array, Function, and Date User values retain native ID getters through real password change and Session issuance.",
+    "The standalone process fixes crypto.getRandomValues and the clock before executing the real upstream operation; complete generated callback arguments are retained.",
+    "The capture preserves all descriptors and errors. Rust behavior and JavaScript reflection require separate acceptance."
+  ]
+}
