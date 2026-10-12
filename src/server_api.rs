@@ -218,7 +218,7 @@ pub struct VerifyKeyOptions {
 }
 
 /// Server API bound to the registered API key plugin and initialized auth context.
-/// A dynamic base URL requires a configured fallback for these requestless operations.
+/// The typed business operations require a fallback for requestless dynamic base URLs.
 pub struct ApiKeyApi<'a, S: AuthSchema> {
     plugin: &'a ApiKeyPlugin,
     context: &'a AuthContext<S>,
@@ -242,6 +242,27 @@ impl<S: AuthSchema> BetterAuth<S> {
 }
 
 impl<S: AuthSchema> ApiKeyApi<'_, S> {
+    /// Delete expired database keys through the registered server-only endpoint.
+    ///
+    /// Endpoint hooks receive the native input. The complete result retains hook replacements
+    /// and any original Logger error returned by the endpoint's cleanup catch.
+    pub async fn delete_all_expired(
+        &self,
+        input: NativeEndpointInput,
+    ) -> AuthResult<better_auth_core::FieldValue> {
+        self.plugin
+            .delete_all_expired_api_keys(
+                self.context,
+                better_auth_core::NativeRequest {
+                    request: input.request.as_ref(),
+                    headers: input.headers.as_ref(),
+                },
+                input.body,
+                input.query,
+            )
+            .await
+    }
+
     /// Issue a key on behalf of a user from trusted server code.
     ///
     /// Organization configurations check the acting user's organization permissions.

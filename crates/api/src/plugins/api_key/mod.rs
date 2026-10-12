@@ -12,6 +12,7 @@ pub(crate) mod storage;
 pub use storage::ApiKeyStorage;
 mod callbacks;
 mod metadata;
+mod native;
 mod permissions;
 mod request;
 pub(super) mod types;
@@ -577,10 +578,11 @@ impl ApiKeyPlugin {
         URL_SAFE_NO_PAD.encode(digest)
     }
 
-    /// Throttled cleanup -- at most once per 10 seconds.
+    /// Throttle automatic cleanup; the server-only endpoint bypasses the interval.
     async fn maybe_delete_expired(
         &self,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+        bypass_last_check: bool,
     ) -> AuthResult<()> {
         let should_run = {
             let mut last = self
@@ -589,7 +591,9 @@ impl ApiKeyPlugin {
                 .unwrap_or_else(|e| e.into_inner());
             let now = std::time::Instant::now();
             match *last {
-                Some(prev) if now.duration_since(prev).as_secs() < 10 => false,
+                Some(prev) if !bypass_last_check && now.duration_since(prev).as_secs() < 10 => {
+                    false
+                }
                 _ => {
                     *last = Some(now);
                     true
@@ -618,7 +622,7 @@ impl ApiKeyPlugin {
         ];
         let plugin = self.clone();
         let context = ctx.clone();
-        let task = Box::pin(async move { plugin.maybe_delete_expired(&context).await });
+        let task = Box::pin(async move { plugin.maybe_delete_expired(&context, false).await });
         let messages = if outer_catch { NESTED } else { INNER };
         if defer {
             run_in_background_with_error_messages(

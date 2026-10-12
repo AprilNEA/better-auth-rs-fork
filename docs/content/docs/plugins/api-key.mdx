@@ -256,7 +256,7 @@ Fields like `permissions`, `remaining`, `refillAmount`, `refillInterval`, `rateL
 
 ## Server-only Operations
 
-Typed `auth.api_keys()` operations resolve requestless runtime options before accessing storage. A dynamic base URL requires a configured fallback.
+The typed `create`, `update`, and `verify` operations resolve requestless runtime options before accessing storage. A dynamic base URL requires a configured fallback for these operations.
 
 Use `auth.api_keys()?` to access the registered plugin and initialized context from trusted Rust code. The accessor returns a configuration error when `ApiKeyPlugin` is not registered.
 
@@ -317,6 +317,23 @@ Verification checks configuration, expiration, permissions, quota, and rate limi
 `ApiKeyVerificationError` preserves credential rejections (`Validation`), application API errors caught during unscoped verification (`Rejected`), infrastructure failures (`Internal`), and errors outside the verification boundary (`Endpoint`). Use `into_response()` to reproduce the upstream server endpoint's response: caught failures return a `valid: false` envelope, while endpoint failures retain their original status and body. Some upstream rejection messages contain an error-code object instead of a string; `ApiKeyErrorMessage` preserves both forms. The successful result includes `reference_id`, `config_id`, permissions, and updated counters. It omits the plaintext key and stored hash.
 
 Pass `config_id` when a route accepts credentials from one configuration. Without that field, lookup uses the default configuration's hashing setting, then validates against the configuration that issued the key.
+
+### Delete Expired Keys
+
+`delete_all_expired` implements the upstream `deleteAllExpiredApiKeys` server-only endpoint. It runs endpoint hooks and deletes database keys whose non-null `expiresAt` is earlier than the database cleanup clock. Each call bypasses the automatic cleanup interval. The endpoint has no HTTP route, requires no user session, and does not delete secondary-storage cache entries.
+
+```rust
+use better_auth::server_api::NativeEndpointInput;
+
+let result = auth.api_keys()?.delete_all_expired(NativeEndpointInput::default()).await?;
+let success = result.model_property("success")?;
+```
+
+Use `NativeEndpointInput` to pass an original request, independently present headers, and native body or query values to endpoint hooks. An original request can resolve a dynamic base URL. The result is the complete `FieldValue`, so hook replacements, undefined properties, and original error objects retain their values and identities.
+
+The default result is `{ success: true, error: null }`. A database failure is logged by the cleanup helper and still returns that result when logging succeeds. If this first Logger call throws, the endpoint logs the Logger error and returns `{ success: false, error }` with the original error object. If the second Logger call throws, the method propagates that error. These catches preserve the upstream policy; a successful response alone does not prove that database deletion succeeded.
+
+Automatic cleanup still uses a per-plugin monotonic `Instant` in Rust. Better Auth 1.7.6 shares its last-check `Date` across instances loaded from one module and uses wall-clock subtraction. Cross-instance throttling and clock rollback remain unaligned. The explicit endpoint bypasses either interval and refreshes the plugin's last-check time. The source contract records the upstream cross-instance and clock behavior separately from Rust acceptance.
 
 ### Session Emulation
 

@@ -167,14 +167,6 @@ async fn create_key_with_server_fields(
     (id, raw_key)
 }
 
-/// Test helper: delete all expired keys and return a success JSON.
-async fn delete_all_expired(
-    ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> serde_json::Value {
-    let _ = ctx.database.delete_expired_api_keys().await.unwrap();
-    serde_json::json!({ "success": true, "error": null })
-}
-
 async fn create_key_and_get_id(
     plugin: &ApiKeyPlugin,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
@@ -547,7 +539,14 @@ async fn test_verify_rate_limiting() {
 #[tokio::test]
 async fn test_delete_all_expired() {
     let plugin = ApiKeyPlugin::builder().build();
-    let (ctx, _user, session) = create_test_context_with_user().await;
+    let (mut ctx, _user, session) = create_test_context_with_user().await;
+    ctx.extensions.insert(Arc::new(
+        better_auth_core::endpoint_dispatch::EndpointDispatcher::<TestSchema>::new(
+            Arc::new(vec![Box::new(plugin.clone())]),
+            Default::default(),
+            [],
+        ),
+    ));
 
     // Create two keys
     let (id1, _) = create_key_and_get_raw(
@@ -578,8 +577,21 @@ async fn test_delete_all_expired() {
         .await
         .unwrap();
 
-    let body = delete_all_expired(&ctx).await;
-    assert_eq!(body["success"], true);
+    let body = plugin
+        .delete_all_expired_api_keys(
+            &ctx,
+            Default::default(),
+            FieldValue::Undefined,
+            FieldValue::Undefined,
+        )
+        .await
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(
+        body,
+        Some(serde_json::json!({ "success": true, "error": null }))
+    );
 
     // Only the non-expired key should remain
     let remaining_keys = ctx

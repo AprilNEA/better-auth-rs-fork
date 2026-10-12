@@ -614,6 +614,7 @@ run_stage() {
       local cache_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-delete-expired.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-batch.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts \
         ./compat-tests/reference-server/contracts/secondary-user-refresh.test.ts \
@@ -629,12 +630,14 @@ run_stage() {
         ./compat-tests/reference-server/contracts/verification-otp-consumer-native-capture.test.ts \
         ./compat-tests/reference-server/contracts/verification-auth-consumer-native-capture.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --features better-auth-core/redis-cache --lib -- -D warnings || cache_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache --test api_key_delete_expired_tests -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
         request_runtime::concurrent:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
         plugins::api_key:: plugins::jwt:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: || cache_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
-        --test secondary_storage_hooks_tests --test session_initial_defaults_tests || cache_status=1
+        --test secondary_storage_hooks_tests --test session_initial_defaults_tests \
+        --test api_key_delete_expired_tests || cache_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || cache_status=1
       return "$cache_status"
       ;;
