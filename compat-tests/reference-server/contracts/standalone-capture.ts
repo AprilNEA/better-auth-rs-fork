@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { assertObservationReplay } from "./observation-replay.mjs";
 import { writeObservation } from "./write-observation.mjs";
 
-async function runStandaloneCapture(
+export async function runStandaloneCapture(
   capture: URL,
   args: readonly string[] = [],
 ) {
