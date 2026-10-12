@@ -177,8 +177,7 @@ fn transaction_callbacks<S: AuthSchema>(
 }
 
 #[tokio::test]
-async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback() -> AuthResult<()>
-{
+async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback() {
     let config = config();
     let database = Database::connect("sqlite::memory:").await.unwrap();
     migrator::run_migrations(&database).await.unwrap();
@@ -194,17 +193,15 @@ async fn sqlite_custom_jwt_callbacks_share_the_session_transaction_and_rollback(
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await?;
+    assert_signing_transaction(auth).await.unwrap();
     assert_eq!(
         *events.lock().unwrap(),
         ["get", "get", "create", "get", "get", "get", "create", "get"]
     );
-    Ok(())
 }
 
 #[tokio::test]
-async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollback()
--> AuthResult<()> {
+async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollback() {
     let events = Arc::new(std::sync::Mutex::new(Vec::new()));
     let auth = BetterAuth::stateless(config())
         .plugin(
@@ -215,10 +212,9 @@ async fn ephemeral_custom_jwt_callbacks_share_the_session_transaction_and_rollba
         .build()
         .await
         .unwrap();
-    assert_signing_transaction(auth).await?;
+    assert_signing_transaction(auth).await.unwrap();
     assert_eq!(
         *events.lock().unwrap(),
         ["get", "get", "create", "get", "get", "get", "create", "get"]
     );
-    Ok(())
 }
