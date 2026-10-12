@@ -83,6 +83,90 @@ fn events(events: &Mutex<Vec<String>>) -> AuthResult<Vec<String>> {
 }
 
 #[test]
+fn callback_error_values_retain_identity_without_reading_properties() -> AuthResult<()> {
+    let raw: FieldValue = source(&["name", "message"], |_| {
+        Err(AuthError::type_error("No field should be read"))
+    })
+    .into();
+    let value = AuthError::from_thrown(raw.clone()).into_thrown_value()?;
+    assert!(value.strict_equals(&raw));
+    for raw in [FieldValue::Undefined, FieldValue::Null, 7.into()] {
+        assert!(
+            AuthError::from_thrown(raw.clone())
+                .into_thrown_value()?
+                .strict_equals(&raw)
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn typed_callback_error_values_keep_messages_hidden_and_api_brands() -> AuthResult<()> {
+    for (error, name, message) in [
+        (
+            AuthError::type_error("bad access"),
+            "TypeError",
+            "bad access",
+        ),
+        (
+            AuthError::RangeError("bad range".into()),
+            "RangeError",
+            "bad range",
+        ),
+        (
+            AuthError::internal("original failure"),
+            "Error",
+            "original failure",
+        ),
+    ] {
+        let value = error.into_thrown_value()?;
+        assert_eq!(value.model_property("name")?, FieldValue::from(name));
+        assert_eq!(value.model_property("message")?, FieldValue::from(message));
+        assert_eq!(value.stringify()?.as_deref(), Some("{}"));
+        assert_eq!(
+            value.display_utf16()?.as_utf16(),
+            format!("{name}: {message}")
+                .encode_utf16()
+                .collect::<Vec<_>>()
+        );
+        let object = value
+            .as_object()
+            .ok_or_else(|| AuthError::internal("runtime errors require object values"))?;
+        assert_eq!(object.own_keys()?, ["message"]);
+        assert!(object.own_property_descriptor("name")?.is_none());
+        assert!(
+            object
+                .own_property_descriptor("message")?
+                .is_some_and(|descriptor| !descriptor.enumerable)
+        );
+    }
+    for (error, class, status) in [
+        (
+            AuthError::FieldInput {
+                code: "BAD_FIELD",
+                message: "bad field".into(),
+            },
+            ApiErrorClass::BetterAuth,
+            FieldValue::from("BAD_REQUEST"),
+        ),
+        (
+            AuthError::RequestValidation {
+                message: "bad request".into(),
+            },
+            ApiErrorClass::BetterCall,
+            FieldValue::from(400),
+        ),
+    ] {
+        let body = error.body_value()?;
+        let value = error.into_thrown_value()?;
+        assert!(api_error_instance(&value, class));
+        assert_eq!(value.model_property("status")?, status);
+        assert_eq!(value.model_property("body")?, body);
+    }
+    Ok(())
+}
+
+#[test]
 fn raw_envelope_round_trip_keeps_identity_without_reading_fields() -> AuthResult<()> {
     let reads = Arc::new(Mutex::new(Vec::new()));
     let raw: FieldValue = source(&["name", "body", "statusCode"], {

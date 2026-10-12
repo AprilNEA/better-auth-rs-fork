@@ -123,6 +123,17 @@ fn error_object(
         fields,
         class,
         hidden: Mutex::new(hidden),
+        inherited_name: "Error",
+    }))
+    .into()
+}
+
+pub(super) fn runtime_error(name: &'static str, message: FieldValue) -> FieldValue {
+    FieldObject::from_source(Arc::new(ErrorObject {
+        fields: FieldMap::from([("message".into(), message)]).into(),
+        class: None,
+        hidden: Mutex::new(HashSet::from(["message".into()])),
+        inherited_name: name,
     }))
     .into()
 }
@@ -137,6 +148,7 @@ struct ErrorObject {
     fields: FieldObject,
     class: Option<ApiErrorClass>,
     hidden: Mutex<HashSet<String>>,
+    inherited_name: &'static str,
 }
 
 impl crate::field_value::FieldObjectSource for ErrorObject {
@@ -168,7 +180,7 @@ impl crate::field_value::FieldObjectSource for ErrorObject {
             return Ok(Some(value));
         }
         Ok(match name {
-            "name" => Some("Error".into()),
+            "name" => Some(self.inherited_name.into()),
             "message" => Some("".into()),
             "toString" => Some(ERROR_TO_STRING.clone().into()),
             _ => None,

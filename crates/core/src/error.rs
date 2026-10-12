@@ -3,6 +3,7 @@ use thiserror::Error;
 
 mod http;
 mod native;
+mod native_value;
 #[cfg(test)]
 pub(crate) use native::brand_api_error_object;
 pub use native::{ApiErrorClass, ApiErrorInit, api_error_instance, is_api_error_value};
@@ -527,7 +528,12 @@ impl AuthError {
             );
             return crate::types::AuthResponse::new(500);
         }
-        let is_api_error = self.is_api_error_instance(ApiErrorClass::BetterCall);
+        if self.is_api_error_instance(ApiErrorClass::BetterCall) {
+            return match self.into_thrown_value() {
+                Ok(value) => Self::from_thrown(value).to_auth_response(),
+                Err(error) => error.to_auth_response(),
+            };
+        }
         let status = match self.status_code() {
             Ok(status) => status,
             Err(error) => return error.to_auth_response(),
@@ -536,30 +542,10 @@ impl AuthError {
             Ok(body) => body,
             Err(error) => return error.to_auth_response(),
         };
-        if is_api_error {
-            let status = match self.status_value() {
-                Ok(status) => status,
-                Err(error) => return error.to_auth_response(),
-            };
-            let error = match Self::try_api_error(ApiErrorInit {
-                class: if self.is_api_error_instance(ApiErrorClass::BetterAuth) {
-                    ApiErrorClass::BetterAuth
-                } else {
-                    ApiErrorClass::BetterCall
-                },
-                status,
-                body,
-                ..Default::default()
-            }) {
-                Ok(error) | Err(error) => error,
-            };
-            error.to_auth_response()
-        } else {
-            // Native thrown values returned above; these convenience variants own a fixed status.
-            match status.typed() {
-                Ok(status) => crate::AuthResponse::native(Some(*status), body),
-                Err(error) => error.to_auth_response(),
-            }
+        // Native thrown values returned above; these convenience variants own a fixed status.
+        match status.typed() {
+            Ok(status) => crate::AuthResponse::native(Some(*status), body),
+            Err(error) => error.to_auth_response(),
         }
     }
 
