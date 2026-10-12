@@ -2,7 +2,7 @@ use better_auth_core::{
     AuthRecordFields, FieldMap, FieldValue,
     user_fields::{UserConfig, UserFieldConfig},
 };
-use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DbBackend};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, Database, DbBackend, IdenStatic};
 
 use crate::{
     SeaOrmOrganizationModel, SeaOrmSessionModel, SeaOrmUserModel, SeaOrmVerificationModel,
@@ -133,7 +133,7 @@ async fn user_and_session_aliases_share_legacy_writes_and_native_getters()
         .insert(&database)
         .await?;
     let view = better_auth_core::UserView::from_model(&row)?;
-    assert_eq!(view.name, "last");
+    assert_eq!(view.name, Some("last".to_owned()));
     assert_eq!(view.image, Some("last".to_owned()));
     let mut active: user::ActiveModel = row.into();
     user::Model::apply_update(
@@ -206,8 +206,8 @@ async fn verification_aliases_share_typed_writes_and_project_every_logical_field
     assert_eq!(record.identifier, "last");
     assert_eq!(record.value, "last");
     assert_eq!(
-        verification::Model::value_column(),
-        verification::Model::identifier_column()
+        verification::Model::value_column().as_str(),
+        verification::Model::identifier_column().as_str()
     );
     assert!(verification::Model::field_column("unknown").is_err());
     Ok(())
@@ -219,7 +219,7 @@ async fn organization_aliases_preserve_projected_slots_without_duplicate_storage
     let database = Database::connect("sqlite::memory:").await?;
     let _ = database.execute_unprepared("CREATE TABLE shared_organization (id TEXT PRIMARY KEY, shared TEXT NOT NULL, logo TEXT, metadata TEXT, created_at TEXT NOT NULL)").await?;
     let date = chrono::DateTime::parse_from_rfc3339("2030-01-02T03:04:05.000Z")?.to_utc();
-    let mut active = organization::ActiveModel::default();
+    let mut active = <organization::ActiveModel as Default>::default();
     organization::Model::apply_fields(
         &mut active,
         FieldMap::from([

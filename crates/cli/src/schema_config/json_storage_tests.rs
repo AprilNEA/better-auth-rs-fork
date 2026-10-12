@@ -41,10 +41,13 @@ pub(super) fn reference_policy(field: &syn::Field) -> syn::Result<Option<bool>> 
         .filter(|attribute| attribute.path().is_ident("auth"))
     {
         attribute.parse_nested_meta(|meta| {
-            if !meta.path.is_ident("reference") {
+            if meta.path.is_ident("reference") {
+                policy = Some(meta.value()?.parse::<syn::LitBool>()?.value);
+            } else if meta.path.is_ident("alias") {
+                let _ = meta.value()?.parse::<syn::LitStr>()?;
+            } else {
                 return Err(meta.error("expected reference policy"));
             }
-            policy = Some(meta.value()?.parse::<syn::LitBool>()?.value);
             Ok(())
         })?;
     }

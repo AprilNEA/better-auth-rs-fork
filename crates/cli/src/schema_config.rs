@@ -390,11 +390,12 @@ impl Entity {
                         })
                         .map_err(|error| format!("invalid field type: {error}"))?,
                         column: if native_catalog
-                            && (core_field(
-                                definition.role,
-                                field.column_name.unwrap_or(field.name),
-                            )
-                            .is_some()
+                            && (session_row_presence
+                                || core_field(
+                                    definition.role,
+                                    field.column_name.unwrap_or(field.name),
+                                )
+                                .is_some()
                                 || two_factor_native_schema && field.name == "two_factor_enabled")
                         {
                             logical_name.clone()
@@ -598,6 +599,12 @@ impl Entity {
 
     pub(crate) fn catalog_field(&self, column: &str) -> Option<&'static FieldDef> {
         core_field(self.role, column).or_else(|| {
+            if self.session_row_presence {
+                return better_auth_schema_registry::plugin_schemas()
+                    .iter()
+                    .flat_map(|plugin| plugin.session_fields)
+                    .find(|field| field.column_name.unwrap_or(field.name) == column);
+            }
             if !self.two_factor_native_schema || self.role != Some(EntityRole::User) {
                 return None;
             }
