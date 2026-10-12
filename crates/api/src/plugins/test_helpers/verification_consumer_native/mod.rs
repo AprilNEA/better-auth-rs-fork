@@ -20,9 +20,12 @@ use std::sync::{
 mod object;
 #[path = "../../../../../../tests/support/secondary_native_observation.rs"]
 mod observation;
+#[path = "../../../../../../tests/support/replay_failures.rs"]
+mod replay_failures;
 mod storage;
 mod values;
 
+pub(crate) use replay_failures::ReplayFailures;
 pub(crate) use storage::Storage;
 
 /// Compare business runtime observations. JavaScript APIError stacks remain unpaired host metadata.
@@ -307,6 +310,13 @@ impl Harness {
         let mut context = super::initialize_test_context(config, Arc::new(store), plugins)
             .await?
             .with_clock(|| chrono::DateTime::from_timestamp_millis(NOW).unwrap());
+        context.extensions.insert(Arc::new(
+            better_auth_core::endpoint_dispatch::EndpointDispatcher::<StatelessSchema>::new(
+                Arc::new(Vec::new()),
+                Default::default(),
+                [],
+            ),
+        ));
         context.secondary_storage = Some(self.cache.clone());
         Ok((context, inner))
     }

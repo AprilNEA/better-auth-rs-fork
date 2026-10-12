@@ -10,7 +10,7 @@ use crate::plugins::{
     OAuthProxyConfig, OAuthProxyPlugin,
     password_management::PasswordManagementPlugin,
     test_helpers::verification_consumer_native::{
-        Harness, NOW, ORIGIN, SECRET, assert_replay, consumer_user, date,
+        Harness, NOW, ORIGIN, ReplayFailures, SECRET, assert_replay, consumer_user, date,
     },
 };
 use better_auth_core::{AuthPlugin, Headers, HttpMethod, store::StatelessSchema};
@@ -301,13 +301,16 @@ async fn auth_consumers_match_upstream_business_runtime_with_explicit_unpaired_h
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 63);
     let mut paired = 0;
+    let mut failures = ReplayFailures::default();
     for case in cases {
         let name = case["name"].as_str().unwrap();
         if name == "oauth-proxy-truthy-value-key-error-is-logged" {
-            assert_eq!(case["scenario"]["keyError"], true);
-            eprintln!(
-                "{name}: native OAuth Proxy secret getter remains unpaired by Option<String>"
-            );
+            failures.record(name, || {
+                assert_eq!(case["scenario"]["keyError"], true);
+                eprintln!(
+                    "{name}: native OAuth Proxy secret getter remains unpaired by Option<String>"
+                );
+            });
             continue;
         }
         let scenario = &case["scenario"];
@@ -322,9 +325,12 @@ async fn auth_consumers_match_upstream_business_runtime_with_explicit_unpaired_h
                 )));
             }
         };
-        assert_replay(&actual, &business_contract(case), name);
+        failures.record(name, || {
+            assert_replay(&actual, &business_contract(case), name)
+        });
         paired += 1;
     }
     assert_eq!(paired, 62);
+    failures.finish();
     Ok(())
 }

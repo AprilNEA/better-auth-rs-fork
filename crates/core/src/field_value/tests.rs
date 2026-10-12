@@ -53,8 +53,10 @@ fn model_properties_preserve_native_identity_and_nullish_access_errors() -> Auth
     Ok(())
 }
 
-#[test]
-fn live_object_read_errors_propagate_without_implicit_snapshots() {
+#[tokio::test]
+async fn live_object_read_errors_propagate_without_implicit_snapshots() {
+    use crate::observability::{LogArgument, LogLevel, LogSink};
+    use crate::{AuthConfig, AuthContext, store::EphemeralStore};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct FailedSource(AtomicUsize, FieldValue);
@@ -80,12 +82,12 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
 
         fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
             let _ = self.0.fetch_add(1, Ordering::SeqCst);
-            Err(AuthError::internal("object source read failed"))
+            Err(AuthError::from_thrown(self.1.clone()))
         }
 
         fn snapshot_fields(&self) -> AuthResult<FieldMap> {
             let _ = self.0.fetch_add(1, Ordering::SeqCst);
-            Err(AuthError::internal("object source read failed"))
+            Err(AuthError::from_thrown(self.1.clone()))
         }
 
         fn set(&self, _: String, _: FieldValue) -> AuthResult<Option<FieldValue>> {
@@ -101,7 +103,24 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
         }
     }
 
-    let failure: FieldValue = FieldMap::from([("original".into(), true.into())]).into();
+    struct FailureLog(AtomicUsize, FieldValue);
+
+    impl LogSink for FailureLog {
+        fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+            assert_eq!(level, LogLevel::Error);
+            assert_eq!(message.to_string(), "Error parsing JSON");
+            assert!(matches!(arguments, [LogArgument::Native(argument)]
+                if argument.own_property_keys().is_ok_and(|keys| keys == ["error"])
+                    && argument.model_property("error").is_ok_and(|error| error.strict_equals(&self.1))));
+            let _ = self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    let failure: FieldValue = FieldMap::from([
+        ("original".into(), true.into()),
+        ("message".into(), "object source read failed".into()),
+    ])
+    .into();
     let source = Arc::new(FailedSource(AtomicUsize::new(0), failure.clone()));
     let object = FieldObject::from_source(source.clone());
     let value = FieldValue::Object(object.clone());
@@ -130,12 +149,24 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
         value.json().map(drop),
         value.stringify().map(drop),
         StructuredCloneContext::new().clone_value(&value).map(drop),
-        crate::utils::json::safe_parse_field(&value).map(drop),
     ] {
         assert!(
-            matches!(result, Err(error) if error.to_string().contains("object source read failed"))
+            matches!(result, Err(error) if error.raw_value().is_some_and(|value| value.strict_equals(&failure)))
         );
     }
+    assert_eq!(source.0.load(Ordering::SeqCst), 6);
+
+    let log = Arc::new(FailureLog(AtomicUsize::new(0), failure));
+    let mut config = AuthConfig::default();
+    config.logger.log = Some(log.clone());
+    config.initialize_logger();
+    let config = Arc::new(config);
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let parsed = context
+        .with_endpoint_context(|_| async { crate::utils::json::safe_parse_field(&value) })
+        .await;
+    assert!(matches!(parsed, Ok(FieldValue::Null)));
+    assert_eq!(log.0.load(Ordering::SeqCst), 1);
     assert_eq!(source.0.load(Ordering::SeqCst), 7);
 }
 

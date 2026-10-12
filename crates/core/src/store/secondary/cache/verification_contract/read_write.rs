@@ -239,17 +239,16 @@ async fn verification_native_read_and_update_match_complete_upstream_runtime() -
     assert_eq!(fixture["version"], "1.7.6");
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 27);
+    let mut failures = ReplayFailures::default();
     for case in cases {
         let scenario = &case["scenario"];
         let name = scenario["name"].as_str().unwrap();
         for in_transaction in [false, true] {
             let actual = capture(scenario, in_transaction).await?;
-            assert_replay(
-                &actual,
-                &case["runtime"],
-                &format!("{name}/transaction={in_transaction}"),
-            );
+            let label = format!("{name}/transaction={in_transaction}");
+            failures.record(&label, || assert_replay(&actual, &case["runtime"], &label));
         }
     }
+    failures.finish();
     Ok(())
 }

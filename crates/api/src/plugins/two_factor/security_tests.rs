@@ -93,8 +93,13 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
         .await
         .err()
         .unwrap();
-    assert_eq!(failure.status_code().unwrap(), 401);
-    assert_eq!(failure.to_string(), "Invalid two factor cookie");
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &failure,
+        "UNAUTHORIZED",
+        401,
+        "INVALID_TWO_FACTOR_COOKIE",
+        "Invalid two factor cookie",
+    );
 }
 
 #[derive(Default)]

@@ -9,7 +9,9 @@ use super::*;
 use crate::plugins::{
     endpoint_context::EndpointContext,
     phone_number::{PhoneNumberApi, PhoneNumberPlugin},
-    test_helpers::verification_consumer_native::{EMAIL, Harness, PHONE, assert_replay},
+    test_helpers::verification_consumer_native::{
+        EMAIL, Harness, PHONE, ReplayFailures, assert_replay,
+    },
 };
 use better_auth_core::{AuthError, AuthRequest, FieldMap, FieldValue, HttpMethod, NativeRequest};
 use serde_json::{Value as Json, json};
@@ -82,10 +84,12 @@ async fn otp_consumers_match_upstream_business_runtime_with_host_stacks_unpaired
     assert_eq!(fixture["version"], "1.7.6");
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 103);
+    let mut failures = ReplayFailures::default();
     for case in cases {
         let name = case["name"].as_str().unwrap();
         let actual = capture(&case["scenario"]).await?;
-        assert_replay(&actual, &case["runtime"], name);
+        failures.record(name, || assert_replay(&actual, &case["runtime"], name));
     }
+    failures.finish();
     Ok(())
 }

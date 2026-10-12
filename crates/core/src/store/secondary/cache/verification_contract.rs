@@ -19,9 +19,12 @@ mod object;
 #[path = "../../../../../../tests/support/secondary_native_observation.rs"]
 mod observation;
 mod read_write;
+#[path = "../../../../../../tests/support/replay_failures.rs"]
+mod replay_failures;
 mod values;
 
 use observation::{NativeObservation, assert_replay};
+use replay_failures::ReplayFailures;
 
 const NOW: i64 = 2_000_000_000_000;
 const TARGET: &str = "verification:subject";
@@ -363,16 +366,15 @@ async fn verification_native_consumption_matches_complete_upstream_runtime() -> 
     assert_eq!(fixture["version"], "1.7.6");
     let cases = fixture["cases"].as_array().unwrap();
     assert_eq!(cases.len(), 27);
+    let mut failures = ReplayFailures::default();
     for case in cases {
         let name = case["name"].as_str().unwrap();
         for in_transaction in [false, true] {
             let actual = capture(name, in_transaction).await?;
-            assert_replay(
-                &actual,
-                &case["runtime"],
-                &format!("{name}/transaction={in_transaction}"),
-            );
+            let label = format!("{name}/transaction={in_transaction}");
+            failures.record(&label, || assert_replay(&actual, &case["runtime"], &label));
         }
     }
+    failures.finish();
     Ok(())
 }
