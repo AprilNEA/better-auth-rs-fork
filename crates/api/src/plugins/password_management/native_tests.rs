@@ -24,7 +24,9 @@ use std::{collections::VecDeque, sync::Mutex};
 
 const PASSWORD: &str = "CorrectHorseBattery1!";
 
+mod authoritative_session;
 mod change_success;
+mod session_boundary;
 
 #[derive(Default)]
 struct State {

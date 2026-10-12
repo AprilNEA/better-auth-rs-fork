@@ -2,8 +2,8 @@ use chrono::Utc;
 use url::Url;
 use uuid::Uuid;
 
+use better_auth_core::session::NativeSessionData;
 use better_auth_core::utils::password::{self as password_utils};
-use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthResult, AuthUser, CreateAccount, RequestMeta, UpdateAccount,
 };
@@ -239,12 +239,12 @@ pub(crate) async fn reset_password_token_core(
 /// Change the password before revoking sessions and issuing replacement credentials.
 pub(crate) async fn change_password_core(
     body: &ChangePasswordRequest,
-    user: &impl AuthUser,
+    data: &NativeSessionData,
     config: &PasswordManagementConfig,
     req: &better_auth_core::AuthRequest,
     meta: &RequestMeta,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<ChangePasswordResponse<UserView>> {
+) -> AuthResult<ChangePasswordResponse<better_auth_core::FieldValue>> {
     password_utils::validate_password(
         &body.new_password,
         ctx.password_policy.min_length,
@@ -253,16 +253,19 @@ pub(crate) async fn change_password_core(
     )?;
     ctx.password_policy
         .validate_max_length(&body.current_password)?;
-    let credential_account = get_credential_account(ctx, user.id().into_owned())
-        .await?
-        .filter(|account| account.password.field_value().is_truthy())
-        .ok_or_else(|| {
-            AuthError::from_code(
-                "BAD_REQUEST",
-                "CREDENTIAL_ACCOUNT_NOT_FOUND",
-                "Credential account not found",
-            )
-        })?;
+    let credential_account = get_credential_account(
+        ctx,
+        better_auth_core::SchemaValue::from_field(data.user_property("id")?),
+    )
+    .await?
+    .filter(|account| account.password.field_value().is_truthy())
+    .ok_or_else(|| {
+        AuthError::from_code(
+            "BAD_REQUEST",
+            "CREDENTIAL_ACCOUNT_NOT_FOUND",
+            "Credential account not found",
+        )
+    })?;
     let password_hash =
         password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.new_password)
             .await?;
@@ -296,11 +299,11 @@ pub(crate) async fn change_password_core(
 
     let new_token = if body.revoke_other_sessions == Some(true) {
         ctx.database
-            .delete_user_sessions(user.id().typed()?)
+            .delete_user_sessions_by_user_value(&data.user_property("id")?)
             .await?;
         let issued = issue_selected_user_session_optional(
             ctx,
-            better_auth_core::FieldMap::from(ctx.internal_user_view(user).await?).into(),
+            data.user.clone(),
             meta,
             ctx.config.session.expires_in(),
         )
@@ -324,7 +327,7 @@ pub(crate) async fn change_password_core(
 
     let response = ChangePasswordResponse {
         token: new_token,
-        user: ctx.user_view(user).await?,
+        user: data.public_user(&ctx.config.user)?,
     };
 
     Ok(response)
@@ -332,15 +335,16 @@ pub(crate) async fn change_password_core(
 
 pub(crate) async fn verify_password_core(
     body: &VerifyPasswordRequest,
-    user: &impl AuthUser,
+    data: &NativeSessionData,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<StatusResponse> {
     ctx.password_policy.validate_max_length(&body.password)?;
-    let stored_hash = get_credential_password_hash(ctx, user.id().into_owned())
-        .await?
-        .ok_or_else(|| {
-            AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password")
-        })?;
+    let stored_hash = get_credential_password_hash(
+        ctx,
+        better_auth_core::SchemaValue::from_field(data.user_property("id")?),
+    )
+    .await?
+    .ok_or_else(|| AuthError::from_code("BAD_REQUEST", "INVALID_PASSWORD", "Invalid password"))?;
 
     password_utils::verify_password_native(
         ctx.password_policy.hasher.as_ref(),

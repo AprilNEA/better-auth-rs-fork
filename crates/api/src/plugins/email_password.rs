@@ -424,21 +424,12 @@ pub(crate) async fn sign_in_core(
         return Err(AuthError::InvalidCredentials);
     };
 
-    let user = record.user;
-    let better_auth_core::store::JoinValue::Many(accounts) = record.accounts else {
-        return Err(AuthError::internal("accounts.find is not a function"));
-    };
-    let credential = accounts
-        .into_iter()
-        .find(|account| account.provider_id == "credential" && account.account_id == user.id);
-    let Some(stored_hash) = credential
-        .map(|account| account.password.into_field_value())
-        .filter(better_auth_core::FieldValue::is_truthy)
-    else {
+    let Some(stored_hash) = credential_password_from_accounts(&record)? else {
         _ = password_utils::hash_password(ctx.password_policy.hasher.as_ref(), &body.password)
             .await?;
         return Err(AuthError::InvalidCredentials);
     };
+    let user = record.user;
     password_utils::verify_password_native(
         ctx.password_policy.hasher.as_ref(),
         &body.password,
@@ -473,6 +464,28 @@ pub(crate) async fn sign_in_core(
         ctx,
     )
     .await
+}
+
+pub(super) fn credential_password_from_accounts(
+    record: &better_auth_core::store::UserAccounts,
+) -> AuthResult<Option<better_auth_core::FieldValue>> {
+    let better_auth_core::store::JoinValue::Many(accounts) = &record.accounts else {
+        return Err(AuthError::internal("accounts.find is not a function"));
+    };
+    Ok(accounts
+        .iter()
+        .find(|account| {
+            account
+                .provider_id
+                .field_value()
+                .strict_equals(&"credential".into())
+                && account
+                    .account_id
+                    .field_value()
+                    .strict_equals(&record.user.id.field_value())
+        })
+        .map(|account| account.password.field_value())
+        .filter(better_auth_core::FieldValue::is_truthy))
 }
 
 /// Core sign-in by username.

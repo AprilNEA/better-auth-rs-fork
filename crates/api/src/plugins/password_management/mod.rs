@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 
-use better_auth_core::AuthSession;
 use better_auth_core::{AuthContext, AuthPlugin, AuthRoute};
 use better_auth_core::{AuthError, AuthResult};
 use better_auth_core::{AuthRequest, AuthResponse, HttpMethod};
@@ -243,22 +242,15 @@ impl PasswordManagementPlugin {
     ) -> AuthResult<AuthResponse> {
         let body = request::change(req)?;
 
-        // Get current user from session
-        let user = self
-            .get_current_user(req, ctx)
-            .await?
-            .ok_or(AuthError::Unauthenticated)?;
+        let data = ctx.require_authoritative_native_session(req).await?;
         let meta = RequestMeta::from_request_with_config(req, &ctx.config.advanced.ip_address);
 
-        let response = change_password_core(&body, &user, &self.config, req, &meta, ctx).await?;
+        let response = change_password_core(&body, &data, &self.config, req, &meta, ctx).await?;
         Ok(AuthResponse::native(
             None,
             better_auth_core::FieldMap::from([
                 ("token".into(), response.token),
-                (
-                    "user".into(),
-                    better_auth_core::FieldMap::from(response.user).into(),
-                ),
+                ("user".into(), response.user),
             ])
             .into(),
         ))
@@ -271,13 +263,8 @@ impl PasswordManagementPlugin {
     ) -> AuthResult<AuthResponse> {
         let body = request::verify(req)?;
 
-        let user = self.get_current_user(req, ctx).await?;
-        let Some(user) = user else {
-            // better-call's default body for a session-gated endpoint hit
-            // without a session, which upstream returns verbatim.
-            return Err(AuthError::AuthenticationFailed("Unauthorized".to_string()));
-        };
-        let response = verify_password_core(&body, &user, ctx).await?;
+        let data = ctx.require_authoritative_native_session(req).await?;
+        let response = verify_password_core(&body, &data, ctx).await?;
         AuthResponse::json(None, &response)
     }
 
@@ -300,25 +287,6 @@ impl PasswordManagementPlugin {
                 Ok(response)
             }
         }
-    }
-
-    async fn get_current_user<S: better_auth_core::AuthSchema>(
-        &self,
-        req: &AuthRequest,
-        ctx: &AuthContext<S>,
-    ) -> AuthResult<Option<better_auth_core::wire::UserView>> {
-        let session_manager = ctx.session_manager();
-
-        if let Some(token) = session_manager.extract_session_token(req)
-            && let Some(session) = session_manager.get_session(&token).await?
-        {
-            return ctx
-                .database
-                .get_user_by_id(session.user_id().typed()?)
-                .await;
-        }
-
-        Ok(None)
     }
 }
 

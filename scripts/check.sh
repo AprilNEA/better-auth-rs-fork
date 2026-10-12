@@ -617,6 +617,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/api-key-ttl-clock.test.ts \
         ./compat-tests/reference-server/contracts/password-native-boundary-capture.test.ts \
         ./compat-tests/reference-server/contracts/password-query-order-capture.test.ts \
+        ./compat-tests/reference-server/contracts/password-session-boundary-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-date-methods-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-date-identity.test.ts \
         ./compat-tests/reference-server/contracts/api-key-session-reference.test.ts \
