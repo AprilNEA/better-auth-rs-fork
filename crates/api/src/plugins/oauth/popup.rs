@@ -161,12 +161,7 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
     let query = req.input_query()?;
     let missing: Vec<_> = ["provider", "popupOrigin"]
         .into_iter()
-        .filter(|field| {
-            query
-                .as_ref()
-                .and_then(|query| query.get(*field))
-                .is_none()
-        })
+        .filter(|field| query.as_ref().and_then(|query| query.get(*field)).is_none())
         .map(|field| json_body::invalid_type(&format!("query.{field}"), "string", None))
         .collect();
     if !missing.is_empty() {
@@ -244,7 +239,8 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
         scopes: scopes.as_deref(),
         additional_params: None,
         login_hint: None,
-        request_sign_up: (req.query_string("requestSignUp")?.as_deref() == Some("true")).then_some(true),
+        request_sign_up: (req.query_string("requestSignUp")?.as_deref() == Some("true"))
+            .then_some(true),
         additional_data: additional,
         link: None,
         disable_redirect: false,
