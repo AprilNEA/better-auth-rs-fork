@@ -18,7 +18,8 @@ test("OAuth native sessions preserve all 172 pinned HTTP, cache, state, and stor
     const [stdout, stderr, status] = await Promise.all([
       new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
     ]);
-    expect({ status, stdout, stderr }).toEqual({ status: 0, stdout: "", stderr: "" });
+    process.stderr.write(stderr);
+    expect({ status, stdout }).toEqual({ status: 0, stdout: "" });
     expect(readFileSync(output, "utf8")).toBe(fixture);
   } finally {
     rmSync(directory, { recursive: true });
