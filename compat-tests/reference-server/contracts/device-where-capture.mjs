@@ -5,6 +5,7 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { getMigrations } from "better-auth/db/migration";
 import { deviceAuthorization } from "better-auth/plugins";
+import { getAuthTables } from "@better-auth/core/db";
 import { captureFreshServerCatalog } from "./server-catalog-shared.mjs";
 import { deviceWhereScenarios } from "./device-where-scenarios.mjs";
 
@@ -24,13 +25,15 @@ export const observeValue = value => {
   return value;
 };
 
-export async function captureDeviceWhereGroup(backend, serial, scenarios = deviceWhereScenarios(), { diagnostics = [], ownerRefType = "string", ownerId = "ordinary-owner" } = {}) {
+export async function captureDeviceWhereGroup(backend, serial, scenarios = deviceWhereScenarios(), {
+  diagnostics = [], ownerRefType = "string", ownerId = "ordinary-owner", ownerRefTarget = "id", replaceOwnerReference = false,
+} = {}) {
   const memory = { user: [], session: [], account: [], verification: [], deviceCode: [] };
   const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
   const events = [];
   const fields = Object.fromEntries(Object.entries(fieldTypes).map(([field, type]) => [field, {
     type: field === "ownerRef" ? ownerRefType : type, required: false, fieldName: `stored_${field}`,
-    ...(field === "ownerRef" ? { references: { model: "user", field: "id" } } : {}),
+    ...(field === "ownerRef" ? { references: { model: "user", field: ownerRefTarget } } : {}),
     transform: {
       input(value) { events.push({ phase: "input", field, value: observeValue(value) }); return value; },
       output(value) { events.push({ phase: "output", field, value: observeValue(value) }); return value; },
@@ -40,8 +43,22 @@ export async function captureDeviceWhereGroup(backend, serial, scenarios = devic
     baseURL: "http://device-where.test", secret: "ordinary-device-where-contract-at-least-32-characters",
     logger: { disabled: true }, telemetry: { enabled: false },
     advanced: { database: { generateId: serial ? "serial" : undefined } },
-    plugins: [deviceAuthorization(), { id: "device-where-fields", schema: { deviceCode: { fields } } }],
+    plugins: [deviceAuthorization(), { id: "device-where-fields", schema: { deviceCode: { fields: replaceOwnerReference ? {
+      ...fields,
+      ownerRef: { type: "json", fieldName: "retired_owner_ref", required: true, defaultValue: "retired-default",
+        transform: { input() { assert.fail("A replaced declaration must not run its input transform"); } } },
+    } : fields } } }, ...(replaceOwnerReference ? [{ id: "device-where-reference-replacement", schema: {
+      deviceCode: { fields: { ownerRef: fields.ownerRef } },
+    } }] : [])],
   };
+  const declaration = replaceOwnerReference ? (() => {
+    const schema = getAuthTables(configuration).deviceCode.fields;
+    const { transform, ...field } = schema.ownerRef;
+    assert.deepEqual(field, { type: ownerRefType, required: false, fieldName: "stored_ownerRef", references: { model: "user", field: ownerRefTarget } });
+    assert.equal(transform.input, fields.ownerRef.transform.input);
+    assert.equal(transform.output, fields.ownerRef.transform.output);
+    return { fields: Object.keys(schema), field, transform: { input: true, output: true } };
+  })() : undefined;
   const capture = async (options, readRaw) => {
     const { adapter } = await betterAuth(options).$context;
     const owner = await adapter.create({ model: "user", forceAllowId: true, data: {
@@ -139,7 +156,7 @@ export async function captureDeviceWhereGroup(backend, serial, scenarios = devic
       assert.ok(observation.events.every(event => event.phase === "output"), "Where conversion must not call field input transforms");
       cases.push(observation);
     }
-    return { serial, cases };
+    return { serial, ...(declaration ? { declaration } : {}), cases };
   };
   try {
     if (backend === "memory") return await capture({ ...configuration, database: memoryAdapter(memory) }, async (model = "deviceCode") => memory[model]);
