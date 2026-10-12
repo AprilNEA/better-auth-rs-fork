@@ -26,7 +26,7 @@ impl Root {
     pub(super) fn new(kind: &str) -> Self {
         let fields = Arc::new(Properties::default());
         let object = FieldObject::from_source(fields.clone());
-        let value = match kind {
+        let value: FieldValue = match kind {
             "date" => FieldDate::from_milliseconds_with_properties(NOW as f64, object).into(),
             "function" => {
                 FieldFunction::contextual_with_properties(|_, _| Ok(FieldValue::Undefined), object)

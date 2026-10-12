@@ -39,7 +39,9 @@ fn request_cookie(
 ) -> AuthResult<()> {
     let name = related_cookie_name(&context.config, suffix);
     let signed = sign_cookie_value(SECRET, value)?;
-    let _ = request.headers.insert("cookie", format!("{name}={signed}"));
+    let _ = request
+        .headers
+        .insert("cookie".to_owned(), format!("{name}={signed}"));
     Ok(())
 }
 

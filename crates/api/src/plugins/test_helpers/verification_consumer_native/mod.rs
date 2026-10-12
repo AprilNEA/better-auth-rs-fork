@@ -6,6 +6,7 @@
 
 use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthPlugin, AuthResult, FieldDate, FieldMap, FieldValue,
+    SchemaValue,
     id::{IdGeneration, IdGenerator},
     observability::{LogArgument, LogLevel, LogSink},
     store::{EphemeralStore, StatelessSchema, schema::EntityRole, secondary::SecondaryStore},
@@ -132,7 +133,12 @@ impl State {
                 headers
                     .enumerable_fields()?
                     .into_iter()
-                    .map(|(key, value)| Ok(json!([key, value.display_utf16()?.to_utf8()?])))
+                    .map(|(key, value)| {
+                        Ok(json!([
+                            key,
+                            SchemaValue::<String>::from_field(value).display_string()?
+                        ]))
+                    })
                     .collect::<AuthResult<Vec<_>>>()?
             };
             output.extend([

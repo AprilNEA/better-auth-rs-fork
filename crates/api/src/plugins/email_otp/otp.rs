@@ -292,11 +292,12 @@ impl EmailOtpPlugin {
         }
         .ok_or_else(invalid_otp)?;
         let (stored, attempts) = split(&record.model_property("value")?)?;
+        let default_attempts = FieldValue::from("0");
         let used_attempts = if consume {
             Some(parse_attempts(if attempts.is_truthy() {
                 &attempts
             } else {
-                &"0".into()
+                &default_attempts
             })?)
         } else {
             None
@@ -325,7 +326,7 @@ impl EmailOtpPlugin {
                 None => parse_attempts(if attempts.is_truthy() {
                     &attempts
                 } else {
-                    &"0".into()
+                    &default_attempts
                 })?,
             };
             value.extend(

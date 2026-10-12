@@ -921,7 +921,7 @@ mod tests {
                     },
                 )
                 .await?;
-            assert_eq!(response.body.json()?, serde_json::json!(NOW + 1));
+            assert_eq!(response.body.json()?, Some(serde_json::json!(NOW + 1)));
             assert_eq!(context.now().timestamp_millis(), NOW + 1);
         }
         Ok(())
