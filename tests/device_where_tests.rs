@@ -46,6 +46,7 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
                 owner_ref_target: "id",
                 replacement: None,
                 owner_id: (!serial).then_some("ordinary-owner"),
+                id_field_name: None,
             },
         )
         .await?;
@@ -62,6 +63,7 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
                 owner_ref_target: "id",
                 replacement: None,
                 owner_id: (!group.serial).then_some("ordinary-owner"),
+                id_field_name: None,
             },
         )
         .await?;
@@ -78,6 +80,7 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
                 owner_ref_target: "id",
                 replacement: None,
                 owner_id: Some(&group.owner_id),
+                id_field_name: None,
             },
         )
         .await?;
@@ -94,6 +97,25 @@ async fn memory_device_where_matches_upstream_rows_callbacks_and_consumption() -
                 owner_ref_target: &group.owner_ref_target,
                 replacement: Some(&group.declaration),
                 owner_id: (!group.serial).then_some("ordinary-owner"),
+                id_field_name: None,
+            },
+        )
+        .await?;
+    }
+    let id_state = contract::load_query_id_state()?;
+    for group in &id_state.groups {
+        let config = contract::config(group.serial);
+        contract::run(
+            Arc::new(EphemeralStore::new(Arc::new(config.clone()))),
+            "memory",
+            &group.cases.iter().collect::<Vec<_>>(),
+            contract::RunConfig {
+                auth: config,
+                owner_ref_type: UserFieldType::String,
+                owner_ref_target: "id",
+                replacement: None,
+                owner_id: (!group.serial).then_some("ordinary-owner"),
+                id_field_name: Some(&id_state.id_field_name),
             },
         )
         .await?;
@@ -132,6 +154,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                     owner_ref_target: "id",
                     replacement: None,
                     owner_id: None,
+                    id_field_name: None,
                 },
             )
             .await?;
@@ -149,6 +172,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                     owner_ref_target: "id",
                     replacement: None,
                     owner_id: Some(owner_id),
+                    id_field_name: None,
                 },
             )
             .await?;
@@ -164,6 +188,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                         owner_ref_target: "id",
                         replacement: None,
                         owner_id: Some(&group.owner_id),
+                        id_field_name: None,
                     },
                 )
                 .await?;
@@ -183,6 +208,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                         owner_ref_target: &group.owner_ref_target,
                         replacement: Some(&group.declaration),
                         owner_id: Some(owner_id),
+                        id_field_name: None,
                     },
                 )
                 .await?;
@@ -203,6 +229,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                 owner_ref_target: "id",
                 replacement: None,
                 owner_id: None,
+                id_field_name: None,
             },
         )
         .await?;
@@ -224,6 +251,7 @@ async fn sql_contract(database: DatabaseConnection, backend: &str) -> TestResult
                 owner_ref_target: &group.owner_ref_target,
                 replacement: Some(&group.declaration),
                 owner_id: None,
+                id_field_name: None,
             },
         )
         .await?;

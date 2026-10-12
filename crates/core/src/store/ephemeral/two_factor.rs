@@ -152,7 +152,8 @@ impl TwoFactorStore for EphemeralStore {
         previous: &FieldValue,
         replacement: FieldValue,
     ) -> AuthResult<bool> {
-        let id = self.plugin_query_value(EntityRole::TwoFactor, "id", id.field_value())?;
+        let (id_column, id) =
+            self.plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
         let previous =
             self.plugin_query_value(EntityRole::TwoFactor, "backupCodes", previous.clone())?;
         let patch = self
@@ -169,7 +170,7 @@ impl TwoFactorStore for EphemeralStore {
             "incrementOne",
             |row| {
                 crate::memory_query::matches_all(
-                    [("id", &id), (column, &previous)],
+                    [(id_column.as_str(), &id), (column, &previous)],
                     |(name, value)| {
                         Ok(field_matches_equality(
                             &row.field(name)?.unwrap_or_default(),
@@ -192,13 +193,14 @@ impl TwoFactorStore for EphemeralStore {
     ) -> AuthResult<()> {
         let schema = self.model_fields.plugin_fields(EntityRole::TwoFactor);
         let column = schema.record_storage_key("failedVerificationCount");
-        let queried_id = self.plugin_query_value(EntityRole::TwoFactor, "id", id.field_value())?;
+        let (id_column, queried_id) =
+            self.plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
         let row = self
             .write_two_factor_row(
                 "incrementOne",
                 |row| {
                     Ok(field_matches_equality(
-                        &row.field("id")?.unwrap_or_default(),
+                        &row.field(&id_column)?.unwrap_or_default(),
                         &queried_id,
                     ))
                 },
@@ -217,8 +219,8 @@ impl TwoFactorStore for EphemeralStore {
             .is_some_and(|order| order.is_ge())
         {
             let deadline = locked_until()?;
-            let queried_id =
-                self.plugin_query_value(EntityRole::TwoFactor, "id", id.field_value())?;
+            let (id_column, queried_id) =
+                self.plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
             let maximum = self.plugin_query_value(
                 EntityRole::TwoFactor,
                 "failedVerificationCount",
@@ -238,7 +240,7 @@ impl TwoFactorStore for EphemeralStore {
                     |row| {
                         crate::memory_query::matches_all(
                             [
-                                ("id", &queried_id, WhereOperator::Eq),
+                                (id_column.as_str(), &queried_id, WhereOperator::Eq),
                                 (column, &maximum, WhereOperator::Gte),
                             ],
                             |(name, value, operator)| {
@@ -263,7 +265,8 @@ impl TwoFactorStore for EphemeralStore {
         id: &SchemaValue<String>,
         locked_before: Option<FieldDate>,
     ) -> AuthResult<()> {
-        let id = self.plugin_query_value(EntityRole::TwoFactor, "id", id.field_value())?;
+        let (id_column, id) =
+            self.plugin_query_field(EntityRole::TwoFactor, "id", id.field_value())?;
         let cutoff = locked_before
             .map(|date| self.plugin_query_value(EntityRole::TwoFactor, "lockedUntil", date.into()))
             .transpose()?;
@@ -291,11 +294,12 @@ impl TwoFactorStore for EphemeralStore {
                     "update"
                 },
                 |row| {
-                    let clauses = std::iter::once(("id", &id, WhereOperator::Eq)).chain(
-                        cutoff
-                            .as_ref()
-                            .map(|value| (column, value, WhereOperator::Lte)),
-                    );
+                    let clauses = std::iter::once((id_column.as_str(), &id, WhereOperator::Eq))
+                        .chain(
+                            cutoff
+                                .as_ref()
+                                .map(|value| (column, value, WhereOperator::Lte)),
+                        );
                     crate::memory_query::matches_all(clauses, |(name, value, operator)| {
                         crate::memory_query::matches(
                             row.field(name)?.as_ref(),

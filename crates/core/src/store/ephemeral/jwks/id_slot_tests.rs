@@ -1,4 +1,7 @@
 use super::*;
+mod atomic_query_alias_tests;
+mod query_alias_tests;
+
 use crate::id::{IdGeneration, IdGenerator};
 use crate::store::{JwksStore, WalletStore};
 use crate::user_fields::{FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform};

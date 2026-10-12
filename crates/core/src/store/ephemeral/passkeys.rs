@@ -116,9 +116,12 @@ impl PasskeyStore for EphemeralStore {
     }
 
     async fn get_passkey_by_id(&self, id: &str) -> AuthResult<Option<Passkey>> {
-        let id = self.plugin_query_value(EntityRole::Passkey, "id", id.into())?;
-        self.find_passkey(|row| row.get("id").is_some_and(|value| value.strict_equals(&id)))
-            .await
+        let (column, id) = self.plugin_query_field(EntityRole::Passkey, "id", id.into())?;
+        self.find_passkey(|row| {
+            row.get(&column)
+                .is_some_and(|value| value.strict_equals(&id))
+        })
+        .await
     }
 
     async fn get_passkey_by_credential_id(

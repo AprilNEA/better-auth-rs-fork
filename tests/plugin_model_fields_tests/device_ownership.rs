@@ -14,6 +14,8 @@ use better_auth_core::{
 };
 use chrono::{DateTime, Utc};
 
+#[path = "device_ownership_id_state.rs"]
+mod id_state;
 #[path = "device_ownership_references.rs"]
 mod references;
 
@@ -565,7 +567,7 @@ async fn device_ownership_equality_uses_declared_fields_and_preserves_mismatches
             .await;
         if field == "unregistered" {
             assert!(matches!(result, Err(AuthError::Config(ref message))
-                if message == "Unknown plugin field DeviceCode.unregistered"));
+                if message == "Field unregistered not found in model deviceCode"));
         } else {
             assert_eq!(
                 result?, None,
@@ -742,7 +744,7 @@ async fn memory_device_ownership_sets_use_shared_conversion_and_preserve_callbac
             let consumed = match field {
                 "unregistered" => {
                     assert!(matches!(result, Err(AuthError::Config(ref message))
-                        if message == "Unknown plugin field DeviceCode.unregistered"));
+                        if message == "Field unregistered not found in model deviceCode"));
                     false
                 }
                 "details" => {

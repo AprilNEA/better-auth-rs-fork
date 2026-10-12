@@ -23,4 +23,6 @@ test("Device Memory consumption resolves the selected ID before resetting a fres
     groups.push(group);
   }
   expect(groups.length).toBe(2);
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/device-query-id-state-memory-1.7.6.json", import.meta.url)).json();
+  expect({ version: "1.7.6", backend: "memory", idFieldName: "old_id", groups }).toStrictEqual(fixture);
 });

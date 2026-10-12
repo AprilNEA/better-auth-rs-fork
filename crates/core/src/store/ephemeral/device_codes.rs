@@ -39,6 +39,7 @@ impl DeviceCodeTransaction {
 pub(super) struct DeviceCodeConsumption {
     origin: Option<DeviceCodeOrigin>,
     binding_fields: [String; 5],
+    selected_field: Option<String>,
     ownership_field: Option<String>,
 }
 
@@ -53,6 +54,7 @@ impl DeviceCodeConsumption {
         for name in self
             .binding_fields
             .iter()
+            .chain(self.selected_field.iter())
             .chain(self.ownership_field.iter())
         {
             let same = match (origin.live.field(name)?, origin.before.get(name)) {
@@ -92,8 +94,7 @@ impl EphemeralStore {
         field: &str,
         operand: Value,
     ) -> AuthResult<Option<DeviceCode>> {
-        let operand = self.plugin_query_value(EntityRole::DeviceCode, field, operand)?;
-        let column = self.device_column(field);
+        let (column, operand) = self.plugin_query_field(EntityRole::DeviceCode, field, operand)?;
         let selected = self
             .raw("deviceCode", "findOne", |op| {
                 Ok(op
@@ -143,7 +144,8 @@ impl EphemeralStore {
         unclaimed: bool,
         input: FieldMap,
     ) -> AuthResult<bool> {
-        let id = self.plugin_query_value(EntityRole::DeviceCode, "id", id.field_value())?;
+        let (id_column, id) =
+            self.plugin_query_field(EntityRole::DeviceCode, "id", id.field_value())?;
         let status = self.plugin_query_value(EntityRole::DeviceCode, "status", status.into())?;
         let owner = if unclaimed {
             Some(self.plugin_query_value(EntityRole::DeviceCode, "userId", Value::Null)?)
@@ -163,7 +165,8 @@ impl EphemeralStore {
                 "deviceCode",
                 if unclaimed { "incrementOne" } else { "update" },
                 |op| {
-                    let mut clauses = vec![("id", &id), (status_column.as_str(), &status)];
+                    let mut clauses =
+                        vec![(id_column.as_str(), &id), (status_column.as_str(), &status)];
                     if let Some(owner) = &owner {
                         clauses.push((owner_column.as_str(), owner));
                     }
@@ -296,6 +299,8 @@ impl DeviceCodeStore for EphemeralStore {
         expected: &DeviceCode,
         ownership: &crate::DeviceCodeOwnership,
     ) -> AuthResult<Option<DeviceCode>> {
+        let (selected_column, selected_id) =
+            self.plugin_query_field(EntityRole::DeviceCode, "id", expected.id.field_value())?;
         let mut query = ownership.query();
         crate::query::validate_where_operand(query.operator, &query.value)?;
         (query.field, query.value) =
@@ -310,6 +315,13 @@ impl DeviceCodeStore for EphemeralStore {
                 let table = op.capture_table(EntityRole::DeviceCode)?;
                 let selected = table
                     .select_refs(|source| {
+                        let selected = crate::query::field_matches_equality(
+                            &source.field(&selected_column)?.unwrap_or_default(),
+                            &selected_id,
+                        );
+                        if !selected {
+                            return Ok(false);
+                        }
                         let owns = crate::memory_query::matches_all([&query], |query| {
                             crate::memory_query::matches(
                                 source.field(&query.field)?.as_ref(),
@@ -360,6 +372,8 @@ impl DeviceCodeStore for EphemeralStore {
                         .cloned();
                     transaction.consumed.push(DeviceCodeConsumption {
                         origin,
+                        selected_field: (selected_column != columns[0])
+                            .then(|| selected_column.clone()),
                         binding_fields: columns,
                         ownership_field: (!matches!(
                             ownership,
@@ -386,14 +400,15 @@ impl DeviceCodeStore for EphemeralStore {
         id: &crate::SchemaValue<String>,
         status: &str,
     ) -> AuthResult<bool> {
-        let id = self.plugin_query_value(EntityRole::DeviceCode, "id", id.field_value())?;
+        let (id_column, id) =
+            self.plugin_query_field(EntityRole::DeviceCode, "id", id.field_value())?;
         let status = self.plugin_query_value(EntityRole::DeviceCode, "status", status.into())?;
         let column = self.device_column("status");
         self.raw("deviceCode", "delete", |op| {
             let table = op.capture_table(EntityRole::DeviceCode)?;
             let selected = table.select_refs(|row| {
                 crate::memory_query::matches_all(
-                    [("id", &id), (column.as_str(), &status)],
+                    [(id_column.as_str(), &id), (column.as_str(), &status)],
                     |(name, expected)| {
                         Ok(crate::query::field_matches_equality(
                             &row.field(name)?.unwrap_or_default(),

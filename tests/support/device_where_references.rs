@@ -160,7 +160,6 @@ fn expected_bindings(case: &Case, seeded: &DeviceCode) -> AuthResult<DeviceCode>
         .ok_or_else(|| {
             AuthError::internal("The captured ownership condition must name its field")
         })?;
-    assert!(matches!(reference_field, "ownerRef" | "stored_ownerRef"));
     assert_eq!(
         case.condition
             .iter()

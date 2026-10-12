@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::{
     collections::HashMap,
+    future::Future,
+    pin::Pin,
     sync::{Arc, mpsc},
 };
 
@@ -172,50 +174,53 @@ pub(crate) async fn stored<S: AuthSchema>(auth: &BetterAuth<S>) -> AuthResult<Va
     observe_row(&row)
 }
 
-pub(crate) async fn request<S: AuthSchema>(
-    auth: &BetterAuth<S>,
+// Bound request-future expansion before generated schema checks enter Send catalog tasks.
+pub(crate) fn request<'a, S: AuthSchema>(
+    auth: &'a BetterAuth<S>,
     transport: Transport,
     method: HttpMethod,
-    path: &str,
+    path: &'a str,
     body: Option<Value>,
     query: Option<Value>,
-    cookie: Option<&str>,
-) -> AuthResult<AuthResponse> {
-    let mut headers = HashMap::new();
-    if let Some(cookie) = cookie {
-        let _ = headers.insert("cookie".into(), cookie.into());
-    }
-    let response = match transport {
-        Transport::Native => auth
-            .call_endpoint(
-                method,
-                path,
-                EndpointInput {
-                    body,
-                    query,
-                    headers: Some(headers),
-                    ..Default::default()
-                },
-            )
-            .await?
-            .into_http_response()?,
-        Transport::Http => {
-            let _ = headers.insert("origin".into(), ORIGIN.into());
-            let _ = headers.insert("accept".into(), "application/json".into());
-            if body.is_some() {
-                let _ = headers.insert("content-type".into(), "application/json".into());
-            }
-            auth.handle_request(AuthRequest::from_parts(
-                method,
-                format!("/api/auth{path}"),
-                headers,
-                body.map(|body| serde_json::to_vec(&body)).transpose()?,
-                query,
-            ))
-            .await?
+    cookie: Option<&'a str>,
+) -> Pin<Box<dyn Future<Output = AuthResult<AuthResponse>> + Send + 'a>> {
+    Box::pin(async move {
+        let mut headers = HashMap::new();
+        if let Some(cookie) = cookie {
+            let _ = headers.insert("cookie".into(), cookie.into());
         }
-    };
-    Ok(response)
+        let response = match transport {
+            Transport::Native => auth
+                .call_endpoint(
+                    method,
+                    path,
+                    EndpointInput {
+                        body,
+                        query,
+                        headers: Some(headers),
+                        ..Default::default()
+                    },
+                )
+                .await?
+                .into_http_response()?,
+            Transport::Http => {
+                let _ = headers.insert("origin".into(), ORIGIN.into());
+                let _ = headers.insert("accept".into(), "application/json".into());
+                if body.is_some() {
+                    let _ = headers.insert("content-type".into(), "application/json".into());
+                }
+                auth.handle_request(AuthRequest::from_parts(
+                    method,
+                    format!("/api/auth{path}"),
+                    headers,
+                    body.map(|body| serde_json::to_vec(&body)).transpose()?,
+                    query,
+                ))
+                .await?
+            }
+        };
+        Ok(response)
+    })
 }
 
 pub(crate) async fn call<S: AuthSchema>(

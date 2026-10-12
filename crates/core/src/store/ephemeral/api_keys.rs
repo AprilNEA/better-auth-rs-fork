@@ -173,7 +173,8 @@ impl ApiKeyStore for EphemeralStore {
         write: ApiKeyUsageWrite,
     ) -> AuthResult<Option<ApiKey>> {
         use crate::{WhereMode, WhereOperator};
-        let id = self.plugin_query_value(EntityRole::ApiKey, "id", id.field_value())?;
+        let (id_column, id) =
+            self.plugin_query_field(EntityRole::ApiKey, "id", id.field_value())?;
         let query = |name, value| self.plugin_query_value(EntityRole::ApiKey, name, value);
         let previous = match &write {
             ApiKeyUsageWrite::Refill { previous, .. } => query("lastRefillAt", previous.clone())?,
@@ -239,7 +240,7 @@ impl ApiKeyStore for EphemeralStore {
                 let matches = op.capture_table(EntityRole::ApiKey)?.select_refs(|key| {
                     crate::memory_query::matches_all(clauses.iter(), |(name, value, operator)| {
                         let column = if *name == "id" {
-                            "id"
+                            id_column.as_str()
                         } else {
                             schema.record_storage_key(name)
                         };

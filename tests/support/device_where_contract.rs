@@ -33,6 +33,9 @@ pub(crate) use reference_defaults::load_reference_defaults;
 #[path = "device_where_reference_declarations.rs"]
 mod reference_declarations;
 pub(crate) use reference_declarations::load_reference_declarations;
+#[path = "device_where_id_state.rs"]
+mod id_state;
+pub(crate) use id_state::load_query_id_state;
 
 type Trace = Arc<Mutex<Vec<Value>>>;
 
@@ -42,6 +45,7 @@ pub(crate) struct RunConfig<'a> {
     pub(crate) owner_ref_target: &'a str,
     pub(crate) replacement: Option<&'a Value>,
     pub(crate) owner_id: Option<&'a str>,
+    pub(crate) id_field_name: Option<&'a str>,
 }
 
 const FIELDS: [(&str, UserFieldType); 7] = [
@@ -184,6 +188,15 @@ fn policies(trace: &Trace, options: &RunConfig<'_>) -> UserConfig {
                         },
                     )
                 })
+                .chain(options.id_field_name.map(|name| {
+                    (
+                        "id".into(),
+                        UserFieldConfig {
+                            field_name: Some(name.into()),
+                            ..Default::default()
+                        },
+                    )
+                }))
                 .collect(),
         ),
     }
@@ -593,14 +606,14 @@ pub(crate) async fn run<S: AuthSchema>(
                 assert_eq!(message, expected.message);
                 None
             }
-            (Some(expected), Err(AuthError::Config(message)))
+            (Some(expected), Err(AuthError::Config(message))) => {
                 if case.condition.get(1).is_some_and(|query| {
                     query.get("operator").and_then(Value::as_str) == Some("in")
                         && query.get("value").is_some_and(|value| !value.is_array())
-                }) =>
-            {
+                }) {
+                    assert_eq!(message, "Value must be an array");
+                }
                 assert_eq!(expected.name, "BetterAuthError");
-                assert_eq!(message, "Value must be an array");
                 assert_eq!(message, expected.message);
                 None
             }

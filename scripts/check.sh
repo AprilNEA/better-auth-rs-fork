@@ -1089,6 +1089,9 @@ run_stage() {
         ./compat-tests/reference-server/contracts/device-where.test.ts \
         ./compat-tests/reference-server/contracts/device-reference-declarations.test.ts \
         ./compat-tests/reference-server/contracts/device-ownership-references.test.ts \
+        ./compat-tests/reference-server/contracts/device-query-id-state.test.ts \
+        ./compat-tests/reference-server/contracts/adapter-query-id-alias.test.ts \
+        ./compat-tests/reference-server/contracts/plugin-query-id-alias.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-where.test.ts \
         ./compat-tests/reference-server/contracts/device-where-transactions.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-where-transactions.test.ts \
@@ -1100,6 +1103,8 @@ run_stage() {
         ./compat-tests/reference-server/consumer-contracts/device-reference-values.test.ts \
         ./compat-tests/reference-server/contracts/device-reference-defaults.test.ts \
         ./compat-tests/reference-server/consumer-contracts/device-reference-defaults.test.ts
+      cargo clippy --locked -p better-auth-core --tests -- -D warnings
+      cargo test --locked -p better-auth-core --lib -- store::ephemeral::jwks::id_slot_tests::
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test device_grant_tests \
         --test device_where_tests --test sql_user_extra_output_tests \

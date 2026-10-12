@@ -37,17 +37,37 @@ impl EphemeralStore {
         name: &str,
         value: FieldValue,
     ) -> AuthResult<(String, FieldValue)> {
-        self.model_fields.begin_id_query(role)?;
+        let fields = self.model_fields.plugin_fields(role);
+        let fields = self.model_fields.runtime_fields(role, &fields)?;
         let name = if name == "_id" { "id" } else { name };
-        if name == "id" {
-            return Ok((name.to_owned(), self.memory_primary_id_query(&value)?));
-        }
-        let fields = self.model_fields.plugin_fields(role).adapter_fields(&[]);
-        let (logical, field) = crate::user_query::declared_field(name, &fields)
-            .ok_or_else(|| AuthError::config(format!("Unknown plugin field {role:?}.{name}")))?;
-        let physical =
-            crate::store::schema::resolve_field_name(field.field_name.as_deref(), logical);
-        let value = self.memory_field_query(&fields, logical, value)?;
+        let model = model(role)?;
+        let (logical, physical) = if name == "id" {
+            (
+                "id",
+                crate::store::schema::resolve_field_name(
+                    fields
+                        .fields()
+                        .get("id")
+                        .and_then(|field| field.field_name.as_deref()),
+                    "id",
+                ),
+            )
+        } else {
+            let (logical, field) =
+                crate::user_query::declared_field(name, &fields).ok_or_else(|| {
+                    AuthError::config(format!("Field {name} not found in model {model}"))
+                })?;
+            (
+                logical,
+                crate::store::schema::resolve_field_name(field.field_name.as_deref(), logical),
+            )
+        };
+        self.model_fields.begin_id_query(role)?;
+        let value = if logical == "id" {
+            self.memory_primary_id_query(&value)?
+        } else {
+            self.memory_field_query(&fields, logical, value)?
+        };
         Ok((physical.to_owned(), value))
     }
 
@@ -139,14 +159,14 @@ impl EphemeralStore {
         role: EntityRole,
         id: &SchemaValue<String>,
     ) -> AuthResult<Option<FieldMap>> {
-        let id = self.plugin_query_value(role, "id", id.field_value())?;
+        let (column, id) = self.plugin_query_field(role, "id", id.field_value())?;
         let selected = self
             .raw(model(role)?, "findOne", |op| {
                 Ok(op
                     .capture_table(role)?
                     .select_refs(|row| {
                         Ok(crate::query::field_matches_equality(
-                            &row.field("id")?.unwrap_or_default(),
+                            &row.field(&column)?.unwrap_or_default(),
                             &id,
                         ))
                     })?
@@ -181,13 +201,13 @@ impl EphemeralStore {
         input: FieldMap,
         internal: FieldMap,
     ) -> AuthResult<Option<RowRef<FieldMap>>> {
-        let id = self.plugin_query_value(role, "id", id.field_value())?;
+        let (column, id) = self.plugin_query_field(role, "id", id.field_value())?;
         let mut patch = self.prepare_plugin_fields(role, input, false).await?;
         patch.extend(internal);
         self.raw(model(role)?, "update", |op| {
             let matches = op.capture_table(role)?.select_refs(|row| {
                 Ok(crate::query::field_matches_equality(
-                    &row.field("id")?.unwrap_or_default(),
+                    &row.field(&column)?.unwrap_or_default(),
                     &id,
                 ))
             })?;
@@ -204,12 +224,12 @@ impl EphemeralStore {
         role: EntityRole,
         id: &SchemaValue<String>,
     ) -> AuthResult<()> {
-        let id = self.plugin_query_value(role, "id", id.field_value())?;
+        let (column, id) = self.plugin_query_field(role, "id", id.field_value())?;
         self.raw(model(role)?, "delete", |op| {
             let table = op.capture_table(role)?;
             let selected = table.select_refs(|row| {
                 Ok(crate::query::field_matches_equality(
-                    &row.field("id")?.unwrap_or_default(),
+                    &row.field(&column)?.unwrap_or_default(),
                     &id,
                 ))
             })?;
