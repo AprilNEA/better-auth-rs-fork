@@ -71,7 +71,7 @@ async fn verify_cleanup_case(expected: &JsonValue, current: &crate::FieldDate) -
         ]});
         let before = observe_model_memory(&store, "apikey")?;
         let result = store
-            .delete_expired_api_keys_with_clock(|| current.clone())
+            .delete_expired_api_keys_before(current.clone())
             .await?;
         let after = observe_model_memory(&store, "apikey")?;
         let observed_events = std::mem::take(&mut *events_lock(&trace)?);

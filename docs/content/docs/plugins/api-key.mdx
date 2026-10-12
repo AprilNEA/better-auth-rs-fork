@@ -322,7 +322,7 @@ Pass `config_id` when a route accepts credentials from one configuration. Withou
 
 ### Delete Expired Keys
 
-`delete_all_expired` implements the upstream `deleteAllExpiredApiKeys` server-only endpoint. It runs endpoint hooks and deletes database keys whose non-null `expiresAt` is earlier than the database cleanup clock. Each call bypasses the automatic cleanup interval. The endpoint has no HTTP route, requires no user session, and does not delete secondary-storage cache entries.
+`delete_all_expired` implements the upstream `deleteAllExpiredApiKeys` server-only endpoint. It runs endpoint hooks and deletes database keys whose non-null `expiresAt` is earlier than the context's wall clock. Each call bypasses the automatic cleanup interval. The endpoint has no HTTP route, requires no user session, and does not delete secondary-storage cache entries.
 
 ```rust
 use better_auth::server_api::NativeEndpointInput;
@@ -335,7 +335,9 @@ Use `NativeEndpointInput` to pass an original request, independently present hea
 
 The default result is `{ success: true, error: null }`. A database failure is logged by the cleanup helper and still returns that result when logging succeeds. If this first Logger call throws, the endpoint logs the Logger error and returns `{ success: false, error }` with the original error object. If the second Logger call throws, the method propagates that error. These catches preserve the upstream policy; a successful response alone does not prove that database deletion succeeded.
 
-Automatic cleanup still uses a per-plugin monotonic `Instant` in Rust. Better Auth 1.7.6 shares its last-check `Date` across instances loaded from one module and uses wall-clock subtraction. Cross-instance throttling and clock rollback remain unaligned. The explicit endpoint bypasses either interval and refreshes the plugin's last-check time. The source contract records the upstream cross-instance and clock behavior separately from Rust acceptance.
+Automatic cleanup shares one last-check timestamp across API Key plugin instances in the process, including instances with different databases. Like Better Auth 1.7.6, the cleanup helper skips a check when fewer than 10,000 wall-clock milliseconds have elapsed. Clock rollback also suppresses automatic cleanup until that interval is reached. The explicit endpoint bypasses the interval and refreshes the shared timestamp, including during rollback. The timestamp is published before database work; database and Logger failures do not restore its previous value.
+
+The helper samples the deletion cutoff separately and passes it to `ApiKeyStore::delete_expired_api_keys_before`. Custom stores must implement this explicit-cutoff operation through their expiration field policy. The existing `delete_expired_api_keys` convenience method samples the current clock and delegates to the same operation. Memory live reads, SQL conversion and deletion statements, transactions, and quota updates retain their backend-specific behavior.
 
 ### Session Emulation
 

@@ -43,6 +43,8 @@ pub(crate) struct StatusResponse {
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
+    #[path = "../../../../../tests/support/secondary_native_observation.rs"]
+    pub(crate) mod native_observation;
     pub(crate) mod native_session;
     pub(crate) mod verification_consumer_native;
 
@@ -52,8 +54,8 @@ pub(crate) mod test_helpers {
     use better_auth_core::config::AuthConfig;
     use better_auth_core::wire::{SessionView, UserView};
     use better_auth_core::{
-        AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResult, AuthSchema,
-        CreateSession, CreateUser, HttpMethod,
+        AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResult, AuthSchema,
+        CreateSession, CreateUser, FieldValue, HttpMethod,
         plugin_runtime::{AdapterUserFields, ApplicationUserFields},
         store::{AuthStore, schema::SchemaConfiguration},
     };

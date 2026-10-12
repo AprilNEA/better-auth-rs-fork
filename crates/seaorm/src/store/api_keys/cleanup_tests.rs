@@ -174,7 +174,7 @@ async fn replay<M: crate::SeaOrmPluginModel<Record = ApiKey>>(
         );
         let before = observation::stored(&database).await?;
         let result = store
-            .delete_expired_api_keys_with_clock(|| current.clone())
+            .delete_expired_api_keys_before(current.clone())
             .await
             .map(|count| json!(count));
         observation::check(&database, &events, &before, result, expected, backend, true).await?;

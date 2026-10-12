@@ -5,9 +5,7 @@ use better_auth_core::{
 };
 use std::sync::{OnceLock, Weak};
 
-#[path = "../../../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
-use observation::{NativeObservation, assert_replay};
+use crate::plugins::test_helpers::native_observation::{NativeObservation, assert_replay};
 
 type Observer = Arc<Mutex<NativeObservation>>;
 

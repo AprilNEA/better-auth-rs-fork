@@ -17,9 +17,9 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use super::native_observation as observation;
+
 mod object;
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
 #[path = "../../../../../../tests/support/replay_failures.rs"]
 mod replay_failures;
 mod storage;

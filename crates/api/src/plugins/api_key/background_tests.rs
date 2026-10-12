@@ -115,14 +115,38 @@ fn assert_failure<T>(result: AuthResult<T>, expected: &FieldValue) -> AuthResult
     Ok(())
 }
 
+#[test]
+fn expired_cleanup_keeps_source_catch_layers_and_unowned_crud_behavior()
+-> Result<(), Box<dyn std::error::Error>> {
+    let output = std::process::Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "plugins::api_key::background_tests::expired_cleanup_catch_child",
+            "--ignored",
+        ])
+        .output()?;
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed;"),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    Ok(())
+}
+
 #[tokio::test]
-async fn expired_cleanup_keeps_source_catch_layers_and_unowned_crud_behavior() -> AuthResult<()> {
-    for (defer, outer, retained) in [
+#[ignore = "The parent starts a fresh process because upstream cleanup state is module-global"]
+async fn expired_cleanup_catch_child() -> AuthResult<()> {
+    for (index, (defer, outer, retained)) in [
         (false, false, true),
         (false, true, true),
         (true, true, false),
         (true, true, true),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let state = Observation::new();
         let config = Arc::new(state.config(
             "Failed to delete expired API keys:",
@@ -145,7 +169,12 @@ async fn expired_cleanup_keeps_source_catch_layers_and_unowned_crud_behavior() -
             config.clone(),
             [("apikey".into(), vec![row.clone()])],
         )?);
-        let ctx = AuthContext::new(config, store.clone())?;
+        let clock =
+            chrono::DateTime::from_timestamp_millis(2_000_000_000_000 + index as i64 * 10_000)
+                .ok_or_else(|| {
+                    AuthError::internal("Cleanup test clock is outside Chrono's range")
+                })?;
+        let ctx = AuthContext::new(config, store.clone())?.with_clock(move || clock);
         ApiKeyPlugin::with_config(ApiKeyConfig::default())
             .start_expired_cleanup(&ctx, defer, outer)
             .await?;
@@ -170,6 +199,17 @@ async fn expired_cleanup_keeps_source_catch_layers_and_unowned_crud_behavior() -
         if outer {
             expected.push("logger:second".to_owned());
         }
+        assert_eq!(*lock(&state.events)?, expected);
+        assert_eq!(
+            store.plugin_storage_rows(EntityRole::ApiKey)?,
+            [row.clone()]
+        );
+        let other = ctx
+            .clone()
+            .with_clock(move || clock + chrono::Duration::milliseconds(1));
+        ApiKeyPlugin::with_config(ApiKeyConfig::default())
+            .maybe_delete_expired(&other, false)
+            .await?;
         assert_eq!(*lock(&state.events)?, expected);
         assert_eq!(store.plugin_storage_rows(EntityRole::ApiKey)?, [row]);
     }

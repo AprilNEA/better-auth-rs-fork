@@ -323,21 +323,12 @@ where
             .await
     }
 
-    async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
-        self.delete_expired_api_keys_with_clock(|| Utc::now().into())
-            .await
-    }
-}
-
-impl<S: AuthSchema, O: crate::SeaOrmOrganizationSchema, P: crate::SeaOrmPluginSchema>
-    SeaOrmStore<S, O, P>
-{
-    async fn delete_expired_api_keys_with_clock(
+    async fn delete_expired_api_keys_before(
         &self,
-        clock: impl FnOnce() -> better_auth_core::FieldDate + Send,
+        cutoff: better_auth_core::FieldDate,
     ) -> AuthResult<usize> {
         let expired =
-            self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
+            self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", cutoff.into())?;
         let present =
             self.bind_plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
         database_operation::<Entity<P::ApiKey>, _>(self.config(), "deleteMany", async {

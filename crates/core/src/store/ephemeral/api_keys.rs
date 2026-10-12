@@ -286,17 +286,8 @@ impl ApiKeyStore for EphemeralStore {
         self.delete_plugin_records(EntityRole::ApiKey, id).await
     }
 
-    async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
-        self.delete_expired_api_keys_with_clock(now).await
-    }
-}
-
-impl EphemeralStore {
-    pub(super) async fn delete_expired_api_keys_with_clock(
-        &self,
-        clock: impl FnOnce() -> FieldDate + Send,
-    ) -> AuthResult<usize> {
-        let current = self.plugin_query_field(EntityRole::ApiKey, "expiresAt", clock().into())?;
+    async fn delete_expired_api_keys_before(&self, cutoff: FieldDate) -> AuthResult<usize> {
+        let current = self.plugin_query_field(EntityRole::ApiKey, "expiresAt", cutoff.into())?;
         let absent = self.plugin_query_field(EntityRole::ApiKey, "expiresAt", FieldValue::Null)?;
         self.raw("apikey", "deleteMany", |op| {
             let table = op.capture_table(EntityRole::ApiKey)?;

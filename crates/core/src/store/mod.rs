@@ -1930,7 +1930,14 @@ pub trait ApiKeyStore: Send + Sync {
         self.update_api_key(id, update).await.map(Some)
     }
     async fn delete_api_key(&self, id: &crate::SchemaValue<String>) -> AuthResult<()>;
-    async fn delete_expired_api_keys(&self) -> AuthResult<usize>;
+    /// Delete keys whose non-null expiration precedes the current wall clock.
+    async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
+        self.delete_expired_api_keys_before(chrono::Utc::now().into())
+            .await
+    }
+    /// Delete keys whose non-null expiration precedes the supplied query operand.
+    /// Apply the registered expiration field policy before comparing stored values.
+    async fn delete_expired_api_keys_before(&self, cutoff: crate::FieldDate) -> AuthResult<usize>;
 
     /// Apply one conditional usage write and return the resulting row.
     /// A failed guard returns `None`; each successful call commits independently.

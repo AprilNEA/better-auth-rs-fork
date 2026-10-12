@@ -1,0 +1,61 @@
+{
+  "contract": "api-key-delete-expired",
+  "version": "1.7.6",
+  "status": "source acceptance passed; shared-clock Rust replay pending",
+  "run": "38234129251",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38234129251",
+  "log": {
+    "path": "/private/tmp/better-auth-ci-38234129251-clean.log",
+    "sha256": "a7c66fa770ce72ae93fd36f726b1d0721560bf9347a6f774d1492a558ac82eda"
+  },
+  "records": [
+    {
+      "name": "success",
+      "line": 28,
+      "sha256": "f11f48beb692e11dff6a96a6677feee4401dcf50845bab9fccb59c1988872387"
+    },
+    {
+      "name": "database-error",
+      "line": 30,
+      "sha256": "a892e5c2c65211e3e3ad917767facfc94048afc60a466a14b556c804e33dd5c7"
+    },
+    {
+      "name": "first-logger-error",
+      "line": 32,
+      "sha256": "d3824630ee96f2e16824b42bef9b87a6938cf091a7d8435e9f9e9de0fc9a000b"
+    },
+    {
+      "name": "second-logger-error",
+      "line": 34,
+      "sha256": "2adbb4a89d3b145daaf20a73d6542516931a461506d2525bafff3751fbd4c984"
+    },
+    {
+      "name": "before-stop",
+      "line": 36,
+      "sha256": "19c1a6383b365b1f7857e397a9d4cea37f762319576a862e9dad341d9b6819a2"
+    },
+    {
+      "name": "after-replacement",
+      "line": 38,
+      "sha256": "ac9e521c02aa0b7b906a608d272360d9cdd28ea32691eefcac29fb533c79871c"
+    },
+    {
+      "name": "bypass",
+      "line": 40,
+      "sha256": "9faf1a98ae84a4df4ba9ff2e643904cb1da94951e80741b18144f058f4de15b2"
+    },
+    {
+      "name": "shared-clock",
+      "line": 42,
+      "sha256": "14449a35426dc008d50f8a7c2f121e4e312a19c65738747c77f50a67cbdebb49"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/api-key-delete-expired-1.7.6.json",
+    "sha256": "96fdeb818081c0f3998584dcad2093f0d6df0b9d04e3c0475024beac07c64462"
+  },
+  "extraction": "Group all eight complete source observations in capture order. Preserve every source value and object key order. Format the result as JSON.",
+  "normalizations": [],
+  "rustBoundary": "Replay shared-clock through the actual cleanup helper and the actual typed create_key automatic caller in separate child processes. Compare all five Memory tables, real adapter deleteMany spans, clock samples, complete cleanup results, original generator error identity, and zero Logger calls. Existing cleanup adapter contracts separately compare the explicit cutoff, field bindings, callbacks, affected row counts, and backend storage. Existing native endpoint tests retain hook, Logger, original-error, and HTTP-absence assertions. A scripted clock proves the real adapter cutoff with boundary rows: stamp 0 is deleted while cutoff 1 remains; stamp 10001 is deleted while cutoff 10002 remains. All other tables are compared after each deletion.",
+  "sourceOnlyBoundary": "The complete source captures retain JavaScript object descriptors, Promise lifecycle, and wrapper adapter inputs and results. The shared-clock Rust replay does not claim JavaScript reflection, Promise timing, or full create-endpoint hook parity."
+}

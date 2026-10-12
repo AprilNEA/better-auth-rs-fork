@@ -40,6 +40,9 @@ mod expiration_tests;
 #[cfg(test)]
 mod background_tests;
 
+#[cfg(test)]
+mod cleanup_clock_tests;
+
 use handlers::*;
 use types::*;
 pub use types::{CreateKeyRequest, CreateKeyResponse, UpdateKeyRequest};
@@ -198,8 +201,6 @@ pub enum ApiKeyReferences {
 pub struct ApiKeyPlugin {
     /// Registered configurations. Unscoped requests use the default configuration.
     pub(super) configurations: Vec<ApiKeyConfig>,
-    /// Throttle for `delete_expired_api_keys` -- stores the last check instant.
-    last_expired_check: Arc<Mutex<Option<std::time::Instant>>>,
 }
 
 impl ApiKeyPlugin {
@@ -529,14 +530,12 @@ impl ApiKeyPlugin {
                 }
                 .normalized(),
             ],
-            last_expired_check: Arc::new(Mutex::new(None)),
         }
     }
 
     pub fn with_config(config: ApiKeyConfig) -> Self {
         Self {
             configurations: vec![config.normalized()],
-            last_expired_check: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -584,25 +583,22 @@ impl ApiKeyPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
         bypass_last_check: bool,
     ) -> AuthResult<()> {
-        let should_run = {
-            let mut last = self
-                .last_expired_check
+        // A local static is shared by every context and every generic instantiation.
+        static LAST_CHECKED: Mutex<Option<i64>> = Mutex::new(None);
+        let cutoff = {
+            let mut last = LAST_CHECKED
                 .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            let now = std::time::Instant::now();
-            match *last {
-                Some(prev) if !bypass_last_check && now.duration_since(prev).as_secs() < 10 => {
-                    false
-                }
-                _ => {
-                    *last = Some(now);
-                    true
-                }
+                .map_err(|_| AuthError::internal("API Key cleanup clock lock poisoned"))?;
+            if let Some(previous) = *last
+                && !bypass_last_check
+                && ctx.now().timestamp_millis() - previous < 10_000
+            {
+                return Ok(());
             }
+            *last = Some(ctx.now().timestamp_millis());
+            better_auth_core::FieldDate::from(ctx.now())
         };
-        if should_run {
-            let _ = ctx.database.delete_expired_api_keys().await?;
-        }
+        let _ = ctx.database.delete_expired_api_keys_before(cutoff).await?;
         Ok(())
     }
 

@@ -21,11 +21,9 @@ use std::sync::{
 use std::{future::Future, pin::Pin, task::Poll};
 use tokio::sync::Notify;
 
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
 #[path = "../../../../../../tests/support/secondary_native_source.rs"]
 mod source;
-use observation::{NativeObservation, assert_replay};
+use crate::plugins::test_helpers::native_observation::{NativeObservation, assert_replay};
 use source::source_value;
 
 const EMAIL: &str = "override-values@example.com";

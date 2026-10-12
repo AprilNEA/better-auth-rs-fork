@@ -14,12 +14,10 @@ use better_auth_core::{
 use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
 
-#[path = "../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
 #[path = "logout_native_tests/values.rs"]
 mod values;
 
-use observation::{NativeObservation, assert_replay};
+use crate::plugins::test_helpers::native_observation::{NativeObservation, assert_replay};
 
 type Observer = Arc<Mutex<NativeObservation>>;
 const NOW: f64 = 2_000_000_000_000.0;

@@ -577,6 +577,9 @@ impl<S: AuthSchema> ApiKeyStore for SecondaryStore<S> {
     async fn delete_expired_api_keys(&self) -> AuthResult<usize> {
         self.inner.delete_expired_api_keys().await
     }
+    async fn delete_expired_api_keys_before(&self, cutoff: crate::FieldDate) -> AuthResult<usize> {
+        self.inner.delete_expired_api_keys_before(cutoff).await
+    }
     async fn write_api_key_usage(
         &self,
         id: &crate::SchemaValue<String>,

@@ -692,13 +692,15 @@ run_stage() {
         ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
         ./compat-tests/reference-server/contracts/api-key-usage-success-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-delete-expired.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-cleanup-fields.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.test.ts \
         ./compat-tests/reference-server/contracts/on-api-error-detached.test.ts \
         ./compat-tests/reference-server/contracts/telemetry-detached.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts || logger_status=1
-      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || logger_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --features axum --tests -- -D warnings || logger_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test http_api_error_logging_tests --test observability_tests \
         --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \
@@ -708,11 +710,13 @@ run_stage() {
         observability::logger:: error::http_tests:: error::logger_boundary_tests:: \
         background::tests:: utils::json:: \
         store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
+        api_key_cleanup_uses_shared_field_bindings \
         plugin::tests::raw_api_errors:: || logger_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
         plugins::user_admission_tests:: plugins::api_key:: \
         plugins::oauth::providers::paypal:: plugins::oauth::popup:: \
         plugins::email_otp:: || logger_status=1
+      cargo test --locked -p better-auth-seaorm --lib store::api_keys::cleanup_tests:: -- --include-ignored --test-threads=1 || logger_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test http_api_error_logging_tests --test observability_tests \
         --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \

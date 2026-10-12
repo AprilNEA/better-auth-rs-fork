@@ -29,13 +29,12 @@ const BY_ID: &str = "api-key:by-id:usage-key";
 const OLD_REF: &str = "api-key:by-ref:owner";
 const FRESH_REF: &str = "api-key:by-ref:fresh-owner";
 
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
 #[path = "../../../../../../tests/support/secondary_native_source.rs"]
 mod source;
-use observation::{NativeObservation, assert_replay};
+use crate::plugins::test_helpers::native_observation::{NativeObservation, assert_replay};
 use source::source_value;
 
+#[path = "usage_tests/success.rs"]
 mod success;
 
 fn lock<T>(mutex: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
