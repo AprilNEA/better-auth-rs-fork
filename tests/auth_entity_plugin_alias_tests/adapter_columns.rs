@@ -1,3 +1,8 @@
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "The alias contract asserts complete records and ActiveModel writes while propagating adapter errors."
+)]
+
 use super::*;
 use better_auth::{
     __private_core::user_fields::AdapterRecord,

@@ -7,7 +7,7 @@ use super::*;
 use better_auth::plugins::endpoint_context::{EndpointContext, OwnedEndpointContext};
 use better_auth::server_api::NativeEndpointInput;
 use better_auth_core::{
-    AuthError, FieldDate, FieldMap, FieldValue,
+    FieldDate, FieldMap, FieldValue,
     endpoint_input::ValidatedInput,
     observability::{AfterEndpointHook, BeforeEndpointHook, EndpointHooks},
 };
@@ -24,8 +24,8 @@ struct NativeProbe {
 
 impl NativeProbe {
     fn raw(&self, phase: &'static str, request: &AuthRequest) -> AuthResult<()> {
-        self.phases.lock().unwrap().push(phase);
-        let scope = current_request_hook_context().unwrap();
+        lock(&self.phases)?.push(phase);
+        let scope = required(current_request_hook_context())?;
         assert!(self.raw.strict_equals(&request.input_query_field_value()?));
         assert!(self.raw.strict_equals(&scope.query));
         assert!(
@@ -47,7 +47,7 @@ impl BeforeEndpointHook<StatelessSchema> for NativeProbe {
         _: &AuthContext<StatelessSchema>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
         self.raw("before", request)?;
-        let _ = self.raw.as_object().unwrap().set("name", "before".into())?;
+        let _ = required(self.raw.as_object())?.set("name", "before".into())?;
         Ok(None)
     }
 }
@@ -103,7 +103,7 @@ impl AuthPlugin<StatelessSchema> for NativeProbe {
     ) -> AuthResult<Option<BeforeRequestAction>> {
         self.raw("plugin.before", request)?;
         assert_eq!(request.query_string("name")?, Some("before".to_owned()));
-        let _ = self.raw.as_object().unwrap().set("name", "plugin".into())?;
+        let _ = required(self.raw.as_object())?.set("name", "plugin".into())?;
         Ok(None)
     }
 
@@ -112,9 +112,9 @@ impl AuthPlugin<StatelessSchema> for NativeProbe {
         request: &AuthRequest,
         context: &AuthContext<StatelessSchema>,
     ) -> AuthResult<Option<AuthResponse>> {
-        self.phases.lock().unwrap().push("handler");
+        lock(&self.phases)?.push("handler");
         let query = request.input_query_field_value()?;
-        let scope = current_request_hook_context().unwrap();
+        let scope = required(current_request_hook_context())?;
         assert!(query.strict_equals(&scope.query));
         assert!(
             self.raw
@@ -126,7 +126,10 @@ impl AuthPlugin<StatelessSchema> for NativeProbe {
             request.validated_query::<String>().map(String::as_str),
             Some("validated")
         );
-        assert_eq!(query.as_object().unwrap().own_keys()?, ["name", "metadata"]);
+        assert_eq!(
+            required(query.as_object())?.own_keys()?,
+            ["name", "metadata"]
+        );
         assert_eq!(request.query_string("name")?, Some("validated".to_owned()));
         assert!(
             query
@@ -137,10 +140,10 @@ impl AuthPlugin<StatelessSchema> for NativeProbe {
         let endpoint = EndpointContext::new(Some(request), request.input_field_value()?, context);
         assert!(query.strict_equals(&endpoint.query_field_value()?));
         assert_eq!(
-            endpoint.request.unwrap().query,
+            required(endpoint.request)?.query,
             Some(json!({"transport":true}))
         );
-        *self.retained.lock().unwrap() = Some(endpoint.to_owned());
+        *lock(&self.retained)? = Some(endpoint.to_owned());
         Ok(Some(AuthResponse::native(None, query)))
     }
 
@@ -207,39 +210,38 @@ async fn native_endpoint_query_retains_identity_through_hooks_schema_and_owned_c
             )
             .await;
         if fail {
-            let error = result.unwrap_err();
-            assert!(error.raw_value().unwrap().strict_equals(&failure));
-            assert!(probe.retained.lock().unwrap().is_none());
+            let error = result.err().ok_or_else(|| {
+                AuthError::internal("Failing query validation unexpectedly returned a response")
+            })?;
+            assert!(required(error.raw_value())?.strict_equals(&failure));
+            assert!(lock(&probe.retained)?.is_none());
             assert_eq!(
-                *probe.phases.lock().unwrap(),
+                *lock(&probe.phases)?,
                 ["before", "plugin.before", "schema:start", "schema:end"]
             );
         } else {
             let response = result?;
             let output = response.body.field_value()?;
             assert_eq!(response.status, 200);
-            let retained = probe.retained.lock().unwrap();
-            let endpoint = retained.as_ref().unwrap().as_endpoint();
+            let retained = lock(&probe.retained)?;
+            let endpoint = required(retained.as_ref())?.as_endpoint();
             assert!(output.strict_equals(&endpoint.query_field_value()?));
             assert!(metadata.strict_equals(&output.model_property("metadata")?));
             assert_eq!(
-                output
-                    .model_property("metadata")?
-                    .as_object()
-                    .unwrap()
-                    .get("ownUndefined")?,
+                required(output.model_property("metadata")?.as_object())?.get("ownUndefined")?,
                 Some(FieldValue::Undefined)
             );
             assert!(
-                output
-                    .model_property("metadata")?
-                    .model_property("nan")?
-                    .as_f64()
-                    .unwrap()
-                    .is_nan()
+                required(
+                    output
+                        .model_property("metadata")?
+                        .model_property("nan")?
+                        .as_f64()
+                )?
+                .is_nan()
             );
             assert_eq!(
-                *probe.phases.lock().unwrap(),
+                *lock(&probe.phases)?,
                 [
                     "before",
                     "plugin.before",
@@ -254,7 +256,7 @@ async fn native_endpoint_query_retains_identity_through_hooks_schema_and_owned_c
         assert_eq!(raw.model_property("name")?, "plugin".into());
         assert_eq!(raw.model_property("ignored")?, true.into());
         assert!(raw.model_property("metadata")?.strict_equals(&metadata));
-        let _ = probe.retained.lock().unwrap().take();
+        let _ = lock(&probe.retained)?.take();
     }
     Ok(())
 }

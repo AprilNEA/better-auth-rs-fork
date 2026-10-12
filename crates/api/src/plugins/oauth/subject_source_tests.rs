@@ -2,8 +2,8 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use better_auth_core::{
-    AuthPlugin, AuthRequest, AuthResult, BeforeRequestAction, CreateUser, CreateVerification,
-    FieldMap, FieldValue, HttpMethod, OAuthStateStrategy,
+    AuthPlugin, AuthRequest, AuthResult, CreateUser, CreateVerification, FieldMap, FieldValue,
+    Headers, HttpMethod, OAuthStateStrategy,
 };
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
@@ -169,13 +169,10 @@ async fn callback_and_proxy_resolve_subject_from_original_exchange_tokens() {
             "state": state, "code": "source-code", "user": "{\"callback\":true}",
         }));
         if proxy_flow {
-            let Some(BeforeRequestAction::Respond(response)) =
-                proxy.before_request(&request, &ctx).await.unwrap()
-            else {
-                panic!("Proxy callback must produce the passthrough response");
-            };
-            assert_eq!(response.status, 302);
-            let location = url::Url::parse(response.headers.get("location").unwrap()).unwrap();
+            let response = proxy.before_request(&request, &ctx).await.unwrap_err();
+            assert!(response.is_found_redirect().unwrap());
+            let headers = Headers::from_field_value(&response.headers_value().unwrap()).unwrap();
+            let location = url::Url::parse(headers.get("location").unwrap()).unwrap();
             let encrypted = location
                 .query_pairs()
                 .find(|(name, _)| name == "profile")

@@ -6,7 +6,7 @@ use crate::{
     user_fields::{FieldTransforms, UserFieldTransform},
 };
 use std::sync::{
-    Mutex,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 

@@ -1,5 +1,5 @@
 use super::*;
-use sea_orm::sqlx::{Column, Row};
+use sea_orm::sqlx::{Column, Connection, Row};
 
 const MODELS: [&str; 5] = ["user", "session", "account", "verification", "apikey"];
 
@@ -274,6 +274,17 @@ pub(super) async fn drop_tables(database: &DatabaseConnection) -> AuthResult<()>
             .execute_unprepared(&format!("DROP TABLE {quote}{model}{quote}"))
             .await
             .map_err(map_db_err)?;
+    }
+    if database.get_database_backend() == DbBackend::Postgres {
+        // The next scenario recreates these tables with different column types.
+        database
+            .get_postgres_connection_pool()
+            .acquire()
+            .await
+            .map_err(|error| AuthError::internal(error.to_string()))?
+            .clear_cached_statements()
+            .await
+            .map_err(|error| AuthError::internal(error.to_string()))?;
     }
     Ok(())
 }

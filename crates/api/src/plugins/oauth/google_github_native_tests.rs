@@ -11,7 +11,7 @@ use better_auth_core::{AuthError, AuthResult, FieldMap, FieldValue, SchemaValue}
 use serde_json::{Value, json};
 
 use crate::plugins::oauth::{
-    OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfoRequest,
+    OAuthProfileMapper, OAuthProvider, OAuthUserInfoRequest,
     resolved::ResolvedProvider,
     social_profile::{ProviderProfile, fetch_user_info_from_provider},
 };

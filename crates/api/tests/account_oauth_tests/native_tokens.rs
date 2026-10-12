@@ -182,7 +182,7 @@ impl OAuthUserInfoHandler for NativeAccountInfo {
 impl OAuthAccountSubject for NativeAccountInfo {
     async fn resolve_subject_native(
         &self,
-        _: &OAuthUserInfoRequest,
+        _: &FieldValue,
         _: &FieldValue,
     ) -> AuthResult<FieldValue> {
         self.calls.lock().unwrap().push("subject");

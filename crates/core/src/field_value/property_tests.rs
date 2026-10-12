@@ -292,7 +292,12 @@ fn native_assignments_preserve_setter_receiver_and_original_failure_without_gett
         assert!(!value.has_property("property")?);
         let _ = lock(&observation.receiver)?.take();
     }
-    for value in [false.into(), 0.into(), f64::NAN.into(), "text".into()] {
+    for value in [
+        FieldValue::from(false),
+        0.into(),
+        f64::NAN.into(),
+        "text".into(),
+    ] {
         assert!(
             matches!(value.set_model_property("property", true.into()), Err(AuthError::TypeError(message)) if message == "Attempted to assign to readonly property.")
         );

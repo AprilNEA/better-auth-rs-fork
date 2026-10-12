@@ -5,7 +5,7 @@
 
 use crate::{
     AuthError, AuthResult, FieldArray, FieldDate, FieldFunction, FieldMap, FieldObject, FieldValue,
-    field_value::FieldObjectSource,
+    field_value::{FieldObjectSource, FieldPropertyDescriptor},
 };
 use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
@@ -37,6 +37,10 @@ fn same_receiver(observation: &Observation, receiver: &FieldValue) -> AuthResult
 impl FieldObjectSource for Properties {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         self.fields.own_keys()
+    }
+
+    fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        self.fields.own_property_descriptor(name)
     }
 
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
