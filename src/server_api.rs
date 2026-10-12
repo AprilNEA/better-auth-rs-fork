@@ -26,6 +26,19 @@ pub struct EndpointInput {
     pub query: Option<Value>,
 }
 
+/// Native input to a registered endpoint, retaining dynamic values and object identities.
+#[derive(Debug, Default)]
+pub struct NativeEndpointInput {
+    /// Original Request for URL resolution and callbacks; input does not inherit its body or query.
+    pub request: Option<better_auth_core::AuthRequest>,
+    /// Preserve omitted headers separately from an explicitly empty header collection.
+    pub headers: Option<HashMap<String, String>>,
+    /// Native body consumed by endpoint hooks and the matched schema.
+    pub body: better_auth_core::FieldValue,
+    /// Native query consumed by endpoint hooks and the matched schema.
+    pub query: better_auth_core::FieldValue,
+}
+
 impl<S: AuthSchema> BetterAuth<S> {
     /// Access the registered server-only organization endpoints.
     pub fn organization(&self) -> AuthResult<crate::plugins::organization::OrganizationApi<'_, S>> {
@@ -45,25 +58,50 @@ impl<S: AuthSchema> BetterAuth<S> {
         path: &str,
         input: EndpointInput,
     ) -> AuthResult<better_auth_core::AuthResponse> {
+        let mut request =
+            better_auth_core::AuthRequest::new(method, path).with_optional_headers(input.headers);
+        if let Some(original) = input.request {
+            request = request.with_original_request(original);
+        }
+        request.body = input.body.as_ref().map(serde_json::to_vec).transpose()?;
+        request.query = input.query;
+        self.call_endpoint_request(request).await
+    }
+
+    /// Call a registered endpoint without projecting native body or query before validation.
+    /// HTTP hooks remain separate. Endpoint hooks, schemas, and errors use the shared dispatcher.
+    pub async fn call_endpoint_value(
+        &self,
+        method: better_auth_core::HttpMethod,
+        path: &str,
+        input: NativeEndpointInput,
+    ) -> AuthResult<better_auth_core::AuthResponse> {
+        let mut request =
+            better_auth_core::AuthRequest::new(method, path).with_optional_headers(input.headers);
+        if let Some(original) = input.request {
+            request = request.with_original_request(original);
+        }
+        request.set_endpoint_body(
+            better_auth_core::endpoint_input::ValidatedInput::unvalidated_native(input.body),
+        );
+        request.set_endpoint_query(
+            better_auth_core::endpoint_input::ValidatedInput::unvalidated_native(input.query),
+        );
+        self.call_endpoint_request(request).await
+    }
+
+    async fn call_endpoint_request(
+        &self,
+        request: better_auth_core::AuthRequest,
+    ) -> AuthResult<better_auth_core::AuthResponse> {
         let source = better_auth_core::NativeRequest {
-            request: input.request.as_ref(),
-            headers: input.headers.as_ref(),
+            request: request.original_request(),
+            headers: request.endpoint_headers(),
         };
         self.context()
             .with_native_context(source, |auth| {
-                let input = &input;
+                let mut request = request.clone();
                 async move {
-                    let mut request = better_auth_core::AuthRequest::new(method, path)
-                        .with_optional_headers(input.headers.clone());
-                    if let Some(original) = &input.request {
-                        request = request.with_original_request(original.clone());
-                    }
-                    request.body = input
-                        .body
-                        .clone()
-                        .map(|body| serde_json::to_vec(&body))
-                        .transpose()?;
-                    request.query = input.query.clone();
                     let mut context = better_auth_core::RequestHookContext::from_request(&request)?;
                     context.body = request.input_field_value()?;
                     context.meta = better_auth_core::RequestMeta::from_request_with_config(
@@ -73,9 +111,12 @@ impl<S: AuthSchema> BetterAuth<S> {
                     let route = crate::core::auth::core_routes()
                         .into_iter()
                         .chain(self.plugins().iter().flat_map(|plugin| plugin.routes()))
-                        .find(|route| route.matches(request.method(), path));
+                        .find(|route| route.matches(request.method(), request.path()));
                     better_auth_core::with_request_hook_context_value(context, async {
-                        better_auth_core::hooks::set_request_hook_route(path, route.as_ref());
+                        better_auth_core::hooks::set_request_hook_route(
+                            request.path(),
+                            route.as_ref(),
+                        );
                         self.dispatch_endpoint(&mut request, false, &auth).await
                     })
                     .await

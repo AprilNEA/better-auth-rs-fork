@@ -228,7 +228,7 @@ impl PasswordManagementPlugin {
     ) -> AuthResult<AuthResponse> {
         let mut body = request::reset(req)?;
         if body.token.as_deref().is_none_or(str::is_empty) {
-            body.token = req.query_string("token")?.map(str::to_owned);
+            body.token = req.query_string("token")?;
         }
         let response = reset_password_core(&body, req, ctx).await?;
         AuthResponse::json(None, &response)
@@ -286,7 +286,7 @@ impl PasswordManagementPlugin {
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
         let query = ResetPasswordTokenQuery {
-            callback_url: req.query_string("callbackURL")?.map(str::to_owned),
+            callback_url: req.query_string("callbackURL")?,
         };
         match reset_password_token_core(token, &query, ctx).await? {
             ResetPasswordTokenResult::Redirect(url) => {

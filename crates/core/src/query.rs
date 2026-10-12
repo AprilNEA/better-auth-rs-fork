@@ -63,7 +63,7 @@ pub fn parse_url_query(query: &str) -> Value {
 /// Run only the endpoint handler and its nested callbacks with validated query input.
 /// The outer dispatch context retains raw input for before and after hooks.
 pub fn with_validated_query<T>(
-    query: Option<Value>,
+    query: FieldValue,
     future: impl Future<Output = T>,
 ) -> impl Future<Output = T> {
     let future = Box::pin(future);
@@ -77,18 +77,21 @@ pub fn with_validated_query<T>(
     }
 }
 
-fn type_name(value: &Value) -> &'static str {
+fn type_name(value: &FieldValue) -> &'static str {
     match value {
-        Value::Null => "null",
-        Value::Array(_) => "array",
-        Value::String(_) => "string",
-        Value::Number(_) => "number",
-        Value::Bool(_) => "boolean",
-        Value::Object(_) => "object",
+        FieldValue::Undefined => "undefined",
+        FieldValue::Null => "null",
+        FieldValue::Array(_) => "array",
+        FieldValue::String(_) | FieldValue::Utf16String(_) => "string",
+        FieldValue::Number(_) => "number",
+        FieldValue::Bool(_) => "boolean",
+        FieldValue::Object(_) => "object",
+        FieldValue::Date(_) => "date",
+        FieldValue::Function(_) => "function",
     }
 }
 
-fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthError {
+fn invalid_type(location: &str, expected: &str, value: &FieldValue) -> AuthError {
     AuthError::RequestValidation {
         message: format!(
             "[{location}] Invalid input: expected {expected}, received {}",
@@ -97,44 +100,62 @@ fn invalid_type(location: &str, expected: &str, value: &Value) -> AuthError {
     }
 }
 
-pub(crate) fn string_field<'a>(
-    query: Option<&'a Value>,
-    name: &str,
-) -> AuthResult<Option<&'a str>> {
-    let Some(query) = query else {
+pub(crate) fn string_field(query: &FieldValue, name: &str) -> AuthResult<Option<String>> {
+    if query.is_undefined() {
         return Ok(None);
-    };
+    }
     let object = query
         .as_object()
         .ok_or_else(|| invalid_type("query", "object", query))?;
-    object
-        .get(name)
-        .map(|value| {
-            value
-                .as_str()
-                .ok_or_else(|| invalid_type(&format!("query.{name}"), "string", value))
-        })
-        .transpose()
+    match object.get(name)?.unwrap_or_default() {
+        FieldValue::Undefined => Ok(None),
+        FieldValue::String(value) => Ok(Some(value)),
+        FieldValue::Utf16String(value) => value.to_utf8().map(Some).map_err(|error| {
+            AuthError::internal(format!(
+                "Query string cannot represent unpaired UTF-16 surrogates: {error}"
+            ))
+        }),
+        value => Err(invalid_type(&format!("query.{name}"), "string", &value)),
+    }
 }
 
 /// Validate the shared get-session query schema, including JavaScript boolean coercion.
 pub fn session_query(query: Option<Value>) -> AuthResult<Option<Value>> {
-    let Some(query) = query else {
-        return Ok(None);
-    };
+    crate::field_value::project_input_json(&session_query_value(
+        query.map(FieldValue::from).unwrap_or_default(),
+    )?)
+}
+
+/// Validate native get-session query values before applying JavaScript boolean coercion.
+pub fn session_query_native(
+    request: &crate::AuthRequest,
+) -> AuthResult<crate::endpoint_input::ValidatedInput> {
+    Ok(crate::endpoint_input::ValidatedInput::unvalidated_native(
+        session_query_value(request.input_query_field_value()?)?,
+    ))
+}
+
+pub(crate) fn session_query_value(query: FieldValue) -> AuthResult<FieldValue> {
+    if query.is_undefined() {
+        return Ok(query);
+    }
     let object = query
         .as_object()
         .ok_or_else(|| invalid_type("query", "object", &query))?;
-    let mut validated = Map::new();
+    let mut validated = crate::FieldMap::new();
     for name in ["disableCookieCache", "disableRefresh"] {
-        if let Some(value) = object.get(name) {
+        if let Some(value) = object.get(name)? {
             let _ = validated.insert(
                 name.into(),
-                Value::Bool(FieldValue::from_json(value.clone())?.is_truthy()),
+                if value.is_undefined() {
+                    value
+                } else {
+                    value.is_truthy().into()
+                },
             );
         }
     }
-    Ok(Some(Value::Object(validated)))
+    Ok(validated.into())
 }
 
 #[cfg(test)]
@@ -167,6 +188,37 @@ mod tests {
         assert!(session_query(Some(Value::Null)).is_err());
     }
 
+    #[test]
+    fn session_query_coerces_native_values_without_serializing_them() {
+        for (value, expected) in [
+            (FieldValue::Number(f64::NAN), false),
+            (FieldValue::Number(f64::INFINITY), true),
+            (FieldValue::Date(crate::FieldDate::invalid()), true),
+            (FieldValue::from(Vec::<FieldValue>::new()), true),
+            (FieldValue::Null, false),
+        ] {
+            let input = crate::FieldMap::from([
+                ("disableCookieCache".into(), value),
+                ("disableRefresh".into(), FieldValue::Undefined),
+                ("ignored".into(), true.into()),
+            ]);
+            let output = session_query_value(input.into()).unwrap();
+            assert_eq!(
+                output.as_object().unwrap().snapshot_fields().unwrap(),
+                crate::FieldMap::from([
+                    ("disableCookieCache".into(), expected.into()),
+                    ("disableRefresh".into(), FieldValue::Undefined),
+                ])
+            );
+        }
+        assert!(
+            session_query_value(FieldValue::Undefined)
+                .unwrap()
+                .is_undefined()
+        );
+        assert!(session_query_value(FieldValue::Null).is_err());
+    }
+
     #[tokio::test]
     async fn handler_projection_restores_raw_query_after_success_and_error() {
         let mut request = AuthRequest::new(HttpMethod::Get, "/get-session");
@@ -175,9 +227,12 @@ mod tests {
         crate::with_request_hook_context(&request, async {
             for fail in [false, true] {
                 let result: AuthResult<()> =
-                    with_validated_query(Some(json!({"disableCookieCache":true})), async {
+                    with_validated_query(json!({"disableCookieCache":true}).into(), async {
                         let context = crate::hooks::current_request_hook_context().unwrap();
-                        assert_eq!(context.query, Some(json!({"disableCookieCache":true})));
+                        assert_eq!(
+                            context.query.json()?,
+                            Some(json!({"disableCookieCache":true}))
+                        );
                         assert_eq!(context.request.query, raw);
                         if fail {
                             Err(crate::AuthError::bad_request("endpoint failed"))
@@ -188,7 +243,10 @@ mod tests {
                     .await;
                 assert_eq!(result.is_err(), fail);
                 assert_eq!(
-                    crate::hooks::current_request_hook_context().unwrap().query,
+                    crate::hooks::current_request_hook_context()
+                        .unwrap()
+                        .query
+                        .json()?,
                     raw
                 );
             }

@@ -764,7 +764,14 @@ impl ApiKeyPlugin {
             .query_string("id")?
             .ok_or_else(|| AuthError::bad_request("Query parameter 'id' is required"))?;
         let config_id = req.query_string("configId")?;
-        let response = get_key_core(id, config_id, session.user_field("id")?, self, ctx).await?;
+        let response = get_key_core(
+            &id,
+            config_id.as_deref(),
+            session.user_field("id")?,
+            self,
+            ctx,
+        )
+        .await?;
         Ok(AuthResponse::native(None, response.field_values()?.into()))
     }
 

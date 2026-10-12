@@ -31,7 +31,7 @@ pub async fn handle_get_invitation(
             ),
             error => error,
         })?;
-    let query = crate::plugins::query_input::parse::<GetInvitationQuery>(&req.query)?;
+    let query = crate::plugins::query_input::parse::<GetInvitationQuery>(req)?;
     match get_invitation_core(&query, &session, config, ctx).await? {
         Some(response) => Ok(AuthResponse::native(None, response.field_values()?.into())),
         None => Err(AuthError::from_status(
@@ -57,7 +57,7 @@ pub async fn handle_list_invitations(
                     .into(),
             )
         })?;
-    let query = crate::plugins::query_input::parse::<ListInvitationsQuery>(&req.query)?;
+    let query = crate::plugins::query_input::parse::<ListInvitationsQuery>(req)?;
     let invitations = list_invitations_core(&query, &session, ctx).await?;
     let invitations = invitations
         .iter()
@@ -83,7 +83,7 @@ pub async fn handle_list_user_invitations(
         better_auth_core::FieldValue::Null,
         ctx,
     );
-    if endpoint.request.is_some() && email.is_some_and(|email| !email.is_empty()) {
+    if endpoint.request.is_some() && email.as_ref().is_some_and(|email| !email.is_empty()) {
         return Err(AuthError::from_status(
             "BAD_REQUEST",
             better_auth_core::FieldMap::from([(
@@ -93,7 +93,7 @@ pub async fn handle_list_user_invitations(
             .into(),
         ));
     }
-    let invitations = list_user_invitations_core(session.as_ref(), email, ctx).await?;
+    let invitations = list_user_invitations_core(session.as_ref(), email.as_deref(), ctx).await?;
     let invitations = invitations
         .iter()
         .map(|invitation| {

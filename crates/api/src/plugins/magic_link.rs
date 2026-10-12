@@ -230,7 +230,7 @@ impl MagicLinkPlugin {
         let error_callback = callback_url(req, ctx, &base, "errorCallbackURL", callback.as_str())?;
         let new_user_callback =
             callback_url(req, ctx, &base, "newUserCallbackURL", callback.as_str())?;
-        let stored = self.config.store_token.encode(token).await?;
+        let stored = self.config.store_token.encode(&token).await?;
         let Some(value) = ctx
             .database
             .consume_verification_by_identifier(&stored)
@@ -318,7 +318,10 @@ impl MagicLinkPlugin {
         ctx.session_manager()
             .set_native_session_cookie(req, issued, None)
             .await?;
-        let response = if req.query_string("callbackURL")?.is_none_or(str::is_empty) {
+        let response = if req
+            .query_string("callbackURL")?
+            .is_none_or(|value| value.is_empty())
+        {
             AuthResponse::native(
                 None,
                 better_auth_core::FieldMap::from([
@@ -355,8 +358,8 @@ fn callback_url<S: AuthSchema>(
     let value = req
         .query_string(key)?
         .filter(|value| !value.is_empty())
-        .unwrap_or(default);
-    let decoded = urlencoding::decode(value)
+        .unwrap_or_else(|| default.to_owned());
+    let decoded = urlencoding::decode(&value)
         .map_err(|error| AuthError::bad_request(format!("Invalid callback URL: {error}")))?;
     if !ctx.config.advanced.disable_origin_check && !ctx.is_redirect_target_trusted(&decoded) {
         return Err(AuthError::forbidden("Invalid callbackURL"));

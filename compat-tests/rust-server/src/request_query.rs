@@ -55,9 +55,10 @@ fn original_url(request: &AuthRequest) -> Option<String> {
         })
 }
 impl Trace {
-    fn record(&self, phase: &str, req: &AuthRequest) {
+    fn record(&self, phase: &str, req: &AuthRequest) -> AuthResult<()> {
         let context = current_request_hook_context().unwrap();
-        self.0.lock().unwrap().push(json!({"phase":phase,"path":context.path,"query":snapshot(&context.query),"url":original_url(req)}));
+        self.0.lock().unwrap().push(json!({"phase":phase,"path":context.path,"query":snapshot(&context.query.json()?),"url":original_url(req)}));
+        Ok(())
     }
 }
 #[async_trait::async_trait]
@@ -77,7 +78,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Trace {
         req: &AuthRequest,
         _: &AuthContext<S>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
-        self.record("before", req);
+        self.record("before", req)?;
         self.1.current("plugin.before", None);
         Ok(None)
     }
@@ -89,10 +90,10 @@ impl<S: AuthSchema> AuthPlugin<S> for Trace {
         if !matches!(req.path(), "/query/raw" | "/query/validated") {
             return Ok(None);
         }
-        self.record("endpoint", req);
+        self.record("endpoint", req)?;
         Ok(Some(AuthResponse::json(
             200,
-            &json!({"query":snapshot(&req.query),"url":original_url(req)}),
+            &json!({"query":snapshot(&req.input_query()?),"url":original_url(req)}),
         )?))
     }
     async fn after_request(
@@ -101,7 +102,7 @@ impl<S: AuthSchema> AuthPlugin<S> for Trace {
         response: &mut AuthResponse,
         _: &AuthContext<S>,
     ) -> AuthResult<()> {
-        self.record("after", req);
+        self.record("after", req)?;
         self.1.current("after", Some(response));
         Ok(())
     }

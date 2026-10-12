@@ -56,8 +56,12 @@ impl AccountSelection {
         Self::from_value(value)
     }
 
-    fn from_query(req: &AuthRequest) -> Result<Self, String> {
-        Self::from_value(req.query.clone().unwrap_or(serde_json::Value::Null))
+    fn from_query(req: &AuthRequest) -> AuthResult<Self> {
+        Self::from_value(req.input_query()?.unwrap_or(serde_json::Value::Null)).map_err(|message| {
+            AuthError::RequestValidation {
+                message: format!("[query] {message}"),
+            }
+        })
     }
 
     fn from_value(value: serde_json::Value) -> Result<Self, String> {
@@ -506,10 +510,7 @@ pub(super) async fn handle_account_info(
     req: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AuthResponse> {
-    let selection = match AccountSelection::from_query(req) {
-        Ok(selection) => selection,
-        Err(message) => return invalid_selection("query", message),
-    };
+    let selection = AccountSelection::from_query(req)?;
     let user_id = selection.resolve_user_id(req, ctx).await?;
     let account = selection.resolve(req, &user_id, ctx).await?;
     let provider = config

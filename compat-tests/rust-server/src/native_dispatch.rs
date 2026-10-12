@@ -32,7 +32,7 @@ fn absent(value: Option<Value>) -> Value {
 }
 impl Trace {
     fn record(&self, phase: &str, request: &AuthRequest) -> AuthResult<()> {
-        self.0.lock().unwrap().events.push(json!({"phase":phase,"path":request.path(),"ambient":absent(better_auth_core::hooks::current_request_hook_context().and_then(|scope|scope.path.map(Value::String))),"body":absent(request.input_body()?),"query":absent(request.query.clone()),"request":request.original_request().and_then(AuthRequest::url).map(|url|url.path()),"header":request.header("x-literal")}));
+        self.0.lock().unwrap().events.push(json!({"phase":phase,"path":request.path(),"ambient":absent(better_auth_core::hooks::current_request_hook_context().and_then(|scope|scope.path.map(Value::String))),"body":absent(request.input_body()?),"query":absent(request.input_query()?),"request":request.original_request().and_then(AuthRequest::url).map(|url|url.path()),"header":request.header("x-literal")}));
         Ok(())
     }
     fn output(&self, value: &str) -> Value {
@@ -100,7 +100,7 @@ impl BeforeEndpointHook<S> for Trace {
             return Ok(Some(BeforeRequestAction::MergeContext(
                 if operation == "getVerificationOTP" {
                     EndpointInputPatch {
-                        query: Some(patch),
+                        query: Some(patch.into()),
                         ..Default::default()
                     }
                 } else {

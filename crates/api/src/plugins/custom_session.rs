@@ -143,7 +143,7 @@ impl<S: AuthSchema> AuthPlugin<S> for CustomSessionPlugin<S> {
         vec![
             AuthRoute::get("/get-session", "getSession")
                 .require_headers(true)
-                .query_validator(better_auth_core::query::session_query),
+                .query_validator_native(better_auth_core::query::session_query_native),
         ]
     }
 

@@ -80,7 +80,7 @@ pub(super) async fn resolve_user<S: AuthSchema>(
     let user = resolver
         .resolve(
             PasskeyEndpoint::new(ctx, req, &Value::Null, &users),
-            req.query_string("context")?,
+            req.query_string("context")?.as_deref(),
         )
         .await?;
     if !user.id.is_truthy()? || !user.name.is_truthy()? {

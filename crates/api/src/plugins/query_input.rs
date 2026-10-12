@@ -1,15 +1,19 @@
 mod routes;
 pub(crate) use routes::*;
 
-use better_auth_core::AuthResult;
+use better_auth_core::{AuthRequest, AuthResult};
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 use super::json_body::{invalid_type, validation_error};
 
-pub(crate) fn parse<T: Default + DeserializeOwned>(query: &Option<Value>) -> AuthResult<T> {
+/// Deserialize the effective input at an explicit JSON-only consumer boundary.
+pub(crate) fn parse<T: Default + DeserializeOwned>(request: &AuthRequest) -> AuthResult<T> {
+    parse_value(request.input_query()?)
+}
+
+fn parse_value<T: Default + DeserializeOwned>(query: Option<Value>) -> AuthResult<T> {
     query
-        .clone()
         .map(serde_json::from_value)
         .transpose()
         .map(|value| value.unwrap_or_default())
@@ -63,9 +67,15 @@ fn finish(output: Map<String, Value>, errors: Vec<String>) -> AuthResult<Option<
 }
 
 pub(crate) fn string_map(
-    query: &Option<Value>,
+    request: &AuthRequest,
 ) -> AuthResult<std::collections::HashMap<String, String>> {
-    parse(query)
+    parse(request)
+}
+
+pub(crate) fn string_map_value(
+    query: Option<Value>,
+) -> AuthResult<std::collections::HashMap<String, String>> {
+    parse_value(query)
 }
 
 pub(crate) fn callback(query: Option<Value>) -> AuthResult<Option<Value>> {

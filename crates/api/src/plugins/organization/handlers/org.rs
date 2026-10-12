@@ -835,7 +835,7 @@ pub async fn handle_get_organization(
             .map(|value| value.filter(|value| !value.is_empty()))
     };
     let organization = if let Some(slug) = nonempty("organizationSlug")? {
-        ctx.database.get_organization_by_slug(slug).await?
+        ctx.database.get_organization_by_slug(&slug).await?
     } else {
         let id = nonempty("organizationId")?
             .map(better_auth_core::FieldValue::from)
@@ -889,7 +889,7 @@ pub async fn handle_get_full_organization(
     config: &OrganizationConfig,
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
-    let query = crate::plugins::query_input::parse::<GetFullOrganizationQuery>(&req.query)?;
+    let query = crate::plugins::query_input::parse::<GetFullOrganizationQuery>(req)?;
     let response = get_full_organization_core(&query, &session, config, ctx).await?;
     Ok(AuthResponse::native(
         None,

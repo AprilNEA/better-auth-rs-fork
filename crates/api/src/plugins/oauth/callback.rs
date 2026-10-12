@@ -40,12 +40,12 @@ pub(super) async fn handle_callback(
             merged.extend(body.clone());
         } else {
             let body = parse_body(req)?;
-            merged.extend(crate::plugins::query_input::string_map(&body)?);
+            merged.extend(crate::plugins::query_input::string_map_value(body)?);
         }
 
         // Match the TS callback route: POST body seeds the redirect, but
         // explicit query parameters win over conflicting body fields.
-        merged.extend(crate::plugins::query_input::string_map(&req.query)?);
+        merged.extend(crate::plugins::query_input::string_map(req)?);
 
         let mut params = url::form_urlencoded::Serializer::new(String::new());
         let mut pairs: Vec<_> = merged.iter().collect();
@@ -61,7 +61,7 @@ pub(super) async fn handle_callback(
         )));
     }
 
-    let merged = crate::plugins::query_input::string_map(&req.query)?;
+    let merged = crate::plugins::query_input::string_map(req)?;
 
     let error = merged.get("error").cloned();
     let state_param =
@@ -447,7 +447,7 @@ pub(super) fn body(
     req: &AuthRequest,
 ) -> AuthResult<better_auth_core::endpoint_input::ValidatedBody> {
     let projection = parse_body(req)?;
-    let typed = crate::plugins::query_input::string_map(&projection)?;
+    let typed = crate::plugins::query_input::string_map_value(projection.clone())?;
     Ok(better_auth_core::endpoint_input::ValidatedBody::new(
         projection, typed,
     ))

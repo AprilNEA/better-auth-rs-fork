@@ -670,7 +670,7 @@ pub async fn handle_list_members(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
-    let query = crate::plugins::query_input::parse::<ListMembersQuery>(&req.query)?;
+    let query = crate::plugins::query_input::parse::<ListMembersQuery>(req)?;
     let response = list_members_core(&query, config, &session, ctx).await?;
     Ok(AuthResponse::native(None, response.field_values()?.into()))
 }
@@ -681,7 +681,7 @@ pub async fn handle_get_active_member_role(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
 ) -> AuthResult<AuthResponse> {
     let session = require_native_session(req, ctx).await?;
-    let query = crate::plugins::query_input::parse::<GetActiveMemberRoleQuery>(&req.query)?;
+    let query = crate::plugins::query_input::parse::<GetActiveMemberRoleQuery>(req)?;
     let response = get_active_member_role_core(&query, &session, ctx).await?;
     Ok(AuthResponse::native(None, response.field_values()?.into()))
 }

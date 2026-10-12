@@ -319,7 +319,7 @@ pub(crate) async fn handle_team_request(
         }
         (HttpMethod::Get, "/organization/list-teams") => {
             let org = resolve_organization_id(
-                req.query_string("organizationId")?,
+                req.query_string("organizationId")?.as_deref(),
                 session,
                 AuthError::from_code(
                     "BAD_REQUEST",
@@ -429,6 +429,7 @@ pub(crate) async fn handle_team_request(
                 .query_string("organizationId")?
                 .filter(|id| !id.is_empty());
             let org = explicit_org
+                .as_deref()
                 .map(FieldValue::from)
                 .unwrap_or_else(|| session.active_organization_id.field_value());
             if !is_self || explicit_org.is_some() {

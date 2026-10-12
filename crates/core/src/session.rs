@@ -441,18 +441,11 @@ impl<S: AuthSchema> SessionManager<S> {
     ) -> impl std::future::Future<Output = AuthResult<SessionResolution<SessionSnapshot>>> + Send
     {
         async move {
-            let raw = if req.path() == "/get-session" {
-                req.query.clone()
-            } else {
-                Some(
-                    req.query
-                        .as_ref()
-                        .filter(|value| value.is_object())
-                        .cloned()
-                        .unwrap_or_else(|| serde_json::json!({})),
-                )
-            };
-            let query = crate::query::session_query(raw)?;
+            let mut raw = req.input_query_field_value()?;
+            if req.path() != "/get-session" && !raw.is_object() {
+                raw = crate::FieldMap::new().into();
+            }
+            let query = crate::query::session_query_value(raw)?;
             crate::query::with_validated_query(query, self.resolve_inner(req, read)).await
         }
     }
@@ -921,12 +914,13 @@ impl<S: AuthSchema> SessionManager<S> {
 }
 
 fn query_flag(req: &AuthRequest, name: &str) -> AuthResult<bool> {
-    req.query
-        .as_ref()
-        .and_then(|query| query.get(name))
-        .map(|value| crate::FieldValue::from_json(value.clone()).map(|value| value.is_truthy()))
-        .transpose()
-        .map(|value| value.unwrap_or(false))
+    Ok(req
+        .input_query_field_value()?
+        .as_object()
+        .map(|query| query.get(name))
+        .transpose()?
+        .flatten()
+        .is_some_and(|value| value.is_truthy()))
 }
 
 fn relationship_array_error() -> AuthError {

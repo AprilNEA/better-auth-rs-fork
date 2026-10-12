@@ -127,7 +127,7 @@ pub(super) async fn generate_register_options_core(
     let expires_at = Utc::now() + Duration::seconds(config.challenge_ttl_secs);
     let serialized_state = serde_json::to_string(&StoredRegistrationState {
         user: user.clone(),
-        context: req.query_string("context")?.map(str::to_owned),
+        context: req.query_string("context")?,
         state: RegistrationChallenge { rs: state },
     })?;
     let _ = ctx

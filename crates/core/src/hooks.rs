@@ -47,7 +47,8 @@ pub struct RequestHookContext {
     /// Values captured from the matched endpoint path.
     pub params: std::collections::HashMap<String, String>,
     pub headers: std::collections::HashMap<String, String>,
-    pub query: Option<serde_json::Value>,
+    /// Effective query input, preserving native values and identities.
+    pub query: crate::FieldValue,
     /// Parsed endpoint input. An absent request body remains absent.
     pub body: crate::FieldValue,
     pub meta: RequestMeta,
@@ -64,7 +65,7 @@ impl RequestHookContext {
             operation_id: None,
             params: Default::default(),
             headers: request.headers.clone(),
-            query: request.query.clone(),
+            query: request.input_query_field_value()?,
             body: request.hook_field_value(),
             meta: RequestMeta::from_request(request),
         })
@@ -146,11 +147,12 @@ pub fn set_request_hook_route(path: &str, route: Option<&crate::AuthRoute>) {
 /// Preserve the matched route, trusted IP metadata, and HTTP error policy.
 pub fn update_request_hook_context(request: &AuthRequest) -> crate::AuthResult<()> {
     let body = request.input_field_value()?;
+    let query = request.input_query_field_value()?;
     let _ = REQUEST_HOOK_CONTEXT.try_with(|context| {
         let mut context = context.borrow_mut();
         context.method = request.method.clone();
         context.headers = request.headers.clone();
-        context.query = request.query.clone();
+        context.query = query;
         context.body = body;
         context.request = request.clone();
     });

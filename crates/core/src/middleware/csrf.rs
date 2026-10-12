@@ -199,24 +199,34 @@ impl CsrfMiddleware {
         }
 
         let body = Self::request_body_map(req).unwrap_or_default();
-        let query_callback = req
-            .query
-            .as_ref()
-            .and_then(|query| query.get("callbackURL"))
-            .cloned();
-        let callback = body
+        let body_field = |name: &str| {
+            body.get(name)
+                .cloned()
+                .map(crate::FieldValue::from)
+                .unwrap_or_default()
+        };
+        let callback = match body
             .get("callbackURL")
             .filter(|value| Self::is_truthy(value))
-            .or(query_callback.as_ref());
+        {
+            Some(value) => value.clone().into(),
+            None => req
+                .input_query_field_value()?
+                .as_object()
+                .map(|query| query.get("callbackURL"))
+                .transpose()?
+                .flatten()
+                .unwrap_or_default(),
+        };
         for (name, value) in [
             ("callbackURL", callback),
-            ("redirectTo", body.get("redirectTo")),
-            ("errorCallbackURL", body.get("errorCallbackURL")),
-            ("newUserCallbackURL", body.get("newUserCallbackURL")),
+            ("redirectTo", body_field("redirectTo")),
+            ("errorCallbackURL", body_field("errorCallbackURL")),
+            ("newUserCallbackURL", body_field("newUserCallbackURL")),
         ] {
-            let Some(value) = value.filter(|value| Self::is_truthy(value)) else {
+            if !value.is_truthy() {
                 continue;
-            };
+            }
             let value = value.as_str().ok_or_else(|| {
                 AuthError::bad_request(format!(
                     "{}: expected a string",

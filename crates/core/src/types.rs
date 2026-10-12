@@ -50,14 +50,16 @@ pub struct AuthRequest {
     pub path: String,
     pub headers: HashMap<String, String>,
     pub body: Option<Vec<u8>>,
-    /// Raw endpoint query. Native omission remains distinct from null and an empty object.
+    /// Raw JSON query. Use `input_query_field_value` for the effective native or validated input.
     pub query: Option<serde_json::Value>,
     url: Option<url::Url>,
     base_relative_path: bool,
     original_request: Option<std::sync::Arc<AuthRequest>>,
     pub(crate) parsed_http_body: Option<crate::http_body::ParsedHttpBody>,
     pub(crate) endpoint_body: Option<crate::endpoint_input::EndpointBody>,
+    pub(crate) endpoint_query: Option<crate::endpoint_input::EndpointQuery>,
     pub(crate) raw_body_input: crate::endpoint_input::RequestBodyCache,
+    pub(crate) raw_query_input: crate::endpoint_input::RequestQueryCache,
     /// Session authenticated by a trusted plugin hook for the current request.
     pub(crate) virtual_session: Option<crate::wire::SessionView>,
     /// Cookie updates from session middleware, shared by normalized request clones.
@@ -544,7 +546,9 @@ impl AuthRequest {
             original_request: None,
             parsed_http_body: None,
             endpoint_body: None,
+            endpoint_query: None,
             raw_body_input: Default::default(),
+            raw_query_input: Default::default(),
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
@@ -578,7 +582,9 @@ impl AuthRequest {
             original_request: None,
             parsed_http_body: None,
             endpoint_body: None,
+            endpoint_query: None,
             raw_body_input: Default::default(),
+            raw_query_input: Default::default(),
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
@@ -592,8 +598,8 @@ impl AuthRequest {
     }
 
     /// Read a scalar query field without collapsing arrays or null into omission.
-    pub fn query_string(&self, name: &str) -> crate::AuthResult<Option<&str>> {
-        crate::query::string_field(self.query.as_ref(), name)
+    pub fn query_string(&self, name: &str) -> crate::AuthResult<Option<String>> {
+        crate::query::string_field(&self.input_query_field_value()?, name)
     }
 
     pub fn method(&self) -> &HttpMethod {

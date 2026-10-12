@@ -38,7 +38,7 @@ impl Hooks {
             .0
             .lock()
             .map_err(|_| AuthError::internal("test state poisoned"))?;
-        state.events.push(json!({"phase":phase,"path":request.path(),"ambient":better_auth_core::hooks::current_request_hook_context().and_then(|scope|scope.path).map(Value::String).unwrap_or_else(||json!({"$undefined":true})),"body":request.input_body()?,"query":request.query,"request":request.original_request().is_some(),"headers":request.headers}));
+        state.events.push(json!({"phase":phase,"path":request.path(),"ambient":better_auth_core::hooks::current_request_hook_context().and_then(|scope|scope.path).map(Value::String).unwrap_or_else(||json!({"$undefined":true})),"body":request.input_body()?,"query":request.input_query()?,"request":request.original_request().is_some(),"headers":request.headers}));
         Ok(state.mode.clone())
     }
     fn mode(&self, mode: &str) -> AuthResult<()> {

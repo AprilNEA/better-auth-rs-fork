@@ -68,6 +68,7 @@ impl PasskeyPlugin {
         let passkey_name = req.query_string("name")?;
         let authenticator_attachment = req.query_string("authenticatorAttachment")?;
         if authenticator_attachment
+            .as_deref()
             .is_some_and(|value| !matches!(value, "platform" | "cross-platform"))
         {
             return Err(AuthError::RequestValidation { message: "[query.authenticatorAttachment] Invalid option: expected one of \"platform\"|\"cross-platform\"".into() });
@@ -76,8 +77,8 @@ impl PasskeyPlugin {
         let (result, cookie_header) = generate_register_options_core(
             &user,
             req,
-            passkey_name,
-            authenticator_attachment,
+            passkey_name.as_deref(),
+            authenticator_attachment.as_deref(),
             &self.config,
             ctx,
         )

@@ -62,12 +62,12 @@ impl<S: better_auth_core::AuthSchema> AuthPlugin<S> for SessionManagementPlugin 
         vec![
             AuthRoute::get("/get-session", "getSession")
                 .require_headers(true)
-                .query_validator(better_auth_core::query::session_query),
+                .query_validator_native(better_auth_core::query::session_query_native),
             // Upstream declares `/get-session` as `method: ["GET", "POST"]`;
             // the POST form requires `session.defer_session_refresh`.
             AuthRoute::post("/get-session", "getSession")
                 .require_headers(true)
-                .query_validator(better_auth_core::query::session_query),
+                .query_validator_native(better_auth_core::query::session_query_native),
             AuthRoute::post("/sign-out", "signOut")
                 .require_headers(true)
                 .body_validator(super::json_body::sign_out_body),

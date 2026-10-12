@@ -3,10 +3,10 @@
 use crate::{AuthRequest, AuthResult, FieldValue, RuntimeExtensions};
 use serde_json::Value;
 
-mod body_validator;
-pub use body_validator::BodyValidator;
+mod validator;
+pub use validator::{BodyValidator, InputValidator, QueryValidator};
 mod request_cache;
-pub(crate) use request_cache::RequestBodyCache;
+pub(crate) use request_cache::{RequestBodyCache, RequestQueryCache};
 
 #[cfg(test)]
 mod dispatch_tests;
@@ -15,24 +15,29 @@ mod tests;
 
 /// One schema result, retaining its typed input and exact callback projection.
 #[derive(Clone)]
-pub struct ValidatedBody {
+pub struct ValidatedInput {
     projection: FieldValue,
     typed: RuntimeExtensions,
 }
 
-impl std::fmt::Debug for ValidatedBody {
+/// The body schema result. Query schemas use the same native input representation.
+pub type ValidatedBody = ValidatedInput;
+
+impl std::fmt::Debug for ValidatedInput {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_struct("ValidatedBody")
+            .debug_struct("ValidatedInput")
             .finish_non_exhaustive()
     }
 }
 
-impl ValidatedBody {
+impl ValidatedInput {
+    /// Retain a JSON schema result and its typed value.
     pub fn new<T: Send + Sync + 'static>(projection: Option<Value>, value: T) -> Self {
         Self::native(projection.map(FieldValue::from).unwrap_or_default(), value)
     }
 
+    /// Retain a native schema result without reading properties or converting values.
     pub fn native<T: Send + Sync + 'static>(projection: FieldValue, value: T) -> Self {
         let mut typed = RuntimeExtensions::default();
         typed.insert(value);
@@ -49,11 +54,12 @@ impl ValidatedBody {
         self.projection.clone()
     }
 
-    /// Preserve input for endpoints without a body schema.
+    /// Preserve JSON input for endpoints without a schema.
     pub fn unvalidated(projection: Option<Value>) -> Self {
         Self::unvalidated_native(projection.map(FieldValue::from).unwrap_or_default())
     }
 
+    /// Preserve native input for endpoints without a schema.
     pub fn unvalidated_native(value: FieldValue) -> Self {
         Self {
             projection: value,
@@ -99,7 +105,13 @@ fn parse_record_body(request: &AuthRequest) -> AuthResult<serde_json::Map<String
 #[derive(Debug, Clone)]
 pub(crate) struct EndpointBody {
     source: Option<Vec<u8>>,
-    value: ValidatedBody,
+    value: ValidatedInput,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct EndpointQuery {
+    source: Option<Value>,
+    value: ValidatedInput,
 }
 
 impl AuthRequest {
@@ -154,6 +166,46 @@ impl AuthRequest {
         });
     }
 
+    /// Share endpoint query without reading properties or crossing a JSON boundary.
+    pub fn input_query_field_value(&self) -> AuthResult<FieldValue> {
+        self.endpoint_query
+            .as_ref()
+            .filter(|query| request_cache::same_query_source(&query.source, &self.query))
+            .map_or_else(
+                || self.raw_query_input.read(&self.query),
+                |query| Ok(query.value.field_value()),
+            )
+    }
+
+    /// Project endpoint query to JSON without invoking `toJSON` or replacing raw query input.
+    /// Use `input_query_field_value` to retain undefined, Date, non-finite numbers, and identity.
+    pub fn input_query(&self) -> AuthResult<Option<Value>> {
+        crate::field_value::project_input_json(&self.input_query_field_value()?)
+    }
+
+    pub(crate) fn unvalidated_query(&self) -> AuthResult<ValidatedInput> {
+        Ok(ValidatedInput::unvalidated_native(
+            self.input_query_field_value()?,
+        ))
+    }
+
+    /// Read the typed result installed by the matched route's query validator.
+    pub fn validated_query<T: Send + Sync + 'static>(&self) -> Option<&T> {
+        self.endpoint_query
+            .as_ref()
+            .filter(|query| request_cache::same_query_source(&query.source, &self.query))?
+            .value
+            .get()
+    }
+
+    /// Install query input while retaining the original query as the replacement guard.
+    pub fn set_endpoint_query(&mut self, value: ValidatedInput) {
+        self.endpoint_query = Some(EndpointQuery {
+            source: self.query.clone(),
+            value,
+        });
+    }
+
     pub(crate) fn projected_body(&self) -> Option<AuthResult<Option<Value>>> {
         self.parsed_input()
             .or_else(|| {
@@ -169,23 +221,40 @@ impl AuthRequest {
 /// Returned before-hook input changes, applied after all before hooks complete.
 #[derive(Debug, Clone, Default)]
 pub struct EndpointInputPatch {
+    /// Body changes retain the existing JSON patch contract.
     pub body: Option<Value>,
-    pub query: Option<Value>,
+    /// Query changes retain native values until the matched schema consumes them.
+    pub query: Option<FieldValue>,
 }
 
 impl EndpointInputPatch {
-    pub fn merge(&mut self, patch: Self) {
+    /// Accumulate patches with recursive object merge, array replacement, and nullish omission.
+    pub fn merge(&mut self, patch: Self) -> AuthResult<()> {
         merge_input(&mut self.body, patch.body);
-        merge_input(&mut self.query, patch.query);
+        if let Some(patch) = patch
+            .query
+            .filter(|value| !value.is_null() && !value.is_undefined())
+        {
+            match &mut self.query {
+                Some(current) => merge_field_value(current, patch)?,
+                None => self.query = Some(patch),
+            }
+        }
+        Ok(())
     }
 
+    /// Install merged inputs without replacing the original transport body or query.
     pub fn apply(self, request: &mut AuthRequest) -> AuthResult<()> {
         if let Some(patch) = self.body {
             let mut body = request.unvalidated_input()?;
             merge_field_value(&mut body.projection, patch.into())?;
             request.set_endpoint_body(body);
         }
-        merge_input(&mut request.query, self.query);
+        if let Some(patch) = self.query {
+            let mut query = request.unvalidated_query()?;
+            merge_field_value(&mut query.projection, patch)?;
+            request.set_endpoint_query(query);
+        }
         Ok(())
     }
 }
@@ -249,7 +318,7 @@ fn merge_value(target: &mut Value, patch: Value) {
 /// Install handler inputs while preserving the raw scope for endpoint after hooks.
 pub fn with_validated_input<T>(
     body: FieldValue,
-    query: Option<Value>,
+    query: FieldValue,
     future: impl std::future::Future<Output = T>,
 ) -> impl std::future::Future<Output = T> {
     let future = Box::pin(future);

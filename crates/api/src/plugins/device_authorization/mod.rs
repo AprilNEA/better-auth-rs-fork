@@ -472,7 +472,7 @@ impl DeviceAuthorizationPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<S>,
     ) -> AuthResult<AuthResponse> {
-        let Some(user_code) = req.query_string("user_code")?.map(str::to_owned) else {
+        let Some(user_code) = req.query_string("user_code")? else {
             return Err(device_error(
                 "BAD_REQUEST",
                 "invalid_request",

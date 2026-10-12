@@ -26,12 +26,15 @@ async fn session_without_refresh<S: AuthSchema>(
 ) -> AuthResult<Option<better_auth_core::session::NativeSessionData>> {
     let mut request = req.clone();
     let mut query = request
-        .query
-        .take()
-        .and_then(|query| query.as_object().cloned())
+        .input_query_field_value()?
+        .as_object()
+        .map(better_auth_core::FieldObject::snapshot_fields)
+        .transpose()?
         .unwrap_or_default();
     let _ = query.insert("disableRefresh".into(), true.into());
-    request.query = Some(query.into());
+    request.set_endpoint_query(
+        better_auth_core::endpoint_input::ValidatedInput::unvalidated_native(query.into()),
+    );
     ctx.native_session(&request, better_auth_core::session::SessionRead::Cached)
         .await
 }

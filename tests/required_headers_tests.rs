@@ -35,7 +35,7 @@ impl Hooks {
 
     fn record(&self, phase: &str, request: &AuthRequest) -> AuthResult<()> {
         self.trace()?.push(json!({
-            "phase":phase,"body":request.input_body()?,"query":request.query,
+            "phase":phase,"body":request.input_body()?,"query":request.input_query()?,
             "request":request.original_request().is_some(),
         }));
         Ok(())

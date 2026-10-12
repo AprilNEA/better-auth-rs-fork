@@ -299,8 +299,8 @@ impl UserManagementPlugin {
                 error => error,
             })?;
         let query: TokenQuery = serde_json::from_value(serde_json::json!({
-            "token": req.query_string("token")?.map(str::to_owned),
-            "callbackURL": req.query_string("callbackURL")?.map(str::to_owned),
+            "token": req.query_string("token")?,
+            "callbackURL": req.query_string("callbackURL")?,
         }))
         .map_err(|_| AuthError::bad_request("Verification token is required"))?;
         let response =

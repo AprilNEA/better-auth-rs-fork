@@ -89,7 +89,7 @@ impl<'a, S: AuthSchema> EmailOtpApi<'a, S> {
                 Some(serde_json::json!({"email":email,"type":kind})),
                 |request, context| async move {
                     let query: OtpInput =
-                        serde_json::from_value(request.query.unwrap_or_default())?;
+                        serde_json::from_value(request.input_query()?.unwrap_or_default())?;
                     let identifier = query.kind.identifier(&query.email.to_lowercase());
                     let record = match self.transaction {
                         Some(transaction) => {

@@ -46,7 +46,7 @@ fn callbacks(observations: Observations, fail: bool) -> OneTimeTokenCallbacks<St
                 session: endpoint.session.clone().map(FieldMap::from),
                 new_session: endpoint.new_session()?.map(FieldMap::from),
                 body: endpoint.body.clone(),
-                query: endpoint.query().cloned(),
+                query: endpoint.query()?,
                 headers: endpoint.headers().cloned(),
                 original_path: endpoint.request.map(|request| request.path().to_owned()),
                 path: endpoint.path.map(str::to_owned),

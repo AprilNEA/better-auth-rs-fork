@@ -167,7 +167,7 @@ impl AuthPlugin<StatelessSchema> for Fixture {
         }
         let mut event = self.endpoint_event("endpoint", request)?;
         event["body"] = request.parsed_http_body().cloned().unwrap_or(Value::Null);
-        event["query"] = serde_json::to_value(&request.query)?;
+        event["query"] = serde_json::to_value(request.input_query()?)?;
         Ok(Some(AuthResponse::json(200, &event)?))
     }
 

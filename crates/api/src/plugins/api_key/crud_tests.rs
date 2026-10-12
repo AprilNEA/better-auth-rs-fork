@@ -334,9 +334,9 @@ async fn list_rejects_invalid_pagination_instead_of_ignoring_it() {
                 field.to_string(),
                 serde_json::Value::from(value.to_string()),
             );
-        let response = match validate(req.query.clone()) {
+        let response = match validate.validate(&req).await {
             Ok(query) => {
-                req.query = query;
+                req.set_endpoint_query(query);
                 plugin.handle_list(&req, &ctx).await.unwrap()
             }
             Err(error) => error.to_auth_response(),

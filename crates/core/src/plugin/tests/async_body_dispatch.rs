@@ -94,7 +94,7 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
                             record("endpoint");
                             assert!(request.endpoint_headers().is_some());
                             assert_eq!(request.input_body()?, Some(json!({"displayName": "Ada"})));
-                            assert_eq!(request.query, Some(json!({"page": 1})));
+                            assert_eq!(request.input_query()?, Some(json!({"page": 1})));
                             assert_eq!(request.body.as_deref(), Some(RAW_BODY));
                             let original = request.original_request().unwrap();
                             assert_eq!(original.body.as_deref(), Some(RAW_BODY));
@@ -104,14 +104,18 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
                             );
                             let scope = current_request_hook_context().unwrap();
                             assert_eq!(scope.body.json()?, request.input_body()?);
-                            assert_eq!(scope.query, request.query);
+                            assert!(
+                                scope
+                                    .query
+                                    .strict_equals(&request.input_query_field_value()?)
+                            );
                             assert_eq!(scope.request.body.as_deref(), Some(RAW_BODY));
                             assert_eq!(scope.request.query, original.query);
                             AuthResponse::json(
                                 200,
                                 &json!({
                                     "displayName": request.validated_body::<String>().unwrap(),
-                                    "page": request.query.as_ref().unwrap()["page"],
+                                    "page": request.input_query()?.unwrap()["page"],
                                 }),
                             )
                         },
@@ -132,7 +136,11 @@ async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
                     );
                     let scope = current_request_hook_context().unwrap();
                     assert_eq!(scope.body.json().unwrap(), original.input_body().unwrap());
-                    assert_eq!(scope.query, original.query);
+                    assert!(
+                        scope
+                            .query
+                            .strict_equals(&original.input_query_field_value()?)
+                    );
                     Ok(())
                 })
                 .await

@@ -42,10 +42,19 @@ impl<'a, S: AuthSchema> EndpointContext<'a, S> {
         self.input_request.and_then(AuthRequest::endpoint_headers)
     }
 
-    /// Endpoint query, preserving native omission separately from null and an empty object.
-    pub fn query(&self) -> Option<&Value> {
+    /// Project endpoint query to JSON at the callback's explicit JSON boundary.
+    /// Use `query_field_value` to retain native values and identities.
+    pub fn query(&self) -> AuthResult<Option<Value>> {
         self.input_request
-            .and_then(|request| request.query.as_ref())
+            .map_or(Ok(None), AuthRequest::input_query)
+    }
+
+    /// Share the effective query without reading properties or converting native values.
+    pub fn query_field_value(&self) -> AuthResult<FieldValue> {
+        self.input_request.map_or(
+            Ok(FieldValue::Undefined),
+            AuthRequest::input_query_field_value,
+        )
     }
 
     /// Active endpoint input and shared server state, independent of the original Request.

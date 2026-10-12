@@ -147,6 +147,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
             req.with_separate_response_status()
         };
         internal_req.set_endpoint_body(internal_req.unvalidated_input()?);
+        internal_req.set_endpoint_query(internal_req.unvalidated_query()?);
         update_request_hook_context(&internal_req)?;
 
         let mut input_patch = crate::endpoint_input::EndpointInputPatch::default();
@@ -236,9 +237,12 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                         Some(validate) => validate.validate(&internal_req).await?,
                         None => internal_req.unvalidated_input()?,
                     };
-                    let query = match route.as_ref().and_then(|route| route.query_validator) {
-                        Some(validate) => validate(internal_req.query.clone())?,
-                        None => internal_req.query.clone(),
+                    let query = match route
+                        .as_ref()
+                        .and_then(|route| route.query_validator.as_ref())
+                    {
+                        Some(validate) => validate.validate(&internal_req).await?,
+                        None => internal_req.unvalidated_query()?,
                     };
                     if route.as_ref().is_some_and(|route| route.require_headers)
                         && internal_req.endpoint_headers().is_none()
@@ -249,7 +253,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                     }
                     let mut request = internal_req.clone();
                     request.set_endpoint_body(body);
-                    request.query = query;
+                    request.set_endpoint_query(query);
                     Ok(request)
                 }
                 .await;
@@ -260,7 +264,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                         }
                         let future = crate::endpoint_input::with_validated_input(
                             request.input_field_value()?,
-                            request.query.clone(),
+                            request.input_query_field_value()?,
                             handler(request.clone()),
                         );
                         let result = if request.is_server_only() {
@@ -270,7 +274,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
                             };
                             scope.path = Some("virtual:".into());
                             scope.request = request.clone();
-                            scope.query = request.query.clone();
+                            scope.query = request.input_query_field_value()?;
                             scope.body = request.input_field_value()?;
                             scope.operation_id =
                                 route.as_ref().map(|route| route.operation_id.clone());
@@ -385,7 +389,7 @@ fn apply_before_action(
             response.merge_endpoint_headers(internal.take_response_headers()?);
             return Ok(Some(response));
         }
-        Some(BeforeRequestAction::MergeContext(patch)) => input_patch.merge(patch),
+        Some(BeforeRequestAction::MergeContext(patch)) => input_patch.merge(patch)?,
         Some(BeforeRequestAction::ReplaceBody(body)) => {
             internal.body = Some(body.clone());
             original.body = Some(body);
@@ -518,7 +522,7 @@ impl<S: AuthSchema> AuthContext<S> {
         source: crate::NativeRequest<'_>,
         route: AuthRoute,
         body: crate::FieldValue,
-        query: Option<serde_json::Value>,
+        query: crate::FieldValue,
         handler: F,
     ) -> AuthResult<AuthResponse>
     where
@@ -529,7 +533,9 @@ impl<S: AuthSchema> AuthContext<S> {
         request.set_endpoint_body(crate::endpoint_input::ValidatedBody::unvalidated_native(
             body,
         ));
-        request.query = query;
+        request.set_endpoint_query(crate::endpoint_input::ValidatedInput::unvalidated_native(
+            query,
+        ));
         self.dispatch_native_request(source, route, request, handler)
             .await
     }

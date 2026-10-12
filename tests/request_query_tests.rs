@@ -8,6 +8,9 @@ use better_auth_core::{
 };
 use serde_json::{Value, json};
 
+#[path = "request_query_tests/native.rs"]
+mod native;
+
 struct Probe(Arc<Mutex<Vec<Value>>>);
 #[async_trait::async_trait]
 impl AuthPlugin<StatelessSchema> for Probe {
@@ -28,7 +31,7 @@ impl AuthPlugin<StatelessSchema> for Probe {
         self.0
             .lock()
             .unwrap()
-            .push(json!({"phase":"before","query":req.query}));
+            .push(json!({"phase":"before","query":req.input_query()?}));
         Ok(None)
     }
     async fn on_request(
@@ -41,7 +44,7 @@ impl AuthPlugin<StatelessSchema> for Probe {
             better_auth_core::FieldValue::Null,
             ctx,
         );
-        AuthResponse::json(200,&json!({"query":req.query,"scope":current_request_hook_context().unwrap().query,"original":endpoint.request.map(|request|request.query.clone())})).map(Some)
+        AuthResponse::json(200,&json!({"query":req.input_query()?,"scope":current_request_hook_context().unwrap().query,"original":endpoint.request.map(|request|request.query.clone())})).map(Some)
     }
     async fn after_request(
         &self,
@@ -52,7 +55,7 @@ impl AuthPlugin<StatelessSchema> for Probe {
         self.0
             .lock()
             .unwrap()
-            .push(json!({"phase":"after","query":req.query}));
+            .push(json!({"phase":"after","query":req.input_query()?}));
         Ok(())
     }
 }

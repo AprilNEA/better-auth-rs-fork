@@ -508,8 +508,9 @@ pub async fn handle_role_request(
             )
         }
         (HttpMethod::Get, "/organization/list-roles" | "/organization/get-role") => {
-            let selector: RoleSelector =
-                serde_json::from_value(req.query.clone().unwrap_or_else(|| serde_json::json!({})))?;
+            let selector: RoleSelector = serde_json::from_value(
+                req.input_query()?.unwrap_or_else(|| serde_json::json!({})),
+            )?;
             let action = if req.path().ends_with("list-roles") {
                 "list"
             } else {
@@ -537,7 +538,7 @@ pub async fn handle_role_request(
                     .collect::<AuthResult<Vec<FieldValue>>>()?;
                 AuthResponse::native(None, roles.into())
             } else {
-                if req.query.is_none() {
+                if req.input_query_field_value()?.is_undefined() {
                     return Err(AuthError::internal("Role lookup requires a query object"));
                 }
                 let mut role = select_role(&selector, &organization_id, ctx).await?;

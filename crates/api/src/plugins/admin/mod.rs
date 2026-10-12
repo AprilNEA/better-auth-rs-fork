@@ -223,10 +223,7 @@ impl AdminPlugin {
             MESSAGE_GET_USER,
         )?;
         let query = GetUserQuery {
-            id: req
-                .query_string("id")?
-                .map(str::to_owned)
-                .unwrap_or_default(),
+            id: req.query_string("id")?.unwrap_or_default(),
         };
         let response = get_user_core(&query, ctx).await?;
         Ok(AuthResponse::native(
@@ -293,7 +290,7 @@ impl AdminPlugin {
             "YOU_ARE_NOT_ALLOWED_TO_LIST_USERS",
             MESSAGE_LIST_USERS,
         )?;
-        let query: ListUsersQueryParams = crate::plugins::query_input::parse(&req.query)?;
+        let query: ListUsersQueryParams = crate::plugins::query_input::parse(req)?;
         // The upstream admin endpoint catches list/count/projection failures.
         let response = list_users_core(&query, ctx)
             .await

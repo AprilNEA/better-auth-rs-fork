@@ -179,6 +179,7 @@ macro_rules! impl_auth_plugin {
                 $(, allowed_media_types = [$($media_type:literal),* $(,)?])?
                 $(, body = $body:path)?
                 $(, query = $query:path)?
+                $(, query_native = $query_native:path)?
                 $(, require_headers = $require_headers:literal)?
             );* $(;)?
         }
@@ -194,6 +195,7 @@ macro_rules! impl_auth_plugin {
                         $(.allowed_media_types(&[$($media_type),*]))?
                         $(.body_validator($body))?
                         $(.query_validator($query))?
+                        $(.query_validator_native($query_native))?
                         $(.require_headers($require_headers))?, )*
                 ]
             }
@@ -218,10 +220,7 @@ macro_rules! impl_auth_plugin {
     };
 }
 
-/// Validate a raw endpoint query without changing the original request.
-pub type QueryValidator = fn(Option<serde_json::Value>) -> AuthResult<Option<serde_json::Value>>;
-
-pub use crate::endpoint_input::BodyValidator;
+pub use crate::endpoint_input::{BodyValidator, QueryValidator};
 
 /// Route definition for plugins
 #[derive(Clone)]
@@ -301,7 +300,10 @@ impl std::fmt::Debug for AuthRoute {
             .field("openapi", &self.openapi)
             .field("endpoint_key", &self.endpoint_key)
             .field("allowed_media_types", &self.allowed_media_types)
-            .field("query_validator", &self.query_validator)
+            .field(
+                "query_validator",
+                &self.query_validator.as_ref().map(|_| "configured"),
+            )
             .field("require_headers", &self.require_headers)
             .field(
                 "body_validator",
@@ -372,9 +374,41 @@ impl AuthRoute {
         self
     }
 
-    /// Install a query validator for the endpoint handler and its middleware.
-    pub fn query_validator(mut self, validator: QueryValidator) -> Self {
-        self.query_validator = Some(validator);
+    /// Install a JSON query validator through an explicit JSON projection bridge.
+    /// Use `query_validator_native` when the schema must observe native values or getters.
+    pub fn query_validator(
+        mut self,
+        validator: fn(Option<serde_json::Value>) -> AuthResult<Option<serde_json::Value>>,
+    ) -> Self {
+        self.query_validator = Some(QueryValidator::new(move |request| {
+            Ok(crate::endpoint_input::ValidatedInput::unvalidated(
+                validator(request.input_query()?)?,
+            ))
+        }));
+        self
+    }
+
+    /// Install a query validator without projecting native input before validation.
+    pub fn query_validator_native(
+        mut self,
+        validator: impl Fn(&AuthRequest) -> AuthResult<crate::endpoint_input::ValidatedInput>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Self {
+        self.query_validator = Some(QueryValidator::new(validator));
+        self
+    }
+
+    /// Install an asynchronous native query validator after body validation.
+    pub fn query_validator_async<F, Fut>(mut self, validator: F) -> Self
+    where
+        F: Fn(AuthRequest) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AuthResult<crate::endpoint_input::ValidatedInput>>
+            + Send
+            + 'static,
+    {
+        self.query_validator = Some(QueryValidator::new_async(validator));
         self
     }
 

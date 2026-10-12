@@ -97,7 +97,7 @@ impl<'a, S: AuthSchema> OrganizationApi<'a, S> {
             }
             MemberInput::Native(body) => {
                 self.context
-                    .dispatch_native_value(self.source, route, body, None, handler)
+                    .dispatch_native_value(self.source, route, body, FieldValue::Undefined, handler)
                     .await
             }
         }

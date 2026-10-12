@@ -607,7 +607,7 @@ impl OAuthProxyPlugin {
         ) else {
             return Ok(None);
         };
-        let mut params = crate::plugins::query_input::string_map(&query)?;
+        let mut params = crate::plugins::query_input::string_map_value(query)?;
         let _ = params.insert("state".to_owned(), state);
         let Some(state) = params.get("state") else {
             return Ok(None);
@@ -799,7 +799,7 @@ impl OAuthProxyPlugin {
                 "[query.callbackURL] Invalid input: expected string, received undefined",
             ));
         };
-        handlers::validate_redirect_target(callback, ctx, "Invalid callbackURL")?;
+        handlers::validate_redirect_target(&callback, ctx, "Invalid callbackURL")?;
         let base_url = ctx
             .config
             .base_url
@@ -825,7 +825,7 @@ impl OAuthProxyPlugin {
                 .error("OAuth proxy callback missing profile data", &[]);
             return redirect_error(&default_error, "missing_profile", None);
         };
-        let plain = match symmetric::decrypt(self.encryption_key(ctx), encrypted) {
+        let plain = match symmetric::decrypt(self.encryption_key(ctx), &encrypted) {
             Ok(plain) => plain,
             Err(_) => return redirect_error(&default_error, "invalid_profile", None),
         };

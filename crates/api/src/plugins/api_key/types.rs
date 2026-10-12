@@ -234,7 +234,7 @@ pub(crate) struct ListKeysQuery {
 
 impl ListKeysQuery {
     pub(crate) fn from_request(req: &AuthRequest) -> better_auth_core::AuthResult<Self> {
-        crate::plugins::query_input::parse(&req.query)
+        crate::plugins::query_input::parse(req)
     }
 }
 
