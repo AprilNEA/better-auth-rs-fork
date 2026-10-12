@@ -1,0 +1,4845 @@
+{
+  "version": "1.7.6",
+  "backend": "postgres",
+  "current": {
+    "type": "date",
+    "value": "2031-01-02T03:04:05.000Z"
+  },
+  "cases": [
+    {
+      "scenario": {
+        "name": "mapped-date",
+        "type": "date",
+        "serial": false,
+        "reference": false
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "1"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2032-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "2"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              null
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 1,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 0,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": {
+                  "type": "date",
+                  "value": "2032-01-02T03:04:05.000Z"
+                },
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "columns": [
+          {
+            "table": "apikey",
+            "position": "1",
+            "name": "id",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "2",
+            "name": "configId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "3",
+            "name": "name",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "4",
+            "name": "start",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "5",
+            "name": "referenceId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "6",
+            "name": "prefix",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "7",
+            "name": "key",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "8",
+            "name": "refillInterval",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "9",
+            "name": "refillAmount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "10",
+            "name": "lastRefillAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "11",
+            "name": "enabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "12",
+            "name": "rateLimitEnabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "13",
+            "name": "rateLimitTimeWindow",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "14",
+            "name": "rateLimitMax",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "15",
+            "name": "requestCount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "16",
+            "name": "remaining",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "17",
+            "name": "lastRequest",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "18",
+            "name": "stored_expiry",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "19",
+            "name": "createdAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "20",
+            "name": "updatedAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "21",
+            "name": "permissions",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "22",
+            "name": "metadata",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          }
+        ],
+        "migration": {
+          "initialSql": "create table \"user\" (\"id\" text not null primary key, \"name\" text not null, \"email\" text not null unique, \"emailVerified\" boolean not null, \"image\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"session\" (\"id\" text not null primary key, \"expiresAt\" timestamptz not null, \"token\" text not null unique, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null, \"ipAddress\" text, \"userAgent\" text, \"userId\" text not null references \"user\" (\"id\") on delete cascade);\n\ncreate table \"account\" (\"id\" text not null primary key, \"accountId\" text not null, \"providerId\" text not null, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"accessToken\" text, \"refreshToken\" text, \"idToken\" text, \"accessTokenExpiresAt\" timestamptz, \"refreshTokenExpiresAt\" timestamptz, \"scope\" text, \"password\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null);\n\ncreate table \"verification\" (\"id\" text not null primary key, \"identifier\" text not null, \"value\" text not null, \"expiresAt\" timestamptz not null, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"apikey\" (\"id\" text not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" timestamptz, \"enabled\" boolean, \"rateLimitEnabled\" boolean, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" timestamptz, \"stored_expiry\" timestamptz, \"createdAt\" timestamptz not null, \"updatedAt\" timestamptz not null, \"permissions\" text, \"metadata\" text);\n\ncreate index \"session_userId_idx\" on \"session\" (\"userId\");\n\ncreate index \"account_userId_idx\" on \"account\" (\"userId\");\n\ncreate index \"verification_identifier_idx\" on \"verification\" (\"identifier\");\n\ncreate index \"apikey_configId_idx\" on \"apikey\" (\"configId\");\n\ncreate index \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\");\n\ncreate index \"apikey_key_idx\" on \"apikey\" (\"key\");",
+          "repeatedSql": ";"
+        }
+      }
+    },
+    {
+      "scenario": {
+        "name": "mapped-json",
+        "type": "json",
+        "serial": false,
+        "reference": false
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "invalid input syntax for type json",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "invalid input syntax for type json"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 193
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22P02"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Token \"-01\" is invalid."
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "JSON data, line 1: 2030-01...\nunnamed portal parameter $17 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "659"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "jsonfuncs.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "json_errsave_error"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "invalid input syntax for type json",
+                  "stack": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "invalid input syntax for type json",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "invalid input syntax for type json"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 193
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22P02"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Token \"-01\" is invalid."
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "JSON data, line 1: 2032-01...\nunnamed portal parameter $17 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "659"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "jsonfuncs.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "json_errsave_error"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "invalid input syntax for type json",
+                  "stack": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              null
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "invalid input syntax for type json",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "invalid input syntax for type json"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 192
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22P02"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Token \"-01\" is invalid."
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "JSON data, line 1: 2031-01...\nunnamed portal parameter $1 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "659"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "jsonfuncs.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "json_errsave_error"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "invalid input syntax for type json",
+                  "stack": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "invalid input syntax for type json",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "invalid input syntax for type json"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 192
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22P02"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Token \"-01\" is invalid."
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "JSON data, line 1: 2031-01...\nunnamed portal parameter $1 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "659"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "jsonfuncs.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "json_errsave_error"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "invalid input syntax for type json",
+                  "stack": "error: invalid input syntax for type json\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "columns": [
+          {
+            "table": "apikey",
+            "position": "1",
+            "name": "id",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "2",
+            "name": "configId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "3",
+            "name": "name",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "4",
+            "name": "start",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "5",
+            "name": "referenceId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "6",
+            "name": "prefix",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "7",
+            "name": "key",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "8",
+            "name": "refillInterval",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "9",
+            "name": "refillAmount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "10",
+            "name": "lastRefillAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "11",
+            "name": "enabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "12",
+            "name": "rateLimitEnabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "13",
+            "name": "rateLimitTimeWindow",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "14",
+            "name": "rateLimitMax",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "15",
+            "name": "requestCount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "16",
+            "name": "remaining",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "17",
+            "name": "lastRequest",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "18",
+            "name": "stored_expiry",
+            "type": "jsonb",
+            "nativeType": "jsonb",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "19",
+            "name": "createdAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "20",
+            "name": "updatedAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "21",
+            "name": "permissions",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "22",
+            "name": "metadata",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          }
+        ],
+        "migration": {
+          "initialSql": "create table \"user\" (\"id\" text not null primary key, \"name\" text not null, \"email\" text not null unique, \"emailVerified\" boolean not null, \"image\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"session\" (\"id\" text not null primary key, \"expiresAt\" timestamptz not null, \"token\" text not null unique, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null, \"ipAddress\" text, \"userAgent\" text, \"userId\" text not null references \"user\" (\"id\") on delete cascade);\n\ncreate table \"account\" (\"id\" text not null primary key, \"accountId\" text not null, \"providerId\" text not null, \"userId\" text not null references \"user\" (\"id\") on delete cascade, \"accessToken\" text, \"refreshToken\" text, \"idToken\" text, \"accessTokenExpiresAt\" timestamptz, \"refreshTokenExpiresAt\" timestamptz, \"scope\" text, \"password\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null);\n\ncreate table \"verification\" (\"id\" text not null primary key, \"identifier\" text not null, \"value\" text not null, \"expiresAt\" timestamptz not null, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"apikey\" (\"id\" text not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" timestamptz, \"enabled\" boolean, \"rateLimitEnabled\" boolean, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" timestamptz, \"stored_expiry\" jsonb, \"createdAt\" timestamptz not null, \"updatedAt\" timestamptz not null, \"permissions\" text, \"metadata\" text);\n\ncreate index \"session_userId_idx\" on \"session\" (\"userId\");\n\ncreate index \"account_userId_idx\" on \"account\" (\"userId\");\n\ncreate index \"verification_identifier_idx\" on \"verification\" (\"identifier\");\n\ncreate index \"apikey_configId_idx\" on \"apikey\" (\"configId\");\n\ncreate index \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\");\n\ncreate index \"apikey_key_idx\" on \"apikey\" (\"key\");",
+          "repeatedSql": ";"
+        }
+      }
+    },
+    {
+      "scenario": {
+        "name": "mapped-serial-reference",
+        "type": "date",
+        "serial": true,
+        "reference": true
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "value \"1893553445000\" is out of range for type integer",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "value \"1893553445000\" is out of range for type integer"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 157
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22003"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "unnamed portal parameter $17 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "609"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: value \"1893553445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "numutils.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "pg_strtoint32_safe"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "value \"1893553445000\" is out of range for type integer",
+                  "stack": "error: value \"1893553445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "value \"1956625445000\" is out of range for type integer",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "value \"1956625445000\" is out of range for type integer"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 157
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22003"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "unnamed portal parameter $17 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "609"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: value \"1956625445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "numutils.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "pg_strtoint32_safe"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "value \"1956625445000\" is out of range for type integer",
+                  "stack": "error: value \"1956625445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1101:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/insert-query-builder.js:1113:37)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:362:41)\n    at async create (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:501:19)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              null
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "value \"1925089445000\" is out of range for type integer",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "value \"1925089445000\" is out of range for type integer"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 156
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22003"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "unnamed portal parameter $1 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "609"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: value \"1925089445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "numutils.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "pg_strtoint32_safe"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "value \"1925089445000\" is out of range for type integer",
+                  "stack": "error: value \"1925089445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": false,
+          "error": {
+            "name": "error",
+            "message": "value \"1925089445000\" is out of range for type integer",
+            "raw": {
+              "root": {
+                "identity": "object-1",
+                "type": "error",
+                "ownKeys": [
+                  "message",
+                  "length",
+                  "name",
+                  "severity",
+                  "code",
+                  "detail",
+                  "hint",
+                  "position",
+                  "internalPosition",
+                  "internalQuery",
+                  "where",
+                  "schema",
+                  "table",
+                  "originalLine",
+                  "originalColumn",
+                  "line",
+                  "column",
+                  "sourceURL",
+                  "stack",
+                  "dataType",
+                  "constraint",
+                  "file",
+                  "routine"
+                ],
+                "properties": [
+                  [
+                    "message",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "value \"1925089445000\" is out of range for type integer"
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 156
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error"
+                    }
+                  ],
+                  [
+                    "severity",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "ERROR"
+                    }
+                  ],
+                  [
+                    "code",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "22003"
+                    }
+                  ],
+                  [
+                    "detail",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "hint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "position",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalPosition",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "internalQuery",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "where",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "unnamed portal parameter $1 = '...'"
+                    }
+                  ],
+                  [
+                    "schema",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "table",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "originalLine",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 508
+                    }
+                  ],
+                  [
+                    "originalColumn",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 36
+                    }
+                  ],
+                  [
+                    "line",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "609"
+                    }
+                  ],
+                  [
+                    "column",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "sourceURL",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg-protocol/dist/parser.js"
+                    }
+                  ],
+                  [
+                    "stack",
+                    {
+                      "enumerable": false,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "error: value \"1925089445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)"
+                    }
+                  ],
+                  [
+                    "dataType",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "constraint",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "type": "undefined"
+                      }
+                    }
+                  ],
+                  [
+                    "file",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "numutils.c"
+                    }
+                  ],
+                  [
+                    "routine",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "pg_strtoint32_safe"
+                    }
+                  ]
+                ],
+                "error": {
+                  "name": "error",
+                  "message": "value \"1925089445000\" is out of range for type integer",
+                  "stack": "error: value \"1925089445000\" is out of range for type integer\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/pg/lib/client.js:694:17)\n    at processTicksAndRejections (native:7:39)\n    at executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/dialect/postgres/postgres-driver.js:126:45)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:39:41)\n    at async provideConnection (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/driver/default-connection-provider.js:10:26)\n    at async executeQuery (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-executor/query-executor-base.js:38:39)\n    at async execute (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:448:51)\n    at async executeTakeFirst (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/kysely/dist/query-builder/delete-query-builder.js:458:37)\n    at async deleteMany (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/node_modules/@better-auth/kysely-adapter/dist/index.mjs:610:31)\n    at processTicksAndRejections (native:7:39)",
+                  "cause": {
+                    "type": "undefined"
+                  }
+                }
+              },
+              "functions": []
+            }
+          },
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": true,
+                "rateLimitEnabled": true,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "columns": [
+          {
+            "table": "apikey",
+            "position": "1",
+            "name": "id",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "2",
+            "name": "configId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "3",
+            "name": "name",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "4",
+            "name": "start",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "5",
+            "name": "referenceId",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "6",
+            "name": "prefix",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "7",
+            "name": "key",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "8",
+            "name": "refillInterval",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "9",
+            "name": "refillAmount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "10",
+            "name": "lastRefillAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "11",
+            "name": "enabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "12",
+            "name": "rateLimitEnabled",
+            "type": "boolean",
+            "nativeType": "bool",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "13",
+            "name": "rateLimitTimeWindow",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "14",
+            "name": "rateLimitMax",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "15",
+            "name": "requestCount",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "16",
+            "name": "remaining",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "17",
+            "name": "lastRequest",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "18",
+            "name": "stored_expiry",
+            "type": "integer",
+            "nativeType": "int4",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "19",
+            "name": "createdAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "20",
+            "name": "updatedAt",
+            "type": "timestamp with time zone",
+            "nativeType": "timestamptz",
+            "maxLength": null,
+            "datetimePrecision": "6",
+            "nullable": "NO",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "21",
+            "name": "permissions",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          },
+          {
+            "table": "apikey",
+            "position": "22",
+            "name": "metadata",
+            "type": "text",
+            "nativeType": "text",
+            "maxLength": null,
+            "datetimePrecision": null,
+            "nullable": "YES",
+            "default": null
+          }
+        ],
+        "migration": {
+          "initialSql": "create table \"user\" (\"id\" integer GENERATED BY DEFAULT AS IDENTITY not null primary key, \"name\" text not null, \"email\" text not null unique, \"emailVerified\" boolean not null, \"image\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"session\" (\"id\" integer GENERATED BY DEFAULT AS IDENTITY not null primary key, \"expiresAt\" timestamptz not null, \"token\" text not null unique, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null, \"ipAddress\" text, \"userAgent\" text, \"userId\" integer not null references \"user\" (\"id\") on delete cascade);\n\ncreate table \"account\" (\"id\" integer GENERATED BY DEFAULT AS IDENTITY not null primary key, \"accountId\" text not null, \"providerId\" text not null, \"userId\" integer not null references \"user\" (\"id\") on delete cascade, \"accessToken\" text, \"refreshToken\" text, \"idToken\" text, \"accessTokenExpiresAt\" timestamptz, \"refreshTokenExpiresAt\" timestamptz, \"scope\" text, \"password\" text, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz not null);\n\ncreate table \"verification\" (\"id\" integer GENERATED BY DEFAULT AS IDENTITY not null primary key, \"identifier\" text not null, \"value\" text not null, \"expiresAt\" timestamptz not null, \"createdAt\" timestamptz default CURRENT_TIMESTAMP not null, \"updatedAt\" timestamptz default CURRENT_TIMESTAMP not null);\n\ncreate table \"apikey\" (\"id\" integer GENERATED BY DEFAULT AS IDENTITY not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" timestamptz, \"enabled\" boolean, \"rateLimitEnabled\" boolean, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" timestamptz, \"stored_expiry\" integer references \"user\" (\"id\") on delete cascade, \"createdAt\" timestamptz not null, \"updatedAt\" timestamptz not null, \"permissions\" text, \"metadata\" text);\n\ncreate index \"session_userId_idx\" on \"session\" (\"userId\");\n\ncreate index \"account_userId_idx\" on \"account\" (\"userId\");\n\ncreate index \"verification_identifier_idx\" on \"verification\" (\"identifier\");\n\ncreate index \"apikey_configId_idx\" on \"apikey\" (\"configId\");\n\ncreate index \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\");\n\ncreate index \"apikey_key_idx\" on \"apikey\" (\"key\");",
+          "repeatedSql": ";"
+        }
+      }
+    }
+  ]
+}

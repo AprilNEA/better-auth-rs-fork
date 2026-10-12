@@ -1,0 +1,3461 @@
+{
+  "version": "1.7.6",
+  "backend": "sqlite",
+  "current": {
+    "type": "date",
+    "value": "2031-01-02T03:04:05.000Z"
+  },
+  "cases": [
+    {
+      "scenario": {
+        "name": "mapped-date",
+        "type": "date",
+        "serial": false,
+        "reference": false
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "1"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              "2030-01-02T03:04:05.000Z"
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2032-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "2"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              "2032-01-02T03:04:05.000Z"
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              null
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2030-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 1,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 0,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "2032-01-02T03:04:05.000Z",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "catalog": {
+          "table": {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey"
+          },
+          "columns": [
+            {
+              "cid": 0,
+              "name": "id",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 1
+            },
+            {
+              "cid": 1,
+              "name": "configId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 2,
+              "name": "name",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 3,
+              "name": "start",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 4,
+              "name": "referenceId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 5,
+              "name": "prefix",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 6,
+              "name": "key",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 7,
+              "name": "refillInterval",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 8,
+              "name": "refillAmount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 9,
+              "name": "lastRefillAt",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 10,
+              "name": "enabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 11,
+              "name": "rateLimitEnabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 12,
+              "name": "rateLimitTimeWindow",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 13,
+              "name": "rateLimitMax",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 14,
+              "name": "requestCount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 15,
+              "name": "remaining",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 16,
+              "name": "lastRequest",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 17,
+              "name": "stored_expiry",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 18,
+              "name": "createdAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 19,
+              "name": "updatedAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 20,
+              "name": "permissions",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 21,
+              "name": "metadata",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            }
+          ],
+          "indexes": [
+            {
+              "definition": {
+                "seq": 0,
+                "name": "apikey_key_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 1,
+                "name": "apikey_referenceId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 2,
+                "name": "apikey_configId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 3,
+                "name": "sqlite_autoindex_apikey_1",
+                "unique": 1,
+                "origin": "pk",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 0,
+                  "name": "id"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 0,
+                  "name": "id",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            }
+          ],
+          "foreignKeys": []
+        },
+        "ddl": [
+          {
+            "type": "index",
+            "name": "apikey_configId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_configId_idx\" on \"apikey\" (\"configId\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_key_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_key_idx\" on \"apikey\" (\"key\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_referenceId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\")"
+          },
+          {
+            "type": "index",
+            "name": "sqlite_autoindex_apikey_1",
+            "tbl_name": "apikey",
+            "sql": null
+          },
+          {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey",
+            "sql": "CREATE TABLE \"apikey\" (\"id\" text not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" date, \"enabled\" integer, \"rateLimitEnabled\" integer, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" date, \"stored_expiry\" date, \"createdAt\" date not null, \"updatedAt\" date not null, \"permissions\" text, \"metadata\" text)"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "name": "mapped-json",
+        "type": "json",
+        "serial": false,
+        "reference": false
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "1"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              "\"2030-01-02T03:04:05.000Z\""
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": {
+              "type": "date",
+              "value": "2032-01-02T03:04:05.000Z"
+            },
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "2"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              "\"2032-01-02T03:04:05.000Z\""
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              "null"
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "null",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "1",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2030-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "null",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 1,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "null",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "null",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 0,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": "2",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "\"2032-01-02T03:04:05.000Z\"",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": "3",
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": "null",
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "catalog": {
+          "table": {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey"
+          },
+          "columns": [
+            {
+              "cid": 0,
+              "name": "id",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 1
+            },
+            {
+              "cid": 1,
+              "name": "configId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 2,
+              "name": "name",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 3,
+              "name": "start",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 4,
+              "name": "referenceId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 5,
+              "name": "prefix",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 6,
+              "name": "key",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 7,
+              "name": "refillInterval",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 8,
+              "name": "refillAmount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 9,
+              "name": "lastRefillAt",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 10,
+              "name": "enabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 11,
+              "name": "rateLimitEnabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 12,
+              "name": "rateLimitTimeWindow",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 13,
+              "name": "rateLimitMax",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 14,
+              "name": "requestCount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 15,
+              "name": "remaining",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 16,
+              "name": "lastRequest",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 17,
+              "name": "stored_expiry",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 18,
+              "name": "createdAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 19,
+              "name": "updatedAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 20,
+              "name": "permissions",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 21,
+              "name": "metadata",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            }
+          ],
+          "indexes": [
+            {
+              "definition": {
+                "seq": 0,
+                "name": "apikey_key_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 1,
+                "name": "apikey_referenceId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 2,
+                "name": "apikey_configId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 3,
+                "name": "sqlite_autoindex_apikey_1",
+                "unique": 1,
+                "origin": "pk",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 0,
+                  "name": "id"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 0,
+                  "name": "id",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            }
+          ],
+          "foreignKeys": []
+        },
+        "ddl": [
+          {
+            "type": "index",
+            "name": "apikey_configId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_configId_idx\" on \"apikey\" (\"configId\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_key_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_key_idx\" on \"apikey\" (\"key\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_referenceId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\")"
+          },
+          {
+            "type": "index",
+            "name": "sqlite_autoindex_apikey_1",
+            "tbl_name": "apikey",
+            "sql": null
+          },
+          {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey",
+            "sql": "CREATE TABLE \"apikey\" (\"id\" text not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" date, \"enabled\" integer, \"rateLimitEnabled\" integer, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" date, \"stored_expiry\" text, \"createdAt\" date not null, \"updatedAt\" date not null, \"permissions\" text, \"metadata\" text)"
+          }
+        ]
+      }
+    },
+    {
+      "scenario": {
+        "name": "mapped-serial-reference",
+        "type": "date",
+        "serial": true,
+        "reference": true
+      },
+      "setup": [
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "1"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": []
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": "1893553445000",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "1"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              1893553445000
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              },
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "2"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": "1956625445000",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "2"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              {
+                "type": "date",
+                "value": "2032-01-02T03:04:05.000Z"
+              }
+            ],
+            [
+              "output",
+              "expiresAt",
+              1956625445000
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 2,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1956625445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "input": {
+            "model": "apikey",
+            "forceAllowId": true,
+            "data": {
+              "name": "Desk",
+              "start": null,
+              "prefix": null,
+              "key": "ordinary-native-replacement-key",
+              "referenceId": "native-replacement-owner",
+              "configId": "default",
+              "refillInterval": 60000,
+              "refillAmount": 10,
+              "lastRefillAt": null,
+              "enabled": true,
+              "rateLimitEnabled": true,
+              "rateLimitTimeWindow": 60000,
+              "rateLimitMax": 3,
+              "requestCount": 0,
+              "remaining": 10,
+              "lastRequest": null,
+              "expiresAt": null,
+              "createdAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "updatedAt": {
+                "type": "date",
+                "value": "2030-01-02T03:04:05.000Z"
+              },
+              "permissions": null,
+              "metadata": null,
+              "id": "3"
+            }
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 2,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1956625445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": {
+            "configId": "default",
+            "name": "Desk",
+            "start": null,
+            "referenceId": "native-replacement-owner",
+            "prefix": null,
+            "key": "ordinary-native-replacement-key",
+            "refillInterval": 60000,
+            "refillAmount": 10,
+            "lastRefillAt": null,
+            "enabled": true,
+            "rateLimitEnabled": true,
+            "rateLimitTimeWindow": 60000,
+            "rateLimitMax": 3,
+            "requestCount": 0,
+            "remaining": 10,
+            "lastRequest": null,
+            "expiresAt": null,
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "updatedAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "permissions": null,
+            "metadata": null,
+            "id": "3"
+          },
+          "events": [
+            [
+              "input",
+              "expiresAt",
+              null
+            ],
+            [
+              "output",
+              "expiresAt",
+              null
+            ]
+          ],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 2,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1956625445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "steps": [
+        {
+          "attempt": 1,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 1,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1893553445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 2,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": 1956625445000,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              },
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 2,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        },
+        {
+          "attempt": 2,
+          "method": "deleteMany",
+          "input": {
+            "model": "apikey",
+            "where": [
+              {
+                "field": "expiresAt",
+                "operator": "lt",
+                "value": {
+                  "type": "date",
+                  "value": "2031-01-02T03:04:05.000Z"
+                }
+              },
+              {
+                "field": "expiresAt",
+                "operator": "ne",
+                "value": null
+              }
+            ]
+          },
+          "before": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          },
+          "returned": true,
+          "result": 0,
+          "events": [],
+          "after": {
+            "user": [],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "apikey": [
+              {
+                "id": 3,
+                "configId": "default",
+                "name": "Desk",
+                "start": null,
+                "referenceId": "native-replacement-owner",
+                "prefix": null,
+                "key": "ordinary-native-replacement-key",
+                "refillInterval": 60000,
+                "refillAmount": 10,
+                "lastRefillAt": null,
+                "enabled": 1,
+                "rateLimitEnabled": 1,
+                "rateLimitTimeWindow": 60000,
+                "rateLimitMax": 3,
+                "requestCount": 0,
+                "remaining": 10,
+                "lastRequest": null,
+                "stored_expiry": null,
+                "createdAt": "2030-01-02T03:04:05.000Z",
+                "updatedAt": "2030-01-02T03:04:05.000Z",
+                "permissions": null,
+                "metadata": "null"
+              }
+            ]
+          }
+        }
+      ],
+      "catalog": {
+        "catalog": {
+          "table": {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey"
+          },
+          "columns": [
+            {
+              "cid": 0,
+              "name": "id",
+              "type": "INTEGER",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 1
+            },
+            {
+              "cid": 1,
+              "name": "configId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 2,
+              "name": "name",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 3,
+              "name": "start",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 4,
+              "name": "referenceId",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 5,
+              "name": "prefix",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 6,
+              "name": "key",
+              "type": "TEXT",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 7,
+              "name": "refillInterval",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 8,
+              "name": "refillAmount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 9,
+              "name": "lastRefillAt",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 10,
+              "name": "enabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 11,
+              "name": "rateLimitEnabled",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 12,
+              "name": "rateLimitTimeWindow",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 13,
+              "name": "rateLimitMax",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 14,
+              "name": "requestCount",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 15,
+              "name": "remaining",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 16,
+              "name": "lastRequest",
+              "type": "date",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 17,
+              "name": "stored_expiry",
+              "type": "INTEGER",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 18,
+              "name": "createdAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 19,
+              "name": "updatedAt",
+              "type": "date",
+              "notnull": 1,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 20,
+              "name": "permissions",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            },
+            {
+              "cid": 21,
+              "name": "metadata",
+              "type": "TEXT",
+              "notnull": 0,
+              "dflt_value": null,
+              "pk": 0
+            }
+          ],
+          "indexes": [
+            {
+              "definition": {
+                "seq": 0,
+                "name": "apikey_key_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 6,
+                  "name": "key",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 1,
+                "name": "apikey_referenceId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 4,
+                  "name": "referenceId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            },
+            {
+              "definition": {
+                "seq": 2,
+                "name": "apikey_configId_idx",
+                "unique": 0,
+                "origin": "c",
+                "partial": 0
+              },
+              "columns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId"
+                }
+              ],
+              "extendedColumns": [
+                {
+                  "seqno": 0,
+                  "cid": 1,
+                  "name": "configId",
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 1
+                },
+                {
+                  "seqno": 1,
+                  "cid": -1,
+                  "name": null,
+                  "desc": 0,
+                  "coll": "BINARY",
+                  "key": 0
+                }
+              ]
+            }
+          ],
+          "foreignKeys": [
+            {
+              "id": 0,
+              "seq": 0,
+              "table": "user",
+              "from": "stored_expiry",
+              "to": "id",
+              "on_update": "NO ACTION",
+              "on_delete": "CASCADE",
+              "match": "NONE"
+            }
+          ]
+        },
+        "ddl": [
+          {
+            "type": "index",
+            "name": "apikey_configId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_configId_idx\" on \"apikey\" (\"configId\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_key_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_key_idx\" on \"apikey\" (\"key\")"
+          },
+          {
+            "type": "index",
+            "name": "apikey_referenceId_idx",
+            "tbl_name": "apikey",
+            "sql": "CREATE INDEX \"apikey_referenceId_idx\" on \"apikey\" (\"referenceId\")"
+          },
+          {
+            "type": "table",
+            "name": "apikey",
+            "tbl_name": "apikey",
+            "sql": "CREATE TABLE \"apikey\" (\"id\" integer not null primary key, \"configId\" text not null, \"name\" text, \"start\" text, \"referenceId\" text not null, \"prefix\" text, \"key\" text not null, \"refillInterval\" integer, \"refillAmount\" integer, \"lastRefillAt\" date, \"enabled\" integer, \"rateLimitEnabled\" integer, \"rateLimitTimeWindow\" integer, \"rateLimitMax\" integer, \"requestCount\" integer, \"remaining\" integer, \"lastRequest\" date, \"stored_expiry\" integer references \"user\" (\"id\") on delete cascade, \"createdAt\" date not null, \"updatedAt\" date not null, \"permissions\" text, \"metadata\" text)"
+          }
+        ]
+      }
+    }
+  ]
+}

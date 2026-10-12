@@ -1,0 +1,52 @@
+{
+  "version": "1.7.6",
+  "backend": "sqlite",
+  "status": "source extraction; Rust replay pending",
+  "run": "38202082192",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38202082192",
+  "commit": "24db89ed092a4214c0a5fe3771674a2c553d7f39",
+  "artifactName": "focused-check-reference-contracts-24db89ed092a4214c0a5fe3771674a2c553d7f39-1",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38202082192-artifact/focused-check-reference-contracts-24db89ed092a4214c0a5fe3771674a2c553d7f39-1/focused-check.log",
+    "bytes": 268901,
+    "sha256": "4f54d08773c1da061568a246262bcc170e997f84f38fb3023dea4ea31f07177f"
+  },
+  "record": {
+    "path": "/private/tmp/better-auth-ci-38202082192-artifact/extracted/api-key-cleanup-fields-sql-sqlite.source.jsonl",
+    "line": 28,
+    "byteOffset": 1088,
+    "bytes": 53731,
+    "sha256": "dc87f35981aff8da1c4d88660b425fc6f79c99f909a9febc0bf20df354732101"
+  },
+  "fixture": {
+    "path": "tests/fixtures/api-key-cleanup-fields-sql-sqlite-1.7.6.json",
+    "bytes": 108762,
+    "sha256": "8580635baa36919b7393cae6c7dfd279464367d020aa7a5e7cf96c013e747da4"
+  },
+  "sourceFiles": [
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.mjs",
+      "sha256": "689fba0eb18e2c1be6546ec7ac37f76d853b020e4d1bb3095466ed2564382959"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-capture.mjs",
+      "sha256": "6922be23e8913884ff463492ab13d0c63b34114ca3588001c684e32bc311d306"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.test.ts",
+      "sha256": "3a99154a016fa8dd04fa6d823d40cf599b3518f89181e3d1ec7a85d323f13497"
+    }
+  ],
+  "extraction": "Remove the log envelope contract key. Preserve all capture values and object key order. Format the capture as JSON.",
+  "normalizations": [],
+  "coverage": {
+    "cases": 3,
+    "creates": 9,
+    "cleanupCalls": 6,
+    "successfulDeletes": [
+      1,
+      1,
+      2
+    ]
+  }
+}

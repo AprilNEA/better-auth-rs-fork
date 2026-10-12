@@ -1,0 +1,53 @@
+{
+  "version": "1.7.6",
+  "backend": "mysql",
+  "status": "source extraction; Rust replay pending",
+  "run": "38202364977",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38202364977",
+  "commit": "49f4412c70569b7b725ddf0963dfe330517a4636",
+  "artifactName": "focused-check-reference-contracts-49f4412c70569b7b725ddf0963dfe330517a4636-1",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38202364977-artifact/focused-check-reference-contracts-49f4412c70569b7b725ddf0963dfe330517a4636-1/focused-check.log",
+    "bytes": 224337,
+    "sha256": "58c0c71f0e119064cb87ef1b37fe71a762f90173423a48319d017dfa8a8dd391"
+  },
+  "record": {
+    "path": "/private/tmp/better-auth-ci-38202364977-artifact/extracted/api-key-cleanup-fields-sql-mysql.source.jsonl",
+    "line": 70,
+    "byteOffset": 154297,
+    "bytes": 69875,
+    "sha256": "e6a85fb42845a395ce51e5383a5255018f70d8a40326d695d303d5769cff98e0"
+  },
+  "fixture": {
+    "path": "tests/fixtures/api-key-cleanup-fields-sql-mysql-1.7.6.json",
+    "bytes": 124436,
+    "sha256": "d78fc171584dd7b2b1ce9c9475fb46f8c8051fd40a30fb11371f00fb141e4ff8"
+  },
+  "sourceFiles": [
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.mjs",
+      "sha256": "689fba0eb18e2c1be6546ec7ac37f76d853b020e4d1bb3095466ed2564382959"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-capture.mjs",
+      "sha256": "6922be23e8913884ff463492ab13d0c63b34114ca3588001c684e32bc311d306"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/api-key-cleanup-fields-sql-capture.test.ts",
+      "sha256": "27fb85b14bc13a468d99250d091b78c6b3f146dc88cd0e7ab91dc8342b6305ef"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "extraction": "Remove the log envelope contract key. Preserve all capture values and object key order. Format the capture as JSON.",
+  "normalizations": [],
+  "coverage": {
+    "cases": 3,
+    "creates": 9,
+    "cleanupCalls": 6,
+    "fullErrorObservations": 2
+  },
+  "limitation": "The serial-reference case has no persisted non-null expiry and does not prove successful deletion of referenced rows."
+}

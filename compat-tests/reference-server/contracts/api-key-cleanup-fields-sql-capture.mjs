@@ -52,7 +52,7 @@ function observeError(error) {
   };
 }
 
-async function captureRows({ options, query, backend }, scenario, events) {
+async function captureRows({ options, query, backend }, scenario, events, baseline) {
   const { adapter } = await betterAuth(options).$context;
   const quote = name => backend === "mysql" ? `\`${name}\`` : `"${name}"`;
   const stored = async () => Object.fromEntries(await Promise.all(models.map(async model => [
@@ -71,10 +71,22 @@ async function captureRows({ options, query, backend }, scenario, events) {
       events: events.splice(0), after: await stored(),
     };
   };
+  const ownerSetup = [];
+  if (baseline) {
+    for (const id of [1000, 3000]) {
+      const input = { model: "user", forceAllowId: true, data: {
+        id: String(id), name: `Cleanup reference ${id}`, email: `owner-${id}@cleanup-fields.test`,
+        emailVerified: false, image: null,
+        createdAt: new Date("2030-01-02T03:04:05.000Z"), updatedAt: new Date("2030-01-02T03:04:05.000Z"),
+      } };
+      ownerSetup.push(await observe(input, () => adapter.create(input)));
+    }
+  }
   const setup = [];
-  for (const [index, expiresAt] of [
+  const expiries = baseline ? [new Date(1000), new Date(3000), null] : [
     new Date("2030-01-02T03:04:05.000Z"), new Date("2032-01-02T03:04:05.000Z"), null,
-  ].entries()) {
+  ];
+  for (const [index, expiresAt] of expiries.entries()) {
     const input = { model: "apikey", forceAllowId: true, data: {
       ...nativeInput("apikey"), id: String(index + 1), expiresAt,
     } };
@@ -83,34 +95,48 @@ async function captureRows({ options, query, backend }, scenario, events) {
   const steps = [];
   for (const attempt of [1, 2]) {
     const input = { model: "apikey", where: [
-      { field: "expiresAt", operator: "lt", value: apiKeyCleanupCurrent },
+      { field: "expiresAt", operator: "lt", value: baseline ? new Date(2000) : apiKeyCleanupCurrent },
       { field: "expiresAt", operator: "ne", value: null },
     ] };
     steps.push({ attempt, method: "deleteMany", ...await observe(input, () => adapter.deleteMany(input)) });
   }
   assert.deepEqual(steps.map(step => step.events), [[], []]);
-  return { scenario, setup, steps };
+  return { scenario, ...(baseline ? { ownerSetup } : {}), setup, steps };
 }
 
-async function captureCase(backend, scenario) {
+async function captureCase(backend, scenario, baseline = false) {
   const events = [];
   const configuration = apiKeyCleanupConfiguration(scenario, events);
   if (backend === "sqlite") {
     const database = new Database(":memory:");
     try {
       const options = { ...configuration, database };
-      await (await getMigrations(options)).runMigrations();
+      const migrations = await getMigrations(options);
+      const initialSql = baseline ? await migrations.compileMigrations() : undefined;
+      await migrations.runMigrations();
       const catalog = observeSqliteCatalog(database, "apikey", "The cleanup table must exist");
       const captured = await captureRows({
         options, backend, query: async (sql, values) => database.query(sql).all(...values),
-      }, scenario, events);
-      return { ...captured, catalog };
+      }, scenario, events, baseline);
+      return {
+        ...captured, catalog,
+        ...(baseline ? {
+          environment: { foreignKeys: database.query("PRAGMA foreign_keys").all() },
+          migration: { initialSql },
+        } : {}),
+      };
     } finally {
       database.close();
     }
   }
   const captured = await captureFreshServerCatalog(backend, ["apikey"], configuration,
-    context => captureRows(context, scenario, events));
+    async context => ({
+      ...await captureRows(context, scenario, events, baseline),
+      ...(baseline ? { environment: backend === "postgres"
+        ? { replicationRole: await context.query("SHOW session_replication_role", []) }
+        : { foreignKeys: await context.query("SELECT @@FOREIGN_KEY_CHECKS AS foreignKeys", []) },
+      } : {}),
+    }));
   return {
     ...captured.observation,
     catalog: { columns: captured.columns, migration: captured.migration },
@@ -122,6 +148,35 @@ export async function captureApiKeyCleanupSqlFields(backend) {
   const cases = [];
   for (const scenario of apiKeyCleanupScenarios) cases.push(await captureCase(backend, scenario));
   return { version: "1.7.6", backend, current: observeValue(apiKeyCleanupCurrent), cases };
+}
+
+async function captureSqliteConnections() {
+  const configurations = [];
+  for (const scenario of apiKeyCleanupScenarios) {
+    const database = new Database(":memory:");
+    try {
+      const options = { ...apiKeyCleanupConfiguration(scenario, []), database };
+      const migrations = await getMigrations(options);
+      const initialSql = await migrations.compileMigrations();
+      await migrations.runMigrations();
+      configurations.push({
+        scenario, initialSql, foreignKeys: database.query("PRAGMA foreign_keys").all(),
+      });
+    } finally {
+      database.close();
+    }
+  }
+  return configurations;
+}
+
+export async function captureApiKeyCleanupReferenceBaseline(backend) {
+  assert.ok(["sqlite", "postgres", "mysql"].includes(backend));
+  const scenario = { name: "mapped-serial-reference-valid", type: "date", serial: true, reference: true };
+  return {
+    version: "1.7.6", backend, current: observeValue(new Date(2000)),
+    cases: [await captureCase(backend, scenario, true)],
+    ...(backend === "sqlite" ? { connections: await captureSqliteConnections() } : {}),
+  };
 }
 
 if (import.meta.main) {
