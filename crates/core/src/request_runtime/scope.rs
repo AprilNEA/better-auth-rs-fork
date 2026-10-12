@@ -18,7 +18,7 @@ impl Identity {
 #[derive(Clone)]
 struct Binding {
     identity: Identity,
-    logger: crate::observability::LoggerConfig,
+    logger: Option<crate::observability::LoggerConfig>,
     context: Arc<dyn Any + Send + Sync>,
 }
 
@@ -43,10 +43,27 @@ pub(super) fn run<S: AuthSchema, T>(
     context: Arc<AuthContext<S>>,
     future: impl Future<Output = T>,
 ) -> impl Future<Output = T> {
+    let logger = Some(context.config.logger.clone());
+    run_with_logger(context, logger, future)
+}
+
+/// HTTP policy resolution must not replace the caller's endpoint or native helper logger.
+pub(super) fn run_runtime<S: AuthSchema, T>(
+    context: Arc<AuthContext<S>>,
+    future: impl Future<Output = T>,
+) -> impl Future<Output = T> {
+    run_with_logger(context, None, future)
+}
+
+fn run_with_logger<S: AuthSchema, T>(
+    context: Arc<AuthContext<S>>,
+    logger: Option<crate::observability::LoggerConfig>,
+    future: impl Future<Output = T>,
+) -> impl Future<Output = T> {
     let mut contexts = CONTEXTS.try_with(Clone::clone).unwrap_or_default();
     contexts.push(Binding {
         identity: context.request_runtime.identity.clone(),
-        logger: context.config.logger.clone(),
+        logger,
         context,
     });
     // Keep large endpoint futures off each nested runtime scope's stack frame.
@@ -78,7 +95,12 @@ pub(crate) fn spawn<T: Send + 'static>(
 
 pub(super) fn current_logger() -> Option<crate::observability::LoggerConfig> {
     CONTEXTS
-        .try_with(|contexts| contexts.last().map(|binding| binding.logger.clone()))
+        .try_with(|contexts| {
+            contexts
+                .iter()
+                .rev()
+                .find_map(|binding| binding.logger.clone())
+        })
         .ok()
         .flatten()
 }

@@ -36,7 +36,7 @@ impl AuthError {
                 logger.level,
                 Some(LogLevel::Error | LogLevel::Warn | LogLevel::Debug)
             ) {
-                LoggerConfig::default().log(
+                crate::observability::logger::current().log(
                     LogLevel::Error,
                     LogArgument::Native(&self.message_value()?),
                     &[],

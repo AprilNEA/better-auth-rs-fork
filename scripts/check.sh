@@ -620,6 +620,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
+        ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
         ./compat-tests/reference-server/contracts/hook-matcher-input.test.ts \
@@ -640,7 +641,7 @@ run_stage() {
         --test api_key_number_name_tests --test api_key_additional_fields_tests \
         --test oauth_token_duration_tests --test oauth_proxy_hooks_tests \
         --test oauth_proxy_request_url_tests --test request_runtime_mutation_tests \
-        --test dynamic_runtime_tests -- -D warnings || json_status=1
+        --test dynamic_runtime_tests --test http_api_error_logging_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
         error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
         request_runtime:: observability::logger:: observability::telemetry:: \
@@ -662,7 +663,8 @@ run_stage() {
         --test organization_body_schema_tests \
         --test api_key_number_name_tests --test oauth_token_duration_tests \
         --test oauth_proxy_hooks_tests --test oauth_proxy_request_url_tests \
-        --test request_runtime_mutation_tests --test dynamic_runtime_tests || json_status=1
+        --test request_runtime_mutation_tests --test dynamic_runtime_tests \
+        --test http_api_error_logging_tests || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test api_key_additional_fields_tests -- typed_metadata:: || json_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || json_status=1

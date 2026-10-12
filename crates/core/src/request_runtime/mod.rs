@@ -290,6 +290,7 @@ impl<S: AuthSchema> AuthContext<S> {
     }
 
     /// Enter the HTTP policy branch before rate limiting, request hooks, and body decoding.
+    /// Preserve the caller's logger until endpoint dispatch enters its own logger scope.
     pub async fn with_http_context<T, F, Fut>(
         &self,
         request: &AuthRequest,
@@ -346,7 +347,7 @@ impl<S: AuthSchema> AuthContext<S> {
             resolved.capture_routing_path()?;
             Arc::new(resolved)
         };
-        scope::run(resolved.clone(), async move { operation(resolved).await }).await
+        scope::run_runtime(resolved.clone(), async move { operation(resolved).await }).await
     }
 
     fn runtime_values(&self) -> AuthResult<&RuntimeValues> {

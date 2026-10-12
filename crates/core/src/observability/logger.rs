@@ -201,7 +201,7 @@ impl LoggerConfig {
     }
 }
 
-/// Use the current auth instance's logger without retaining a process-global instance.
+/// Use the nearest endpoint or native helper logger. HTTP policy resolution preserves the caller's logger.
 pub fn current() -> LoggerConfig {
     crate::request_runtime::current_logger().unwrap_or_default()
 }
