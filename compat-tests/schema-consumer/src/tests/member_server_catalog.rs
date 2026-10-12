@@ -68,30 +68,46 @@ async fn check(database: &DatabaseConnection, backend: DbBackend, case: &Value) 
         .get("name")
         .and_then(Value::as_str)
         .ok_or("Missing Member catalog case name")?;
-    let table = match (backend, name) {
+    let (table, organization_table) = match (backend, name) {
         (DbBackend::Postgres, "default") => {
             let _schema = postgres_default::AppAuthSchema;
             let _organization = std::marker::PhantomData::<postgres_default::AppOrganizationSchema>;
             postgres_default::create_auth_tables(database).await?;
-            postgres_default::member::Entity.table_name().to_owned()
+            (
+                postgres_default::member::Entity.table_name().to_owned(),
+                postgres_default::organization::Entity
+                    .table_name()
+                    .to_owned(),
+            )
         }
         (DbBackend::Postgres, "custom") => {
             let _schema = postgres_custom::AppAuthSchema;
             let _organization = std::marker::PhantomData::<postgres_custom::AppOrganizationSchema>;
             postgres_custom::create_auth_tables(database).await?;
-            postgres_custom::member::Entity.table_name().to_owned()
+            (
+                postgres_custom::member::Entity.table_name().to_owned(),
+                postgres_custom::organization::Entity
+                    .table_name()
+                    .to_owned(),
+            )
         }
         (DbBackend::MySql, "default") => {
             let _schema = mysql_default::AppAuthSchema;
             let _organization = std::marker::PhantomData::<mysql_default::AppOrganizationSchema>;
             mysql_default::create_auth_tables(database).await?;
-            mysql_default::member::Entity.table_name().to_owned()
+            (
+                mysql_default::member::Entity.table_name().to_owned(),
+                mysql_default::organization::Entity.table_name().to_owned(),
+            )
         }
         (DbBackend::MySql, "custom") => {
             let _schema = mysql_custom::AppAuthSchema;
             let _organization = std::marker::PhantomData::<mysql_custom::AppOrganizationSchema>;
             mysql_custom::create_auth_tables(database).await?;
-            mysql_custom::member::Entity.table_name().to_owned()
+            (
+                mysql_custom::member::Entity.table_name().to_owned(),
+                mysql_custom::organization::Entity.table_name().to_owned(),
+            )
         }
         _ => return Err(format!("Unsupported Member catalog {backend:?}/{name}").into()),
     };
@@ -102,6 +118,15 @@ async fn check(database: &DatabaseConnection, backend: DbBackend, case: &Value) 
             .ok_or("Missing upstream Member catalog columns")?,
         "{backend:?} Member catalog {name}"
     );
+    server_catalog::assert_frozen_ddl(
+        database,
+        backend,
+        &organization_table,
+        case["migration"]["initialSql"]
+            .as_str()
+            .ok_or("Missing frozen Organization DDL")?,
+    )
+    .await?;
     Ok(())
 }
 

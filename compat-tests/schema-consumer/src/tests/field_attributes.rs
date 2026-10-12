@@ -39,7 +39,7 @@ fn statement(sql: impl Into<String>) -> Statement {
 async fn insert_organization(database: &DatabaseConnection, id: &str, column: &str, value: &str) {
     database.execute_raw(Statement::from_sql_and_values(
         DbBackend::Sqlite,
-        format!("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, created_at, updated_at, \"{column}\") VALUES (?, 'Attributes', 'shared-slug', 'required', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)"),
+        format!("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, createdAt, \"{column}\") VALUES (?, 'Attributes', 'shared-slug', 'required', CURRENT_TIMESTAMP, ?)"),
         [id.into(), value.into()],
     )).await.unwrap();
 }
@@ -69,9 +69,9 @@ async fn generated_attributes_enforce_indexes_references_and_delete_actions() {
     );
     assert_eq!(columns.get("owner_id").map(String::as_str), Some("TEXT"));
     assert_eq!(columns.get("bigOwner").map(String::as_str), Some("TEXT"));
-    assert!(database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, created_at, updated_at) VALUES ('missing-required', 'Invalid', 'invalid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)").await.unwrap_err().to_string().contains("NOT NULL constraint failed"));
-    assert!(database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, created_at, updated_at) VALUES ('null-required', 'Invalid', 'invalid', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)").await.unwrap_err().to_string().contains("NOT NULL constraint failed"));
-    database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, lookup, unique_code, created_at, updated_at) VALUES ('nullable-fields', 'Nullable', 'nullable', 'present', NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)").await.unwrap();
+    assert!(database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, createdAt) VALUES ('missing-required', 'Invalid', 'invalid', CURRENT_TIMESTAMP)").await.unwrap_err().to_string().contains("NOT NULL constraint failed"));
+    assert!(database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, createdAt) VALUES ('null-required', 'Invalid', 'invalid', NULL, CURRENT_TIMESTAMP)").await.unwrap_err().to_string().contains("NOT NULL constraint failed"));
+    database.execute_unprepared("INSERT INTO app_organizations (id, display_name, slug, implicitRequired, lookup, unique_code, createdAt) VALUES ('nullable-fields', 'Nullable', 'nullable', 'present', NULL, NULL, CURRENT_TIMESTAMP)").await.unwrap();
 
     let mut indexes = BTreeMap::<Vec<String>, Vec<bool>>::new();
     let mut index_names = BTreeMap::<Vec<String>, Vec<String>>::new();

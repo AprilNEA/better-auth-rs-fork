@@ -11,18 +11,12 @@ use super::value_filter::{self, QueryPredicate};
 
 pub(super) type Entity<M> = <M as SeaOrmOrganizationModel>::Entity;
 
-pub(super) fn extra_updated_at_column<M: SeaOrmOrganizationModel>(
+pub(super) fn private_column<M: SeaOrmOrganizationModel>(
     fields: &UserConfig,
+    name: &str,
+    logical: &str,
 ) -> AuthResult<Option<M::Column>> {
-    let column = M::column("auth_updated_at")?;
-    let logical = M::core_field_name(&column).unwrap_or("auth_updated_at");
-    if fields.fields().contains_key(logical) {
-        return Ok(None);
-    }
-    Ok(
-        (!fields.owns_adapter_column(&column.as_str(), |name| Ok(M::column(name)?.as_str()))?)
-            .then_some(column),
-    )
+    super::record_write::private_column(fields, logical, || M::private_column(name), M::column)
 }
 
 pub(super) fn raw_record<M: SeaOrmOrganizationModel>(
@@ -261,8 +255,21 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
     policy: &better_auth_core::id::IdGeneration,
     (runtime, role): (&ModelFields, EntityRole),
 ) -> AuthResult<super::record_write::RecordWrite<Entity<M>>> {
+    let mut private = Vec::new();
     let core = core
         .into_iter()
+        .filter_map(|(name, value)| {
+            if let Some(logical) = better_auth_core::store::schema::core_fields(role)
+                .iter()
+                .find(|field| field.name == name)
+                .and_then(|field| field.adapter_private)
+            {
+                private.push((name, logical, value));
+                None
+            } else {
+                Some((name, value))
+            }
+        })
         .map(|(name, value)| {
             let column = M::column(&name)?;
             Ok((
@@ -271,14 +278,14 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
             ))
         })
         .collect::<AuthResult<FieldMap>>()?;
-    let backend_updated_at = if role == EntityRole::Organization {
-        extra_updated_at_column::<M>(config)?.and_then(|column| {
-            let logical = M::core_field_name(&column).unwrap_or("auth_updated_at");
-            core.get(logical).cloned().map(|value| (column, value))
+    let private = private
+        .into_iter()
+        .filter_map(|(name, logical, value)| {
+            private_column::<M>(config, &name, logical)
+                .map(|column| column.map(|column| (column, value)))
+                .transpose()
         })
-    } else {
-        None
-    };
+        .collect::<AuthResult<Vec<_>>>()?;
     let supplied = core.get("id").or_else(|| input.get("id")).cloned();
     let fields = runtime
         .with_id_input(
@@ -324,7 +331,7 @@ pub(super) async fn active<M: SeaOrmOrganizationModel>(
         )
         .await?;
     let mut active = super::record_write::RecordWrite::<Entity<M>>::default();
-    if let Some((column, value)) = backend_updated_at {
+    for (column, value) in private {
         active.native_field(column, value);
     }
     active.apply_fields(fields, M::column)?;

@@ -6,7 +6,9 @@ use better_auth_core::{
     AuthResult, AuthSchema, FieldMap,
     organization_fields::OrganizationFields,
     plugin_runtime::ModelFields,
-    store::schema::{EntityRole, SchemaConfiguration, SchemaTable, resolve_field_name},
+    store::schema::{
+        EntityRole, SchemaConfiguration, SchemaTable, core_fields, resolve_field_name,
+    },
     user_fields::UserConfig,
 };
 use sea_orm::{ColumnTrait, EntityTrait};
@@ -47,9 +49,17 @@ fn columns<C: ColumnTrait>(
 }
 
 fn organization<M: SeaOrmOrganizationModel>(
+    role: EntityRole,
     fields: &UserConfig,
-    extra_insert_columns: impl IntoIterator<Item = M::Column>,
 ) -> AuthResult<SchemaTable> {
+    let extra_insert_columns = core_fields(role)
+        .iter()
+        .filter_map(|field| field.adapter_private.map(|logical| (field, logical)))
+        .filter_map(|(field, logical)| {
+            super::super::organization_models::private_column::<M>(fields, field.name, logical)
+                .transpose()
+        })
+        .collect::<AuthResult<Vec<_>>>()?;
     Ok(model::<M::Entity>(columns(
         fields,
         M::column,
@@ -59,20 +69,19 @@ fn organization<M: SeaOrmOrganizationModel>(
 
 fn plugin<M: SeaOrmPluginModel>(role: EntityRole, fields: &UserConfig) -> AuthResult<SchemaTable> {
     let legacy = match role {
-        EntityRole::Passkey if M::passkey_storage() == better_auth_core::PasskeyStorage::Legacy => {
-            &[("credential", "credential"), ("updatedAt", "updated_at")][..]
+        EntityRole::Passkey => M::passkey_storage() == better_auth_core::PasskeyStorage::Legacy,
+        EntityRole::TwoFactor => {
+            M::two_factor_storage() == better_auth_core::TwoFactorStorage::Legacy
         }
-        EntityRole::TwoFactor
-            if M::two_factor_storage() == better_auth_core::TwoFactorStorage::Legacy =>
-        {
-            &[("createdAt", "created_at"), ("updatedAt", "updated_at")][..]
-        }
-        _ => &[],
+        _ => false,
     };
-    let extra_insert_columns = legacy
+    let extra_insert_columns = core_fields(role)
         .iter()
-        .filter(|(logical, _)| !fields.fields().contains_key(*logical))
-        .map(|(_, physical)| M::column(physical))
+        .filter(|_| legacy)
+        .filter_map(|field| field.adapter_private)
+        .filter_map(|logical| {
+            super::super::plugin_rows::private_column::<M>(fields, logical).transpose()
+        })
         .collect::<AuthResult<Vec<_>>>()?;
     Ok(model::<M::Entity>(columns(
         fields,
@@ -134,24 +143,22 @@ where
                 S::Verification::extra_insert_columns(),
             )?)),
             EntityRole::Organization => {
-                let fields = organization_fields.fields_for(role)?;
-                let extra = super::super::organization_models::extra_updated_at_column::<
-                    O::Organization,
-                >(fields)?;
-                organization::<O::Organization>(fields, extra)
+                organization::<O::Organization>(role, organization_fields.fields_for(role)?)
             }
             EntityRole::Member => {
-                organization::<O::Member>(organization_fields.fields_for(role)?, [])
+                organization::<O::Member>(role, organization_fields.fields_for(role)?)
             }
             EntityRole::Invitation => {
-                organization::<O::Invitation>(organization_fields.fields_for(role)?, [])
+                organization::<O::Invitation>(role, organization_fields.fields_for(role)?)
             }
-            EntityRole::Team => organization::<O::Team>(organization_fields.fields_for(role)?, []),
+            EntityRole::Team => {
+                organization::<O::Team>(role, organization_fields.fields_for(role)?)
+            }
             EntityRole::TeamMember => {
-                organization::<O::TeamMember>(&model_fields.plugin_fields(role), [])
+                organization::<O::TeamMember>(role, &model_fields.plugin_fields(role))
             }
             EntityRole::OrganizationRole => {
-                organization::<O::OrganizationRole>(organization_fields.fields_for(role)?, [])
+                organization::<O::OrganizationRole>(role, organization_fields.fields_for(role)?)
             }
             EntityRole::ApiKey => plugin::<P::ApiKey>(role, &model_fields.plugin_fields(role)),
             EntityRole::DeviceCode => {

@@ -16,6 +16,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+mod organization;
 mod passkey;
 mod projection;
 mod two_factor;

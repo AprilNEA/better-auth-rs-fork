@@ -85,6 +85,8 @@ pub struct FieldDef {
     pub ty: &'static str,
     pub is_primary_key: bool,
     pub column_name: Option<&'static str>,
+    /// Logical name of legacy adapter storage that an upstream model does not require.
+    pub adapter_private: Option<&'static str>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -110,6 +112,7 @@ macro_rules! f {
             ty: $ty,
             is_primary_key: false,
             column_name: None,
+            adapter_private: None,
         }
     };
 }
@@ -121,6 +124,7 @@ macro_rules! pk {
             ty: $ty,
             is_primary_key: true,
             column_name: None,
+            adapter_private: None,
         }
     };
 }
@@ -132,6 +136,16 @@ macro_rules! f_col {
             ty: $ty,
             is_primary_key: false,
             column_name: Some($column_name),
+            adapter_private: None,
+        }
+    };
+}
+
+macro_rules! private {
+    ($name:expr, $ty:expr, $logical:expr) => {
+        FieldDef {
+            adapter_private: Some($logical),
+            ..f!($name, $ty)
         }
     };
 }
@@ -185,7 +199,7 @@ static VERIFICATION_CORE: &[FieldDef] = &[
     f!("updated_at", "DateTimeUtc"),
 ];
 
-/// Core fields that are always required for a given entity role.
+/// Native fields and legacy adapter storage for an entity role.
 pub fn core_fields(role: EntityRole) -> &'static [FieldDef] {
     match role {
         EntityRole::User => USER_CORE,
@@ -300,8 +314,8 @@ static PLUGINS: &[PluginSchema] = &[
                 f!("verified", "bool"),
                 f!("failed_verification_count", "i64"),
                 f!("locked_until", "Option<DateTimeUtc>"),
-                f!("created_at", "DateTimeUtc"),
-                f!("updated_at", "DateTimeUtc"),
+                private!("created_at", "DateTimeUtc", "createdAt"),
+                private!("updated_at", "DateTimeUtc", "updatedAt"),
             ],
         }],
     },
@@ -363,6 +377,7 @@ static PLUGINS: &[PluginSchema] = &[
                         ty: "DateTimeUtc",
                         is_primary_key: false,
                         column_name: Some("updated_at"),
+                        adapter_private: Some("authUpdatedAt"),
                     },
                 ],
             },
@@ -409,6 +424,7 @@ static PLUGINS: &[PluginSchema] = &[
                         ty: "i64",
                         is_primary_key: false,
                         column_name: Some("member_count"),
+                        adapter_private: None,
                     },
                 ],
             },
@@ -491,10 +507,10 @@ static PLUGINS: &[PluginSchema] = &[
                 f!("device_type", "String"),
                 f!("backed_up", "bool"),
                 f!("transports", "Option<String>"),
-                f!("credential", "String"),
+                private!("credential", "String", "credential"),
                 f!("aaguid", "Option<String>"),
                 f!("created_at", "DateTimeUtc"),
-                f!("updated_at", "DateTimeUtc"),
+                private!("updated_at", "DateTimeUtc", "updatedAt"),
             ],
         }],
     },

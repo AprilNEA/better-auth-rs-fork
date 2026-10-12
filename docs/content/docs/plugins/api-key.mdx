@@ -89,6 +89,8 @@ A serialized JSON `null` cache entry is a cache miss. Database fallback reloads 
 
 API keys use the database by default. Set `storage: ApiKeyStorage::SecondaryStorage` to use the shared secondary storage. A configuration's `custom_storage` takes precedence over the shared backend. `MemoryCacheAdapter` and the optional `RedisAdapter` implement `SecondaryStorage`; applications implement its async `get`, `set_native`, `delete`, and atomic `get_and_delete` methods. `set_native` receives `FieldValue` keys and values and an optional floating-point TTL in seconds. JSON serialization can produce Undefined, which reaches the backend unchanged. Memory retains that value; Redis rejects non-string values at its encoding boundary. The `set` convenience method accepts string keys, string values, and unsigned TTLs. No TTL means persistent storage.
 
+Native storage bridges may override `invoke_get_native`, `invoke_set_native`, and `invoke_delete_native` to separate invocation errors from returned asynchronous completions. Existing async implementations use the default hooks. The write hook receives `Option<Option<f64>>`: outer `None` omits the TTL argument, while `Some(None)` supplies undefined. API Key calls evaluate each key and start its storage call before evaluating the next key. A later invocation or key-conversion error does not cancel earlier writes. Unowned failures reach the shared terminal reporter; adopted failures retain the existing concurrent collector. Atomic quota and cache-consume APIs keep their separate guarantees.
+
 ```rust
 use std::sync::Arc;
 use better_auth::plugins::api_key::{ApiKeyPlugin, ApiKeyStorage};

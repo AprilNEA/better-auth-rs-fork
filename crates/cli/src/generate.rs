@@ -1,6 +1,6 @@
 use crate::schema_config::{
     AdditionalField, Database, Entity, Field, FieldType, IdGeneration, OnDelete, SchemaConfig,
-    SchemaOptions, model_name, sqlite_native_catalog,
+    SchemaOptions, model_name,
 };
 use better_auth_schema_registry::{self as registry, EntityRole, ExtraEntitySchema};
 use proc_macro2::TokenStream;
@@ -487,12 +487,7 @@ fn gen_table(
                 return Some(column);
             }
             if database == Database::Sqlite
-                && (sqlite_native_catalog(database, entity.role)
-                    || entity.session_row_presence
-                    || entity.api_key_native_schema
-                    || entity.device_code_native_schema
-                    || entity.passkey_native_schema
-                    || entity.two_factor_native_schema)
+                && entity.native_catalog
                 && field.attributes.is_none()
             {
                 let definition = entity.catalog_field(field.registry_column?)?;
@@ -513,7 +508,7 @@ fn gen_table(
                         && definition.name == "permission" => quote!(column.text();),
                     _ => return None,
                 };
-                let unique = inline_native_unique(entity, field, database)
+                let unique = inline_native_unique(entity, field)
                     .then(|| quote!(column.unique_key();));
                 let required_email = (entity.role == Some(EntityRole::User)
                     && definition.name == "email")
@@ -570,30 +565,7 @@ fn gen_server_native_column(
     database: Database,
 ) -> Option<TokenStream> {
     let definition = entity.catalog_field(field.registry_column?)?;
-    if database == Database::Sqlite
-        || !(entity.session_row_presence
-            || entity.api_key_native_schema
-            || entity.device_code_native_schema
-            || entity.passkey_native_schema
-            || entity.two_factor_native_schema
-            || matches!(
-                entity.role,
-                Some(
-                    EntityRole::User
-                        | EntityRole::Account
-                        | EntityRole::Verification
-                        | EntityRole::Jwk
-                        | EntityRole::RateLimit
-                        | EntityRole::Member
-                        | EntityRole::OrganizationRole
-                        | EntityRole::Team
-                        | EntityRole::TeamMember
-                        | EntityRole::Invitation
-                        | EntityRole::WalletAddress
-                )
-            ))
-        || field.attributes.is_some()
-    {
+    if database == Database::Sqlite || !entity.native_catalog || field.attributes.is_some() {
         return None;
     }
     let data_type = match (database, definition.ty) {
@@ -611,6 +583,7 @@ fn gen_server_native_column(
                 || matches!(
                     (entity.role, definition.name),
                     (Some(EntityRole::User), "name" | "email")
+                        | (Some(EntityRole::Organization), "name" | "slug")
                         | (Some(EntityRole::Session), "token")
                         | (Some(EntityRole::Verification), "identifier")
                         | (Some(EntityRole::RateLimit), "key")
@@ -655,8 +628,7 @@ fn gen_server_native_column(
     };
     let required_email = (entity.role == Some(EntityRole::User) && definition.name == "email")
         .then(|| quote!(column.not_null();));
-    let unique =
-        inline_native_unique(entity, field, database).then(|| quote!(column.unique_key();));
+    let unique = inline_native_unique(entity, field).then(|| quote!(column.unique_key();));
     let timestamp_default = if database == Database::Mysql {
         quote!(sea_orm::sea_query::Expr::custom_keyword(
             "CURRENT_TIMESTAMP(3)"
@@ -747,11 +719,12 @@ fn gen_column_type(field: &AdditionalField) -> TokenStream {
     }
 }
 
-fn inline_native_unique(entity: &Entity, field: &Field, database: Database) -> bool {
-    (sqlite_native_catalog(database, entity.role)
-        || entity.role == Some(EntityRole::User)
-        || entity.role == Some(EntityRole::TeamMember)
-        || entity.session_row_presence)
+fn inline_native_unique(entity: &Entity, field: &Field) -> bool {
+    entity.native_catalog
+        && !entity.api_key_native_schema
+        && !entity.device_code_native_schema
+        && !entity.passkey_native_schema
+        && !(entity.two_factor_native_schema && entity.role == Some(EntityRole::TwoFactor))
         && field.attributes.is_none()
         && field.registry_column.is_some_and(|column| {
             entity.catalog_field(column).is_some()
@@ -785,7 +758,7 @@ fn gen_indexes(entity: &Entity, database: Database) -> Vec<TokenStream> {
         })
         .filter(|index| {
             !entity.fields.iter().any(|field| {
-                inline_native_unique(entity, field, database)
+                inline_native_unique(entity, field)
                     && index.unique
                     && field
                         .registry_column

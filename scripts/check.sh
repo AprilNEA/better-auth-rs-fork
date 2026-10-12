@@ -73,7 +73,7 @@ run_stage() {
         for target in "${targets[@]}"; do
           selection+=(--test "$target")
         done
-        ./scripts/consumer-check.sh "${selection[@]}"
+        ./scripts/consumer-check.sh "${selection[@]}" -- --include-ignored
       fi
       ;;
     fullstack) cargo check --locked --manifest-path examples/fullstack/backend/Cargo.toml ;;

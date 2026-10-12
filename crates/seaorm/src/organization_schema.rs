@@ -26,6 +26,10 @@ pub trait SeaOrmOrganizationModel:
     type Column: ColumnTrait;
     /// Resolve a logical or serialized field name to the application's column.
     fn column(name: &str) -> AuthResult<Self::Column>;
+    /// Resolve optional adapter storage. Unknown mappings must retain their errors.
+    fn private_column(name: &str) -> AuthResult<Option<Self::Column>> {
+        Self::column(name).map(Some)
+    }
     /// Return whether the column stores a typed built-in field.
     fn is_core_column(column: &Self::Column) -> bool;
     /// Return the canonical public name of a built-in column.

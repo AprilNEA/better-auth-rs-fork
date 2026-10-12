@@ -93,3 +93,57 @@ pub async fn observe(
     }
     Ok(json!({"indexes": indexes, "foreignKeys": foreign_keys}))
 }
+
+pub async fn constraints(
+    database: &DatabaseConnection,
+    backend: DbBackend,
+    table_name: &str,
+) -> TestResult<Value> {
+    let sql = match backend {
+        DbBackend::Postgres => {
+            r#"SELECT t.relname AS "table", c.conname AS "name", c.contype::text AS "type",
+            c.condeferrable AS "deferrable", c.condeferred AS "deferred", c.convalidated AS "validated",
+            pg_get_constraintdef(c.oid) AS "definition"
+            FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+            WHERE n.nspname = current_schema() AND t.relname = $1
+            ORDER BY c.conname"#
+        }
+        DbBackend::MySql => {
+            r"SELECT TABLE_NAME AS `table`, CONSTRAINT_NAME AS `name`,
+            CONSTRAINT_TYPE AS `type`, ENFORCED AS `enforced`
+            FROM information_schema.TABLE_CONSTRAINTS
+            WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = ?
+            ORDER BY CONSTRAINT_NAME"
+        }
+        _ => return Err("The constraint observer requires PostgreSQL or MySQL".into()),
+    };
+    let mut constraints = Vec::new();
+    for row in database
+        .query_all_raw(Statement::from_sql_and_values(
+            backend,
+            sql,
+            [table_name.into()],
+        ))
+        .await?
+    {
+        constraints.push(match backend {
+            DbBackend::Postgres => json!({
+                "table": row.try_get::<String>("", "table")?,
+                "name": row.try_get::<String>("", "name")?,
+                "type": row.try_get::<String>("", "type")?,
+                "deferrable": row.try_get::<bool>("", "deferrable")?,
+                "deferred": row.try_get::<bool>("", "deferred")?,
+                "validated": row.try_get::<bool>("", "validated")?,
+                "definition": row.try_get::<String>("", "definition")?,
+            }),
+            _ => json!({
+                "table": row.try_get::<String>("", "table")?,
+                "name": row.try_get::<String>("", "name")?,
+                "type": row.try_get::<String>("", "type")?,
+                "enforced": row.try_get::<String>("", "enforced")?,
+            }),
+        });
+    }
+    Ok(json!(constraints))
+}

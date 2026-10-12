@@ -120,13 +120,18 @@ pub(crate) fn derive_auth_entity(input: &DeriveInput) -> TokenStream {
     let plugin = registry::plugin_field_names(role);
     let plugin_record = plugin_model::record_name(role).is_some();
 
-    if let Some(missing) = core.iter().find(|required| {
-        !(plugin_record && **required != "id" || row_presence && **required == "active")
-            && !idents.iter().any(|ident| ident == *required)
+    if let Some(missing) = registry::core_fields(role).iter().find(|required| {
+        !(required.adapter_private.is_some()
+            || plugin_record && required.name != "id"
+            || row_presence && required.name == "active")
+            && !idents.iter().any(|ident| ident == required.name)
     }) {
         return syn::Error::new_spanned(
             &input.ident,
-            format!("missing required auth field `{missing}` for this role"),
+            format!(
+                "missing required auth field `{}` for this role",
+                missing.name
+            ),
         )
         .to_compile_error();
     }

@@ -301,7 +301,7 @@ async fn generated_organization_models_persist_mapped_fields_and_enforce_constra
 
     for (statement, expected) in [
         (
-            "INSERT INTO app_organizations (id, organization_name, slug, createdAt, updated_at) SELECT 'duplicate-name', organization_name, 'different-slug', createdAt, updated_at FROM app_organizations LIMIT 1",
+            "INSERT INTO app_organizations (id, organization_name, slug, createdAt) SELECT 'duplicate-name', organization_name, 'different-slug', createdAt FROM app_organizations LIMIT 1",
             "UNIQUE constraint failed: app_organizations.organization_name",
         ),
         (
@@ -316,7 +316,7 @@ async fn generated_organization_models_persist_mapped_fields_and_enforce_constra
         let error = database.execute_unprepared(statement).await.unwrap_err();
         assert!(error.to_string().contains(expected), "{error}");
     }
-    database.execute_unprepared("INSERT INTO app_organizations (id, organization_name, slug, createdAt, updated_at) SELECT 'duplicate-slug', 'Different name', slug, createdAt, updated_at FROM app_organizations LIMIT 1").await.unwrap();
+    database.execute_unprepared("INSERT INTO app_organizations (id, organization_name, slug, createdAt) SELECT 'duplicate-slug', 'Different name', slug, createdAt FROM app_organizations LIMIT 1").await.unwrap();
     database
         .execute_unprepared("DELETE FROM app_organizations WHERE id = 'duplicate-slug'")
         .await

@@ -17,6 +17,24 @@ use super::{
 #[path = "record_write_tests.rs"]
 mod tests;
 
+pub(super) fn private_column<C: ColumnTrait>(
+    schema: &better_auth_core::user_fields::UserConfig,
+    name: &str,
+    candidate: impl FnOnce() -> AuthResult<Option<C>>,
+    resolve: impl Fn(&str) -> AuthResult<C>,
+) -> AuthResult<Option<C>> {
+    if schema.fields().contains_key(name) {
+        return Ok(None);
+    }
+    let Some(column) = candidate()? else {
+        return Ok(None);
+    };
+    Ok((!schema.owns_adapter_column(&column.to_string(), |name| {
+        resolve(name).map(|column| column.to_string())
+    })?)
+    .then_some(column))
+}
+
 pub(super) struct RecordWrite<E: EntityTrait> {
     fields: Vec<(E::Column, Binding)>,
 }

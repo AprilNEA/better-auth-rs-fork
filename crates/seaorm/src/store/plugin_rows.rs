@@ -241,14 +241,7 @@ pub(super) fn private_column<M: SeaOrmPluginModel>(
     fields: &UserConfig,
     name: &str,
 ) -> AuthResult<Option<M::Column>> {
-    if fields.fields().contains_key(name) {
-        return Ok(None);
-    }
-    let column = M::column(name)?;
-    Ok(
-        (!fields.owns_adapter_column(&column.as_str(), |name| Ok(M::column(name)?.as_str()))?)
-            .then_some(column),
-    )
+    super::record_write::private_column(fields, name, || M::column(name).map(Some), M::column)
 }
 
 fn error(column: &str, error: impl std::fmt::Display) -> AuthError {

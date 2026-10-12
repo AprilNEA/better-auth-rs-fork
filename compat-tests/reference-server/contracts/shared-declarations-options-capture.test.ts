@@ -8,6 +8,9 @@ test("Shared CLI declarations retain Organization option mutations and complete 
   const first = await runStandaloneCapture(capture);
   await writeObservation(first.stdout);
   expect({ status: first.status, stderr: first.stderr }, `Capture evidence: ${first.directory}`).toStrictEqual({ status: 0, stderr: "" });
+  expect(readFileSync(first.output, "utf8"), `Capture evidence: ${first.directory}`).toBe(readFileSync(
+    new URL("../../../tests/fixtures/shared-declarations-options-1.7.6.json", import.meta.url), "utf8",
+  ));
   const second = await runStandaloneCapture(capture);
   expect({ status: second.status, stderr: second.stderr }, `Capture evidence: ${second.directory}`).toStrictEqual({ status: 0, stderr: "" });
   expect(readFileSync(second.output, "utf8"), `Capture evidence: ${second.directory}`).toBe(readFileSync(first.output, "utf8"));

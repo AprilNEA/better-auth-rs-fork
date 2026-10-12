@@ -23,6 +23,31 @@ pub(super) fn generate(
     };
     let record = format_ident!("{record}");
     let core_fields = registry::core_field_names(role);
+    let private_columns = registry::core_fields(role)
+        .iter()
+        .filter_map(|definition| {
+            definition
+                .adapter_private
+                .map(|logical| (definition, logical))
+        })
+        .map(|(definition, logical)| {
+            let name = definition.name;
+            let column = fields.named.iter().find_map(|field| {
+                field
+                    .ident
+                    .as_ref()
+                    .filter(|ident| *ident == name)
+                    .map(|_| {
+                        format_ident!(
+                            "{}",
+                            serde_rename_rule::RenameRule::PascalCase.apply_to_field(name)
+                        )
+                    })
+            });
+            let value = column.map_or_else(|| quote!(None), |column| quote!(Some(Column::#column)));
+            quote!(#name | #logical => Ok(#value),)
+        })
+        .collect::<Vec<_>>();
     let rename_rule = serde_serialized_name(&input.attrs, "rename_all")?
         .map(|rule| {
             serde_rename_rule::RenameRule::from_rename_all_str(&rule)
@@ -80,7 +105,11 @@ pub(super) fn generate(
                 continue;
             }
             if matches!(name.as_str(), "auth_updated_at" | "membership_key") {
-                output_values.push(quote!(let _ = projected.remove(#public_name);));
+                output_values.push(quote! {
+                    if !fields.fields().contains_key(#public_name) {
+                        let _ = projected.remove(#public_name);
+                    }
+                });
                 continue;
             }
             if matches!(name.as_str(), "created_at" | "updated_at" | "expires_at") {
@@ -142,6 +171,9 @@ pub(super) fn generate(
             type Column = Column;
             fn column(name: &str) -> #core_root::AuthResult<Column> {
                 match name { #(#columns)* _ => Err(#core_root::AuthError::config(format!("Unknown organization model column: {name}"))) }
+            }
+            fn private_column(name: &str) -> #core_root::AuthResult<Option<Column>> {
+                match name { #(#private_columns)* _ => Err(#core_root::AuthError::config(format!("Unknown private organization model column: {name}"))) }
             }
             fn is_core_column(column: &Column) -> bool {
                 matches!(column, #(#core_columns)|*)

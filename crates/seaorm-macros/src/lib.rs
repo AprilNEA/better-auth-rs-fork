@@ -16,6 +16,7 @@ use syn::{DeriveInput, parse_macro_input};
 /// Organization roles are `organization`, `member`, `invitation`, `team`, `team_member`, and `organization_role`.
 /// Plugin roles are `api_key`, `device_code`, `passkey`, `two_factor`, `jwk`, `wallet_address`, and `rate_limit`.
 /// Plugin models require `id` and may omit native fields that their runtime declarations do not use.
+/// Organization models may omit adapter-private storage columns. Declared fields retain ownership of those columns when present.
 /// Typed record conversion remains fallible.
 /// Table and column mappings use SeaORM's `table_name` and `column_name` attributes.
 /// IDs use the declared field types. Absent IDs remain unset for database defaults.

@@ -102,13 +102,22 @@ async fn check(database: &DatabaseConnection, backend: DbBackend, case: &Value) 
         }
         _ => return Err(format!("Unsupported RateLimit catalog {backend:?}/{name}").into()),
     };
-    let actual = server_catalog::observe(database, backend, [table]).await?;
+    let actual = server_catalog::observe(database, backend, [table.clone()]).await?;
     assert_eq!(
         &actual,
         case.get("columns")
             .ok_or("Missing upstream RateLimit catalog columns")?,
         "{backend:?} RateLimit catalog {name}"
     );
+    server_catalog::assert_frozen_ddl(
+        database,
+        backend,
+        &table,
+        case["migration"]["initialSql"]
+            .as_str()
+            .ok_or("Missing frozen RateLimit DDL")?,
+    )
+    .await?;
     Ok(())
 }
 

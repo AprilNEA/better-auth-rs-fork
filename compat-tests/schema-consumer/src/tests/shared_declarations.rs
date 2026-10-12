@@ -77,11 +77,19 @@ async fn shared_declarations_preserve_sqlite_json_text_and_native_column_names()
     assert_eq!(physical.try_get::<String>("", "name")?, text);
     assert_eq!(physical.try_get::<String>("", "createdAt")?, date);
 
-    database.execute_raw(Statement::from_sql_and_values(
-        DbBackend::Sqlite,
-        "INSERT INTO organization (id, name, slug, logo, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        ["shared-organization".into(), "Shared".into(), "shared".into(), text.into(), date.into(), date.into()],
-    )).await?;
+    database
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Sqlite,
+            "INSERT INTO organization (id, name, slug, logo, createdAt) VALUES (?, ?, ?, ?, ?)",
+            [
+                "shared-organization".into(),
+                "Shared".into(),
+                "shared".into(),
+                text.into(),
+                date.into(),
+            ],
+        ))
+        .await?;
     let organization = sqlite::organization::Entity::find_by_id("shared-organization")
         .one(&database)
         .await?
@@ -103,6 +111,14 @@ async fn shared_declarations_preserve_sqlite_json_text_and_native_column_names()
         .ok_or("The declared TeamMember row must remain stored")?;
     assert_eq!(serde_json::to_value(&row.label)?, json!(text));
 
+    let expected: Value = serde_json::from_str(include_str!(
+        "../../../../tests/fixtures/shared-declarations-options-1.7.6.json"
+    ))?;
+    assert_eq!(expected["version"], "1.7.6");
+    assert_eq!(expected["database"], "sqlite");
+    let expected_models = expected["models"]
+        .as_array()
+        .ok_or("Expected model catalogs")?;
     let mut catalogs = Vec::new();
     for model in [
         "user",
@@ -127,8 +143,23 @@ async fn shared_declarations_preserve_sqlite_json_text_and_native_column_names()
             "{}",
             json!({ "model": model, "catalog": catalog, "ddl": ddl })
         );
+        let expected_model = expected_models
+            .get(catalogs.len())
+            .ok_or("Missing model catalog")?;
+        assert_eq!(expected_model["model"], model);
+        assert_eq!(
+            catalog,
+            json!({
+                "table": expected_model["table"],
+                "columns": expected_model["columns"],
+                "indexes": expected_model["indexes"],
+                "foreignKeys": expected_model["foreignKeys"],
+            }),
+            "{model}: complete SQLite catalog"
+        );
         catalogs.push(catalog);
     }
+    assert_eq!(catalogs.len(), expected_models.len());
     let rate_limit = catalogs.last().ok_or("The RateLimit catalog must exist")?;
     let columns = rate_limit
         .get("columns")

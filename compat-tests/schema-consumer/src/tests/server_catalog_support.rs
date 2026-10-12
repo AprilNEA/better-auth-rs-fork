@@ -72,6 +72,48 @@ pub async fn observe<const N: usize>(
     Ok(json!(columns))
 }
 
+async fn complete_catalog(
+    database: &DatabaseConnection,
+    backend: DbBackend,
+    table: &str,
+) -> TestResult<Value> {
+    Ok(json!({
+        "columns": observe(database, backend, [table.to_owned()]).await?,
+        "indexesAndForeignKeys": super::server_catalog_indexes::observe(database, backend, table).await?,
+        "constraints": super::server_catalog_indexes::constraints(database, backend, table).await?,
+    }))
+}
+
+/// Rebuild the pinned upstream migration in an isolated database before comparing catalogs.
+pub async fn assert_frozen_ddl(
+    database: &DatabaseConnection,
+    backend: DbBackend,
+    table: &str,
+    source: &str,
+) -> TestResult {
+    let actual = complete_catalog(database, backend, table).await?;
+    let table = table.to_owned();
+    let source = source.to_owned();
+    let check = |database: DatabaseConnection| async move {
+        let _ = database.execute_unprepared(&source).await?;
+        let expected = complete_catalog(&database, backend, &table).await?;
+        eprintln!(
+            "{}",
+            json!({ "table": table, "actual": actual, "upstream": expected })
+        );
+        assert_eq!(
+            actual, expected,
+            "{backend:?} {table}: complete catalog from frozen DDL"
+        );
+        Ok(())
+    };
+    match backend {
+        DbBackend::Postgres => in_postgres_catalog(check).await,
+        DbBackend::MySql => in_mysql_catalog(check).await,
+        _ => Err("The DDL comparison requires PostgreSQL or MySQL".into()),
+    }
+}
+
 pub async fn in_postgres_catalog<F, Fut>(check: F) -> TestResult
 where
     F: FnOnce(DatabaseConnection) -> Fut + Send + 'static,

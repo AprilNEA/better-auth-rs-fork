@@ -40,26 +40,6 @@ pub(crate) enum Database {
     Mysql,
 }
 
-pub(crate) fn sqlite_native_catalog(database: Database, role: Option<EntityRole>) -> bool {
-    matches!(database, Database::Sqlite)
-        && matches!(
-            role,
-            Some(
-                EntityRole::User
-                    | EntityRole::Account
-                    | EntityRole::Verification
-                    | EntityRole::Jwk
-                    | EntityRole::RateLimit
-                    | EntityRole::Member
-                    | EntityRole::OrganizationRole
-                    | EntityRole::Team
-                    | EntityRole::TeamMember
-                    | EntityRole::Invitation
-                    | EntityRole::WalletAddress
-            )
-        )
-}
-
 pub(crate) fn core_field(role: Option<EntityRole>, column: &str) -> Option<&'static FieldDef> {
     better_auth_schema_registry::core_fields(role?)
         .iter()
@@ -88,6 +68,7 @@ pub(crate) struct SchemaOptions {
     pub device_code_legacy_schema: bool,
     pub passkey_legacy_schema: bool,
     pub two_factor_legacy_schema: bool,
+    pub organization_legacy_schema: bool,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -202,6 +183,7 @@ pub(crate) struct Entity {
     pub registry_table: &'static str,
     pub table: String,
     pub role: Option<EntityRole>,
+    pub native_catalog: bool,
     pub fields: Vec<Field>,
     registry_columns: BTreeMap<&'static str, String>,
     logical_columns: BTreeMap<String, String>,
@@ -306,15 +288,23 @@ impl Entity {
                     && fields
                         .iter()
                         .any(|field| field.name == "two_factor_enabled"));
+        let native_catalog = match definition.role {
+            Some(EntityRole::Session) => session_row_presence,
+            Some(EntityRole::ApiKey) => api_key_native_schema,
+            Some(EntityRole::DeviceCode) => device_code_native_schema,
+            Some(EntityRole::Passkey) => passkey_native_schema,
+            Some(EntityRole::TwoFactor) => two_factor_native_schema,
+            Some(EntityRole::Organization) => !options.organization_legacy_schema,
+            Some(_) => true,
+            None => false,
+        };
         let mut fields = fields
             .iter()
-            .filter(|field| {
-                !(passkey_native_schema && matches!(field.name, "credential" | "updated_at"))
-                    && !(two_factor_native_schema
-                        && definition.role == Some(EntityRole::TwoFactor)
-                        && matches!(field.name, "created_at" | "updated_at"))
-            })
+            .filter(|field| !(native_catalog && field.adapter_private.is_some()))
             .collect::<Vec<_>>();
+        if native_catalog && definition.role == Some(EntityRole::Organization) {
+            fields.sort_by_key(|field| field.name == "metadata");
+        }
         if api_key_native_schema {
             fields.sort_by_key(|field| match field.name {
                 "id" => 0,
@@ -334,28 +324,6 @@ impl Entity {
                 _ => 0,
             });
         }
-        let native_catalog = sqlite_native_catalog(database, definition.role)
-            || session_row_presence
-            || api_key_native_schema
-            || device_code_native_schema
-            || passkey_native_schema
-            || two_factor_native_schema
-            || matches!(
-                definition.role,
-                Some(
-                    EntityRole::User
-                        | EntityRole::Account
-                        | EntityRole::Verification
-                        | EntityRole::Jwk
-                        | EntityRole::RateLimit
-                        | EntityRole::Member
-                        | EntityRole::OrganizationRole
-                        | EntityRole::Team
-                        | EntityRole::TeamMember
-                        | EntityRole::Invitation
-                        | EntityRole::WalletAddress
-                )
-            );
         let mut entity = Self {
             module: syn::parse_str(definition.mod_name)
                 .map_err(|error| format!("invalid model name: {error}"))?,
@@ -367,6 +335,7 @@ impl Entity {
                 definition.table_name.to_owned()
             },
             role: definition.role,
+            native_catalog,
             session_row_presence,
             api_key_native_schema,
             device_code_native_schema,

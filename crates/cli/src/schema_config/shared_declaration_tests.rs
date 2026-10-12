@@ -158,3 +158,60 @@ fn column_name(field: &syn::Field) -> Result<String, String> {
     }
     Ok(name)
 }
+
+#[test]
+fn organization_generation_separates_native_columns_from_legacy_adapter_storage()
+-> Result<(), String> {
+    for database in [Database::Sqlite, Database::Postgres, Database::Mysql] {
+        for legacy in [false, true] {
+            let source = crate::generate::generate_schema(
+                &["organization".into()],
+                &SchemaConfig::default(),
+                false,
+                IdGeneration::Random,
+                database,
+                SchemaOptions {
+                    organization_legacy_schema: legacy,
+                    ..Default::default()
+                },
+            )?;
+            let generated = syn::parse_file(&source).map_err(|error| error.to_string())?;
+            let fields = generated
+                .items
+                .iter()
+                .find_map(|item| match item {
+                    syn::Item::Mod(module) if module.ident == "organization" => {
+                        module.content.as_ref().and_then(|(_, items)| {
+                            items.iter().find_map(|item| match item {
+                                syn::Item::Struct(model) if model.ident == "Model" => {
+                                    Some(&model.fields)
+                                }
+                                _ => None,
+                            })
+                        })
+                    }
+                    _ => None,
+                })
+                .ok_or("Missing generated Organization")?;
+            let columns = fields
+                .iter()
+                .map(column_name)
+                .collect::<Result<Vec<_>, _>>()?;
+            let expected = if legacy {
+                vec![
+                    "id",
+                    "name",
+                    "slug",
+                    "logo",
+                    "metadata",
+                    "created_at",
+                    "updated_at",
+                ]
+            } else {
+                vec!["id", "name", "slug", "logo", "createdAt", "metadata"]
+            };
+            assert_eq!(columns, expected);
+        }
+    }
+    Ok(())
+}
