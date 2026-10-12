@@ -244,7 +244,7 @@ pub(crate) async fn change_password_core(
     req: &better_auth_core::AuthRequest,
     meta: &RequestMeta,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> AuthResult<ChangePasswordResponse<better_auth_core::FieldValue>> {
+) -> AuthResult<ChangePasswordResponse> {
     password_utils::validate_password(
         &body.new_password,
         ctx.password_policy.min_length,
