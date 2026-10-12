@@ -76,7 +76,7 @@ pub(super) mod user {
     pub struct Model {
         #[sea_orm(primary_key, auto_increment = false)]
         pub id: i32,
-        pub name: Option<String>,
+        pub name: String,
         pub email: String,
         #[sea_orm(column_name = "emailVerified")]
         pub email_verified: bool,

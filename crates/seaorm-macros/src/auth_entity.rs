@@ -337,6 +337,8 @@ fn gen_user(
     let (ident, fields) = model;
     let id_type = identity::field_type(fields, "id")?;
     let id_view = identity::string_view(id_type, "id");
+    let decode_email =
+        adapter_record::decode_type(identity::field_type(fields, "email")?, seaorm_root);
     let decode_name =
         adapter_record::decode_type(identity::field_type(fields, "name")?, seaorm_root);
     let decode_image =
@@ -455,7 +457,10 @@ fn gen_user(
             ) -> #core_root::AuthResult<Self::ActiveModel> {
                 Ok(Self::ActiveModel {
                     id: id.map_or(#seaorm_root::sea_orm::ActiveValue::NotSet, #seaorm_root::sea_orm::ActiveValue::Set),
-                    email: #seaorm_root::sea_orm::ActiveValue::Set(create_user.email),
+                    email: {
+                        let value = #core_root::SchemaField::into_field(create_user.email);
+                        #seaorm_root::sea_orm::ActiveValue::Set(#decode_email)
+                    },
                     name: match Some(create_user.name.into_field_value()).filter(|value| !value.is_undefined()) {
                         Some(value) => #seaorm_root::sea_orm::ActiveValue::Set(#decode_name),
                         None => #seaorm_root::sea_orm::ActiveValue::NotSet,
@@ -484,7 +489,8 @@ fn gen_user(
                     active.image = #seaorm_root::sea_orm::ActiveValue::Set(#decode_image);
                 }
                 if let ::std::option::Option::Some(email) = update.email {
-                    active.email = #seaorm_root::sea_orm::ActiveValue::Set(::std::option::Option::Some(email));
+                    let value = #core_root::SchemaField::into_field(email);
+                    active.email = #seaorm_root::sea_orm::ActiveValue::Set(#decode_email);
                 }
                 if let ::std::option::Option::Some(email_verified) = update.email_verified {
                     active.email_verified = #seaorm_root::sea_orm::ActiveValue::Set(email_verified);
