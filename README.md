@@ -159,11 +159,11 @@ User, Session, JWK, and Wallet ID declarations retain their field position. The 
 
 The [device authorization plugin](docs/content/docs/plugins/device-authorization.mdx) supports asynchronous code generators and propagates callback errors before persistence. Default device codes contain ASCII letters and digits; verification links replace any existing user-code query parameter.
 
-The [Admin plugin](docs/content/docs/plugins/admin.mdx) preserves a cancelled user update as a nullable response. Database-hook errors continue to propagate. User cache refresh errors use the instance logger and preserve the update result; see [commit ordering](docs/content/docs/concepts/hooks.mdx#provisioning-after-signup).
+The [Admin plugin](docs/content/docs/plugins/admin.mdx) preserves a cancelled user update as a nullable response. Database-hook errors continue to propagate. User cache refresh errors use the instance logger; logger failures propagate after the completed write; see [commit ordering](docs/content/docs/concepts/hooks.mdx#provisioning-after-signup).
 
 [HTTP rate limits](docs/content/docs/reference/configuration-options.mdx#ratelimitconfig) support memory, database, secondary, and custom storage. Database selection restores the native RateLimit declarations after plugin registration. `RateLimitConfig.model_name` and `fields` configure the final table alias and column mappings; SQL mappings must match the bound generated entity. Use `BetterAuth::call_endpoint` for trusted [endpoint calls](docs/content/docs/concepts/plugins.mdx) with JSON input. Use `call_endpoint_value` with `NativeEndpointInput` to retain native body and query values through the same registered hooks and dispatcher.
 
-Use `ctx.logger()` for instance diagnostics. The default renderer follows Better Auth's color environment policy, including `FORCE_COLOR`, `NO_COLOR`, and CI detection. Building an auth instance fixes its logger options; `config.logger` retains the original options for inspection and telemetry.
+Use `ctx.logger().error("message", &[])?` for fallible instance diagnostics. Configure `config.logger` with `LoggerConfig { .. }.into()`, or retain `LoggerOptions` for live callback replacement. An instance freezes its logging policy and retains its original callback owner; see [observability](docs/content/docs/concepts/observability.mdx) for configuration and error ownership.
 
 Passwords use Better Auth's scrypt format by default. The [password guide](docs/content/docs/authentication/email-password.mdx) explains explicit Argon2 migration. Add [HaveIBeenPwnedPlugin](docs/content/docs/plugins/have-i-been-pwned.mdx) to reject compromised passwords before hashing.
 

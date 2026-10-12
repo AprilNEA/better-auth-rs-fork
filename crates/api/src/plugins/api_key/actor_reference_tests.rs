@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthSchema, FieldValue,
@@ -365,7 +369,7 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
             let error = result.unwrap_err();
             assert_eq!(error.status_code().unwrap(), 401, "{}", sample["name"]);
             assert_eq!(
-                json_body(&error.to_auth_response())["code"],
+                json_body(&error.to_auth_response().expect("fixture response succeeds"))["code"],
                 "UNAUTHORIZED_SESSION"
             );
         }
@@ -377,7 +381,8 @@ async fn check_lifecycle<S: AuthSchema>(ctx: AuthContext<S>, secondary: bool, sq
 async fn memory_api_key_lifecycle_retains_native_actor_reference() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     check_lifecycle(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         false,
         false,
     )
@@ -398,7 +403,8 @@ async fn sqlite_api_key_lifecycle_retains_native_actor_reference() {
 async fn secondary_api_key_lifecycle_retains_native_actor_reference() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     check_lifecycle(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         true,
         false,
     )
@@ -409,7 +415,8 @@ async fn secondary_api_key_lifecycle_retains_native_actor_reference() {
 async fn secondary_null_and_missing_references_retain_distinct_strict_owners() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     let (ctx, plugin, sessions, keys, callbacks) = harness(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         true,
         &[],
     )
@@ -495,7 +502,8 @@ async fn deleting_api_keys_only_rejects_a_strict_boolean_ban() {
     );
     let config = Arc::new(config);
     let (ctx, plugin, sessions, keys, _) = harness(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         true,
         &[],
     )
@@ -542,7 +550,7 @@ async fn deleting_api_keys_only_rejects_a_strict_boolean_ban() {
             let error = response.unwrap_err();
             assert_eq!(error.status_code().unwrap(), 401);
             assert_eq!(
-                json_body(&error.to_auth_response()),
+                json_body(&error.to_auth_response().expect("fixture response succeeds")),
                 json!({"code":"USER_BANNED", "message":"User is banned"})
             );
             assert!(

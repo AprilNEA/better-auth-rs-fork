@@ -74,7 +74,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
 ) -> AuthResult<ProviderProfile> {
     let logger = better_auth_core::observability::logger::current();
     if !request.access_token.is_truthy()? {
-        logger.error("Access token is required to fetch PayPal user info", &[]);
+        logger.error("Access token is required to fetch PayPal user info", &[])?;
         return Ok(ProviderProfile::default());
     }
     let result: AuthResult<ProviderProfile> = async {
@@ -89,7 +89,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
         )
         .await?;
         let Some(profile) = profile.filter(|profile| !profile.is_null()) else {
-            logger.error("Failed to fetch user info from PayPal", &[]);
+            logger.error("Failed to fetch user info from PayPal", &[])?;
             return Ok(ProviderProfile::default());
         };
         if request.id_token.is_truthy()? {
@@ -122,7 +122,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
                 logger.error(
                     "PayPal user info subject does not match ID token subject",
                     &[],
-                );
+                )?;
                 return Ok(ProviderProfile::default());
             }
         }
@@ -144,7 +144,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
             logger.error(
                 "Failed to fetch user info from PayPal:",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
             Ok(ProviderProfile::default())
         }
     }
@@ -155,7 +155,7 @@ pub(in crate::plugins::oauth) fn token_result(
     grant: crate::plugins::oauth::token::TokenGrantType,
 ) -> AuthResult<super::OAuthTokenSet> {
     use crate::plugins::oauth::token::TokenGrantType;
-    result.map_err(|error| {
+    result.or_else(|error| {
         let (message, code) = match grant {
             TokenGrantType::AuthorizationCode => (
                 "PayPal token exchange failed:",
@@ -169,7 +169,124 @@ pub(in crate::plugins::oauth) fn token_result(
         better_auth_core::observability::logger::current().error(
             message,
             &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
-        AuthError::internal(code)
+        )?;
+        Err(AuthError::internal(code))
     })
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The token failure contract asserts logger arguments and the resulting error identity."
+)]
+mod tests {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
+    use better_auth_core::{
+        AuthConfig, AuthContext, FieldMap, FieldValue,
+        observability::{LogArgument, LogLevel, LogSink, LoggerConfig},
+        store::{EphemeralStore, StatelessSchema},
+    };
+
+    use super::*;
+    use crate::plugins::oauth::token::TokenGrantType;
+
+    struct TokenFailureLog {
+        calls: AtomicUsize,
+        original: FieldValue,
+        failure: Option<FieldValue>,
+        message: &'static str,
+    }
+
+    impl LogSink for TokenFailureLog {
+        fn log(
+            &self,
+            level: LogLevel,
+            message: LogArgument<'_>,
+            arguments: &[LogArgument<'_>],
+        ) -> AuthResult<()> {
+            let _ = self.calls.fetch_add(1, Ordering::SeqCst);
+            assert_eq!(level, LogLevel::Error);
+            assert_eq!(message.to_string(), self.message);
+            assert_eq!(arguments.len(), 1);
+            let argument = match arguments.first() {
+                Some(LogArgument::Error(error)) => error.downcast_ref::<AuthError>(),
+                _ => None,
+            };
+            assert!(
+                argument
+                    .and_then(AuthError::raw_value)
+                    .is_some_and(|value| value.strict_equals(&self.original))
+            );
+            match &self.failure {
+                Some(value) => Err(AuthError::from_thrown(value.clone())),
+                None => Ok(()),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn token_failure_logs_before_replacing_error_and_preserves_logger_failure()
+    -> AuthResult<()> {
+        for (grant, message, code) in [
+            (
+                TokenGrantType::AuthorizationCode,
+                "PayPal token exchange failed:",
+                "FAILED_TO_GET_ACCESS_TOKEN",
+            ),
+            (
+                TokenGrantType::RefreshToken,
+                "PayPal token refresh failed:",
+                "FAILED_TO_REFRESH_ACCESS_TOKEN",
+            ),
+        ] {
+            for throw in [false, true] {
+                let original: FieldValue =
+                    FieldMap::from([("failure".into(), "token".into())]).into();
+                let failure: FieldValue =
+                    FieldMap::from([("failure".into(), "logger".into())]).into();
+                let sink = Arc::new(TokenFailureLog {
+                    calls: AtomicUsize::new(0),
+                    original: original.clone(),
+                    failure: throw.then(|| failure.clone()),
+                    message,
+                });
+                let mut config =
+                    AuthConfig::new("paypal-logger-contract-secret-at-least-32-characters")
+                        .base_url("http://paypal-logger.test");
+                config.logger = LoggerConfig {
+                    log: Some(sink.clone()),
+                    ..Default::default()
+                }
+                .into();
+                let config = Arc::new(config);
+                let database = Arc::new(EphemeralStore::new(config.clone()));
+                let context = AuthContext::<StatelessSchema>::new(config, database)?;
+                let result = context
+                    .with_native_context(Default::default(), |_| async move {
+                        token_result(Err(AuthError::from_thrown(original)), grant)
+                    })
+                    .await;
+                let Err(error) = result else {
+                    return Err(AuthError::internal(
+                        "PayPal token failure unexpectedly succeeded",
+                    ));
+                };
+                assert_eq!(sink.calls.load(Ordering::SeqCst), 1);
+                if throw {
+                    assert!(
+                        error
+                            .raw_value()
+                            .is_some_and(|value| value.strict_equals(&failure))
+                    );
+                } else {
+                    assert!(matches!(error, AuthError::Internal(message) if message == code));
+                }
+            }
+        }
+        Ok(())
+    }
 }

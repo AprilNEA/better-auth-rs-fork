@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::native_tests::{assert_coded_error, context, numeric_output, session};
 use super::*;
 use crate::plugins::organization::{
@@ -400,7 +404,7 @@ async fn trusted_member_capacity_failure_cleans_up_native_identifiers() {
         .await;
     let error = result.unwrap_err();
     assert!(error.is_api_error().unwrap());
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status().unwrap(),
         better_auth_core::SchemaValue::Typed(403)

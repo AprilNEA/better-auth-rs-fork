@@ -192,7 +192,17 @@ impl Harness {
         let mut config =
             AuthConfig::new("protected-function-contract-secret-at-least-32-characters")
                 .base_url("http://protected-function.test");
-        config.logger.disabled = Some(true);
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.telemetry.enabled = false;
         let called = counts.clone();
         config.advanced.database.generate_id =

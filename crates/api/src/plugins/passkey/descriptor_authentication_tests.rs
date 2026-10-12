@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthInitContext, CreatePasskey, FieldValue, PasskeyCredentialState,
@@ -59,7 +63,8 @@ async fn native_authentication_accepts_utf16_transport_hints_and_rejects_non_str
         )
         .await?;
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(fixture.ctx.config.clone(), raw.clone());
+        let mut init = AuthInitContext::new(fixture.ctx.config.clone(), raw.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<
             better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
         >::schema(&PasskeyPlugin::new(), &mut model_fields)?;

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use std::sync::atomic::AtomicUsize;
 
@@ -90,7 +94,12 @@ pub(super) struct InstanceCapture {
 }
 
 impl LogSink for InstanceCapture {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         let LogArgument::Native(message) = message else {
             panic!("Raw errors must preserve the native logger message");
         };
@@ -107,6 +116,7 @@ impl LogSink for InstanceCapture {
             message: message.clone(),
             arguments,
         });
+        Ok(())
     }
 }
 
@@ -177,12 +187,23 @@ impl Harness {
             records: Mutex::default(),
         });
         let mut config = (*crate::test_store::test_config()).clone();
-        config.logger.disabled = Some(disabled);
-        config.logger.log = Some(logs.clone());
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(disabled);
+            logger_options.log = Some(logs.clone());
+        }
         config.api_error.throw_errors = Some(throws);
         let config = Arc::new(config);
         Self {
-            context: AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+            context: AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+                .expect("fixture context initializes"),
             logs,
             events: events.clone(),
             cause,

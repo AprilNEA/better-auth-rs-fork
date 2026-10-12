@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::organization::OrganizationPlugin;
 use better_auth_core::{CreateMember, CreateOrganization, SchemaValue};
@@ -136,7 +140,7 @@ async fn check_organization_actor<S: AuthSchema>(ctx: AuthContext<S>) {
         let error = result.unwrap_err();
         assert_eq!(error.status_code().unwrap(), 403);
         assert_eq!(
-            json_body(&error.to_auth_response())["code"],
+            json_body(&error.to_auth_response().expect("fixture response succeeds"))["code"],
             "USER_NOT_MEMBER_OF_ORGANIZATION"
         );
     }
@@ -180,10 +184,10 @@ async fn check_organization_actor<S: AuthSchema>(ctx: AuthContext<S>) {
 #[tokio::test]
 async fn memory_organization_api_keys_query_membership_with_native_actor() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
-    check_organization_actor(AuthContext::new(
-        config.clone(),
-        Arc::new(EphemeralStore::new(config)),
-    ))
+    check_organization_actor(
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
+    )
     .await;
 }
 

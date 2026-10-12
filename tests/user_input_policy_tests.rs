@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use async_trait::async_trait;
 use better_auth::plugins::{AdminPlugin, AnonymousPlugin, PhoneNumberPlugin, TwoFactorPlugin};
 use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
@@ -443,7 +447,9 @@ fn user_input_factory_and_transform_propagate_original_failures() -> AuthResult<
             take_trace(&trace)?,
             [if factory { "factory" } else { "transform" }]
         );
-        let error = AuthError::from_returned_response(error.to_auth_response())?;
+        let error = AuthError::from_returned_response(
+            error.to_auth_response().expect("fixture response succeeds"),
+        )?;
         assert!(
             error
                 .raw_value()

@@ -3,7 +3,9 @@ use std::sync::Arc;
 use better_auth_core::{
     AuthConfig, AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse,
     AuthResult, AuthSchema, AuthStore, EmailProvider, HttpMethod, OkResponse, OpenApiRegistry,
-    OpenApiSpec, SessionManager, UpdateUser, core_paths,
+    OpenApiSpec, SessionManager, UpdateUser,
+    api_error::{HttpFailure, handle_http_error_for_transport},
+    core_paths,
     hooks::{RequestHookContext, set_request_hook_route, with_request_hook_context_value},
     middleware::{
         self, BodyLimitConfig, BodyLimitMiddleware, CorsConfig, CorsMiddleware, CsrfConfig,
@@ -176,14 +178,14 @@ impl<S: AuthSchema> AuthBuilder<S> {
 
     /// Build the BetterAuth instance.
     pub async fn build(mut self) -> AuthResult<BetterAuth<S>> {
-        self.config.initialize_logger();
+        self.config.initialize_logger()?;
         self.config.resolve_secrets()?;
 
         let capabilities = better_auth_core::store::StoreCapabilities {
             database: self.store.is_some(),
             secondary: self.secondary_storage.is_some(),
         };
-        self.config.resolve_storage_defaults(capabilities);
+        self.config.resolve_storage_defaults(capabilities)?;
         let config = Arc::new(self.config);
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         let mut registered_model_fields = Vec::with_capacity(self.plugins.len());
@@ -212,7 +214,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
             .ok_or_else(|| AuthError::config("Auth store not configured"))?;
         let store = store.with_runtime(initial_adapter_config, Vec::new(), initial_fields)?;
 
-        let mut init_context = AuthInitContext::new(config.clone(), store.clone());
+        let mut init_context = AuthInitContext::new(config.clone(), store.clone())?;
         init_context.initialize_request_context().await?;
         init_context.extensions.insert(capabilities);
         init_context
@@ -250,7 +252,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
                     database_hooks: store.database_hook_metadata(),
                 },
             )?;
-            super::telemetry::start_init(telemetry.clone(), payload).await?;
+            super::telemetry::start_init(telemetry.clone(), payload).await;
         }
         init_context.extensions.insert(telemetry);
 
@@ -266,7 +268,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
             .insert(better_auth_core::plugin_runtime::ApplicationUserFields(
                 config.user.clone(),
             ));
-        let mut context = AuthContext::new(config.clone(), store.clone());
+        let mut context = AuthContext::new(config.clone(), store.clone())?;
         init_parts.apply_request_runtime(&mut context);
         let (adapter_config, endpoint_config, mut model_fields) = model_fields.resolve(&config);
         let adapter_fields = adapter_config.user.clone();
@@ -378,7 +380,7 @@ impl<S: AuthSchema> AuthBuilder<S> {
         }
 
         // HTTP plugins run after rate limiting but before endpoint origin and body checks.
-        config.advanced.ip_address.warn_invalid_proxies();
+        config.advanced.ip_address.warn_invalid_proxies()?;
         let http_middlewares: Vec<Box<dyn Middleware>> = vec![
             Box::new(BodyLimitMiddleware::new(body_limit.clone())),
             Box::new(RateLimitMiddleware::from_context(
@@ -454,6 +456,15 @@ impl<S: AuthSchema> BetterAuth<S> {
     /// Endpoint API errors retain their public body and headers. Ordinary endpoint
     /// failures return an empty 500. HTTP request-hook failures propagate to the host.
     pub async fn handle_request(&self, req: AuthRequest) -> AuthResult<AuthResponse> {
+        self.handle_request_for_transport(req)
+            .await
+            .map_err(HttpFailure::into_error)
+    }
+
+    pub(crate) async fn handle_request_for_transport(
+        &self,
+        req: AuthRequest,
+    ) -> Result<AuthResponse, HttpFailure> {
         // Ignore any caller-supplied virtual session value; only internal
         // before_request hooks may inject this during dispatch.
         let url = req.url().cloned();
@@ -480,36 +491,35 @@ impl<S: AuthSchema> BetterAuth<S> {
         let original = req.clone();
         self.context
             .with_http_context(&original, |context| async move {
-                with_request_hook_context_value(request_context, async {
+                Ok(with_request_hook_context_value(request_context, async {
                     if let Some(response) = self.handle_http_phase(&req, &context).await? {
-                        return middleware::run_after(
+                        let response = middleware::run_after(
                             &self.middlewares,
                             &req,
-                            response.into_http_response()?,
+                            response
+                                .into_http_response()
+                                .map_err(HttpFailure::Conversion)?,
                         )
-                        .await
-                        .and_then(AuthResponse::into_http_response);
+                        .await?;
+                        return response
+                            .into_http_response()
+                            .map_err(HttpFailure::Conversion);
                     }
                     let original_request = req.clone();
                     let response = match self.parse_endpoint_http_body(&mut req, &context) {
                         Ok(Some(response)) => response,
-                        Err(error) => {
-                            better_auth_core::api_error::handle_http_error(error, &context).await?
-                        }
+                        Err(error) => handle_http_error_for_transport(error, &context).await?,
                         Ok(None) => match self.dispatch_endpoint(&mut req, true, &context).await {
                             Ok(response) => response,
-                            Err(error) => {
-                                better_auth_core::api_error::handle_http_error(error, &context)
-                                    .await?
-                            }
+                            Err(error) => handle_http_error_for_transport(error, &context).await?,
                         },
                     };
                     self.finish_http_response(&original_request, response, &context)
                         .await
                 })
-                .await
+                .await)
             })
-            .await
+            .await?
     }
 
     async fn handle_http_phase(
@@ -543,20 +553,26 @@ impl<S: AuthSchema> BetterAuth<S> {
         request: &AuthRequest,
         mut response: AuthResponse,
         context: &AuthContext<S>,
-    ) -> AuthResult<AuthResponse> {
-        response = response.into_http_response()?;
+    ) -> Result<AuthResponse, HttpFailure> {
+        response = response
+            .into_http_response()
+            .map_err(HttpFailure::Conversion)?;
         for plugin in self.plugins.iter() {
             if let Some(replacement) = plugin
                 .on_http_response(request, &mut response, context)
                 .await?
             {
-                response = replacement.into_http_response()?;
+                response = replacement
+                    .into_http_response()
+                    .map_err(HttpFailure::Conversion)?;
                 break;
             }
         }
         middleware::run_after(&self.middlewares, request, response)
             .await
-            .and_then(AuthResponse::into_http_response)
+            .map_err(HttpFailure::Source)?
+            .into_http_response()
+            .map_err(HttpFailure::Conversion)
     }
 
     fn parse_endpoint_http_body(

@@ -54,7 +54,7 @@ pub(super) fn build_authorization_url(
         better_auth_core::observability::logger::current().error(
             "Client Id is required for Microsoft Entra ID. Make sure to provide it in the options.",
             &[],
-        );
+        )?;
         return Err(AuthError::internal("CLIENT_ID_AND_SECRET_REQUIRED"));
     }
     if generic.is_none()
@@ -74,7 +74,7 @@ pub(super) fn build_authorization_url(
             None
         };
         if let Some((message, code)) = missing {
-            better_auth_core::observability::logger::current().error(message, &[]);
+            better_auth_core::observability::logger::current().error(message, &[])?;
             return Err(AuthError::internal(code));
         }
     }
@@ -82,7 +82,7 @@ pub(super) fn build_authorization_url(
         && (provider.config.client_id.is_empty() || provider.config.client_secret.is_empty())
         && let Some(message) = provider.config.required_credentials_message()
     {
-        better_auth_core::observability::logger::current().error(message, &[]);
+        better_auth_core::observability::logger::current().error(message, &[])?;
         return Err(AuthError::internal("CLIENT_ID_AND_SECRET_REQUIRED"));
     }
     if generic.is_none() && input.code_challenge.is_empty() {

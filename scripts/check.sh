@@ -688,16 +688,30 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts || logger_status=1
-      cargo clippy --locked -p better-auth-core --lib -- -D warnings || logger_status=1
-      cargo clippy --locked -p better-auth-api --lib -- -D warnings || logger_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || logger_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
-        --test http_api_error_logging_tests --test observability_tests -- -D warnings || logger_status=1
-      cargo test --locked -p better-auth-core --lib -- \
-        observability::logger:: error::http_tests:: \
+        --test http_api_error_logging_tests --test observability_tests \
+        --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \
+        --test captcha_logger_scope_tests \
+        --test axum_session_tests -- -D warnings || logger_status=1
+      cargo test --locked -p better-auth-core --features axum --lib -- \
+        observability::logger:: error::http_tests:: error::logger_boundary_tests:: \
+        background::tests:: utils::json:: \
         store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
         plugin::tests::raw_api_errors:: || logger_status=1
+      cargo test --locked -p better-auth-api --features axum --lib -- \
+        plugins::user_admission_tests:: plugins::api_key::background_tests:: \
+        plugins::oauth::providers::paypal:: plugins::oauth::popup:: || logger_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
-        --test http_api_error_logging_tests --test observability_tests || logger_status=1
+        --test http_api_error_logging_tests --test observability_tests \
+        --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \
+        --test captcha_logger_scope_tests \
+        --test axum_session_tests --test native_endpoint_tests \
+        --test background_notification_tests --test background_otp_notification_tests \
+        --test background_transaction_tests --test lifecycle_notification_tests \
+        --test remaining_notification_tests --test rate_cleanup_background_tests \
+        --test request_runtime_mutation_tests || logger_status=1
+      cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || logger_status=1
       return "$logger_status"
       ;;
     native-json)

@@ -262,7 +262,7 @@ async fn run(base: &str, input: Value) -> AuthResult<Value> {
                 for (name, headers) in cases {
                     let response = match auth.call_endpoint(HttpMethod::Get, "/token", EndpointInput {headers, ..Default::default()}).await {
                         Ok(response) => response,
-                        Err(error) => error.to_auth_response().into_http_response()?,
+                        Err(error) => error.to_auth_response()?.into_http_response()?,
                     };
                     let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
                     let body = match body["token"].as_str() {

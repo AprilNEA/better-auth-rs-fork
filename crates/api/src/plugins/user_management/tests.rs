@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use async_trait::async_trait;
@@ -555,7 +559,7 @@ async fn test_on_request_disabled_change_email_rejects_after_authentication() {
     );
 
     let error = plugin.on_request(&req, &ctx).await.unwrap_err();
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status().unwrap(),
         better_auth_core::SchemaValue::Typed(400)

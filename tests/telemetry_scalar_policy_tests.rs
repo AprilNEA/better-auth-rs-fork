@@ -48,7 +48,17 @@ async fn omitted_and_explicit_http_error_defaults_keep_the_same_runtime_policy()
     for configured in [None, Some(false), Some(true)] {
         let mut config = AuthConfig::new("scalar-policy-secret-more-than-32-characters")
             .base_url("https://example.test");
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.api_error.throw_errors = configured;
         let observer = Arc::new(Observer::default());
         let auth = BetterAuth::stateless(config)

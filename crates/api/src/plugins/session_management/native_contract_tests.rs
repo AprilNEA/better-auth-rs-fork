@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Real native dispatch paired with the complete Better Auth 1.7.6 Session capture.
 //! Native status provenance, effective HTTP status, headers, storage, and hook events remain distinct observations.
 
@@ -487,7 +491,17 @@ async fn check(case: &Value) -> AuthResult<()> {
         ..Default::default()
     });
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.session.fresh_age = Some(Duration::seconds(60));
     config.session.disable_session_refresh = Some(true);
     config.session.cookie_cache = Some(CookieCacheConfig {
@@ -639,7 +653,7 @@ async fn check(case: &Value) -> AuthResult<()> {
             json!({"kind":"error", "name":"TypeError", "message":message, "headers":{"entries":[], "cookies":[]}})
         }
         Err(error) if error.is_api_error()? => {
-            let response = error.to_auth_response();
+            let response = error.to_auth_response().expect("fixture response succeeds");
             let mut result = observe(&returned(&response)?, clock.shift)?;
             let headers = match response.captured_headers()? {
                 Some(headers) => headers,

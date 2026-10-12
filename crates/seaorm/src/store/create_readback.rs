@@ -94,7 +94,7 @@ impl<E: EntityTrait> CreateReadback<'_, E> {
                 E::default().table_name()
             ),
             &[],
-        );
+        )?;
         Ok(None)
     }
 

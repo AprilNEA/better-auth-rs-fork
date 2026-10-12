@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Explicit proxy linking preserves thrown values and writes completed before a failure.
 
 use std::sync::{
@@ -110,6 +114,7 @@ async fn fixture(
     let config = Arc::new(AuthConfig::new(SECRET).base_url(ORIGIN));
     let store = Arc::new(EphemeralStore::new(config.clone()).with_hooks(vec![hooks.clone()]));
     let context = AuthContext::new(config, store.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await?;
     if existing {

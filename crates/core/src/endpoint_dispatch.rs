@@ -310,7 +310,7 @@ impl<S: AuthSchema> EndpointDispatcher<S> {
             Err(error) if error.is_api_error()? => {
                 let status = error.status_code()?;
                 let headers = merge_api_error_headers(&error)?;
-                let mut response = error.to_auth_response();
+                let mut response = error.to_auth_response()?;
                 response.set_endpoint_headers(headers);
                 response.set_native_status(crate::NativeResponseStatus::Present(status));
                 response
@@ -409,7 +409,9 @@ fn apply_before_action(
     Ok(None)
 }
 fn publishes_debug<S: AuthSchema>(context: &AuthContext<S>) -> bool {
-    context.logger().level.unwrap_or_default() == crate::observability::LogLevel::Debug
+    context
+        .logger()
+        .publishes(crate::observability::LogLevel::Debug)
 }
 
 fn restore_error_stack(value: &crate::FieldValue) -> AuthResult<()> {
@@ -486,7 +488,7 @@ fn apply_after_result<S: AuthSchema>(
                 restore_error_stack(value)?;
             }
             let headers = merge_api_error_headers(&error)?;
-            let mut returned = error.to_auth_response();
+            let mut returned = error.to_auth_response()?;
             returned.set_endpoint_headers(headers);
             response.replace_returned(returned);
         }
@@ -571,4 +573,77 @@ fn native_request(source: crate::NativeRequest<'_>, route: &AuthRoute) -> AuthRe
         request = request.with_original_request(original.clone());
     }
     request
+}
+
+#[cfg(test)]
+mod logger_tests {
+    use super::*;
+    use crate::{
+        ApiErrorInit, AuthConfig, FieldMap, FieldValue,
+        store::{EphemeralStore, StatelessSchema},
+    };
+
+    #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "The dispatch contract asserts original error identity and stack publication across hook phases."
+    )]
+    fn hook_errors_publish_stacks_for_unknown_levels_even_when_logging_is_disabled()
+    -> AuthResult<()> {
+        for (level, publishes) in [
+            (FieldValue::from("debug"), true),
+            (FieldValue::from("unknown"), true),
+            (FieldValue::from(false), true),
+            (FieldValue::from(FieldMap::new()), true),
+            (FieldValue::from("info"), false),
+            (FieldValue::from("warn"), false),
+        ] {
+            for disabled in [false, true] {
+                let config = Arc::new(AuthConfig {
+                    logger: crate::FieldObject::from(FieldMap::from([
+                        ("level".into(), level.clone()),
+                        ("disabled".into(), disabled.into()),
+                    ]))
+                    .into(),
+                    ..Default::default()
+                });
+                let context = AuthContext::<StatelessSchema>::new(
+                    config.clone(),
+                    Arc::new(EphemeralStore::new(config)),
+                )?;
+                for after in [false, true] {
+                    let error = AuthError::try_api_error(ApiErrorInit {
+                        status: "BAD_REQUEST".into(),
+                        ..Default::default()
+                    })?;
+                    let raw = error.raw_value().cloned().ok_or_else(|| {
+                        AuthError::internal("Hook error must retain its native value")
+                    })?;
+                    let object = raw
+                        .as_object()
+                        .ok_or_else(|| AuthError::internal("Hook error must be an object"))?;
+                    let original_stack: FieldValue =
+                        FieldMap::from([("stack".into(), "original".into())]).into();
+                    let _ = object.set("stack", "hidden".into())?;
+                    let _ = object.set("errorStack", original_stack.clone())?;
+                    let request = AuthRequest::new(HttpMethod::Get, "/hook-error");
+                    let retained = if after {
+                        let mut response = AuthResponse::new(200);
+                        apply_after_result(Err(error), &request, &mut response, &context)?;
+                        response.body.field_value()?
+                    } else {
+                        before_error(error, &request, &context)?.into_thrown_value()?
+                    };
+                    assert!(retained.strict_equals(&raw));
+                    let stack = raw.model_property("stack")?;
+                    if publishes {
+                        assert!(stack.strict_equals(&original_stack));
+                    } else {
+                        assert_eq!(stack, "hidden".into());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }

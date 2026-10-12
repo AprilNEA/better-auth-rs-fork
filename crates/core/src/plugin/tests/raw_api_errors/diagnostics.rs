@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{
@@ -53,7 +57,7 @@ impl crate::observability::LogSink for MatcherFailure {
         level: LogLevel,
         message: crate::observability::LogArgument<'_>,
         arguments: &[crate::observability::LogArgument<'_>],
-    ) {
+    ) -> crate::AuthResult<()> {
         assert_eq!(level, LogLevel::Error);
         assert!(matches!(
             message,
@@ -66,6 +70,7 @@ impl crate::observability::LogSink for MatcherFailure {
         };
         assert_raw(error.downcast_ref::<AuthError>().unwrap(), &self.value);
         self.events.lock().unwrap().push("log".into());
+        Ok(())
     }
 }
 
@@ -86,14 +91,25 @@ async fn matcher_failures_preserve_log_identity_and_skip_handler_error_recovery(
                 .into(),
         );
         let mut config = (*crate::test_store::test_config()).clone();
-        config.logger.level = Some(LogLevel::Debug);
-        config.logger.disabled = Some(false);
-        config.logger.log = Some(Arc::new(MatcherFailure {
-            value: value.clone(),
-            events: events.clone(),
-        }));
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.level = Some(LogLevel::Debug);
+            logger_options.disabled = Some(false);
+            logger_options.log = Some(Arc::new(MatcherFailure {
+                value: value.clone(),
+                events: events.clone(),
+            }));
+        }
         let config = Arc::new(config);
-        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes");
         let hook = Arc::new(Hooks::new("none", FieldValue::Undefined, &events));
         let route = AuthRoute::get("/matcher-error", "matcherError");
         let dispatcher = EndpointDispatcher::new(

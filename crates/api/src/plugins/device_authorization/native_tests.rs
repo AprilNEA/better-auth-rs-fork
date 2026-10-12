@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -162,7 +166,8 @@ impl Fixture {
         let raw: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(config.clone()));
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(config.clone(), raw.clone());
+        let mut init =
+            AuthInitContext::new(config.clone(), raw.clone()).expect("fixture context initializes");
         better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
             &DeviceAuthorizationPlugin::new(),
             &mut model_fields,
@@ -245,7 +250,7 @@ impl Fixture {
             config.clone(),
             Default::default(),
         )?);
-        let mut ctx = AuthContext::new(config, database);
+        let mut ctx = AuthContext::new(config, database).expect("fixture context initializes");
         ctx.secondary_storage = Some(storage.clone());
         let request = device_token_request("native-device", "client");
         *storage.request.lock().unwrap() = Some(request.clone());

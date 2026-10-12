@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(all(feature = "axum", feature = "seaorm2"))]
 #![expect(
     clippy::unwrap_used,
@@ -638,6 +642,7 @@ async fn social_code_exchange_and_profile_mapping_persist_through_sqlite() {
                     .await
                     .unwrap_err()
                     .to_auth_response()
+                    .expect("fixture response succeeds")
                     .into_http_response()
                     .unwrap();
                 assert_eq!(refresh.status, 400);

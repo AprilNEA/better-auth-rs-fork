@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::member_contract_support::{
     Storage, date, memory_fixture, ordered, seed, sqlite_fixture,
 };
@@ -57,7 +61,17 @@ fn record(events: &Events, field: &str, phase: &str, value: FieldValue) -> AuthR
 
 fn settings(ids: Ids) -> AuthConfig {
     let mut settings = config();
-    settings.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut settings.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     settings.advanced.database.generate_id =
         Some(IdGeneration::Custom(IdGenerator::new(move |_| {
             Ok(Some(trace_lock(&ids)?.clone()))
@@ -582,7 +596,10 @@ async fn check<S: AuthSchema>(
                 ])
                 .into(),
             )?;
-            let response = error.to_auth_response().into_http_response()?;
+            let response = error
+                .to_auth_response()
+                .expect("fixture response succeeds")
+                .into_http_response()?;
             assert_eq!(
                 response.body.bytes()?.as_ref(),
                 br#"{"message":"Team not found","code":"TEAM_NOT_FOUND"}"#.as_slice()

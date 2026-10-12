@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 #[test]
@@ -10,7 +14,11 @@ fn endpoint_error_preserves_body_headers_and_redacts_diagnostics() {
     assert_eq!(error.status_code().unwrap(), 429);
     assert!(!format!("{error:?} {error}").contains("sensitive"));
     assert!(!format!("{error:?} {error}").contains("tryAgainIn"));
-    let response = error.to_auth_response().into_http_response().unwrap();
+    let response = error
+        .to_auth_response()
+        .expect("fixture response succeeds")
+        .into_http_response()
+        .unwrap();
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&response.body.bytes().unwrap()).unwrap(),
         body
@@ -258,6 +266,7 @@ fn error_payload_for_internal_error_hides_details() {
 fn to_auth_response_returns_correct_status() {
     let resp = AuthError::bad_request("oops")
         .to_auth_response()
+        .expect("fixture response succeeds")
         .into_http_response()
         .unwrap();
     assert_eq!(resp.status, 400);
@@ -268,6 +277,7 @@ fn to_auth_response_returns_correct_status() {
 fn to_auth_response_body_contains_code_and_message() {
     let resp = AuthError::UserNotFound
         .to_auth_response()
+        .expect("fixture response succeeds")
         .into_http_response()
         .unwrap();
     assert_eq!(resp.status, 404);
@@ -352,7 +362,10 @@ fn request_validation_uses_native_errors_and_preserves_http_bodies() -> AuthResu
     request.body = Some(br#"{"name":"x"}"#.to_vec());
     let error = validate_request_body::<Body>(&request).unwrap_err();
     assert!(error.is_api_error()?);
-    let response = error.to_auth_response().into_http_response()?;
+    let response = error
+        .to_auth_response()
+        .expect("fixture response succeeds")
+        .into_http_response()?;
     assert_eq!(response.status, 400);
     assert_eq!(
         response.body.bytes()?.as_ref(),
@@ -366,7 +379,10 @@ fn request_validation_uses_native_errors_and_preserves_http_bodies() -> AuthResu
     );
     let error = validate_request_body::<Body>(&request).unwrap_err();
     assert!(error.is_api_error()?);
-    let response = error.to_auth_response().into_http_response()?;
+    let response = error
+        .to_auth_response()
+        .expect("fixture response succeeds")
+        .into_http_response()?;
     assert_eq!(response.status, 400);
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&response.body.bytes()?)?,

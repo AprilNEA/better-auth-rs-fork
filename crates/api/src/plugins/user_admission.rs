@@ -136,7 +136,7 @@ impl UserValidationRejection {
 
 /// Equivalent to `user.validateUserInfo`. Returning `None` admits the operation.
 ///
-/// Callback errors reject with `validation_failed`; they never permit authentication.
+/// Callback errors reject with `validation_failed` after logging. Logger errors propagate.
 #[async_trait]
 pub trait ValidateUserInfo<S: AuthSchema>: Send + Sync {
     async fn validate(
@@ -149,13 +149,13 @@ pub trait ValidateUserInfo<S: AuthSchema>: Send + Sync {
 pub(crate) async fn validate<S: AuthSchema>(
     data: UserValidationData,
     endpoint: &EndpointContext<'_, S>,
-) -> Result<(), UserValidationRejection> {
+) -> AuthResult<Option<UserValidationRejection>> {
     let Some(callback) = endpoint
         .auth
         .extensions
         .get::<Arc<dyn ValidateUserInfo<S>>>()
     else {
-        return Ok(());
+        return Ok(None);
     };
     let invalid_source = if data.source.method.is_empty() {
         Some("User validation source is required")
@@ -179,21 +179,23 @@ pub(crate) async fn validate<S: AuthSchema>(
         None
     };
     if let Some(message) = invalid_source {
-        return Err(
-            UserValidationRejection::new("validation_source_missing").with_description(message)
-        );
+        return Ok(Some(
+            UserValidationRejection::new("validation_source_missing").with_description(message),
+        ));
     }
     match callback.validate(&data, endpoint).await {
-        Ok(Some(rejection)) if !rejection.error.is_empty() => Err(rejection),
-        Ok(_) => Ok(()),
+        Ok(Some(rejection)) if !rejection.error.is_empty() => Ok(Some(rejection)),
+        Ok(_) => Ok(None),
         Err(error) => {
             // Upstream deliberately masks application exceptions at this fail-closed boundary.
             better_auth_core::observability::logger::current().error(
-                "User validation callback failed",
+                "validateUserInfo callback threw",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-            Err(UserValidationRejection::new("validation_failed")
-                .with_description("User validation failed"))
+            )?;
+            Ok(Some(
+                UserValidationRejection::new("validation_failed")
+                    .with_description("User validation failed"),
+            ))
         }
     }
 }
@@ -202,7 +204,7 @@ pub(crate) async fn validate_create<S: AuthSchema>(
     input: &FieldMap,
     source: UserValidationSource,
     endpoint: &EndpointContext<'_, S>,
-) -> Result<(), UserValidationRejection> {
+) -> AuthResult<Option<UserValidationRejection>> {
     validate(
         UserValidationData {
             user: input.clone(),
@@ -219,13 +221,15 @@ pub(crate) async fn create_user_optional<S: AuthSchema>(
     endpoint: &EndpointContext<'_, S>,
 ) -> AuthResult<Option<better_auth_core::wire::UserView>> {
     let mut input = input.into_user_fields()?;
-    validate_create(
+    if let Some(rejection) = validate_create(
         &input,
         UserValidationSource::new(method, UserValidationAction::CreateUser),
         endpoint,
     )
-    .await
-    .map_err(UserValidationRejection::into_auth_error)?;
+    .await?
+    {
+        return Err(rejection.into_auth_error());
+    }
     super::helpers::apply_default_role(endpoint.auth, &mut input);
     match endpoint.transaction {
         Some(transaction) => transaction.create_user_fields_optional(input).await,

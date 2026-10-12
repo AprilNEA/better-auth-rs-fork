@@ -19,8 +19,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
             };
             if !session.is_truthy() {
                 self.config
-                    .logger()
-                    .error("Session not found in secondary storage", &[]);
+                    .logger()?
+                    .error("Session not found in secondary storage", &[])?;
                 return Ok(());
             }
             let user_id = session.model_property("userId")?;
@@ -66,8 +66,8 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 }
             } else {
                 self.config
-                    .logger()
-                    .error("Active sessions list not found in secondary storage", &[]);
+                    .logger()?
+                    .error("Active sessions list not found in secondary storage", &[])?;
             }
         }
         storage.delete_native(token).await?;

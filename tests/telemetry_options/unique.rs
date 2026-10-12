@@ -69,7 +69,17 @@ async fn unique_field_metadata_matches_real_initialization_without_callbacks() -
     ] {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let (mut config, reports) = configuration();
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.user = configured_fields(unique, "user", &calls);
         config.session.additional_fields =
             configured_fields(unique, "session", &calls).additional_fields;

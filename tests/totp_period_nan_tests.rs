@@ -86,7 +86,17 @@ impl Runtime {
         let events = Events::default();
         let mut config = AuthConfig::new(AUTH_SECRET).base_url(ORIGIN);
         config.app_name = fixture["issuer"].as_str().expect("issuer").to_owned();
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.telemetry.enabled = false;
         config.session.expires_in = Some(Duration::hours(1));
         config.session.disable_session_refresh = Some(true);

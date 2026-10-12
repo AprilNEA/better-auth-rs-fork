@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -263,7 +267,7 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
         let outcome = match result {
             Ok(outcome) => outcome,
             Err(error) => {
-                json!({"kind":"error","response":response_result(error.into_auth_error().to_auth_response())?})
+                json!({"kind":"error","response":response_result(error.into_auth_error().to_auth_response().expect("fixture response succeeds"))?})
             }
         };
         assert_eq!(
@@ -330,7 +334,7 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
                 response
             }
             Ok(None) => return Err("Missing callback response".into()),
-            Err(error) => error.to_auth_response(),
+            Err(error) => error.to_auth_response().expect("fixture response succeeds"),
         };
         let mut users = Vec::new();
         let mut accounts = Vec::new();

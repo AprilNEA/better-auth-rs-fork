@@ -74,9 +74,9 @@ impl AuthPlugin<S> for Background {
                 Ok(())
             })),
             context.config.advanced.background_tasks.as_ref(),
-            &context.config.logger,
+            context.logger(),
         )
-        .await;
+        .await?;
         lock(&self.0.events)?.push("handler-return");
         AuthResponse::json(200, &json!({ "baseURL": context.base_url() })).map(Some)
     }
@@ -137,7 +137,9 @@ async fn owned_background_callback_observes_later_writes_after_the_response() ->
     background.0.release.notify_one();
     tokio::time::timeout(Duration::from_secs(5), async {
         for task in tasks {
-            task.await.expect("Background contract task completed");
+            task.await
+                .expect("Background contract task completed")
+                .expect("Background contract application task succeeded");
         }
     })
     .await

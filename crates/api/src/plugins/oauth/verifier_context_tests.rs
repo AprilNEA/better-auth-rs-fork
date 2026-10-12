@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use async_trait::async_trait;
 use better_auth_core::{
     AuthConfig, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthUser, CreateUser,
@@ -166,7 +170,17 @@ async fn observe(
         });
     }
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     let context = test_helpers::create_test_context_with_config(config).await;
     let cookie = if operation == Operation::Link {
@@ -358,7 +372,17 @@ async fn exercise_endpoint_verifier(
 ) -> TestResult<()> {
     const EMAIL: &str = "typed-verifier@example.test";
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     let mut context = test_helpers::create_test_context_with_config(config).await;
     let runtime_user = context
@@ -537,7 +561,8 @@ async fn exercise_endpoint_verifier(
     let plugin = OAuthPlugin::new()
         .add_provider("google", provider)
         .callbacks(callbacks);
-    let mut init = AuthInitContext::new(context.config.clone(), context.database.clone());
+    let mut init = AuthInitContext::new(context.config.clone(), context.database.clone())
+        .expect("fixture context initializes");
     init.extensions.insert(RuntimeMarker(runtime_id.clone()));
     plugin.on_init(&mut init).await?;
     context.extensions = init.extensions;
@@ -558,7 +583,7 @@ async fn exercise_endpoint_verifier(
         }),
     )
     .await
-    .unwrap_or_else(|error| error.to_auth_response());
+    .unwrap_or_else(|error| error.to_auth_response().expect("fixture response succeeds"));
     let accepted = matches!(outcome, VerifierResult::Accept | VerifierResult::Both);
     let disabled = outcome == VerifierResult::Disabled;
     assert_eq!(calls.load(Ordering::SeqCst), usize::from(!disabled));
@@ -678,7 +703,8 @@ async fn social_typed_verifiers_reject_unregistered_provider_names() -> TestResu
     let callbacks = OAuthCallbacks::<BundledSchema>::default()
         .verify_id_token("unregistered", |_, _, _| Box::pin(async { Ok(false) }));
     let plugin = OAuthPlugin::new().callbacks(callbacks);
-    let mut init = AuthInitContext::new(context.config, context.database);
+    let mut init = AuthInitContext::new(context.config, context.database)
+        .expect("fixture context initializes");
     let error = plugin.on_init(&mut init).await.unwrap_err();
     assert!(
         error

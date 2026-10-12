@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -418,7 +422,7 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     let response = crate::plugins::test_helpers::finalize_response(
         &ctx,
         &request_only,
-        error.to_auth_response(),
+        error.to_auth_response().expect("fixture response succeeds"),
     );
     assert_eq!(response.status, 401);
     assert_eq!(
@@ -432,7 +436,7 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
     assert_eq!(hash_calls.load(Ordering::SeqCst), 0);
     let error = plugin.on_request(&request, &ctx).await.unwrap_err();
     super::tests::assert_message_error(&error, "Client requests are disabled");
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status()?,
         better_auth_core::SchemaValue::Typed(400)
@@ -459,7 +463,7 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
         .await
         .unwrap_err();
     super::tests::assert_message_error(&error, "Client requests are disabled");
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status()?,
         better_auth_core::SchemaValue::Typed(400)

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::tests::{cookie_value, create_test_context_with_credential_user};
 use super::*;
 use crate::plugins::test_helpers;
@@ -36,7 +40,7 @@ async fn challenge_database_failures_preserve_upstream_errors_and_cookie_expiry(
     let database =
         better_auth_seaorm::SeaOrmStore::<TestSchema>::new(config.clone(), connection.clone())
             .hook(FailChallengeDeletion);
-    let ctx = AuthContext::new(config, Arc::new(database));
+    let ctx = AuthContext::new(config, Arc::new(database)).expect("fixture context initializes");
     let user = test_helpers::create_user(
         &ctx,
         better_auth_core::CreateUser::new()
@@ -548,7 +552,7 @@ async fn factor_lookup_failure_preserves_the_created_challenge_and_cookie() {
     let config = Arc::new(test_helpers::create_test_config());
     let database =
         better_auth_seaorm::SeaOrmStore::<TestSchema>::new(config.clone(), connection.clone());
-    let ctx = AuthContext::new(config, Arc::new(database));
+    let ctx = AuthContext::new(config, Arc::new(database)).expect("fixture context initializes");
     let user = test_helpers::create_user(
         &ctx,
         better_auth_core::CreateUser::new()

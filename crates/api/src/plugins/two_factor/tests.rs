@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::AuthPlugin;
@@ -398,7 +402,10 @@ async fn body_schemas_keep_each_instances_global_and_nested_password_policy() {
                 .validate(&request)
                 .await;
             if required {
-                let response = result.unwrap_err().to_auth_response();
+                let response = result
+                    .unwrap_err()
+                    .to_auth_response()
+                    .expect("fixture response succeeds");
                 let body = response.api_error_body().unwrap().json().unwrap().unwrap();
                 assert_eq!(
                     body["message"],

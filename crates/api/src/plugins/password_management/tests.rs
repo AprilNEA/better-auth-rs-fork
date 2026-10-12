@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::AuthContext;
@@ -825,7 +829,7 @@ async fn test_password_validation() {
         argon2_config: Argon2Config::default(),
     };
     let database = test_helpers::create_test_database().await;
-    let ctx = AuthContext::new(Arc::new(config), database);
+    let ctx = AuthContext::new(Arc::new(config), database).expect("fixture context initializes");
 
     // Test valid password
     assert!(plugin.validate_password("Password123!", &ctx).is_ok());
@@ -1031,7 +1035,8 @@ async fn test_on_password_reset_callback() {
     let plugin = PasswordManagementPlugin::new().on_password_reset(callback);
     let (mut ctx, user, _session) = create_test_context_with_user().await;
 
-    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     plugin.on_init(&mut init).await.unwrap();
     ctx.password_policy = init.password_policy;
 
@@ -1064,7 +1069,8 @@ async fn test_revoke_sessions_on_password_reset_false() {
     let plugin = PasswordManagementPlugin::new().revoke_sessions_on_password_reset(false);
     let (mut ctx, user, session) = create_test_context_with_user().await;
 
-    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     plugin.on_init(&mut init).await.unwrap();
     ctx.password_policy = init.password_policy;
 
@@ -1106,7 +1112,8 @@ async fn test_revoke_sessions_on_password_reset_true() {
     let plugin = PasswordManagementPlugin::new().revoke_sessions_on_password_reset(true);
     let (mut ctx, user, _session) = create_test_context_with_user().await;
 
-    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     plugin.on_init(&mut init).await.unwrap();
     ctx.password_policy = init.password_policy;
 

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 #[tokio::test]
@@ -36,10 +40,21 @@ async fn headers_identity_controls_rereads_and_prevents_duplicate_context_cookie
         let value = raw_error(&events, &["APIError"], None, vec![("headers", getter)]);
         let mut config = (*crate::test_store::test_config()).clone();
         config.experimental.instrumentation.enabled = false;
-        config.logger.disabled = Some(true);
-        config.logger.level = Some(LogLevel::Warn);
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+            logger_options.level = Some(LogLevel::Warn);
+        }
         let config = Arc::new(config);
-        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes");
         let route = AuthRoute::get("/raw-headers", "rawHeaders");
         let dispatcher = EndpointDispatcher::new(
             Arc::new(Vec::new()),

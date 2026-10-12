@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::expect_used,
     clippy::panic_in_result_fn,
@@ -137,7 +141,8 @@ impl Subscriber for Trace {
 #[tokio::test]
 async fn dispatch_uses_upstream_templates_without_rewriting_http_request_paths() -> AuthResult<()> {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     for mode in ["native", "http", "server-only"] {
         let http = mode == "http";
         let server_only = mode == "server-only";

@@ -274,7 +274,7 @@ impl SiwePlugin {
                         better_auth_core::observability::logger::current().warn(
                             "SIWE email reservation failed; using wallet placeholder email",
                             &[better_auth_core::observability::LogArgument::Error(&cause)],
-                        );
+                        )?;
                         false
                     }
                 };
@@ -322,7 +322,7 @@ impl SiwePlugin {
                 better_auth_core::observability::logger::current().warn(
                     "SIWE email reservation cleanup failed",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
-                );
+                )?;
             }
             created?.ok_or_else(|| {
                 AuthError::internal("Cannot read properties of null (reading 'id')")

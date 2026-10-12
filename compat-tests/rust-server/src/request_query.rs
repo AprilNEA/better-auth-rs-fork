@@ -281,8 +281,8 @@ fn configure<S: AuthSchema>(
 }
 fn wire(response: AuthResult<AuthResponse>) -> Response {
     let response = response
-        .unwrap_or_else(|error| error.to_auth_response())
-        .into_http_response()
+        .or_else(AuthError::to_auth_response)
+        .and_then(AuthResponse::into_http_response)
         .expect("The fixture response must materialize");
     let mut output = (
         StatusCode::from_u16(response.status).unwrap(),

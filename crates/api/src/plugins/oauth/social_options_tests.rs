@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "contract tests propagate setup failures and assert upstream results"
@@ -484,7 +488,10 @@ async fn google_stored_account_profile_decodes_id_token_and_rejects_missing_toke
         } else {
             let error = result.expect_err("A stored account without idToken has no Google profile");
             assert_eq!(error.status_value()?, FieldValue::from("UNAUTHORIZED"));
-            let response = error.to_auth_response().into_http_response()?;
+            let response = error
+                .to_auth_response()
+                .expect("fixture response succeeds")
+                .into_http_response()?;
             assert_eq!(response.status, 401);
             assert_eq!(
                 serde_json::from_slice::<Value>(&response.body.bytes()?)?,

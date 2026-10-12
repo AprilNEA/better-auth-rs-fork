@@ -1,8 +1,11 @@
 //! Notification work that can outlive an endpoint and its transaction.
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     AuthResult,
-    observability::{LogArgument, LoggerConfig},
+    observability::{LogArgument, Logger},
 };
 use std::{
     fmt,
@@ -16,9 +19,9 @@ use std::{
 pub type BackgroundFuture = Pin<Box<dyn Future<Output = AuthResult<()>> + Send + 'static>>;
 
 /// An already-running notification. Dropping this handle does not cancel the task.
-pub struct BackgroundTask(tokio::task::JoinHandle<()>);
+pub struct BackgroundTask(tokio::task::JoinHandle<AuthResult<()>>);
 impl Future for BackgroundTask {
-    type Output = Result<(), tokio::task::JoinError>;
+    type Output = Result<AuthResult<()>, tokio::task::JoinError>;
     fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.0).poll(context)
     }
@@ -39,8 +42,86 @@ impl BackgroundTasks {
     }
 }
 
-fn log_failure(logger: &LoggerConfig, message: &str, error: &crate::AuthError) {
-    logger.error(message, &[LogArgument::Error(error)]);
+fn log_failure(logger: &Logger, message: &str, error: &crate::AuthError) -> AuthResult<()> {
+    logger.error(message, &[LogArgument::Error(error)])
+}
+
+#[derive(Clone, Copy)]
+enum TaskPolicy {
+    Await,
+    AwaitWithCatch(&'static str),
+    DetachedWithCatch(&'static str),
+    DetachedWithCatches(&'static [&'static str]),
+}
+
+impl TaskPolicy {
+    fn detached(self) -> bool {
+        matches!(
+            self,
+            Self::DetachedWithCatch(_) | Self::DetachedWithCatches(_)
+        )
+    }
+
+    fn catch(self, logger: &Logger, result: AuthResult<()>) -> AuthResult<()> {
+        match self {
+            Self::Await => catch_errors(logger, result, &["Failed to run background task:"]),
+            Self::AwaitWithCatch(message) => {
+                catch_errors(logger, result, &[message, "Failed to run background task:"])
+            }
+            Self::DetachedWithCatch(message) => catch_errors(logger, result, &[message]),
+            Self::DetachedWithCatches(messages) => catch_errors(logger, result, messages),
+        }
+    }
+}
+
+fn catch_errors(logger: &Logger, mut result: AuthResult<()>, messages: &[&str]) -> AuthResult<()> {
+    for message in messages {
+        result = result.or_else(|error| log_failure(logger, message, &error));
+    }
+    result
+}
+
+async fn first_poll(task: &mut BackgroundFuture) -> Poll<AuthResult<()>> {
+    std::future::poll_fn(|context| Poll::Ready(task.as_mut().poll(context))).await
+}
+
+/// Start an unowned promise and report its terminal rejection without an application catch.
+#[doc(hidden)]
+pub async fn start_unowned(task: BackgroundFuture, boundary: &'static str) {
+    start_unowned_with_error_messages(
+        task,
+        &crate::observability::logger::current(),
+        &[],
+        boundary,
+    )
+    .await;
+}
+
+/// Start an unowned promise with its source catch layers and retain terminal error ownership.
+#[doc(hidden)]
+pub async fn start_unowned_with_error_messages(
+    mut task: BackgroundFuture,
+    logger: &Logger,
+    error_messages: &'static [&'static str],
+    boundary: &'static str,
+) {
+    let first = first_poll(&mut task).await;
+    let logger = logger.clone();
+    let finish = move |result| {
+        if let Err(error) = catch_errors(&logger, result, error_messages) {
+            crate::observability::report_terminal_error(boundary, error);
+        }
+    };
+    match first {
+        Poll::Ready(result) => finish(result),
+        Poll::Pending => {
+            drop(crate::request_runtime::spawn_with_request_context(
+                async move {
+                    finish(task.await);
+                },
+            ));
+        }
+    }
 }
 
 /// Await a notification by default, or hand its running task to the configured handler.
@@ -48,9 +129,9 @@ fn log_failure(logger: &LoggerConfig, message: &str, error: &crate::AuthError) {
 pub async fn run_or_await(
     task: Option<BackgroundFuture>,
     handler: Option<&BackgroundTasks>,
-    logger: &LoggerConfig,
-) {
-    run_or_await_with_error_message(task, handler, logger, "Failed to run background task:").await;
+    logger: &Logger,
+) -> AuthResult<()> {
+    run(task, handler, logger, TaskPolicy::Await).await
 }
 
 /// Schedule delivery with its endpoint-specific failure message.
@@ -59,42 +140,115 @@ pub async fn run_or_await(
 pub async fn run_or_await_with_error_message(
     task: Option<BackgroundFuture>,
     handler: Option<&BackgroundTasks>,
-    logger: &LoggerConfig,
+    logger: &Logger,
     error_message: &'static str,
-) {
+) -> AuthResult<()> {
+    run(
+        task,
+        handler,
+        logger,
+        TaskPolicy::AwaitWithCatch(error_message),
+    )
+    .await
+}
+
+/// Start a task with one custom catch and transfer its result to the configured handler.
+/// Without a handler, upstream explicitly suppresses the caught task's final rejection.
+#[doc(hidden)]
+pub async fn run_in_background_with_error_message(
+    task: BackgroundFuture,
+    handler: Option<&BackgroundTasks>,
+    logger: &Logger,
+    error_message: &'static str,
+) -> AuthResult<()> {
+    run(
+        Some(task),
+        handler,
+        logger,
+        TaskPolicy::DetachedWithCatch(error_message),
+    )
+    .await
+}
+
+/// Transfer a promise with ordered source catch layers to the background handler.
+#[doc(hidden)]
+pub async fn run_in_background_with_error_messages(
+    task: BackgroundFuture,
+    handler: Option<&BackgroundTasks>,
+    logger: &Logger,
+    error_messages: &'static [&'static str],
+) -> AuthResult<()> {
+    run(
+        Some(task),
+        handler,
+        logger,
+        TaskPolicy::DetachedWithCatches(error_messages),
+    )
+    .await
+}
+
+async fn run(
+    task: Option<BackgroundFuture>,
+    handler: Option<&BackgroundTasks>,
+    logger: &Logger,
+    policy: TaskPolicy,
+) -> AuthResult<()> {
     let Some(mut task) = task else {
-        return;
+        return Ok(());
     };
-    let Some(handler) = handler else {
-        if let Err(error) = task.await {
-            log_failure(logger, error_message, &error);
-        }
-        return;
-    };
+    if handler.is_none() && !policy.detached() {
+        return policy.catch(logger, task.await);
+    }
     // JavaScript callbacks start before the handler receives their promise. Poll once
     // in the caller's context before transferring the pending Rust future.
-    let first = std::future::poll_fn(|context| Poll::Ready(task.as_mut().poll(context))).await;
+    let first = first_poll(&mut task).await;
     let ready = match first {
         Poll::Ready(result) => Some(result),
         Poll::Pending => None,
     };
-    let pending = ready.is_none();
-    let start = std::sync::Arc::new(tokio::sync::Notify::new());
-    let task_start = start.clone();
+    let (start, task_start) = tokio::sync::oneshot::channel();
     let task_logger = logger.clone();
+    let suppress = handler.is_none();
     let handle = crate::request_runtime::spawn_with_request_context(async move {
-        task_start.notified().await;
-        if pending && let Err(error) = task.await {
-            log_failure(&task_logger, error_message, &error);
+        // Losing the startup owner is a Rust task failure, not an application rejection.
+        #[expect(
+            clippy::expect_used,
+            reason = "A lost startup owner is a Rust task failure and must remain a JoinError"
+        )]
+        let ready = task_start
+            .await
+            .expect("Background task startup owner must publish a completion decision");
+        let result = match ready {
+            Some(result) => result,
+            None => policy.catch(&task_logger, task.await),
+        };
+        if suppress {
+            // Upstream runInBackground installs p.catch(() => {}) without a handler.
+            drop(result);
+            Ok(())
+        } else {
+            result
         }
     });
-    if let Err(error) = (handler.0)(BackgroundTask(handle)) {
-        log_failure(logger, "Failed to run background task:", &error);
-    }
+    let handler_result = match handler {
+        Some(handler) => {
+            let result = (handler.0)(BackgroundTask(handle));
+            if policy.detached() {
+                result
+            } else {
+                result
+                    .or_else(|error| log_failure(logger, "Failed to run background task:", &error))
+            }
+        }
+        None => {
+            drop(handle);
+            Ok(())
+        }
+    };
     // An already-rejected promise runs its catch after handler invocation and before
     // the awaiting endpoint continues. A worker must not race ahead of that handler.
-    if let Some(Err(error)) = ready {
-        log_failure(logger, error_message, &error);
-    }
-    start.notify_one();
+    let completion = ready.map(|result| policy.catch(logger, result));
+    // A dropped receiver belongs to Rust task shutdown; do not report the application result again.
+    drop(start.send(completion));
+    handler_result
 }

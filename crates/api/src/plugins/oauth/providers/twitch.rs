@@ -45,7 +45,8 @@ pub(in crate::plugins::oauth) fn fetch_profile(
     request: &OAuthUserInfoRequest,
 ) -> AuthResult<Option<Value>> {
     if !request.id_token.is_truthy()? {
-        better_auth_core::observability::logger::current().error("No idToken found in token", &[]);
+        better_auth_core::observability::logger::current()
+            .error("No idToken found in token", &[])?;
         return Ok(None);
     }
     let token = request.id_token.field_value();

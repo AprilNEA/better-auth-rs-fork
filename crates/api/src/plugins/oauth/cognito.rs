@@ -126,7 +126,7 @@ pub(super) async fn fetch_user_info(
             Err(error) => better_auth_core::observability::logger::current().error(
                 "Failed to decode ID token:",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            ),
+            )?,
         }
     }
     if request.access_token.is_truthy()? {
@@ -154,7 +154,7 @@ pub(super) async fn fetch_user_info(
                 better_auth_core::observability::logger::current().error(
                     "Failed to fetch user info from Cognito:",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+                )?;
                 Ok(ProviderProfile::default())
             }
         };

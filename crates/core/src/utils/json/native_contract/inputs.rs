@@ -187,7 +187,7 @@ impl Input {
             );
             fields.getter("hidden", unread(), false);
             value
-        } else if name == "object-getter-error" {
+        } else if matches!(name, "object-getter-error" | "logger-original-error") {
             let value = fields.bind(properties.into());
             let error = original.clone();
             fields.getter(

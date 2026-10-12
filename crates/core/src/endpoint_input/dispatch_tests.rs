@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "The dispatch regression asserts native identity and the complete hook lifecycle."
@@ -120,7 +124,8 @@ impl AfterEndpointHook<StatelessSchema> for Hooks {
 async fn hook_mutations_reach_validation_and_handler_without_replacing_raw_scope() -> AuthResult<()>
 {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     for http in [false, true] {
         let mut request = AuthRequest::new(HttpMethod::Post, "/input");
         request.body = Some(BYTES.to_vec());

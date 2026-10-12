@@ -105,7 +105,7 @@ impl Telemetry {
         }
     }
 
-    /// Transport errors are logged as specified by upstream and do not fail authentication.
+    /// Transport errors are caught; a failure in the scoped logger remains an error.
     pub async fn publish(&self, kind: impl Into<String>, payload: Value) -> AuthResult<()> {
         let Some(transport) = &self.transport else {
             return Ok(());
@@ -117,9 +117,9 @@ impl Telemetry {
         };
         if self.debug {
             let value = Value::String(serde_json::to_string_pretty(&event)?);
-            super::logger::default_logger().info("telemetry event", &[LogArgument::Value(&value)]);
+            super::logger::current().info("telemetry event", &[LogArgument::Value(&value)])?;
         } else if let Err(error) = transport.send(&event).await {
-            super::logger::default_logger().log(
+            super::logger::current().log(
                 super::logger::LogLevel::Error,
                 LogArgument::Error(&error),
                 &[],

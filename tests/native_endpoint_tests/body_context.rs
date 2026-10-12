@@ -302,7 +302,17 @@ async fn check(input: Option<Value>, http: bool, api_key: bool) -> AuthResult<()
     let contract = Contract::new(input.clone(), "body observed", http)?;
     let mut config = AuthConfig::new("native-body-context-secret-at-least-32-characters");
     config.base_url = ORIGIN.into();
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     let store = Arc::new(EphemeralStore::new(Arc::new(config.clone())));
     let mut builder = BetterAuth::new(config)
         .store_arc(store.clone())

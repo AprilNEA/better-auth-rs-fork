@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Admission validates provider presence before invoking callbacks with the original value.
 
 use super::*;
@@ -36,7 +40,7 @@ async fn provider_admission_uses_native_truthiness_and_preserves_callback_identi
 -> AuthResult<()> {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     let store = Arc::new(EphemeralStore::new(config.clone()));
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     let trace = Arc::new(ProviderTrace::default());
     context
         .extensions
@@ -68,13 +72,13 @@ async fn provider_admission_uses_native_truthiness_and_preserves_callback_identi
                 },
                 &endpoint,
             )
-            .await;
+            .await?;
             let mut observed = trace
                 .0
                 .lock()
                 .map_err(|_| AuthError::internal("Provider trace lock poisoned"))?;
             if admitted {
-                assert!(result.is_ok());
+                assert!(result.is_none());
                 assert_eq!(observed.len(), 1);
                 assert!(
                     observed
@@ -82,9 +86,8 @@ async fn provider_admission_uses_native_truthiness_and_preserves_callback_identi
                         .is_some_and(|value| value.strict_equals(&provider))
                 );
             } else {
-                let rejection = result
-                    .err()
-                    .ok_or_else(|| AuthError::internal("Missing provider was admitted"))?;
+                let rejection =
+                    result.ok_or_else(|| AuthError::internal("Missing provider was admitted"))?;
                 assert_eq!(rejection.error, "validation_source_missing");
                 assert_eq!(
                     rejection.error_description.as_deref(),

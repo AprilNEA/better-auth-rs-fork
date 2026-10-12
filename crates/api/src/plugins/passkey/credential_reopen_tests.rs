@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::{Authenticator, CREDENTIAL_ID, ORIGIN, RP_ID, STANDARD, TRANSPORTS, TestResult};
 use crate::plugins::{passkey::PasskeyPlugin, test_helpers};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -88,7 +92,7 @@ impl Fixture {
         let config = Arc::new(config);
         let store = SeaOrmStore::<BundledSchema>::new(config.clone(), database.clone())
             .with_plugin_schema::<Models>();
-        let ctx = AuthContext::new(config, Arc::new(store));
+        let ctx = AuthContext::new(config, Arc::new(store)).expect("fixture context initializes");
         assert_eq!(ctx.database.passkey_storage(), PasskeyStorage::Native);
         Ok(Self { ctx, database })
     }

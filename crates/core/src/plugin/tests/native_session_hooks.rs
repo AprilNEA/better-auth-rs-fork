@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -93,7 +97,8 @@ async fn fixture() -> AuthResult<(AuthContext<StatelessSchema>, NativeSessionDat
         ..Default::default()
     });
     let config = Arc::new(config);
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let user = context
         .database
         .create_user(CreateUser::new().with_email("owner@trusted-session.test"))

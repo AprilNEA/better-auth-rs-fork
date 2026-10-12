@@ -148,7 +148,17 @@ impl Fixture {
         let mut config =
             AuthConfig::new("sparse-native-join-contract-at-least-thirty-two-characters")
                 .base_url("http://sparse-native.test");
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.telemetry.enabled = false;
         config.advanced.database.joins = Some(joins);
         let _ = config.user.fields_mut().insert(

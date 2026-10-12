@@ -46,7 +46,17 @@ fn configured<M: crate::SeaOrmPluginModel<Record = ApiKey>>(
 ) -> AuthResult<Store<M>> {
     let mut config =
         AuthConfig::new("ordinary-cleanup-fields-secret-at-least-thirty-two-characters");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     config.advanced.database.generate_id = Some(if required(scenario["serial"].as_bool())? {
         IdGeneration::Serial

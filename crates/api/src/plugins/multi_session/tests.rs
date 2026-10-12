@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthConfig, CreateSession, CreateUser, HttpMethod,
@@ -22,7 +26,8 @@ async fn relationship_sessions() -> (AuthContext<StatelessSchema>, Vec<SessionVi
         },
     );
     let config = Arc::new(config);
-    let ctx = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let ctx = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let mut sessions = Vec::new();
     for index in 0..2 {
         let session = ctx

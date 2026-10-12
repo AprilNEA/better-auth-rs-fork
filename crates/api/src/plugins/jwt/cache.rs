@@ -87,7 +87,7 @@ impl<S: AuthSchema> SessionCookieSigner<S> for CookieSigner<S> {
                 better_auth_core::observability::logger::current().debug(
                     "Cookie-cache JWT verification failed",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+                )?;
                 return Ok(None);
             }
         };

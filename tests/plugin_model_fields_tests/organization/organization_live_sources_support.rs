@@ -111,7 +111,17 @@ pub(super) async fn auth_config<S: AuthSchema>(
     mut plugin: OrganizationConfig,
 ) -> AuthResult<BetterAuth<S>> {
     let mut settings = config();
-    settings.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut settings.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     settings.advanced.database.generate_id =
         Some(IdGeneration::Custom(IdGenerator::new(move |_| {
             Ok(Some(trace_lock(&ids)?.clone()))

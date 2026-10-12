@@ -5,7 +5,10 @@ pub mod logger;
 pub mod telemetry;
 
 pub use instrumentation::{ExperimentalConfig, InstrumentationConfig, SpanAttributes, with_span};
-pub use logger::{LogArgument, LogLevel, LogSink, LoggerConfig};
+pub use logger::{
+    LogArgument, LogLevel, LogSink, Logger, LoggerConfig, LoggerOptions, LoggerSource,
+    report_terminal_error,
+};
 pub use telemetry::{TelemetryConfig, TelemetryEvent, TelemetryTransport};
 
 pub mod database;

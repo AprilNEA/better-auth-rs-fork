@@ -51,7 +51,7 @@ impl MemoryOperation<'_> {
                 crate::observability::logger::current().error(
                     &format!("[MemoryAdapter] {context} {name} not found in the DB"),
                     &[crate::observability::LogArgument::Value(&keys)],
-                );
+                )?;
                 Err(AuthError::internal(format!("{context} {name} not found")))
             }
         }

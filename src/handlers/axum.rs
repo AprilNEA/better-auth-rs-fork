@@ -2,7 +2,6 @@
 use axum::{
     Router,
     extract::{FromRef, FromRequestParts, Request, State},
-    http::StatusCode,
     http::request::Parts,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -121,9 +120,11 @@ fn create_plugin_handler<T: AuthSchema>()
     |State(auth): State<Arc<BetterAuth<T>>>, req: Request| {
         Box::pin(async move {
             match convert_axum_request(req, max_body_bytes(auth.body_limit())).await {
-                Ok(auth_req) => match auth.handle_request(auth_req).await {
+                Ok(auth_req) => match auth.handle_request_for_transport(auth_req).await {
                     Ok(auth_response) => convert_auth_response(auth_response),
-                    Err(err) => err.into_response(),
+                    Err(error) => {
+                        better_auth_core::error::finish_axum_response(error.into_response())
+                    }
                 },
                 Err(err) => err.into_response(),
             }
@@ -297,27 +298,7 @@ fn transport_url(parts: &Parts) -> Result<Option<url::Url>, AuthError> {
 
 #[cfg(feature = "axum")]
 pub(super) fn convert_auth_response(auth_response: AuthResponse) -> Response {
-    let auth_response = match auth_response.into_http_response() {
-        Ok(response) => response,
-        Err(error) => return error.into_response(),
-    };
-    let body = match auth_response.body.into_bytes() {
-        Ok(body) => body,
-        Err(error) => return error.into_response(),
-    };
-    let mut response = Response::builder().status(auth_response.status);
-    for (name, value) in auth_response.headers {
-        response = response.header(name, value);
-    }
-
-    match response.body(axum::body::Body::from(body)) {
-        Ok(resp) => resp,
-        Err(_) => {
-            let (mut parts, _) = Response::new(()).into_parts();
-            parts.status = StatusCode::INTERNAL_SERVER_ERROR;
-            Response::from_parts(parts, axum::body::Body::from("Internal server error"))
-        }
-    }
+    better_auth_core::error::finish_axum_response(Ok(auth_response))
 }
 
 // ---------------------------------------------------------------------------

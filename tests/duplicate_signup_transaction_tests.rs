@@ -29,13 +29,19 @@ impl Events {
     }
 }
 impl LogSink for Events {
-    fn log(&self, _: LogLevel, message: LogArgument<'_>, _: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        _: LogLevel,
+        message: LogArgument<'_>,
+        _: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         if message
             .to_string()
             .starts_with("Failed to run background task")
         {
             self.push("log");
         }
+        Ok(())
     }
 }
 #[better_auth::database_hooks()]
@@ -95,8 +101,18 @@ async fn duplicate_notification_uses_signup_transaction_and_preserves_after_comm
         let mut config =
             AuthConfig::new("duplicate-transaction-contract-secret-longer-than-thirty-two")
                 .base_url("http://localhost:3000");
-        config.logger.level = Some(LogLevel::Error);
-        config.logger.log = Some(events.clone());
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.level = Some(LogLevel::Error);
+            logger_options.log = Some(events.clone());
+        }
         let db = Database::connect("sqlite::memory:").await.unwrap();
         migrator::run_migrations(&db).await.unwrap();
         let sender = events.clone();

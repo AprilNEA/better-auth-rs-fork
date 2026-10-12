@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     reason = "Cache contract fixtures fail immediately if fixture setup or an observation is invalid."
@@ -138,7 +142,7 @@ fn context(cache: Arc<Cache>, fallback: bool) -> (ApiKeyConfig, AuthContext<Stat
             custom_storage: Some(cache),
             ..Default::default()
         },
-        AuthContext::new(config, database),
+        AuthContext::new(config, database).expect("fixture context initializes"),
     )
 }
 

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::OAuthSignInError;
 use better_auth_core::{AuthError, AuthResponse, AuthResult, FieldMap, FieldValue, Utf16String};
 use serde_json::json;
@@ -196,7 +200,9 @@ fn callback_converts_truthy_api_error_values_at_the_url_boundary() -> AuthResult
         for error in [
             OAuthSignInError::from(AuthError::from(response.clone())),
             OAuthSignInError::Auth(AuthError::from_returned_response(
-                AuthError::from(response).to_auth_response(),
+                AuthError::from(response)
+                    .to_auth_response()
+                    .expect("fixture response succeeds"),
             )?),
         ] {
             assert_eq!(
@@ -236,7 +242,7 @@ fn callback_preserves_errors_without_codes_and_found_redirects() -> AuthResult<(
                 ));
             }
         };
-        let response = error.to_auth_response();
+        let response = error.to_auth_response().expect("fixture response succeeds");
         assert_eq!(
             response.api_error_status()?,
             better_auth_core::SchemaValue::Typed(422)
@@ -263,7 +269,7 @@ fn callback_preserves_errors_without_codes_and_found_redirects() -> AuthResult<(
         Ok(_) => return Err(AuthError::internal("A FOUND redirect was replaced")),
     };
     assert!(error.is_found_redirect().unwrap());
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status()?,
         better_auth_core::SchemaValue::Typed(302)

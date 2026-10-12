@@ -42,20 +42,14 @@ impl StateExtras {
         }
     }
 
-    pub(super) fn popup_entries(text: Option<&str>) -> Self {
+    pub(super) fn popup_entries(text: Option<&str>) -> AuthResult<Self> {
         let Some(text) = text.filter(|text| !text.is_empty()) else {
-            return Self::default();
+            return Ok(Self::default());
         };
         match Self::parse_popup_entries(text) {
-            Ok(value) => value,
-            Err(error) => {
-                // The upstream safeJSONParse logs invalid JSON and returns null.
-                better_auth_core::observability::logger::current().error(
-                    "Error parsing JSON",
-                    &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
-                Self::default()
-            }
+            Ok(value) => Ok(value),
+            Err(_) => better_auth_core::utils::json::safe_parse_field(&text.into())
+                .map(|_| Self::default()),
         }
     }
 
@@ -200,7 +194,7 @@ mod tests {
 
     #[test]
     fn popup_entries_preserve_utf16_and_revive_only_values() {
-        let fields = StateExtras::popup_entries(Some(r#""😀x""#));
+        let fields = StateExtras::popup_entries(Some(r#""😀x""#)).unwrap();
         let text = serde_json::to_string(&fields).unwrap();
         let mut fields: StateExtras = serde_json::from_str(&text).unwrap();
         for (key, units) in [("0", vec![0xd83d]), ("1", vec![0xde00]), ("2", vec![120])] {
@@ -211,7 +205,7 @@ mod tests {
 
         let mut fields = StateExtras::popup_entries(Some(
             r#"{"oauthState":"forged","\ud800":{"v":"\udc00","day":"2026-02-30T00:00:00Z"},"day":1,"day":2}"#,
-        ));
+        )).unwrap();
         assert!(fields.remove("oauthState").is_none());
         assert_eq!(fields.remove("day").unwrap().get(), "2");
         let raw = &fields.0.first().unwrap().1;
@@ -223,11 +217,79 @@ mod tests {
         );
         assert_eq!(fields.0.first().unwrap().0.as_utf16(), &[0xd800]);
         assert_eq!(
-            serde_json::to_string(&StateExtras::popup_entries(Some(
-                r#""2026-02-30T00:00:00Z""#
-            )))
+            serde_json::to_string(
+                &StateExtras::popup_entries(Some(r#""2026-02-30T00:00:00Z""#)).unwrap()
+            )
             .unwrap(),
             "{}"
         );
+    }
+
+    #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "The popup parser contract asserts the original logger failure and its sole emission."
+    )]
+    async fn invalid_popup_json_preserves_logger_failure() -> AuthResult<()> {
+        use better_auth_core::{
+            AuthConfig, AuthContext, AuthError, FieldMap, FieldValue,
+            observability::{LogArgument, LogLevel, LogSink, LoggerConfig},
+            store::{EphemeralStore, StatelessSchema},
+        };
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        struct FailingLog {
+            calls: AtomicUsize,
+            failure: FieldValue,
+        }
+
+        impl LogSink for FailingLog {
+            fn log(
+                &self,
+                _: LogLevel,
+                message: LogArgument<'_>,
+                _: &[LogArgument<'_>],
+            ) -> AuthResult<()> {
+                assert_eq!(message.to_string(), "Error parsing JSON");
+                let _ = self.calls.fetch_add(1, Ordering::SeqCst);
+                Err(AuthError::from_thrown(self.failure.clone()))
+            }
+        }
+
+        let failure: FieldValue = FieldMap::from([("failure".into(), "logger".into())]).into();
+        let sink = Arc::new(FailingLog {
+            calls: AtomicUsize::new(0),
+            failure: failure.clone(),
+        });
+        let mut config = AuthConfig::new("popup-logger-contract-secret-at-least-32-characters")
+            .base_url("http://popup-logger.test");
+        config.logger = LoggerConfig {
+            log: Some(sink.clone()),
+            ..Default::default()
+        }
+        .into();
+        let config = Arc::new(config);
+        let database = Arc::new(EphemeralStore::new(config.clone()));
+        let context = AuthContext::<StatelessSchema>::new(config, database)?;
+        let result = context
+            .with_native_context(Default::default(), |_| async move {
+                StateExtras::popup_entries(Some("{broken"))
+            })
+            .await;
+        let Err(error) = result else {
+            return Err(AuthError::internal(
+                "Invalid popup JSON unexpectedly ignored the logger failure",
+            ));
+        };
+        assert!(
+            error
+                .raw_value()
+                .is_some_and(|value| value.strict_equals(&failure))
+        );
+        assert_eq!(sink.calls.load(Ordering::SeqCst), 1);
+        Ok(())
     }
 }

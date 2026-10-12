@@ -115,10 +115,12 @@ fn forbidden_user() -> AuthError {
 }
 pub(super) fn verification_error(error: AuthError, registration: bool) -> AuthError {
     if !error.is_api_error_instance(ApiErrorClass::BetterAuth) {
-        better_auth_core::observability::logger::current().error(
+        if let Err(error) = better_auth_core::observability::logger::current().error(
             "Passkey verification failed",
             &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
+        ) {
+            return error;
+        }
         if registration {
             AuthError::from_code(
                 "INTERNAL_SERVER_ERROR",

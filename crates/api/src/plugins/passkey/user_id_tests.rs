@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthInitContext, AuthPlugin, AuthSchema, CreatePasskey, FieldMap, FieldValue,
@@ -51,6 +55,7 @@ fn memory() -> AuthContext<StatelessSchema> {
     config.telemetry.enabled = false;
     let config = Arc::new(config);
     AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes")
 }
 
 async fn project<S: AuthSchema>(
@@ -63,7 +68,8 @@ async fn project<S: AuthSchema>(
     config.session.store_session_in_database = Some(true);
     let config = Arc::new(config);
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(config.clone(), ctx.database.clone());
+    let mut init = AuthInitContext::new(config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     better_auth_core::AuthPlugin::<S>::schema(&PasskeyPlugin::new(), &mut model_fields)?;
     AuthPlugin::on_init(&PasskeyPlugin::new(), &mut init).await?;
     if let Some(owner) = passkey_owner {
@@ -92,7 +98,8 @@ async fn project<S: AuthSchema>(
     let cache = Arc::new(MemoryCacheAdapter::new());
     let database =
         SecondaryStore::new(database, cache.clone(), config.clone(), Default::default())?;
-    let mut projected = AuthContext::new(config, Arc::new(database));
+    let mut projected =
+        AuthContext::new(config, Arc::new(database)).expect("fixture context initializes");
     projected.secondary_storage = Some(cache.clone());
     let mut user = ctx
         .database
@@ -143,7 +150,11 @@ async fn owner_session<S: AuthSchema>(ctx: &AuthContext<S>) -> TestResult<String
 async fn response<S: AuthSchema>(ctx: &AuthContext<S>, request: &AuthRequest) -> AuthResponse {
     match route(ctx, request).await {
         Ok(response) => response,
-        Err(error) => test_helpers::finalize_response(ctx, request, error.to_auth_response()),
+        Err(error) => test_helpers::finalize_response(
+            ctx,
+            request,
+            error.to_auth_response().expect("fixture response succeeds"),
+        ),
     }
 }
 

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 // =======================================================================
@@ -605,7 +609,8 @@ async fn test_create_for_organization_rejects_non_member() {
         crate::plugins::organization::METADATA_ENABLED.to_string(),
         serde_json::Value::Bool(true),
     );
-    let ctx = AuthContext::with_metadata(ctx.config.clone(), ctx.database.clone(), metadata);
+    let ctx = AuthContext::with_metadata(ctx.config.clone(), ctx.database.clone(), metadata)
+        .expect("fixture context initializes");
 
     let req = create_auth_request(
         HttpMethod::Post,

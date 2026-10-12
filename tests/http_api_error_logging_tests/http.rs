@@ -146,9 +146,21 @@ async fn http_api_errors_keep_instance_and_exported_logger_scopes_distinct() -> 
                     })?;
                     let before_error = error_snapshot(&cause)?;
                     let mut b_config = config(ORIGIN_B);
-                    b_config.logger.level = level;
-                    b_config.logger.disabled = Some(disabled);
-                    b_config.logger.log = Some(observations.sink("B")?);
+                    {
+                        let better_auth_core::LoggerSource::Config(logger_options) =
+                            &mut b_config.logger
+                        else {
+                            #[allow(
+                                clippy::panic,
+                                clippy::panic_in_result_fn,
+                                reason = "The fixture modifies its existing authored logger options."
+                            )]
+                            panic!("fixture requires authored logger options");
+                        };
+                        logger_options.level = level;
+                        logger_options.disabled = Some(disabled);
+                        logger_options.log = Some(observations.sink("B")?);
+                    }
                     let (b_builder, b_store) = builder(b_config, &[])?;
                     let b = Arc::new(
                         b_builder
@@ -161,8 +173,20 @@ async fn http_api_errors_keep_instance_and_exported_logger_scopes_distinct() -> 
                             .await?,
                     );
                     let mut a_config = config(ORIGIN_A);
-                    a_config.logger.level = Some(LogLevel::Error);
-                    a_config.logger.log = Some(observations.sink("A")?);
+                    {
+                        let better_auth_core::LoggerSource::Config(logger_options) =
+                            &mut a_config.logger
+                        else {
+                            #[allow(
+                                clippy::panic,
+                                clippy::panic_in_result_fn,
+                                reason = "The fixture modifies its existing authored logger options."
+                            )]
+                            panic!("fixture requires authored logger options");
+                        };
+                        logger_options.level = Some(LogLevel::Error);
+                        logger_options.log = Some(observations.sink("A")?);
+                    }
                     let (a_builder, a_store) = builder(a_config, &[])?;
                     let a = a_builder
                         .plugin(Parent {

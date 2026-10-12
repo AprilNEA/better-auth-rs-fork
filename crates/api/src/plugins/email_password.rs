@@ -352,7 +352,7 @@ async fn finalize_sign_in_with_user_core(
         better_auth_core::observability::logger::current().warn(
             "Failed to send verification email on sign-in",
             &[better_auth_core::observability::LogArgument::Error(&e)],
-        );
+        )?;
     }
 
     let expires_in = if remember_me == Some(false) {
@@ -376,7 +376,7 @@ async fn finalize_sign_in_with_user_core(
         };
         if matches!(method, CredentialSignIn::Email(_)) {
             better_auth_core::observability::logger::current()
-                .error("Failed to create session", &[]);
+                .error("Failed to create session", &[])?;
         }
         return Err(AuthError::from_code(
             session_failure_status,
@@ -720,7 +720,8 @@ mod tests {
         let config = Arc::new(config);
         let database = crate::plugins::test_helpers::create_test_database().await;
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = better_auth_core::AuthInitContext::new(config.clone(), database.clone());
+        let mut init =
+            better_auth_core::AuthInitContext::new(config.clone(), database.clone()).unwrap();
         init.password_policy.hasher =
             <EmailPasswordPlugin as AuthPlugin<TestSchema>>::password_hasher(plugin);
         better_auth_core::AuthPlugin::<TestSchema>::schema(plugin, &mut model_fields).unwrap();
@@ -734,7 +735,7 @@ mod tests {
                 model_fields,
             )
             .unwrap();
-        let mut context = AuthContext::new(Arc::new(endpoint_config), database);
+        let mut context = AuthContext::new(Arc::new(endpoint_config), database).unwrap();
         parts.apply_request_runtime(&mut context);
         context.extensions = parts.extensions;
         context.email_verification_policy = parts.email_verification_policy;
@@ -1079,6 +1080,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_auth_response()
+            .unwrap()
             .into_http_response()
             .unwrap();
         assert_eq!(response.status, 422);
@@ -1108,6 +1110,7 @@ mod tests {
             .await
             .unwrap_err()
             .to_auth_response()
+            .unwrap()
             .into_http_response()
             .unwrap();
         assert_eq!(response.status, 422);

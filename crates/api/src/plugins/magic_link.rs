@@ -258,7 +258,7 @@ impl MagicLinkPlugin {
                     better_auth_core::FieldValue::Null,
                     ctx,
                 );
-                if let Err(rejection) = super::user_admission::validate_create(
+                if let Some(rejection) = super::user_admission::validate_create(
                     &user,
                     super::user_admission::UserValidationSource::new(
                         "magic-link",
@@ -266,7 +266,7 @@ impl MagicLinkPlugin {
                     ),
                     &endpoint,
                 )
-                .await
+                .await?
                 {
                     let message = rejection.message().to_owned();
                     let mut target = error_callback;

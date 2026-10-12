@@ -203,7 +203,7 @@ pub(crate) async fn revoke_session_core(
         ctx.database
             .delete_session(token)
             .await
-            .map_err(revocation_error)?;
+            .or_else(revocation_error)?;
     }
     Ok(StatusResponse { status: true })
 }
@@ -218,7 +218,7 @@ pub(crate) async fn revoke_sessions_core(
             .await
     }
     .await;
-    result.map_err(revocation_error)?;
+    result.or_else(revocation_error)?;
     Ok(StatusResponse { status: true })
 }
 
@@ -262,16 +262,16 @@ pub(crate) async fn revoke_other_sessions_core(
     Ok(StatusResponse { status: true })
 }
 
-fn revocation_error(error: AuthError) -> AuthError {
+fn revocation_error(error: AuthError) -> AuthResult<()> {
     better_auth_core::observability::logger::current().error(
         "Failed to revoke Sessions",
         &[better_auth_core::observability::LogArgument::Error(&error)],
-    );
-    AuthError::from_code(
+    )?;
+    Err(AuthError::from_code(
         "INTERNAL_SERVER_ERROR",
         "INTERNAL_SERVER_ERROR",
         "Internal Server Error",
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -320,18 +320,16 @@ impl SessionManagementPlugin {
             ));
         }
         let result = async { list_sessions_core(&session_user_id(&data)?, ctx).await }.await;
-        let mut sessions = result.map_err(|error| {
+        let mut sessions = result.or_else(|error| {
             better_auth_core::observability::logger::current().error(
                 "Failed to list Sessions",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-            match AuthError::try_api_error(better_auth_core::ApiErrorInit {
+            )?;
+            Err(AuthError::try_api_error(better_auth_core::ApiErrorInit {
                 status: "INTERNAL_SERVER_ERROR".into(),
                 class: better_auth_core::ApiErrorClass::BetterCall,
                 ..Default::default()
-            }) {
-                Ok(error) | Err(error) => error,
-            }
+            })?)
         })?;
         if admin_plugin_enabled(ctx) {
             sessions.retain(|session| !session.impersonated_by.field_value().is_truthy());
@@ -400,7 +398,7 @@ pub(crate) async fn handle_sign_out(
         better_auth_core::observability::logger::current().error(
             "Failed to delete session during sign-out",
             &[better_auth_core::observability::LogArgument::Error(&error)],
-        );
+        )?;
     }
     ctx.session_manager().clear_cookies(req)?;
     let mut response = AuthResponse::json(None, &SuccessResponse { success: true })?;

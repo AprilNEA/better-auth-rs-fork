@@ -426,7 +426,7 @@ mod tests {
             Some(user.id.field_value())
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
-        let context = crate::AuthContext::new(config, manager.database.clone());
+        let context = crate::AuthContext::new(config, manager.database.clone())?;
         for authoritative in [false, true] {
             let mut request = AuthRequest::new(HttpMethod::Get, "/native-business-consumer");
             request.headers = native_request.headers.clone();

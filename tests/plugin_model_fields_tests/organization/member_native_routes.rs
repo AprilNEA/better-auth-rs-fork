@@ -272,7 +272,17 @@ async fn check<S: AuthSchema>(
     let observer = Arc::new(Observe::default());
     let plugin = OrganizationPlugin::with_config(OrganizationConfig::default());
     let mut settings = config();
-    settings.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut settings.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     settings.advanced.database.generate_id =
         Some(IdGeneration::Custom(IdGenerator::new(|input| {
             Ok(Some(format!("{}-a", input.model)))

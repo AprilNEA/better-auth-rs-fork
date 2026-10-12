@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::{ApiKeyEndpoint, ApiKeyPlugin, ApiKeyVerificationError, VerifyApiKey};
 use crate::plugins::api_key::{ApiKeyConfig, ApiKeyValidator};
 use async_trait::async_trait;
@@ -107,9 +111,14 @@ impl Trace {
 impl LogSink for Trace {
     #[expect(
         clippy::expect_used,
-        reason = "The synchronous LogSink cannot propagate trace failures or a wrong error argument."
+        reason = "The contract requires the original AuthError and an available trace capture."
     )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         assert_eq!(level, LogLevel::Error);
         assert_eq!(arguments.len(), 1);
         let error = match arguments.first() {
@@ -120,6 +129,7 @@ impl LogSink for Trace {
         assert_eq!(error_pointer(error), self.original.load(Ordering::SeqCst));
         self.push(json!(["log", "error", message.to_string(), true]))
             .expect("Validator trace lock is not poisoned");
+        Ok(())
     }
 }
 
@@ -208,7 +218,18 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
         for scoped in [false, true] {
             let trace = Arc::new(Trace::default());
             let mut config = AuthConfig::default();
-            config.logger.log = Some(trace.clone());
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.log = Some(trace.clone());
+            }
             let config = Arc::new(config);
             let store = Arc::new(EphemeralStore::new(config.clone()));
             assert_eq!(
@@ -219,7 +240,7 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
                 store.plugin_storage_rows(EntityRole::ApiKey)?,
                 [stored_key_fields("Before")]
             );
-            let ctx = AuthContext::new(config, store.clone());
+            let ctx = AuthContext::new(config, store.clone()).expect("fixture context initializes");
             let plugin = ApiKeyPlugin::with_config(ApiKeyConfig {
                 disable_key_hashing: true,
                 custom_api_key_validator: Some(Arc::new(RejectingValidator {
@@ -259,7 +280,7 @@ async fn validator_errors_preserve_catch_scope_response_and_committed_callback_w
                 };
                 assert_eq!(error_pointer(&error), trace.original.load(Ordering::SeqCst));
                 if let Some(status) = failure.api_status() {
-                    let response = error.to_auth_response();
+                    let response = error.to_auth_response().expect("fixture response succeeds");
                     assert_eq!(
                         response.api_error_status()?,
                         better_auth_core::SchemaValue::Typed(status)

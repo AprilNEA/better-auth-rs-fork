@@ -10,15 +10,15 @@ pub(super) fn string_operation<'a>(
     value: &'a SchemaValue<String>,
     operation: &str,
 ) -> AuthResult<&'a str> {
-    value.typed().map(String::as_str).map_err(|error| {
+    value.typed().map(String::as_str).or_else(|error| {
         better_auth_core::observability::logger::current().error(
             "Organization string operation failed",
             &[
                 better_auth_core::observability::LogArgument::Error(&error),
                 better_auth_core::observability::LogArgument::Value(&serde_json::json!(operation)),
             ],
-        );
-        better_auth_core::AuthResponse::new(500).into()
+        )?;
+        Err(better_auth_core::AuthResponse::new(500).into())
     })
 }
 

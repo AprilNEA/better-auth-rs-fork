@@ -267,7 +267,7 @@ async fn run(base_url: &str, input: Value) -> AuthResult<Value> {
                 .body_value()?
                 .json()?
                 .unwrap_or_else(|| Value::String(String::new()));
-            let response = error.to_auth_response();
+            let response = error.to_auth_response()?;
             json!({"thrown":true,"status":status,"body":body,"location":response.api_error_headers()?.get("location")})
         }
         Err(AuthError::Internal(message))

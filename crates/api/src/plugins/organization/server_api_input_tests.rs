@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::organization::OrganizationConfig;
 use crate::plugins::test_helpers::{create_test_config, create_test_context_with_plugins};
@@ -100,7 +104,8 @@ async fn add_member_validates_fields_before_queries_and_limit_callbacks() {
             .add_member(input, None, &ctx)
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .expect("fixture response succeeds");
         assert_eq!(
             response.api_error_status().unwrap(),
             better_auth_core::SchemaValue::Typed(400)

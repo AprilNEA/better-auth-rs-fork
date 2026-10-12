@@ -151,7 +151,18 @@ async fn organization_user_pages_and_missing_users_match_upstream() -> AuthResul
             let mut config =
                 AuthConfig::new("organization-query-limits-secret-at-least-32-characters")
                     .base_url("http://organization.test");
-            config.logger.disabled = Some(true);
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.disabled = Some(true);
+            }
             config.advanced.database.default_find_many_limit = database_limit;
             let plugin = OrganizationPlugin::with_config(OrganizationConfig {
                 membership_limit,

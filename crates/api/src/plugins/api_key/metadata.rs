@@ -27,7 +27,7 @@ async fn write(
     (id, metadata): (SchemaValue<String>, FieldValue),
 ) -> AuthResult<()> {
     // The upstream migration updates only the database, including fallback mode.
-    // A failed legacy repair is logged per key and does not reject verification.
+    // A successful warning catch preserves verification after a failed legacy repair.
     if let Err(error) = ctx
         .database
         .update_api_key_optional(
@@ -45,7 +45,7 @@ async fn write(
                 id.display_string()?
             ),
             &[LogArgument::Error(&error)],
-        );
+        )?;
     }
     Ok(())
 }
@@ -103,6 +103,6 @@ pub(super) async fn batch(
         ctx.config.advanced.background_tasks.as_ref(),
         ctx.logger(),
     )
-    .await;
+    .await?;
     Ok(())
 }

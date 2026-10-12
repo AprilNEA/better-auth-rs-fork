@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "Assertions verify constructor order, shared identity, and observable error propagation."
@@ -185,7 +189,7 @@ fn raw_envelope_round_trip_keeps_identity_without_reading_fields() -> AuthResult
             .is_some_and(|value| value.strict_equals(&raw))
     );
     let _ = format!("{error:?} {error}");
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert!(response.body.field_value()?.strict_equals(&raw));
     assert!(
         response
@@ -445,7 +449,9 @@ fn organization_input_propagates_getter_failures_without_issue_aggregation() -> 
     assert_eq!(error.status_value()?, FieldValue::from("CONFLICT"));
     assert!(error.is_api_error_instance(ApiErrorClass::BetterAuth));
     assert_eq!(events(&reads)?, ["value"]);
-    let error = AuthError::from_returned_response(error.to_auth_response())?;
+    let error = AuthError::from_returned_response(
+        error.to_auth_response().expect("fixture response succeeds"),
+    )?;
     assert!(
         error
             .raw_value()

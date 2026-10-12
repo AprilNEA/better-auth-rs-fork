@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::token::create_email_verification_token;
 use super::*;
 use crate::plugins::test_helpers;
@@ -1044,7 +1048,7 @@ async fn test_verify_email_errors_preserve_status_codes_redirect_queries_and_fra
             );
             let response = match plugin.handle_verify_email(&request, &ctx).await {
                 Ok(response) => response,
-                Err(error) => error.to_auth_response(),
+                Err(error) => error.to_auth_response().expect("fixture response succeeds"),
             }
             .into_http_response()
             .unwrap();
@@ -1282,7 +1286,11 @@ async fn test_verify_email_rejects_untrusted_callback_url() {
         "INVALID_CALLBACK_URL",
         "Invalid callbackURL",
     );
-    let response = test_helpers::finalize_response(&ctx, &req, error.to_auth_response());
+    let response = test_helpers::finalize_response(
+        &ctx,
+        &req,
+        error.to_auth_response().expect("fixture response succeeds"),
+    );
     assert_eq!(response.status, 403);
     assert_eq!(
         response.body.bytes().unwrap().as_ref(),

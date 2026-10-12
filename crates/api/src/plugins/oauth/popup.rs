@@ -228,7 +228,7 @@ async fn start(req: &AuthRequest, ctx: &AuthContext<impl AuthSchema>) -> AuthRes
         .query_string("scopes")?
         .filter(|value| !value.is_empty())
         .map(|scopes| scopes.split(',').map(str::to_owned).collect::<Vec<_>>());
-    let additional = StateExtras::popup_entries(req.query_string("additionalData")?.as_deref());
+    let additional = StateExtras::popup_entries(req.query_string("additionalData")?.as_deref())?;
     let request = handlers::FlowStartRequest {
         anonymous_user_id: None,
         provider_name: &provider_name,
@@ -294,7 +294,7 @@ fn failed_start(
     better_auth_core::observability::logger::current().error(
         "OAuth popup failed to start",
         &[better_auth_core::observability::LogArgument::Error(&error)],
-    );
+    )?;
     completion::render(
         &mut response,
         Some(origin.into()),

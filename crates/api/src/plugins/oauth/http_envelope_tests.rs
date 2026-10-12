@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Paired with social-http-envelope.test.mjs using real HTTP bodies and native observations.
 
 use super::*;
@@ -12,7 +16,12 @@ use better_auth_core::{
 struct Logs(Mutex<Vec<(LogLevel, String, Vec<FieldValue>)>>);
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.0.lock().unwrap().push((
             level,
             message.to_string(),
@@ -26,6 +35,7 @@ impl LogSink for Logs {
                 })
                 .collect(),
         ));
+        Ok(())
     }
 }
 
@@ -89,10 +99,12 @@ async fn run(
     config.logger = LoggerConfig {
         log: Some(logs.clone()),
         ..Default::default()
-    };
+    }
+    .into();
     let config = Arc::new(config);
     let context =
-        AuthContext::<StatelessSchema>::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+        AuthContext::<StatelessSchema>::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes");
     let request = OAuthUserInfoRequest {
         access_token: Some("ordinary-access".into()).into(),
         ..Default::default()

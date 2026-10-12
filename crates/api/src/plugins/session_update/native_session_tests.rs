@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -293,7 +297,7 @@ async fn update_session_rejections_keep_native_api_errors_and_http_status() -> A
                     fields.keys().collect::<Vec<_>>(),
                     expected.as_object().unwrap().keys().collect::<Vec<_>>()
                 );
-                error.to_auth_response()
+                error.to_auth_response().expect("fixture response succeeds")
             };
             assert_eq!(response.is_api_error()?, !http);
             if http {
@@ -493,7 +497,13 @@ async fn phone_update_binds_native_actor_and_consumes_otp_before_user_failure() 
             assert_eq!(delivered.lock().unwrap().len(), 1);
         } else {
             assert_eq!(
-                body(&result.unwrap_err().to_auth_response())["code"].as_str(),
+                body(
+                    &result
+                        .unwrap_err()
+                        .to_auth_response()
+                        .expect("fixture response succeeds")
+                )["code"]
+                    .as_str(),
                 Some("FAILED_TO_UPDATE_USER")
             );
             assert_eq!(delivered.lock().unwrap().len(), 1);
@@ -570,7 +580,7 @@ async fn two_factor_primitive_users_preserve_sender_payload_and_branch_order() -
             .unwrap_err();
         assert_eq!(error.status_code().unwrap(), 400);
         assert_eq!(
-            body(&error.to_auth_response())["message"],
+            body(&error.to_auth_response().expect("fixture response succeeds"))["message"],
             "Two factor isn't enabled"
         );
     }
@@ -587,6 +597,7 @@ async fn two_factor_primitive_users_preserve_sender_payload_and_branch_order() -
                 .await
                 .unwrap_err()
                 .to_auth_response()
+                .expect("fixture response succeeds")
         )["code"]
             .as_str(),
         Some("TOTP_NOT_CONFIGURED")

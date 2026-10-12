@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use serde_json::json;
 
@@ -460,7 +464,7 @@ async fn list_memory_applies_adapter_default_before_public_pagination() {
     config.advanced.database.default_find_many_limit = Some(2.0);
     let config = Arc::new(config);
     let store = Arc::new(better_auth_core::store::EphemeralStore::new(config.clone()));
-    let ctx = AuthContext::new(config, store);
+    let ctx = AuthContext::new(config, store).expect("fixture context initializes");
     check_list_default_limit(&ctx).await;
 }
 
@@ -479,6 +483,6 @@ async fn list_sqlite_applies_adapter_default_before_public_pagination() {
         config.clone(),
         db,
     ));
-    let ctx = AuthContext::new(config, store);
+    let ctx = AuthContext::new(config, store).expect("fixture context initializes");
     check_list_default_limit(&ctx).await;
 }

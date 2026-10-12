@@ -23,7 +23,7 @@ impl ProviderKind {
                 better_auth_core::observability::logger::current().error(
                     "Failed to fetch user info from Cloudflare:",
                     &[LogArgument::Native(&diagnostic)],
-                );
+                )?;
                 return Ok(None);
             }
             return response.model_property("result").map(Some);

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth::{middleware::RateLimitConfig, server_api::EndpointInput};
 use better_auth_core::{
@@ -93,7 +97,17 @@ impl Fixture {
     async fn new(overrides: FieldMap) -> AuthResult<Self> {
         let mut config = AuthConfig::new("native-device-route-secret-at-least-32-characters")
             .base_url("http://native-device-route.test");
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         config.telemetry.enabled = false;
         let raw = Arc::new(EphemeralStore::new(Arc::new(config.clone())));
         let store: Arc<dyn AuthStore<StatelessSchema>> = raw.clone();
@@ -192,7 +206,10 @@ impl Fixture {
                     outcome.error().is_some(),
                     "{outcome:?} must complete native dispatch"
                 );
-                error.to_auth_response().into_http_response()?
+                error
+                    .to_auth_response()
+                    .expect("fixture response succeeds")
+                    .into_http_response()?
             }
             Err(error) => return Err(error),
         };

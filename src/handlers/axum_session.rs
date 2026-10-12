@@ -103,32 +103,35 @@ async fn resolve<T: AuthSchema>(
     let failed = resolution.is_err();
     let (data, mut response) = match resolution {
         Ok(resolution) => (resolution.data, AuthResponse::new(200)),
-        Err(error) => (None, error.to_auth_response()),
+        Err(error) => (
+            None,
+            error.to_auth_response().map_err(terminal_session_error)?,
+        ),
     };
     let _ = response.headers.insert("Cache-Control", "no-store");
     let _ = response.headers.insert("Pragma", "no-cache");
     auth.session_manager()
         .finish_response(&request, &mut response)
-        .map_err(|error| Box::new(error.into_response()))?;
+        .map_err(terminal_session_error)?;
     if failed {
-        return Err(Box::new(super::axum::convert_auth_response(response)));
+        let response = better_auth_core::error::materialize_axum_response(response)
+            .map_err(terminal_session_error)?;
+        return Err(Box::new(response));
     }
     let response = response
         .into_http_response()
-        .map_err(|error| Box::new(error.into_response()))?;
+        .map_err(terminal_session_error)?;
     let mut headers = HeaderMap::new();
     for (name, value) in response.headers {
         let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| {
-            Box::new(
-                AuthError::internal(format!("Invalid session response header name: {error}"))
-                    .into_response(),
-            )
+            terminal_session_error(AuthError::internal(format!(
+                "Invalid session response header name: {error}"
+            )))
         })?;
         let value = HeaderValue::from_str(&value).map_err(|error| {
-            Box::new(
-                AuthError::internal(format!("Invalid session response header value: {error}"))
-                    .into_response(),
-            )
+            terminal_session_error(AuthError::internal(format!(
+                "Invalid session response header value: {error}"
+            )))
         })?;
         let _ = headers.append(name, value);
     }
@@ -137,4 +140,15 @@ async fn resolve<T: AuthSchema>(
         headers,
         schema: PhantomData,
     })
+}
+
+fn terminal_session_error(error: AuthError) -> Box<Response> {
+    let mut response = better_auth_core::error::finish_axum_response(Err(error));
+    let _ = response
+        .headers_mut()
+        .insert("Cache-Control", HeaderValue::from_static("no-store"));
+    let _ = response
+        .headers_mut()
+        .insert("Pragma", HeaderValue::from_static("no-cache"));
+    Box::new(response)
 }

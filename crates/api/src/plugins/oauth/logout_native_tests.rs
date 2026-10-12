@@ -43,9 +43,15 @@ impl LogSink for Sink {
         clippy::expect_used,
         reason = "A malformed native log must fail the contract at its observation boundary."
     )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.capture(level, message, arguments)
             .expect("The native logout log must remain observable");
+        Ok(())
     }
 }
 
@@ -189,11 +195,21 @@ async fn run_case(name: &str) -> AuthResult<Json> {
     .into();
     let projected = values::projected(name, &observer, &original)?;
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.level = Some(LogLevel::Error);
-    config.logger.log = Some(Arc::new(Sink {
-        observer: observer.clone(),
-        original,
-    }));
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.level = Some(LogLevel::Error);
+        logger_options.log = Some(Arc::new(Sink {
+            observer: observer.clone(),
+            original,
+        }));
+    }
     let observed = observer.clone();
     let _ = config.account.additional_fields.insert(
         "updatedAt".into(),

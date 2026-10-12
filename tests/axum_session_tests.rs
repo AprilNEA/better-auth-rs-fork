@@ -235,6 +235,61 @@ async fn optional_cached_extractor_propagates_callback_unauthorized() {
     assert_eq!(body["code"], "CACHE_VERSION_REJECTED");
 }
 
+#[tokio::test]
+async fn cached_extractor_retains_no_cache_headers_when_error_materialization_fails() {
+    use better_auth::config::{CookieCacheConfig, CookieCacheVersion};
+    use better_auth::integrations::axum::OptionalCachedSession;
+    use better_auth_core::{ApiErrorInit, AuthError, FieldFunction, FieldMap};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let materializations = Arc::new(AtomicUsize::new(0));
+    let calls = materializations.clone();
+    let error = AuthError::try_api_error(ApiErrorInit {
+        status: "UNAUTHORIZED".into(),
+        body: FieldMap::from([
+            ("message".into(), "Cache version rejected".into()),
+            (
+                "toJSON".into(),
+                FieldFunction::contextual(move |_, _| {
+                    let _ = calls.fetch_add(1, Ordering::SeqCst);
+                    Err(AuthError::internal("Session error serialization failed"))
+                })
+                .into(),
+            ),
+        ])
+        .into(),
+        ..Default::default()
+    })
+    .unwrap()
+    .into_thrown_value()
+    .unwrap();
+    let mut config =
+        AuthConfig::new("session-extractor-terminal-test-secret-at-least-32-characters");
+    config.session.bearer = Some(Default::default());
+    config.session.cookie_cache = Some(CookieCacheConfig {
+        enabled: Some(true),
+        version: CookieCacheVersion::dynamic(move |_| {
+            let error = error.clone();
+            async move { Err(AuthError::from_thrown(error)) }
+        }),
+        ..Default::default()
+    });
+    let (_, auth, token) = setup_with_config(config).await;
+    let response = OptionalCachedSession::<Schema>::from_request_parts(&mut request(&token), &auth)
+        .await
+        .err()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.headers().get("cache-control").unwrap(), "no-store");
+    assert_eq!(response.headers().get("pragma").unwrap(), "no-cache");
+    assert_eq!(materializations.load(Ordering::SeqCst), 1);
+    assert!(auth.store().get_session(&token).await.unwrap().is_some());
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(body.as_ref(), b"Internal server error");
+}
+
 fn request(token: &str) -> Parts {
     Request::builder()
         .header("authorization", format!("Bearer {token}"))

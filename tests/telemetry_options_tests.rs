@@ -114,7 +114,14 @@ impl AuthPlugin<S> for InitOrder {
 }
 struct Callbacks;
 impl LogSink for Callbacks {
-    fn log(&self, _: LogLevel, _: LogArgument<'_>, _: &[LogArgument<'_>]) {}
+    fn log(
+        &self,
+        _: LogLevel,
+        _: LogArgument<'_>,
+        _: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
+        Ok(())
+    }
 }
 impl core::api_error::ApiErrorHandler<S> for Callbacks {
     fn on_error(
@@ -177,12 +184,23 @@ async fn configured_options_keep_omission_after_storage_normalization() -> AuthR
             config.account.account_linking.update_user_info_on_link = Some(custom);
             config.verification.disable_cleanup = Some(custom);
             config.api_error.throw_errors = Some(custom);
-            config.logger.disabled = Some(custom);
-            config.logger.level = Some(if custom {
-                LogLevel::Error
-            } else {
-                LogLevel::Warn
-            });
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.disabled = Some(custom);
+                logger_options.level = Some(if custom {
+                    LogLevel::Error
+                } else {
+                    LogLevel::Warn
+                });
+            }
             config.session.cookie_cache = Some(CookieCacheConfig {
                 enabled: Some(custom),
                 max_age: Some(chrono::Duration::seconds(if custom { 900 } else { 300 })),
@@ -207,7 +225,18 @@ async fn configured_options_keep_omission_after_storage_normalization() -> AuthR
             config.advanced.default_cookie_attributes.path =
                 Some(if custom { "/auth" } else { "/" }.into());
             if custom {
-                config.logger.log = Some(Arc::new(Callbacks));
+                {
+                    let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
+                    else {
+                        #[allow(
+                            clippy::panic,
+                            clippy::panic_in_result_fn,
+                            reason = "The fixture modifies its existing authored logger options."
+                        )]
+                        panic!("fixture requires authored logger options");
+                    };
+                    logger_options.log = Some(Arc::new(Callbacks));
+                }
                 config.session.fresh_age = Some(chrono::Duration::zero());
                 config.advanced.cookie_prefix = Some(String::new());
                 config.advanced.default_cookie_attributes.domain = Some("example.test".into());

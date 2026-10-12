@@ -1,12 +1,14 @@
 use super::{AuthError, AuthResult};
 use crate::{
     FieldValue,
-    observability::{LogArgument, LogLevel, LoggerConfig},
+    observability::{LogArgument, LogLevel, Logger, LoggerSource},
 };
 
 impl AuthError {
-    pub(crate) fn log_http_error(&self, logger: &LoggerConfig) -> AuthResult<()> {
-        if logger.disabled == Some(true) {
+    pub(crate) fn log_http_error(&self, logger: &Logger, options: &LoggerSource) -> AuthResult<()> {
+        let level = options.raw_level()?;
+        let disabled = options.raw_disabled()?;
+        if disabled.strict_equals(&true.into()) {
             return Ok(());
         }
         if self.http_has_property("message")? && self.message_value()?.is_string() {
@@ -32,10 +34,10 @@ impl AuthError {
                     &[self.http_log_argument()],
                 )?;
             }
-            if matches!(
-                logger.level,
-                Some(LogLevel::Error | LogLevel::Warn | LogLevel::Debug)
-            ) {
+            if ["error", "warn", "debug"]
+                .iter()
+                .any(|name| level.strict_equals(&(*name).into()))
+            {
                 crate::observability::logger::current().log(
                     LogLevel::Error,
                     LogArgument::Native(&self.message_value()?),

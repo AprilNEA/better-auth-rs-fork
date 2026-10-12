@@ -20,20 +20,20 @@ fn native(value: LogArgument<'_>) -> FieldValue {
 }
 
 impl LogSink for Instance {
-    #[expect(
-        clippy::expect_used,
-        reason = "The synchronous logger sink cannot propagate a capture failure"
-    )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
-        lock(&self.observations.events)
-            .expect("Logger observation lock must remain available")
-            .push(Event::Log {
-                sink: self.name,
-                scope: self.observations.owner(),
-                level,
-                message: native(message),
-                arguments: arguments.iter().copied().map(native).collect(),
-            });
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
+        lock(&self.observations.events)?.push(Event::Log {
+            sink: self.name,
+            scope: self.observations.owner(),
+            level,
+            message: native(message),
+            arguments: arguments.iter().copied().map(native).collect(),
+        });
+        Ok(())
     }
 }
 

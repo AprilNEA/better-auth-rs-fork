@@ -50,7 +50,7 @@ impl OAuthProvider {
             better_auth_core::observability::logger::current().error(
                 "Domain, region and userPoolId are required for Amazon Cognito. Make sure to provide them in the options.",
                 &[],
-            );
+            )?;
             return Err(AuthError::internal("DOMAIN_AND_REGION_REQUIRED"));
         }
         let domain = options

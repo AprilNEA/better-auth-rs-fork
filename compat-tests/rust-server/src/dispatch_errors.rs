@@ -43,7 +43,7 @@ fn observe(response: AuthResponse, thrown: bool) -> Value {
 }
 
 fn observe_error(error: AuthError) -> AuthResult<Value> {
-    let response = error.to_auth_response();
+    let response = error.to_auth_response()?;
     let explicit = observed_headers(&response.api_error_headers()?);
     let captured = response.captured_headers()?.as_ref().map(observed_headers);
     let mut output = explicit.clone();

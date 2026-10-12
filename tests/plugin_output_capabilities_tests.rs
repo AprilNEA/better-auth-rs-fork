@@ -62,7 +62,17 @@ type Trace = Arc<Mutex<Vec<Value>>>;
 fn config() -> AuthConfig {
     let mut config = AuthConfig::new("plugin-output-capabilities-secret-at-least-32-characters")
         .base_url("http://plugin-output-capabilities.test");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     config
 }

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers::create_test_context;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -217,7 +221,8 @@ async fn cookie_signer_resolves_keys_before_rejecting_missing_subject() -> AuthR
                     })
                 }),
         );
-        let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+        let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+            .expect("fixture context initializes");
         plugin.on_init(&mut init).await?;
         let runtime = init.runtime();
         ctx.extensions = init.extensions;
@@ -316,7 +321,8 @@ async fn cookie_signer_is_purpose_bound_and_cache_survives_store_revocation() {
         .session_cookie_cache(true)
         .issuer("token-issuer".into())
         .audience("token-audience".into());
-    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     plugin.on_init(&mut init).await.unwrap();
     let runtime = init.runtime();
     ctx.extensions = init.extensions;
@@ -543,7 +549,8 @@ async fn cookie_signer_preserves_fractional_lifetime_through_normal_cache_read()
     });
     let mut ctx = create_test_context_with_config(config).await;
     let plugin = JwtPlugin::new().session_cookie_cache(true);
-    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     plugin.on_init(&mut init).await.unwrap();
     let runtime = init.runtime();
     ctx.extensions = init.extensions;

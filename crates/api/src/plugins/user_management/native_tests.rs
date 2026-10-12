@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -283,7 +287,7 @@ async fn deletion_callback_consumes_mismatched_native_tokens_without_deleting() 
             .await
             .unwrap_err();
         assert_eq!(error.status_code().unwrap(), 404);
-        let response = error.to_auth_response();
+        let response = error.to_auth_response().expect("fixture response succeeds");
         assert_eq!(
             response.api_error_body()?.json()?.unwrap()["message"],
             "Invalid token"

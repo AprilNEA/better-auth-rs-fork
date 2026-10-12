@@ -307,7 +307,7 @@ async fn permission_roles(
                                     &serde_json::json!(role),
                                 ),
                             ],
-                        );
+                        )?;
                         return Err(better_auth_core::AuthError::from_status(
                             "INTERNAL_SERVER_ERROR",
                             better_auth_core::FieldMap::from([(

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::{OAuthProxyConfig, OAuthProxyPlugin};
 use crate::plugins::test_helpers;
 use better_auth_core::{AuthInitContext, AuthPlugin};
@@ -20,7 +24,8 @@ async fn max_age_initialization_accepts_all_numeric_values() {
                 ..Default::default()
             }),
         ] {
-            let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+            let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+                .expect("fixture context initializes");
             let result = plugin.on_init(&mut init).await;
             assert!(result.is_ok(), "{max_age}: {result:?}");
         }

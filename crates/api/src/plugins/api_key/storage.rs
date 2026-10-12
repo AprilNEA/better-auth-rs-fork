@@ -443,8 +443,8 @@ pub(super) async fn delete_for_verification(
     let database = ctx.database.clone();
     let config = config.clone();
     let key = key.clone();
-    let _task = tokio::spawn(async move {
-        let result: AuthResult<()> = async {
+    better_auth_core::background::run_in_background_with_error_message(
+        Box::pin(async move {
             if config.storage == ApiKeyStorage::SecondaryStorage {
                 let storage = storage.ok_or_else(|| {
                     AuthError::internal(
@@ -457,16 +457,12 @@ pub(super) async fn delete_for_verification(
                 database.delete_api_key(&key.id).await?;
             }
             Ok(())
-        }
-        .await;
-        if let Err(error) = result {
-            better_auth_core::observability::logger::current().error(
-                "Deferred API key deletion failed",
-                &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-        }
-    });
-    Ok(())
+        }),
+        ctx.config.advanced.background_tasks.as_ref(),
+        ctx.logger(),
+        "Deferred update failed:",
+    )
+    .await
 }
 
 pub(super) async fn list_groups(

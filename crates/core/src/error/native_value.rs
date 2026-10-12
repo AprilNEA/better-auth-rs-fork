@@ -13,6 +13,13 @@ impl AuthError {
         if let Self::Response(error) = self {
             return Ok(error.value);
         }
+        self.callback_value()
+    }
+
+    pub(crate) fn callback_value(&self) -> AuthResult<FieldValue> {
+        if let Some(value) = self.raw_value() {
+            return Ok(value.clone());
+        }
         if self.is_api_error_instance(ApiErrorClass::BetterCall) {
             return native::construct(ApiErrorInit {
                 class: if self.is_api_error_instance(ApiErrorClass::BetterAuth) {

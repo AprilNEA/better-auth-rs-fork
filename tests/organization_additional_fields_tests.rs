@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(feature = "seaorm2")]
 #![allow(
     unreachable_pub,
@@ -282,7 +286,7 @@ async fn assert_http_metadata(
             },
         )
         .await
-        .unwrap_or_else(|error| error.to_auth_response())
+        .unwrap_or_else(|error| error.to_auth_response().expect("fixture response succeeds"))
         .into_http_response()?;
     let body: serde_json::Value = serde_json::from_slice(&response.body.bytes()?)?;
     if expected.is_null() {

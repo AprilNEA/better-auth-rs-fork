@@ -219,7 +219,7 @@ pub(super) async fn create_key_for_user(
     ApiKeyPlugin::validate_prefix(config, body.prefix.as_deref())?;
     ApiKeyPlugin::validate_name(config, body.name.as_deref(), true)?;
 
-    plugin.maybe_delete_expired(ctx).await;
+    plugin.start_expired_cleanup(ctx, false, false).await?;
     let (full_key, hash) = if let Some(generator) = &config.custom_key_generator {
         let key = generator
             .generate(
@@ -344,7 +344,7 @@ pub(crate) async fn get_key_core(
 ) -> AuthResult<ApiKeyView> {
     let config = plugin.resolve_configuration(config_id)?;
     let api_key = helpers::get_owned_api_key(ctx, config, id, &user_id.into(), "read").await?;
-    plugin.maybe_delete_expired(ctx).await;
+    plugin.start_expired_cleanup(ctx, false, false).await?;
     super::metadata::single(ApiKeyView::try_from_api_key(&api_key)?, config, ctx).await
 }
 
@@ -427,7 +427,7 @@ pub(crate) async fn list_keys_core(
     if let Some(limit) = query.limit {
         views.truncate(limit.min(views.len() as u64) as usize);
     }
-    plugin.maybe_delete_expired(ctx).await;
+    plugin.start_expired_cleanup(ctx, false, false).await?;
     super::metadata::batch(&mut views, &plugin.configurations, ctx).await?;
     Ok(ListKeysResponse {
         api_keys: views,
@@ -560,7 +560,7 @@ pub(super) async fn update_key_for_user(
             ));
         }
     };
-    plugin.maybe_delete_expired(ctx).await;
+    plugin.start_expired_cleanup(ctx, false, false).await?;
     super::metadata::single(ApiKeyView::try_from_api_key(&updated)?, config, ctx).await
 }
 
@@ -574,6 +574,6 @@ pub(crate) async fn delete_key_core(
     let api_key =
         helpers::get_owned_api_key(ctx, config, &body.key_id, &user_id.into(), "delete").await?;
     super::storage::delete(config, ctx, &api_key).await?;
-    plugin.maybe_delete_expired(ctx).await;
+    plugin.start_expired_cleanup(ctx, false, false).await?;
     Ok(serde_json::json!({ "success": true }))
 }

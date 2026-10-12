@@ -239,30 +239,30 @@ impl AnonymousPlugin {
         ctx.database
             .delete_user_sessions_by_user_value(&user.id.field_value())
             .await
-            .map_err(|cause| {
+            .or_else(|cause| {
                 better_auth_core::observability::logger::current().error(
                     "Failed to delete anonymous user sessions",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
-                );
-                AuthError::from_code(
+                )?;
+                Err(AuthError::from_code(
                     "INTERNAL_SERVER_ERROR",
                     "FAILED_TO_DELETE_ANONYMOUS_USER_SESSIONS",
                     "Failed to delete anonymous user sessions",
-                )
+                ))
             })?;
         ctx.database
             .delete_user_value(&user.id.field_value())
             .await
-            .map_err(|cause| {
+            .or_else(|cause| {
                 better_auth_core::observability::logger::current().error(
                     "Failed to delete anonymous user",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
-                );
-                AuthError::from_code(
+                )?;
+                Err(AuthError::from_code(
                     "INTERNAL_SERVER_ERROR",
                     "FAILED_TO_DELETE_ANONYMOUS_USER",
                     "Failed to delete anonymous user",
-                )
+                ))
             })?;
         ctx.session_manager().clear_cookies(req)?;
         AuthResponse::json(None, &serde_json::json!({"success":true}))
@@ -405,7 +405,7 @@ impl AnonymousPlugin {
                 better_auth_core::observability::logger::current().error(
                     "Failed to clean up anonymous user during post-link cleanup",
                     &[better_auth_core::observability::LogArgument::Error(&cause)],
-                );
+                )?;
             }
         }
         Ok(())

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::store::database_hooks::{DatabaseHookUpdate, VerificationUpdate};
 
@@ -124,7 +128,12 @@ struct ParseLogger {
 }
 
 impl LogSink for ParseLogger {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         assert_eq!(level, LogLevel::Error);
         let values = arguments
             .iter()
@@ -152,6 +161,7 @@ impl LogSink for ParseLogger {
                 ("sameOriginal".into(), same.into()),
             ],
         );
+        Ok(())
     }
 }
 
@@ -171,12 +181,24 @@ async fn capture(scenario: &Json, in_transaction: bool) -> AuthResult<Json> {
     });
     let mut config = AuthConfig::default();
     config.verification.store_in_database = false;
-    config.logger.level = Some(LogLevel::Debug);
-    config.logger.log = Some(Arc::new(ParseLogger {
-        observer: observer.clone(),
-        original: input.original.clone(),
-    }));
-    config.initialize_logger();
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.level = Some(LogLevel::Debug);
+        logger_options.log = Some(Arc::new(ParseLogger {
+            observer: observer.clone(),
+            original: input.original.clone(),
+        }));
+    }
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     let config = Arc::new(config);
     let inner = Arc::new(
         EphemeralStore::new(config.clone())
@@ -189,7 +211,7 @@ async fn capture(scenario: &Json, in_transaction: bool) -> AuthResult<Json> {
         Default::default(),
     )?
     .with_clock(|| chrono::DateTime::from_timestamp_millis(NOW).unwrap());
-    let context = AuthContext::new(config, inner.clone());
+    let context = AuthContext::new(config, inner.clone()).expect("fixture context initializes");
     let before = observer.lock().unwrap().observe(&cache.state(&inner)?)?;
     let update = input.patch();
     let find = scenario["operation"] == "find";

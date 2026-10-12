@@ -115,7 +115,7 @@ impl CaptchaFixture {
             request.body=Some(serde_json::to_vec(&body).unwrap());
             request.headers.insert("content-type".into(),"application/json".into());
             let response=match EmailPasswordPlugin::new().on_request(&request,auth.context()).await {
-                Ok(Some(response))=>response, Err(error)=>error.to_auth_response().into_http_response().expect("The fixture error must materialize"), Ok(None)=>AuthResponse::new(404),
+                Ok(Some(response))=>response, Err(error)=>error.to_auth_response().and_then(AuthResponse::into_http_response).expect("The fixture error must materialize"), Ok(None)=>AuthResponse::new(404),
             };
             Json(json!({"status":response.status,"body":serde_json::from_slice::<Value>(&response.body.bytes().expect("The fixture response must serialize")).unwrap()}))
         }})).route("/__test/captcha/siteverify",post(move |headers:HeaderMap,body:Bytes|{let fixture=provider.clone();async move {

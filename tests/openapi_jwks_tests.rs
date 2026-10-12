@@ -19,7 +19,17 @@ async fn configured_jwks_paths_preserve_the_pinned_openapi_operation()
         let mut config =
             AuthConfig::new("ordinary-openapi-jwks-secret-at-least-thirty-two-characters")
                 .base_url("https://openapi-jwks.example.test");
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         if name == "disabled" {
             config.disabled_paths.push(path.into());
         }

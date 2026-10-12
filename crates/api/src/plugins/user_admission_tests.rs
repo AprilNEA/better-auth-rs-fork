@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::{
@@ -7,6 +11,9 @@ use better_auth_core::{
     user_fields::{UserFieldConfig, UserFieldType},
 };
 use std::sync::Mutex;
+
+#[path = "user_admission_tests/logger_failure.rs"]
+mod logger_failure;
 
 #[derive(Default)]
 struct Trace(Mutex<Vec<(&'static str, FieldMap, bool)>>);
@@ -85,7 +92,7 @@ fn context<S: AuthSchema>(
     } else {
         store
     };
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     context
         .extensions
         .insert(trace.clone() as Arc<dyn ValidateUserInfo<S>>);
@@ -359,7 +366,7 @@ async fn check_signup_failure<S: AuthSchema>(
         users: Mutex::default(),
     });
     let store = store.with_runtime(config.clone(), vec![trace.clone()], Default::default())?;
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     context.password_policy.hasher = Some(trace.clone());
     context
         .extensions
@@ -572,7 +579,7 @@ async fn check_email_otp_fields<S: AuthSchema>(
     );
     let config = Arc::new(config);
     let store = store.with_runtime(config.clone(), vec![trace.clone()], Default::default())?;
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     context
         .extensions
         .insert(trace.clone() as Arc<dyn ValidateUserInfo<S>>);
@@ -721,7 +728,8 @@ async fn signup_preserves_native_phone_fields_from_enabled_plugin_declarations()
     let config = Arc::new(test_helpers::create_test_config());
     let store: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(EphemeralStore::new(config.clone()));
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(config.clone(), store.clone());
+    let mut init =
+        AuthInitContext::new(config.clone(), store.clone()).expect("fixture context initializes");
     better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
         &crate::plugins::phone_number::PhoneNumberPlugin::new(),
         &mut model_fields,
@@ -753,7 +761,8 @@ async fn signup_preserves_native_phone_fields_from_enabled_plugin_declarations()
         users: Mutex::default(),
     });
     let store = store.with_runtime(adapter, vec![trace.clone()], fields)?;
-    let mut context = AuthContext::new(Arc::new(endpoint), store);
+    let mut context =
+        AuthContext::new(Arc::new(endpoint), store).expect("fixture context initializes");
     context.metadata = parts.metadata;
     context.extensions = parts.extensions;
     context.extensions.insert(AdapterUserFields(adapter_fields));

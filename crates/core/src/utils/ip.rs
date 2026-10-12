@@ -117,15 +117,16 @@ fn normalize(ip: IpAddr, original: &str, subnet: f64) -> String {
 
 impl IpAddressConfig {
     /// Log invalid proxy entries. Invalid entries never become trusted networks.
-    pub fn warn_invalid_proxies(&self) {
+    pub fn warn_invalid_proxies(&self) -> crate::AuthResult<()> {
         let invalid: Vec<_> = self
             .trusted_proxies
             .iter()
             .filter(|entry| network(entry).is_none())
             .collect();
         if !invalid.is_empty() {
-            crate::observability::logger::current().warn("Ignoring invalid advanced.ipAddress.trustedProxies entries; each entry must be an IP address or CIDR range", &[crate::observability::LogArgument::Value(&serde_json::json!(invalid))]);
+            crate::observability::logger::current().warn("Ignoring invalid advanced.ipAddress.trustedProxies entries; each entry must be an IP address or CIDR range", &[crate::observability::LogArgument::Value(&serde_json::json!(invalid))])?;
         }
+        Ok(())
     }
 
     /// Resolve one forwarded header, excluding configured trusted proxies.

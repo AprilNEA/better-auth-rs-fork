@@ -23,10 +23,10 @@ impl<S: AuthSchema> SecondaryStore<S> {
         let effect = Box::pin(async move {
             // Only refresh failures use the upstream onError policy; ordinary after hooks propagate.
             if let Err(error) = runtime.refresh_user_sessions(user.as_ref()).await {
-                runtime.config.logger().error(
+                runtime.config.logger()?.error(
                     "Failed to refresh committed user sessions in secondary storage",
                     &[crate::observability::LogArgument::Error(&error)],
-                );
+                )?;
             }
             Ok(())
         });

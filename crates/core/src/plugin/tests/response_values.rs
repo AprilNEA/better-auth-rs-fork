@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -209,7 +213,8 @@ async fn native_values_and_http_bodies_match_the_pinned_response_contract() -> A
         b"<p>explicit</p>".to_vec(),
     ));
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let fallback = AuthResponse::json(None, &serde_json::json!({"endpoint":true}))?;
     for (name, returned, content_type, bytes) in cases {
         for phase in ["endpoint", "before", "after"] {
@@ -396,7 +401,8 @@ fn materialization_preserves_bun_status_and_body_construction() -> AuthResult<()
 #[tokio::test]
 async fn invalid_response_status_preserves_native_values_and_range_errors() -> AuthResult<()> {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let route = AuthRoute::get("/invalid-response-status", "invalidResponseStatus");
     let dispatcher =
         EndpointDispatcher::new(Arc::new(vec![]), EndpointHooks::default(), [route.clone()]);

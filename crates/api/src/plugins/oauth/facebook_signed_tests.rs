@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -227,7 +231,8 @@ impl App {
         let config = Arc::new(crate::plugins::test_helpers::create_test_config());
         let database = crate::plugins::test_helpers::create_test_database().await;
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = better_auth_core::AuthInitContext::new(config.clone(), database.clone());
+        let mut init = better_auth_core::AuthInitContext::new(config.clone(), database.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<
             better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
         >::schema(&plugin, &mut model_fields)
@@ -242,7 +247,8 @@ impl App {
                 model_fields,
             )
             .unwrap();
-        let mut context = AuthContext::new(Arc::new(endpoint_config), database);
+        let mut context = AuthContext::new(Arc::new(endpoint_config), database)
+            .expect("fixture context initializes");
         parts.apply_request_runtime(&mut context);
         context.extensions = parts.extensions;
         context.email_verification_policy = parts.email_verification_policy;

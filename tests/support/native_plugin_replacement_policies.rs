@@ -46,7 +46,17 @@ pub(crate) fn config() -> better_auth::AuthConfig {
     )
     .base_url("http://native-replacements.test");
     config.telemetry.enabled = false;
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.advanced.database.generate_id =
         Some(IdGeneration::Custom(IdGenerator::new(|request| {
             Ok(Some(

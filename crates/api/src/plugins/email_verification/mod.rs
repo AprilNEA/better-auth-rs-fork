@@ -271,7 +271,7 @@ impl EmailVerificationPlugin {
                 ctx.config.advanced.background_tasks.as_ref(),
                 ctx.logger(),
             )
-            .await;
+            .await?;
             return Ok(());
         }
         let message = VerificationEmail {
@@ -285,7 +285,7 @@ impl EmailVerificationPlugin {
             ctx.config.advanced.background_tasks.as_ref(),
             ctx.logger(),
         )
-        .await;
+        .await?;
 
         Ok(())
     }
@@ -334,7 +334,7 @@ impl EmailVerificationPlugin {
         callback_url: &str,
         request: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-    ) {
+    ) -> AuthResult<()> {
         let should_send = if is_register {
             self.config.send_on_sign_up.unwrap_or(require_verification)
         } else {
@@ -344,7 +344,7 @@ impl EmailVerificationPlugin {
             || user.is_some_and(|user| user.email_verified().field_value().is_truthy())
             || !delivery::available(Some(&self.config), ctx)
         {
-            return;
+            return Ok(());
         }
         let result = async {
             let user = user.ok_or_else(|| {
@@ -357,12 +357,13 @@ impl EmailVerificationPlugin {
         }
         .await;
         if let Err(error) = result {
-            // Upstream logs verification delivery failures without changing the OAuth verification decision.
+            // A successful catch preserves the OAuth verification decision.
             better_auth_core::observability::logger::current().error(
                 "Failed to send OAuth verification email",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
         }
+        Ok(())
     }
 
     /// Check if `send_on_sign_in` is enabled.

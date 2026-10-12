@@ -208,13 +208,15 @@ impl<'a, S: AuthSchema> TestUtilsApi<'a, S> {
     pub async fn save_user(&self, user: CreateUser) -> AuthResult<Option<UserView>> {
         let mut user = user.into_user_fields()?;
         if let Some(endpoint) = self.endpoint {
-            user_admission::validate_create(
+            if let Some(rejection) = user_admission::validate_create(
                 &user,
                 UserValidationSource::new("test", UserValidationAction::CreateUser),
                 endpoint,
             )
-            .await
-            .map_err(UserValidationRejection::into_auth_error)?;
+            .await?
+            {
+                return Err(rejection.into_auth_error());
+            }
         } else if self
             .auth
             .extensions
@@ -228,13 +230,15 @@ impl<'a, S: AuthSchema> TestUtilsApi<'a, S> {
                         .into_auth_error()
                 })?;
             let endpoint = EndpointContext::new(Some(&current.request), current.body, self.auth);
-            user_admission::validate_create(
+            if let Some(rejection) = user_admission::validate_create(
                 &user,
                 UserValidationSource::new("test", UserValidationAction::CreateUser),
                 &endpoint,
             )
-            .await
-            .map_err(UserValidationRejection::into_auth_error)?;
+            .await?
+            {
+                return Err(rejection.into_auth_error());
+            }
         }
         super::helpers::apply_default_role(self.auth, &mut user);
         match self.endpoint.and_then(|endpoint| endpoint.transaction) {

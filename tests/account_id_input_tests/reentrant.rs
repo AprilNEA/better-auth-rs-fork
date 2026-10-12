@@ -22,7 +22,17 @@ pub(super) async fn check<S: AuthSchema>(
     let events = Events::default();
     let callback_events = events.clone();
     let mut config = AuthConfig::default();
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.advanced.database.generate_id = Some(if found {
         generator(&events, false)
     } else {
@@ -186,7 +196,17 @@ pub(super) async fn batch_output_reset<S: AuthSchema>(
         ..Default::default()
     };
     let mut config = AuthConfig::default();
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.advanced.database.generate_id = Some(generator(&events, false));
     let _ = config
         .account

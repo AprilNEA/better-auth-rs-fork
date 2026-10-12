@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers::assert_coded_api_error;
 use better_auth_core::AuthUser;
@@ -16,7 +20,7 @@ async fn create_test_context_with_user() -> (AuthContext<TestSchema>, UserView, 
     config.session.bearer = Some(Default::default());
     let config = Arc::new(config);
     let database = crate::plugins::test_helpers::create_test_database().await;
-    let ctx = AuthContext::new(config, database.clone());
+    let ctx = AuthContext::new(config, database.clone()).expect("fixture context initializes");
 
     let user = database
         .create_user(
@@ -822,7 +826,10 @@ async fn native_schema_rejects_nonfinite_numbers_before_storage() {
                 },
             )
             .await;
-        let response = result.unwrap_err().to_auth_response();
+        let response = result
+            .unwrap_err()
+            .to_auth_response()
+            .expect("fixture response succeeds");
         assert_eq!(
             response.api_error_status().unwrap(),
             better_auth_core::SchemaValue::Typed(400)

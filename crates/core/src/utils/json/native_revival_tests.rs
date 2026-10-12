@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "The reviver contracts assert sparse properties, callback timing, and original error identity."
@@ -85,7 +89,12 @@ async fn native_revival_catches_original_callback_errors_and_logs_the_error_prop
     type Logs = Arc<parking_lot::Mutex<Vec<(LogLevel, String, Vec<Option<FieldValue>>)>>>;
     struct Sink(Logs);
     impl LogSink for Sink {
-        fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+        fn log(
+            &self,
+            level: LogLevel,
+            message: LogArgument<'_>,
+            arguments: &[LogArgument<'_>],
+        ) -> crate::AuthResult<()> {
             self.0.lock().push((
                 level,
                 message.to_string(),
@@ -97,6 +106,7 @@ async fn native_revival_catches_original_callback_errors_and_logs_the_error_prop
                     })
                     .collect(),
             ));
+            Ok(())
         }
     }
     let original: FieldValue = FieldMap::from([("original".into(), true.into())]).into();
@@ -108,10 +118,23 @@ async fn native_revival_catches_original_callback_errors_and_logs_the_error_prop
     )?;
     let logs = Logs::default();
     let mut config = AuthConfig::default();
-    config.logger.log = Some(Arc::new(Sink(logs.clone())));
-    config.initialize_logger();
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.log = Some(Arc::new(Sink(logs.clone())));
+    }
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     let config = Arc::new(config);
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let parsed = context
         .with_endpoint_context(|_| async { safe_parse_field(&input.into()) })
         .await?;

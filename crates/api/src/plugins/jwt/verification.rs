@@ -46,7 +46,7 @@ impl JwtPlugin {
                 better_auth_core::observability::logger::current().debug(
                     "JWT verification failed",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+                )?;
                 return Ok(None);
             }
         };

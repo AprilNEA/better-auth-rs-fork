@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::config::AccountConfig;
@@ -62,7 +66,7 @@ async fn storage_failure_returns_500_and_disables_http_caching() {
         config.clone(),
         connection.clone(),
     ));
-    let ctx = AuthContext::new(config, store);
+    let ctx = AuthContext::new(config, store).expect("fixture context initializes");
     connection.close().await.unwrap();
     let req = test_helpers::create_auth_request_no_query(
         HttpMethod::Get,
@@ -81,7 +85,7 @@ async fn storage_failure_returns_500_and_disables_http_caching() {
         "FAILED_TO_GET_SESSION",
         "Failed to get session",
     );
-    let mut response = error.to_auth_response();
+    let mut response = error.to_auth_response().expect("fixture response succeeds");
     ctx.session_manager()
         .finish_response(&req, &mut response)
         .unwrap();
@@ -168,7 +172,8 @@ async fn get_session_preserves_numeric_key_user_relationships() -> AuthResult<()
         );
         let config = Arc::new(config);
         let database = Arc::new(EphemeralStore::new(config.clone()));
-        let ctx = AuthContext::<StatelessSchema>::new(config, database);
+        let ctx = AuthContext::<StatelessSchema>::new(config, database)
+            .expect("fixture context initializes");
         let session = ctx
             .database
             .create_session(CreateSession {

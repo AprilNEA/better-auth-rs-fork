@@ -100,7 +100,7 @@ pub fn safe_parse_field(value: &FieldValue) -> AuthResult<FieldValue> {
             crate::observability::logger::current().error(
                 "Error parsing JSON",
                 &[crate::observability::LogArgument::Native(&argument)],
-            );
+            )?;
             Ok(FieldValue::Null)
         }
     }

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(all(feature = "axum", feature = "seaorm2"))]
 #![expect(
     clippy::unwrap_used,
@@ -258,6 +262,7 @@ async fn wechat_login_saved_account_info_and_refresh_use_normal_sqlite_lifecycle
         .await
         .unwrap_err()
         .to_auth_response()
+        .expect("fixture response succeeds")
         .into_http_response()
         .unwrap();
     assert_eq!(info.status, 401);

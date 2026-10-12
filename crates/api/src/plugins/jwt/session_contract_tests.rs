@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use better_auth_core::{
@@ -192,7 +196,8 @@ async fn capture(
     let plugin = JwtPlugin::with_config(config(policy, &events));
     let request = AuthRequest::new(HttpMethod::Get, "/token");
     let result = if cookie {
-        let init = AuthInitContext::new(context.config.clone(), context.database.clone());
+        let init = AuthInitContext::new(context.config.clone(), context.database.clone())
+            .expect("fixture context initializes");
         let runtime = init.runtime();
         let context = Arc::new(context);
         runtime.bind(&context)?;
@@ -435,7 +440,8 @@ async fn token_header_and_cookie_keys_observe_native_relationship_snapshots() ->
     );
     assert!(!response.headers.contains_key("set-auth-jwt"));
 
-    let init = AuthInitContext::new(context.config.clone(), context.database.clone());
+    let init = AuthInitContext::new(context.config.clone(), context.database.clone())
+        .expect("fixture context initializes");
     let runtime = init.runtime();
     let context = Arc::new(context);
     runtime.bind(&context)?;

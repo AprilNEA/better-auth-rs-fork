@@ -403,7 +403,7 @@ pub(super) async fn send_otp_core<S: better_auth_core::AuthSchema>(
         ctx.logger(),
         "Failed to send two-factor OTP",
     )
-    .await;
+    .await?;
 
     Ok(StatusResponse { status: true })
 }

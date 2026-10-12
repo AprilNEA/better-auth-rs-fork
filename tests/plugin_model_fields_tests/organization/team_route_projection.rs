@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth::server_api::EndpointInput;
 use better_auth_core::{CreateMember, HttpMethod};
@@ -344,6 +348,7 @@ async fn check<S: AuthSchema>(
         let response = if native {
             required(result.err(), "Native route must reject the Team")?
                 .to_auth_response()
+                .expect("fixture response succeeds")
                 .into_http_response()?
         } else {
             result?

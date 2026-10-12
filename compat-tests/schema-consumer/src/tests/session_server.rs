@@ -200,7 +200,11 @@ where
     let mut config = AuthConfig::new(SECRET)
         .base_url(ORIGIN)
         .session_expires_in(chrono::Duration::seconds(expires_in));
-    config.logger.disabled = Some(true);
+    config.logger = better_auth::observability::LoggerConfig {
+        disabled: Some(true),
+        ..Default::default()
+    }
+    .into();
     config.telemetry.enabled = false;
     let auth = BetterAuth::<S>::new(config.clone())
         .store(SeaOrmStore::<S>::new(config, database.clone()))

@@ -92,7 +92,17 @@ fn error_shape(error: &AuthError) -> Value {
 
 fn config() -> AuthConfig {
     let mut config = AuthConfig::new(SECRET).base_url("https://cookie-expires.test");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     config.advanced.use_secure_cookies = Some(false);
     config.session.expires_in = Some(Duration::seconds(300));
@@ -172,7 +182,12 @@ impl Observer {
 }
 
 impl LogSink for Observer {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let arguments: Vec<_> = arguments
             .iter()
             .map(|argument| match argument {
@@ -188,6 +203,7 @@ impl LogSink for Observer {
             })
             .collect();
         self.push(json!({ "kind": "log", "level": level.as_str(), "message": message.to_string(), "args": arguments }));
+        Ok(())
     }
 }
 

@@ -1502,7 +1502,7 @@ async fn run(listener: TcpListener, port: u16) -> Result<(), Box<dyn std::error:
                 match plugin.add_member(body, Some(&request), auth.context()).await {
                     Ok(member) => Json(serde_json::to_value(member).unwrap()).into_response(),
                     Err(better_auth::AuthError::Unauthenticated) => (axum::http::StatusCode::UNAUTHORIZED, [(axum::http::header::CONTENT_TYPE, "application/json")]).into_response(),
-                    Err(error) => { let response = error.to_auth_response().into_http_response().expect("The fixture error must materialize"); (axum::http::StatusCode::from_u16(response.status).unwrap(), [(axum::http::header::CONTENT_TYPE, "application/json")], response.body.into_bytes().expect("The fixture response must serialize")).into_response() }
+                    Err(error) => { let response = error.to_auth_response().and_then(better_auth_core::AuthResponse::into_http_response).expect("The fixture error must materialize"); (axum::http::StatusCode::from_u16(response.status).unwrap(), [(axum::http::header::CONTENT_TYPE, "application/json")], response.body.into_bytes().expect("The fixture response must serialize")).into_response() }
                 }
             }
         }))
@@ -1719,7 +1719,7 @@ async fn run(listener: TcpListener, port: u16) -> Result<(), Box<dyn std::error:
                     let ctx = InternalAuthContext::new(
                         Arc::new(auth.config().clone()),
                         auth.store().clone(),
-                    );
+                    ).expect("The fixture context must initialize");
                     match two_factor_plugin
                         .view_backup_codes(&query.user_id, &ctx)
                         .await

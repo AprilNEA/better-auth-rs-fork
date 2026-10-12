@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthInitContext, AuthSchema,
@@ -26,7 +30,8 @@ async fn check_permissions<S: AuthSchema>(
         .store_starting_characters(false)
         .build();
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields)?;
     plugin.on_init(&mut init).await?;
     if declaration {
@@ -50,7 +55,7 @@ async fn check_permissions<S: AuthSchema>(
     let store = ctx
         .database
         .with_runtime(ctx.config.clone(), Vec::new(), model_fields)?;
-    let ctx = AuthContext::new(ctx.config, store);
+    let ctx = AuthContext::new(ctx.config, store).expect("fixture context initializes");
     let created = plugin
         .create_key(
             &ctx,
@@ -117,7 +122,8 @@ async fn memory_omitted_permissions_preserve_defaults_and_complete_cache_records
     for mode in ["database", "secondary", "fallback"] {
         for declaration in [false, true] {
             let config = Arc::new(crate::plugins::test_helpers::create_test_config());
-            let ctx = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+            let ctx = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+                .expect("fixture context initializes");
             check_permissions(ctx, mode, declaration, false).await?;
         }
     }

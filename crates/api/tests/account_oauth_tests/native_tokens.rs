@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Account-info preserves native token inputs and spreads the complete provider response.
 
 use super::*;
@@ -114,6 +118,7 @@ async fn test_account_info_preserves_number_expiry_and_native_token_identity() {
             .with_runtime(config.clone(), Vec::new(), Default::default())
             .unwrap();
         let context = AuthContext::new(config, runtime)
+            .expect("fixture context initializes")
             .initialize_request_context()
             .await
             .unwrap();
@@ -239,6 +244,7 @@ async fn test_account_info_spreads_native_response_without_resolving_subject() {
         .with_runtime(config.clone(), Vec::new(), Default::default())
         .unwrap();
     let context = AuthContext::new(config, runtime)
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .unwrap();

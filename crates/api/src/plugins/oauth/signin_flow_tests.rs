@@ -143,7 +143,17 @@ async fn context(
 ) -> AuthResult<(AuthContext<StatelessSchema>, Arc<EphemeralStore>)> {
     let mut config = test_helpers::create_test_config();
     config.account.store_account_cookie = Some(true);
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     let config = Arc::new(config);
     let store = Arc::new(EphemeralStore::new(config.clone()).with_hooks(vec![trace.clone()]));
     let context = test_helpers::initialize_test_context(config, store.clone(), &[]).await?;

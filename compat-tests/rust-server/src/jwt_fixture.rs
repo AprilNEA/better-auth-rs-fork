@@ -29,7 +29,7 @@ impl JwtFixture {
             .await?;
         let store = SeaOrmStore::<TestSchema>::new(config.clone(), database);
         Ok(Self {
-            remote: Arc::new(AuthContext::new(Arc::new(config.clone()), Arc::new(store))),
+            remote: Arc::new(AuthContext::new(Arc::new(config.clone()), Arc::new(store))?),
             profile: profile.into(),
         })
     }

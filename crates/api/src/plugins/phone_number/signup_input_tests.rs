@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::{
     test_helpers,
@@ -181,7 +185,8 @@ async fn check_signup<S: AuthSchema>(
         });
     }
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(config.clone(), store.clone());
+    let mut init =
+        AuthInitContext::new(config.clone(), store.clone()).expect("fixture context initializes");
     better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields)?;
     plugin.on_init(&mut init).await?;
     let mut replacement_fields = UserConfig::default();
@@ -203,7 +208,8 @@ async fn check_signup<S: AuthSchema>(
         rate_limit: Default::default(),
     });
     let store = store.with_runtime(adapter, vec![trace.clone()], fields)?;
-    let mut context = AuthContext::new(Arc::new(endpoint), store);
+    let mut context =
+        AuthContext::new(Arc::new(endpoint), store).expect("fixture context initializes");
     context.metadata = parts.metadata;
     context.extensions = parts.extensions;
     context.extensions.insert(AdapterUserFields(adapter_fields));

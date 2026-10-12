@@ -426,13 +426,13 @@ impl AuthPlugin<S> for Probe {
         request: &AuthRequest,
         ctx: &AuthContext<S>,
     ) -> AuthResult<Option<AuthResponse>> {
-        ctx.config.logger.info(
+        ctx.logger().info(
             "literal %s",
             &[
                 LogArgument::Value(&json!({"value":1})),
                 LogArgument::Value(&json!("tail")),
             ],
-        );
+        )?;
         match request
             .query
             .as_ref()
@@ -450,7 +450,17 @@ fn config() -> AuthConfig {
     init_tracing();
     let mut config = AuthConfig::new("observability-reference-secret-more-than-32-characters")
         .base_url("http://observability.test");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config
 }
 async fn build(config: AuthConfig) -> AuthResult<BetterAuth<S>> {
@@ -739,7 +749,12 @@ async fn database_spans_trace_only_declared_callbacks_and_instance_enablement() 
 #[derive(Default)]
 struct Logs(Mutex<Vec<(LogLevel, String, Vec<Value>)>>);
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, args: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        args: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let values = args
             .iter()
             .map(|argument| match argument {
@@ -757,6 +772,7 @@ impl LogSink for Logs {
             message.to_string(),
             values,
         ));
+        Ok(())
     }
 }
 #[tokio::test]
@@ -764,14 +780,34 @@ async fn loggers_are_instance_scoped_and_instrumentation_is_independent() -> Aut
     let left = Arc::new(Logs::default());
     let right = Arc::new(Logs::default());
     let mut a = config();
-    a.logger.disabled = Some(false);
-    a.logger.level = Some(LogLevel::Info);
-    a.logger.log = Some(left.clone());
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut a.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(false);
+        logger_options.level = Some(LogLevel::Info);
+        logger_options.log = Some(left.clone());
+    }
     a.experimental.instrumentation.enabled = false;
     let mut b = config();
-    b.logger.disabled = Some(false);
-    b.logger.level = Some(LogLevel::Error);
-    b.logger.log = Some(right.clone());
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut b.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(false);
+        logger_options.level = Some(LogLevel::Error);
+        logger_options.log = Some(right.clone());
+    }
     let a = build(a).await?;
     let b = build(b).await?;
     let request = || AuthRequest::new(HttpMethod::Get, "/api/auth/probe");
@@ -845,8 +881,18 @@ async fn telemetry_opt_in_controls_sink_and_preserves_auth_when_sink_rejects() -
     options.telemetry.enabled = true;
     options.telemetry.debug = true;
     options.telemetry.track = Some(enabled.clone());
-    options.logger.disabled = Some(false);
-    options.logger.log = Some(logs.clone());
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut options.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(false);
+        logger_options.log = Some(logs.clone());
+    }
     let auth = build(options).await?;
     assert_eq!(
         auth.handle_request(AuthRequest::new(HttpMethod::Get, "/api/auth/probe"))

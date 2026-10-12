@@ -85,7 +85,7 @@ impl ResolvedOAuthConfig {
                     &[better_auth_core::observability::LogArgument::Value(
                         &serde_json::json!(name),
                     )],
-                );
+                )?;
             }
         }
         Ok(Self {
@@ -137,7 +137,7 @@ async fn resolve_generic(
                                     ),
                                     better_auth_core::observability::LogArgument::Error(&error),
                                 ],
-                            );
+                            )?;
                             return Ok(None);
                         }
                     };
@@ -165,7 +165,7 @@ async fn resolve_generic(
                         )),
                         better_auth_core::observability::LogArgument::Error(&error),
                     ],
-                );
+                )?;
             }
         }
         if config
@@ -179,7 +179,7 @@ async fn resolve_generic(
                 &[better_auth_core::observability::LogArgument::Value(
                     &serde_json::json!(name),
                 )],
-            );
+            )?;
             return Ok(None);
         }
     }
@@ -193,7 +193,7 @@ async fn resolve_generic(
             .is_some_and(|url| !url.is_empty())
         {
             better_auth_core::observability::logger::current()
-                .error(&format!("{message}; provider skipped"), &[]);
+                .error(&format!("{message}; provider skipped"), &[])?;
             return Ok(None);
         }
         return Err(AuthError::config(message));

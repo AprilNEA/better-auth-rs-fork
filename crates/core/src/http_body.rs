@@ -171,7 +171,11 @@ mod tests {
                     .unwrap()
                     .is_empty()
             );
-            let response = error.to_auth_response().into_http_response().unwrap();
+            let response = error
+                .to_auth_response()
+                .unwrap()
+                .into_http_response()
+                .unwrap();
             assert_eq!(response.status, status);
             assert_eq!(
                 response.body.bytes().unwrap().as_ref(),

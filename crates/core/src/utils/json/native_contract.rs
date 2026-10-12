@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::observability::{LogArgument, LogLevel, LogSink};
 use crate::{AuthConfig, AuthContext, store::EphemeralStore};
@@ -23,11 +27,19 @@ struct Log {
 }
 
 #[derive(Default)]
-struct Sink(Mutex<Vec<Log>>);
+struct Sink {
+    logs: Mutex<Vec<Log>>,
+    failure: Option<FieldValue>,
+}
 
 impl LogSink for Sink {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
-        self.0.lock().push(Log {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
+        self.logs.lock().push(Log {
             level,
             message: message.to_string(),
             arguments: arguments
@@ -38,11 +50,15 @@ impl LogSink for Sink {
                 })
                 .collect(),
         });
+        match &self.failure {
+            Some(failure) => Err(AuthError::from_thrown(failure.clone())),
+            None => Ok(()),
+        }
     }
 }
 
 fn record_logs(sink: &Sink, observer: &Observer, original: &FieldValue) -> AuthResult<()> {
-    for log in std::mem::take(&mut *sink.0.lock()) {
+    for log in std::mem::take(&mut *sink.logs.lock()) {
         assert_eq!(log.level, LogLevel::Error);
         let argument = log
             .arguments
@@ -105,17 +121,48 @@ fn optional_property(value: &FieldValue, name: &str) -> AuthResult<FieldValue> {
 async fn run_case(name: &str) -> AuthResult<Json> {
     let observer = Observer::default();
     let input = inputs::Input::new(name, &observer)?;
-    let sink = Arc::new(Sink::default());
+    let sink = Arc::new(Sink {
+        failure: (name == "logger-original-error").then(|| input.logger_failure.clone()),
+        ..Default::default()
+    });
     let mut config = AuthConfig::default();
-    config.logger.log = Some(sink.clone());
-    config.initialize_logger();
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.log = Some(sink.clone());
+    }
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     let config = Arc::new(config);
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let parsed = context
         .with_endpoint_context(|_| async { safe_parse_field(&input.value) })
         .await;
     // Parser error logging is synchronous and terminal; observe the captured native arguments before the outcome.
     record_logs(&sink, &observer, &input.original)?;
+    if name == "logger-original-error" {
+        assert!(
+            parsed
+                .as_ref()
+                .err()
+                .and_then(AuthError::raw_value)
+                .is_some_and(|failure| failure.strict_equals(&input.logger_failure))
+        );
+        assert!(
+            input
+                .value
+                .model_property("mutation")?
+                .strict_equals(&"retained-before-error".into())
+        );
+    }
     let result = parsed.as_ref().ok().cloned().unwrap_or_default();
     if name == "array-holes-and-undefined" {
         assert!(result.model_property("3")?.strict_equals(&input.date));
@@ -174,17 +221,11 @@ async fn safe_json_native_runtime_matches_upstream() -> AuthResult<()> {
         .and_then(Json::as_array)
         .ok_or_else(|| AuthError::internal("safeJSONParse source cases are absent"))?;
     let mut paired = Vec::new();
-    let mut unpaired = Vec::new();
     for case in cases {
         let name = case
             .get("name")
             .and_then(Json::as_str)
             .ok_or_else(|| AuthError::internal("safeJSONParse source case name is absent"))?;
-        if name == "logger-original-error" {
-            // LogSink returns (), so a thrown logger value has no Rust callback representation.
-            unpaired.push(name);
-            continue;
-        }
         let expected = case
             .get("runtime")
             .ok_or_else(|| AuthError::internal("safeJSONParse runtime observation is absent"))?;
@@ -202,14 +243,11 @@ async fn safe_json_native_runtime_matches_upstream() -> AuthResult<()> {
             "array-holes-and-undefined",
             "object-key-snapshot-and-late-getters",
             "object-getter-error",
+            "logger-original-error",
             "date-root-skips-properties",
             "function-root-skips-properties",
             "object-native-children",
         ]
-    );
-    assert_eq!(unpaired, ["logger-original-error"]);
-    eprintln!(
-        "safeJSONParse retains the logger-original-error source case unpaired because LogSink cannot return a thrown value. Descriptor reflection and Error host metadata remain source audit observations."
     );
     Ok(())
 }

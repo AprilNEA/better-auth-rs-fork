@@ -23,19 +23,35 @@ struct State {
     tasks: Mutex<Vec<BackgroundTask>>,
 }
 impl LogSink for State {
-    fn log(&self, _: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        _: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let message = message.to_string();
         if message == "Error pruning rate limit rows" || message == "Failed to run background task:"
         {
             self.events.lock().unwrap().push(message);
             assert!(!arguments.is_empty());
         }
+        Ok(())
     }
 }
 fn config(state: Arc<State>, fail_handler: bool) -> AuthConfig {
     let mut config = AuthConfig::default();
-    config.logger.level = Some(LogLevel::Error);
-    config.logger.log = Some(state.clone());
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.level = Some(LogLevel::Error);
+        logger_options.log = Some(state.clone());
+    }
     config.advanced.background_tasks = Some(BackgroundTasks::new(move |task| {
         state.events.lock().unwrap().push("handler".into());
         state.tasks.lock().unwrap().push(task);
@@ -49,7 +65,7 @@ fn config(state: Arc<State>, fail_handler: bool) -> AuthConfig {
 async fn finish(state: &State) {
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     for task in tasks {
-        task.await.unwrap();
+        task.await.unwrap().unwrap();
     }
 }
 async fn read_count(db: &DatabaseConnection) -> i64 {

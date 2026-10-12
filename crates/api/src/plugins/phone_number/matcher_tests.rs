@@ -48,14 +48,19 @@ impl LogSink for Trace {
         clippy::expect_used,
         reason = "The synchronous log callback must fail immediately when the original error or trace lock is unavailable."
     )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         if message.to_string()
             != format!(
                 "An error occurred during {} hook matcher execution:",
                 self.source
             )
         {
-            return;
+            return Ok(());
         }
         assert_eq!(arguments.len(), 1);
         let error = match arguments.first() {
@@ -71,6 +76,7 @@ impl LogSink for Trace {
                 raw: error.raw_value().cloned(),
                 type_error: matches!(error, AuthError::TypeError(_)),
             });
+        Ok(())
     }
 }
 
@@ -258,8 +264,18 @@ async fn native_phone_matcher_retains_input_presence_and_getter_order() -> AuthR
         };
         let phone = PhoneNumberPlugin::new();
         let mut config = test_helpers::create_test_config();
-        config.logger.level = Some(LogLevel::Debug);
-        config.logger.log = Some(trace.clone());
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.level = Some(LogLevel::Debug);
+            logger_options.log = Some(trace.clone());
+        }
         let config = Arc::new(config);
         let store = Arc::new(EphemeralStore::new(config.clone()));
         let context =
@@ -381,8 +397,19 @@ async fn api_key_wraps_only_the_matcher_getter_for_native_and_typed_calls() -> A
                 .custom_api_key_getter(getter.clone())
                 .build();
             let mut config = test_helpers::create_test_config();
-            config.logger.level = Some(LogLevel::Debug);
-            config.logger.log = Some(trace.clone());
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.level = Some(LogLevel::Debug);
+                logger_options.log = Some(trace.clone());
+            }
             let config = Arc::new(config);
             let store = Arc::new(EphemeralStore::new(config.clone()));
             let context =

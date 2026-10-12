@@ -294,7 +294,17 @@ async fn check<S: AuthSchema>(
     let observations = Arc::new(Mutex::new(Observations::default()));
     let reads = Arc::new(AtomicUsize::new(0));
     let mut options = config();
-    options.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut options.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     options.session.disable_session_refresh = Some(true);
     options.advanced.database.joins = Some(joins);
     let _ = options.user.fields_mut().insert(

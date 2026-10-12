@@ -305,7 +305,7 @@ async fn run<S: AuthSchema>(
     state.finished.notified().await;
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     for task in tasks {
-        task.await.unwrap();
+        task.await.unwrap().unwrap();
     }
     let final_state = persistent(&auth, observer).await;
     let fresh = attempt(auth.store().get_user_by_email(EMAIL).await);
@@ -377,7 +377,17 @@ fn config() -> AuthConfig {
     let mut config =
         AuthConfig::new("background-transaction-secret-at-least-thirty-two-characters")
             .base_url("http://localhost:3000");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config
 }
 #[tokio::test]

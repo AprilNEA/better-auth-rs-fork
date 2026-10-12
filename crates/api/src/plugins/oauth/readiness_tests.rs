@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{AuthError, AuthInitContext};
 use serde_json::{Value, json};
@@ -85,7 +89,8 @@ async fn availability_uses_discovery_results_and_reuses_them_during_initializati
         assert_eq!(known.unwrap(), available);
         assert!(!unknown.unwrap());
         let ctx = crate::plugins::test_helpers::create_test_context().await;
-        let mut init = AuthInitContext::new(ctx.config, ctx.database);
+        let mut init =
+            AuthInitContext::new(ctx.config, ctx.database).expect("fixture context initializes");
         plugin.on_init(&mut init).await.unwrap();
         assert_eq!(plugin.has_provider("oidc").await.unwrap(), available);
         assert_eq!(server.requests.load(Ordering::Relaxed), 1);

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Paired with contracts/oauth-proxy-native-result.mjs before HTTP serialization.
 
 #![expect(
@@ -36,12 +40,18 @@ const PLAINTEXT: &str =
 struct Logs(Mutex<Vec<(String, String, Vec<String>)>>);
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.0.lock().unwrap().push((
             level.as_str().into(),
             message.to_string(),
             arguments.iter().map(ToString::to_string).collect(),
         ));
+        Ok(())
     }
 }
 
@@ -67,7 +77,8 @@ impl Fixture {
         config.logger = LoggerConfig {
             log: Some(logs.clone()),
             ..Default::default()
-        };
+        }
+        .into();
         let observed_reads = reads.clone();
         let observed_armed = armed.clone();
         let _ = config.verification.additional_fields.insert(
@@ -512,7 +523,7 @@ async fn native_api_error_body_url_is_not_an_error_object_url() -> AuthResult<()
     let fixture = Fixture::new(OAuthStateStrategy::Database, true, None, false).await?;
     let original = object(URL.into());
     let error: AuthError = AuthResponse::native(400, original.clone()).into();
-    let mut response = error.to_auth_response();
+    let mut response = error.to_auth_response().expect("fixture response succeeds");
     let before = fixture.store.storage_rows(EntityRole::Verification)?;
     plugin()
         .after_request(&request(), &mut response, &fixture.context)

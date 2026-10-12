@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 fn contract() -> Value {
@@ -12,14 +16,18 @@ fn assert_error(error: AuthError, expected: &Value) {
         u64::from(*error.status_code().unwrap().typed().unwrap()),
         expected["status"].as_u64().unwrap()
     );
-    assert_eq!(json_body(&error.to_auth_response()), expected["body"]);
+    assert_eq!(
+        json_body(&error.to_auth_response().expect("fixture response succeeds")),
+        expected["body"]
+    );
 }
 
 #[tokio::test]
 async fn typed_and_http_creation_preserve_gate_order_before_side_effects() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     let (ctx, _, _, _, callbacks) = harness(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         false,
         &[],
     )
@@ -75,7 +83,8 @@ impl ApiKeyGetter for SelectedKey {
 async fn typed_and_http_creation_cannot_replace_the_authenticated_user() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     let (ctx, _, sessions, _, callbacks) = harness(
-        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         false,
         &[],
     )

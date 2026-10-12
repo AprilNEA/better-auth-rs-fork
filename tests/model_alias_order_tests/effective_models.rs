@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "The paired registration contract compares complete schema order and resolver results."
@@ -12,7 +16,8 @@ use better_auth_core::{
 fn context(config: &AuthConfig) -> (AuthInitContext<StatelessSchema>, ModelFields) {
     let config = Arc::new(config.clone());
     (
-        AuthInitContext::new(config.clone(), Arc::new(EphemeralStore::new(config))),
+        AuthInitContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes"),
         ModelFields::default(),
     )
 }

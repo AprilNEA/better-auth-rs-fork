@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use crate::store::{EphemeralStore, StatelessSchema};
 use crate::{AuthConfig, AuthContext};
 use std::sync::Arc;
@@ -12,7 +16,8 @@ async fn initialization_retains_the_source_url_cell_and_explicit_assignments() {
         let source = AuthContext::<StatelessSchema>::new(
             config.clone(),
             Arc::new(EphemeralStore::new(config)),
-        );
+        )
+        .expect("fixture context initializes");
         let source_clone = source.clone();
         if let Some(assigned) = assigned {
             source_clone.set_base_url(assigned);

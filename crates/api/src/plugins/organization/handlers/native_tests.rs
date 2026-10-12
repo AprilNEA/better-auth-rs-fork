@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::organization::{OrganizationPlugin, types::*};
 use crate::plugins::test_helpers;
@@ -57,7 +61,7 @@ pub(super) async fn session(
 pub(super) fn assert_coded_error(error: AuthError, status: u16, expected: &[u8]) {
     assert!(error.is_api_error().unwrap());
     assert_eq!(error.status_code().unwrap(), status);
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status().unwrap(),
         better_auth_core::SchemaValue::Typed(status)

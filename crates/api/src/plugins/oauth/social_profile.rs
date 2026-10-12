@@ -235,7 +235,7 @@ pub(super) async fn fetch_user_info_with_claims(
                     "Failed to fetch user from Figma"
                 },
                 &[],
-            );
+            )?;
             Ok(response)
         }
         Err(error)
@@ -251,7 +251,7 @@ pub(super) async fn fetch_user_info_with_claims(
                     "Failed to fetch user info from Figma:"
                 },
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
             Ok(ProviderProfile::default())
         }
         response => response,
@@ -487,7 +487,7 @@ async fn fetch_default_user_info(
                     provider.config.google_hosted_domain().unwrap_or_default(),
                 ),
                 &[],
-            );
+            )?;
             return Ok(ProviderProfile::default());
         }
         let profile = FieldValue::from(data.clone());

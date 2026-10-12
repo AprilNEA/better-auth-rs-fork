@@ -53,7 +53,7 @@ pub(crate) async fn request_password_reset_core(
                 &[better_auth_core::observability::LogArgument::Value(
                     &serde_json::json!(body.email),
                 )],
-            );
+            )?;
             return Ok(success);
         }
     };
@@ -106,7 +106,7 @@ pub(crate) async fn request_password_reset_core(
         ctx.config.advanced.background_tasks.as_ref(),
         ctx.logger(),
     )
-    .await;
+    .await?;
 
     Ok(success)
 }
@@ -389,7 +389,7 @@ fn build_redirect_url(
     let base = Url::parse(base_url)
         .map_err(|error| AuthError::internal(format!("Invalid base URL: {}", error)))?;
     let mut url = if let Some(callback_url) = callback_url {
-        base.join(callback_url).map_err(|error| {
+        base.join(callback_url).or_else(|error| {
             // Upstream sends the bare message so the response carries the
             // INVALID_CALLBACK_URL code; keep the parse detail in the log.
             better_auth_core::observability::logger::current().warn(
@@ -400,8 +400,8 @@ fn build_redirect_url(
                         callback_url
                     )),
                 ],
-            );
-            AuthError::bad_request("Invalid callbackURL")
+            )?;
+            Err(AuthError::bad_request("Invalid callbackURL"))
         })?
     } else {
         base.join("/error")

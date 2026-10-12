@@ -22,7 +22,7 @@ impl OAuthProxyPlugin {
         let package = match self.decrypt_state(&state, ctx) {
             Ok(package) => package,
             Err(_) => {
-                ctx.logger().debug("OAuth proxy: could not decrypt state package, falling back to regular callback", &[]);
+                ctx.logger().debug("OAuth proxy: could not decrypt state package, falling back to regular callback", &[])?;
                 return Ok(None);
             }
         };
@@ -30,7 +30,8 @@ impl OAuthProxyPlugin {
             || !package.model_property("state")?.is_truthy()
             || !package.model_property("stateCookie")?.is_truthy()
         {
-            ctx.logger().warn("Invalid OAuth proxy state package", &[]);
+            ctx.logger()
+                .warn("Invalid OAuth proxy state package", &[])?;
             return Ok(None);
         }
         let params = match callback_params(&params)? {
@@ -39,7 +40,7 @@ impl OAuthProxyPlugin {
                 ctx.logger().warn(
                     "Invalid OAuth callback query",
                     &[LogArgument::Error(&error)],
-                );
+                )?;
                 return Ok(None);
             }
         };
@@ -49,7 +50,7 @@ impl OAuthProxyPlugin {
                 ctx.logger().error(
                     "Failed to decrypt OAuth proxy state cookie:",
                     &[LogArgument::Error(&error)],
-                );
+                )?;
                 return Ok(None);
             }
         };
@@ -71,7 +72,7 @@ impl OAuthProxyPlugin {
                 .strict_equals(&package.model_property("state")?)
         {
             ctx.logger()
-                .error("OAuth proxy state binding mismatch", &[]);
+                .error("OAuth proxy state binding mismatch", &[])?;
             return Err(redirect_error(req, &error_url, "state_mismatch")?);
         }
         let error = params.model_property("error")?;
@@ -82,7 +83,7 @@ impl OAuthProxyPlugin {
         let code = params.model_property("code")?;
         if !code.is_truthy() {
             ctx.logger()
-                .warn("OAuth callback missing authorization code", &[]);
+                .warn("OAuth callback missing authorization code", &[])?;
             return Err(redirect_error(req, &error_url, "no_code")?);
         }
         let Some(provider) = ctx
@@ -94,7 +95,7 @@ impl OAuthProxyPlugin {
             ctx.logger().warn(
                 "OAuth provider not found",
                 &[LogArgument::Native(&argument)],
-            );
+            )?;
             return Err(redirect_error(req, &error_url, "oauth_provider_not_found")?);
         };
         let tokens = match async {
@@ -119,7 +120,7 @@ impl OAuthProxyPlugin {
                 ctx.logger().error(
                     "Failed to validate authorization code",
                     &[LogArgument::Error(&error)],
-                );
+                )?;
                 return Err(redirect_error(req, &error_url, "invalid_code")?);
             }
         };
@@ -139,11 +140,11 @@ impl OAuthProxyPlugin {
         };
         if !user.is_truthy() {
             ctx.logger()
-                .error("Unable to get user info from provider", &[]);
+                .error("Unable to get user info from provider", &[])?;
             return Err(redirect_error(req, &error_url, "unable_to_get_user_info")?);
         }
         if !user.model_property("email")?.is_truthy() {
-            ctx.logger().error("Provider did not return email", &[]);
+            ctx.logger().error("Provider did not return email", &[])?;
             return Err(redirect_error(req, &error_url, "email_not_found")?);
         }
         let account_id = match async {
@@ -168,7 +169,7 @@ impl OAuthProxyPlugin {
                 ctx.logger().error(
                     "Unable to derive provider account identity",
                     &[LogArgument::Native(&argument)],
-                );
+                )?;
                 return Err(redirect_error(req, &error_url, "unable_to_get_user_info")?);
             }
         };

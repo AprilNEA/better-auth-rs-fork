@@ -189,22 +189,12 @@ impl CaptchaPlugin {
             let checker = check_bot_id.clone();
             let validator = validate_request.clone();
             let request = request.clone();
-            let hook_context = better_auth_core::hooks::current_request_hook_context();
             // Promise.race does not cancel the application callback when its deadline expires.
-            let task = tokio::spawn(async move {
-                let verify = async {
-                    let verdict = checker.check().await?;
-                    match validator {
-                        Some(validator) => validator.validate(&request, &verdict).await,
-                        None => Ok(!verdict.is_bot),
-                    }
-                };
-                match hook_context {
-                    Some(context) => {
-                        better_auth_core::hooks::with_request_hook_context_value(context, verify)
-                            .await
-                    }
-                    None => verify.await,
+            let task = better_auth_core::request_runtime::spawn_with_request_context(async move {
+                let verdict = checker.check().await?;
+                match validator {
+                    Some(validator) => validator.validate(&request, &verdict).await,
+                    None => Ok(!verdict.is_bot),
                 }
             });
             let valid = tokio::time::timeout(TIMEOUT, task)
@@ -386,7 +376,7 @@ impl<S: AuthSchema> AuthPlugin<S> for CaptchaPlugin {
             Ok(response) => Ok(response),
             Err(_) => {
                 better_auth_core::observability::logger::current()
-                    .error("CAPTCHA verification service or callback failed", &[]);
+                    .error("CAPTCHA verification service or callback failed", &[])?;
                 failure(500, "UNKNOWN_ERROR", "Something went wrong").map(Some)
             }
         }

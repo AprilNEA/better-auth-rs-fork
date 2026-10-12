@@ -57,13 +57,19 @@ struct ProviderState {
 struct ProfileLogs(Mutex<Vec<(String, Vec<String>)>>);
 
 impl LogSink for ProfileLogs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         if level == LogLevel::Error {
             self.0.lock().unwrap().push((
                 message.to_string(),
                 arguments.iter().map(ToString::to_string).collect(),
             ));
         }
+        Ok(())
     }
 }
 
@@ -263,7 +269,17 @@ impl Fixture {
         }
         let mut config = AuthConfig::new("figma-public-error-test-secret-more-than-32-characters")
             .base_url(BASE_URL);
-        config.logger.log = Some(state.logs.clone());
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.log = Some(state.logs.clone());
+        }
         let database = Database::connect("sqlite::memory:").await.unwrap();
         migrator::run_migrations(&database).await.unwrap();
         let builder =

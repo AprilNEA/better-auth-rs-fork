@@ -44,13 +44,19 @@ impl LogSink for Logger {
         clippy::expect_used,
         reason = "The synchronous logger cannot return recorder errors; poisoning must fail the contract."
     )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.0
             .push(json!({
                 "kind": "logger", "level": level.as_str(), "message": argument(&message),
                 "args": arguments.iter().map(argument).collect::<Vec<_>>(),
             }))
             .expect("Record verification logger event");
+        Ok(())
     }
 }
 
@@ -75,9 +81,19 @@ async fn contract<S: AuthSchema>(
     storage::assert_snapshot(&before, &case.before, backend.is_sqlite(), case);
     let events = Events::default();
     let mut options = config::configured(scenario, case.joins, Some(&events))?;
-    options.logger.disabled = Some(false);
-    options.logger.level = Some(LogLevel::Error);
-    options.logger.log = Some(Arc::new(Logger(events.clone())));
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut options.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(false);
+        logger_options.level = Some(LogLevel::Error);
+        logger_options.log = Some(Arc::new(Logger(events.clone())));
+    }
     let store = raw.with_runtime(
         Arc::new(options.clone()),
         vec![Arc::new(hooks::Hooks(events.clone()))],

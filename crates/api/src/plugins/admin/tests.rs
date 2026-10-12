@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::entity::AuthSession;
@@ -406,7 +410,7 @@ async fn test_stop_impersonating_without_impersonated_session_returns_bad_reques
         None,
     );
     let err = plugin.on_request(&req, &ctx).await.unwrap_err();
-    let response = err.to_auth_response();
+    let response = err.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status().unwrap(),
         better_auth_core::SchemaValue::Typed(400)

@@ -281,7 +281,7 @@ impl CsrfMiddleware {
         }
     }
 
-    fn reject(error: AuthError) -> AuthResponse {
+    fn reject(error: AuthError) -> AuthResult<AuthResponse> {
         error.to_auth_response()
     }
 }
@@ -300,11 +300,11 @@ impl Middleware for CsrfMiddleware {
         let csrf_result = self.validate_origin(req, false).await;
 
         if let Err(error) = csrf_result {
-            return Ok(Some(Self::reject(error)));
+            return Ok(Some(Self::reject(error)?));
         }
 
         if let Err(error) = self.validate_redirect_targets(req) {
-            return Ok(Some(Self::reject(error)));
+            return Ok(Some(Self::reject(error)?));
         }
 
         Ok(None)
@@ -392,7 +392,7 @@ mod tests {
             mw.validate_form_request(&req)
                 .await
                 .err()
-                .map(|error| error.to_auth_response())
+                .map(|error| error.to_auth_response().unwrap())
                 .is_none()
         );
     }
@@ -414,7 +414,7 @@ mod tests {
             mw.validate_form_request(&req)
                 .await
                 .err()
-                .map(|error| error.to_auth_response()),
+                .map(|error| error.to_auth_response().unwrap()),
         );
         assert_eq!(message, CROSS_SITE_NAVIGATION_LOGIN_BLOCKED);
     }
@@ -433,7 +433,7 @@ mod tests {
                     mw.validate_form_request(&req)
                         .await
                         .err()
-                        .map(|error| error.to_auth_response()),
+                        .map(|error| error.to_auth_response().unwrap()),
                 );
                 assert_eq!(message, INVALID_ORIGIN);
             }
@@ -447,7 +447,7 @@ mod tests {
                     mw.validate_form_request(&req)
                         .await
                         .err()
-                        .map(|error| error.to_auth_response())
+                        .map(|error| error.to_auth_response().unwrap())
                         .is_none()
                 );
             }

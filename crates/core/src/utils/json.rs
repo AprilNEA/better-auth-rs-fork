@@ -10,33 +10,9 @@ pub use runtime::{parse_client_json, parse_native_json, safe_parse_field};
 mod stringify;
 pub use stringify::{array_index, stringify};
 
-/// Parse upstream JSON values and revive ISO date strings. Invalid JSON produces null.
-pub fn safe_json_parse(text: &str) -> Value {
-    let mut value: Value = match serde_json::from_str(text) {
-        Ok(value) => value,
-        Err(error) => {
-            // The upstream adapter logs invalid JSON and returns null.
-            crate::observability::logger::current().error(
-                "Error parsing JSON",
-                &[crate::observability::LogArgument::Error(&error)],
-            );
-            return Value::Null;
-        }
-    };
-    fn revive_dates(value: &mut Value) {
-        match value {
-            Value::Object(fields) => fields.values_mut().for_each(revive_dates),
-            Value::Array(values) => values.iter_mut().for_each(revive_dates),
-            Value::String(text) => {
-                if let Some(date) = parse_json_date(text) {
-                    *text = date.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-                }
-            }
-            _ => {}
-        }
-    }
-    revive_dates(&mut value);
-    value
+/// Parse and project upstream JSON values. Invalid JSON produces null after successful logging.
+pub fn safe_json_parse(text: &str) -> crate::AuthResult<Option<Value>> {
+    safe_parse_field(&text.into())?.json()
 }
 
 /// Revive the ISO date strings accepted by the upstream JSON decoder.

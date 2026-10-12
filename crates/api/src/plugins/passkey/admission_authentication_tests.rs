@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::admin::{AdminPlugin, BannedUserMessage};
 use better_auth_core::{
@@ -45,7 +49,8 @@ impl MemoryFixture {
         let raw: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(config.clone()));
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(config.clone(), raw.clone());
+        let mut init =
+            AuthInitContext::new(config.clone(), raw.clone()).expect("fixture context initializes");
         better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
             &PasskeyPlugin::new(),
             &mut model_fields,
@@ -57,7 +62,7 @@ impl MemoryFixture {
         let (config, _, fields) = model_fields.resolve(&config);
         let config = Arc::new(config);
         let raw = raw.with_runtime(config.clone(), Vec::new(), fields)?;
-        let ctx = AuthContext::new(config, raw.clone());
+        let ctx = AuthContext::new(config, raw.clone()).expect("fixture context initializes");
         let owner = raw.create_user(user).await?;
         let session = ctx
             .session_manager()
@@ -125,7 +130,8 @@ impl MemoryFixture {
     ) -> TestResult {
         let config = Arc::new(config);
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(config.clone(), self.raw.clone());
+        let mut init = AuthInitContext::new(config.clone(), self.raw.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
             &PasskeyPlugin::new(),
             &mut model_fields,
@@ -170,7 +176,8 @@ impl MemoryFixture {
         let database =
             self.raw
                 .with_runtime(Arc::new(adapter), vec![self.trace.clone()], fields)?;
-        self.ctx = AuthContext::new(Arc::new(endpoint), database);
+        self.ctx =
+            AuthContext::new(Arc::new(endpoint), database).expect("fixture context initializes");
         self.ctx.metadata = parts.metadata;
         self.ctx.extensions = parts.extensions;
         Ok(())
@@ -196,9 +203,11 @@ impl MemoryFixture {
         let result = self.trace.capture(route(&self.ctx, &request)).await;
         let response = match result {
             Ok(response) => response,
-            Err(error) => {
-                test_helpers::finalize_response(&self.ctx, &request, error.to_auth_response())
-            }
+            Err(error) => test_helpers::finalize_response(
+                &self.ctx,
+                &request,
+                error.to_auth_response().expect("fixture response succeeds"),
+            ),
         };
         Ok((request, response))
     }

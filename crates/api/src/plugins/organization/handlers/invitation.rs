@@ -394,7 +394,7 @@ pub(crate) async fn invite_member_core(
         ctx.config.advanced.background_tasks.as_ref(),
         ctx.logger(),
     )
-    .await;
+    .await?;
     if !is_resend && let Some(hooks) = &config.hooks {
         hooks
             .after_create_invitation(OrganizationInvitationEvent {

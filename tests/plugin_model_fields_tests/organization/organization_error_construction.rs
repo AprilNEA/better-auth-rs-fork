@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth::plugins::organization::RolePermissions;
 use better_auth::plugins::organization::{
@@ -325,7 +329,7 @@ async fn check<S: AuthSchema>(
         );
         assert_eq!(error.status_code()?, status, "{case:?}");
         ordered(&error.body_value()?, &expected)?;
-        let response = error.to_auth_response();
+        let response = error.to_auth_response().expect("fixture response succeeds");
         response.into_http_response()?
     } else {
         result?

@@ -229,7 +229,7 @@ pub(super) async fn verify_email_core(
                     ctx.config.advanced.background_tasks.as_ref(),
                     ctx.logger(),
                 )
-                .await;
+                .await?;
             }
             return Ok(success(query, None));
         }
@@ -279,7 +279,7 @@ pub(super) async fn verify_email_core(
                     ctx.config.advanced.background_tasks.as_ref(),
                     ctx.logger(),
                 )
-                .await;
+                .await?;
             }
         }
         let mut fields = active.user.enumerable_fields()?;

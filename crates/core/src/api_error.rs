@@ -14,7 +14,7 @@ pub type ApiErrorTask = Pin<Box<dyn Future<Output = AuthResult<()>> + Send + 'st
 ///
 /// Return `Err` to throw synchronously. Return a future for asynchronous work that must not
 /// delay the response. The future starts before the response and continues in the request scope.
-/// A detached failure is logged; the failure cannot replace an already returned response.
+/// A detached failure receives a runtime diagnostic and cannot replace an already returned response.
 pub trait ApiErrorHandler<S: AuthSchema>: Send + Sync {
     fn on_error(
         &self,
@@ -23,13 +23,56 @@ pub trait ApiErrorHandler<S: AuthSchema>: Send + Sync {
     ) -> AuthResult<Option<ApiErrorTask>>;
 }
 
+/// Preserve the owner of failures that cross the HTTP router boundary.
+#[doc(hidden)]
+pub enum HttpFailure {
+    Source(AuthError),
+    Conversion(AuthError),
+}
+
+impl HttpFailure {
+    pub fn into_error(self) -> AuthError {
+        match self {
+            Self::Source(error) | Self::Conversion(error) => error,
+        }
+    }
+
+    /// Convert a source failure once; a failed conversion already belongs to the host.
+    pub fn into_response(self) -> AuthResult<AuthResponse> {
+        match self {
+            Self::Source(error) => error.to_auth_response(),
+            Self::Conversion(error) => Err(error),
+        }
+    }
+}
+
+impl From<AuthError> for HttpFailure {
+    fn from(error: AuthError) -> Self {
+        Self::Source(error)
+    }
+}
+
 /// Apply the policy only at the HTTP router's endpoint invocation catch boundary.
 pub async fn handle_http_error<S: AuthSchema>(
     error: AuthError,
     context: &AuthContext<S>,
 ) -> AuthResult<AuthResponse> {
-    if error.is_found_redirect()? {
-        return error.to_auth_response().into_http_response();
+    handle_http_error_for_transport(error, context)
+        .await
+        .map_err(HttpFailure::into_error)
+}
+
+/// Retain conversion ownership for transports that cannot propagate the original error.
+#[doc(hidden)]
+pub async fn handle_http_error_for_transport<S: AuthSchema>(
+    error: AuthError,
+    context: &AuthContext<S>,
+) -> Result<AuthResponse, HttpFailure> {
+    if error.is_found_redirect().map_err(HttpFailure::Conversion)? {
+        return error
+            .to_auth_response()
+            .and_then(AuthResponse::into_http_response)
+            .map_err(HttpFailure::Conversion);
     }
     if context.config.api_error.throw_errors() {
         return rethrow(error);
@@ -52,28 +95,28 @@ pub async fn handle_http_error<S: AuthSchema>(
                 }
             }
         }
-        return error.to_http_response();
+        return error.to_http_response().map_err(HttpFailure::Conversion);
     }
-    if let Err(replacement) = error.log_http_error(context.logger()) {
+    if let Err(replacement) = error.log_http_error(context.logger(), &context.config.logger) {
         return rethrow(replacement);
     }
-    error.to_http_response()
+    error.to_http_response().map_err(HttpFailure::Conversion)
 }
 
-fn rethrow(error: AuthError) -> AuthResult<AuthResponse> {
+fn rethrow(error: AuthError) -> Result<AuthResponse, HttpFailure> {
     // The outer HTTP router still serializes thrown API errors, including callback replacements.
-    if error.is_api_error()? {
-        error.to_auth_response().into_http_response()
+    if error.is_api_error().map_err(HttpFailure::Conversion)? {
+        error
+            .to_auth_response()
+            .and_then(AuthResponse::into_http_response)
+            .map_err(HttpFailure::Conversion)
     } else {
-        Err(error)
+        Err(HttpFailure::Source(error))
     }
 }
 
 fn report_detached_error(result: AuthResult<()>) {
     if let Err(error) = result {
-        crate::observability::logger::current().error(
-            "Detached onAPIError callback failed",
-            &[crate::observability::LogArgument::Error(&error)],
-        );
+        crate::observability::report_terminal_error("onAPIError callback", error);
     }
 }

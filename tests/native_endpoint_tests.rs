@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "Native endpoint contracts assert complete hook observations and propagate setup errors."
@@ -418,7 +422,10 @@ async fn update_user_preserves_native_builtin_error_declarations() -> AuthResult
         assert_eq!(error.status_value()?, status.into());
         assert_eq!(error.status_code()?, code);
         assert_eq!(error.body_value()?.json()?, Some(expected.clone()));
-        let response = error.to_auth_response().into_http_response()?;
+        let response = error
+            .to_auth_response()
+            .expect("fixture response succeeds")
+            .into_http_response()?;
         assert_eq!(response.status, code);
         assert_eq!(
             response.body.bytes()?.as_ref(),

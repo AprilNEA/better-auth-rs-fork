@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use std::{collections::HashMap, sync::Arc};
 
 use better_auth::{
@@ -69,7 +73,7 @@ async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() -> Au
                 },
             )
             .await
-            .unwrap_or_else(|error| error.to_auth_response())
+            .unwrap_or_else(|error| error.to_auth_response().expect("fixture response succeeds"))
             .into_http_response()?;
         assert_eq!(response.status, status);
         if let Some(message) = message {

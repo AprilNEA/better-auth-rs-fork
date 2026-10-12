@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthSchema, CreateUser, CreateVerification, FieldDate, FieldMap, FieldValue,
@@ -110,7 +114,8 @@ async fn duplicate_signup_filters_custom_synthetic_user_without_writes() -> Auth
     config.user = adapter.clone();
     let store = store.with_runtime(Arc::new(config.clone()), vec![], Default::default())?;
     config.user = endpoint;
-    let mut context = AuthContext::new(Arc::new(config), store);
+    let mut context =
+        AuthContext::new(Arc::new(config), store).expect("fixture context initializes");
     context.extensions.insert(AdapterUserFields(adapter));
     context
         .extensions
@@ -265,7 +270,7 @@ async fn check_synthetic_transaction<S: AuthSchema>(
     );
     let config = Arc::new(config);
     let store = store.with_runtime(config.clone(), vec![hooks], Default::default())?;
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     context.password_policy.hasher = Some(Arc::new(Password));
     let factory_events = events.clone();
     let plugin = EmailPasswordPlugin::new()

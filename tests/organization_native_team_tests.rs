@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(feature = "seaorm2")]
 #![expect(
     unreachable_pub,
@@ -332,7 +336,17 @@ async fn trusted_and_owner_native_teams_match_pinned_memory_and_sqlite() -> Auth
         let state = Arc::new(State::default());
         let mut config = AuthConfig::new("native-team-contract-secret-at-least-thirty-two")
             .base_url("http://localhost:3000");
-        config.logger.disabled = Some(true);
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+        }
         let sqlite = string(&case, "backend")? == "sqlite";
         let plugin = OrganizationPlugin::with_config(options(&state, sqlite));
         if sqlite {
@@ -425,7 +439,9 @@ async fn request_bearing_team_lifecycle_calls_still_require_a_session() -> AuthR
                     },
                 )
                 .await
-                .unwrap_or_else(AuthError::to_auth_response)
+                .unwrap_or_else(|error| {
+                    error.to_auth_response().expect("fixture response succeeds")
+                })
                 .into_http_response()?;
             assert_empty_unauthorized(&response);
         }
@@ -439,7 +455,7 @@ async fn request_bearing_team_lifecycle_calls_still_require_a_session() -> AuthR
         let response = auth
             .handle_request(request)
             .await
-            .unwrap_or_else(AuthError::to_auth_response)
+            .unwrap_or_else(|error| error.to_auth_response().expect("fixture response succeeds"))
             .into_http_response()?;
         assert_empty_unauthorized(&response);
     }

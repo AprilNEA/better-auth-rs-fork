@@ -110,7 +110,17 @@ async fn endpoint<S: AuthSchema>(
     mode: Mode,
 ) -> AuthResult<BetterAuth<S>> {
     let mut config = config();
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.advanced.database.joins = Some(joins);
     config.advanced.database.default_find_many_limit = mode.limit();
     config.advanced.database.generate_id =

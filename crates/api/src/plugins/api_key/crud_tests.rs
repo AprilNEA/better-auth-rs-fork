@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers::assert_coded_api_error;
 use better_auth_core::AuthUser;
@@ -40,7 +44,7 @@ async fn context() -> (AuthContext<TestSchema>, String, String) {
     let mut config = AuthConfig::new("a-secret-that-is-at-least-32-characters");
     config.session.bearer = Some(Default::default());
     (
-        AuthContext::new(Arc::new(config), database),
+        AuthContext::new(Arc::new(config), database).expect("fixture context initializes"),
         user_id.typed().unwrap().clone(),
         token,
     )
@@ -339,7 +343,7 @@ async fn list_rejects_invalid_pagination_instead_of_ignoring_it() {
                 req.set_endpoint_query(query);
                 plugin.handle_list(&req, &ctx).await.unwrap()
             }
-            Err(error) => error.to_auth_response(),
+            Err(error) => error.to_auth_response().expect("fixture response succeeds"),
         };
         assert_eq!(
             response.api_error_status().unwrap(),

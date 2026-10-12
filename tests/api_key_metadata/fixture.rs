@@ -25,13 +25,19 @@ pub(super) struct State {
     pub(super) tasks: Mutex<Vec<BackgroundTask>>,
 }
 impl LogSink for State {
-    fn log(&self, _: LogLevel, message: LogArgument<'_>, _: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        _: LogLevel,
+        message: LogArgument<'_>,
+        _: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let message = message.to_string();
         if message.starts_with("Failed to migrate double-stringified metadata") {
             self.logs.lock().unwrap().push("migration-warning".into());
         } else if message == "Failed to run background task:" {
             self.logs.lock().unwrap().push(message);
         }
+        Ok(())
     }
 }
 struct Hasher;
@@ -77,8 +83,18 @@ impl Fixture {
         let mut config = AuthConfig::new("api-key-metadata-contract-secret-longer-than-thirty-two")
             .base_url("http://localhost:3000");
         config.session.store_session_in_database = Some(true);
-        config.logger.level = Some(LogLevel::Warn);
-        config.logger.log = Some(state.clone());
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.level = Some(LogLevel::Warn);
+            logger_options.log = Some(state.clone());
+        }
         if scheduling != "default" {
             let state = state.clone();
             config.advanced.background_tasks = Some(BackgroundTasks::new(move |task| {
@@ -281,7 +297,7 @@ impl Fixture {
         let tasks = std::mem::take(&mut *self.state.tasks.lock().unwrap());
         let mut states = Vec::new();
         for task in tasks {
-            task.await.unwrap();
+            task.await.unwrap().unwrap();
             states.push("fulfilled");
         }
         states

@@ -364,7 +364,7 @@ impl<S: AuthSchema> AuthPlugin<S> for OAuthProxyPlugin {
                 ctx.logger().warn(
                     "OAuth proxy: cross-origin callback reached after hook unexpectedly",
                     &[],
-                );
+                )?;
                 Ok(())
             },
         )
@@ -485,7 +485,7 @@ impl OAuthProxyPlugin {
                 &[better_auth_core::observability::logger::LogArgument::Error(
                     &error,
                 )],
-            ),
+            )?,
         }
         Ok(())
     }
@@ -530,7 +530,7 @@ impl OAuthProxyPlugin {
             }
         };
         if !payload.is_truthy() {
-            ctx.logger().warn("No OAuth state found for proxy", &[]);
+            ctx.logger().warn("No OAuth state found for proxy", &[])?;
             return Ok(None);
         }
         if !payload.is_string() {
@@ -597,7 +597,7 @@ impl OAuthProxyPlugin {
             .filter(|value| !value.is_empty())
         else {
             ctx.logger()
-                .error("OAuth proxy callback missing profile data", &[]);
+                .error("OAuth proxy callback missing profile data", &[])?;
             return redirect_error(&default_error, "missing_profile", None);
         };
         let plain = match symmetric::decrypt(self.encryption_key(ctx), &encrypted) {

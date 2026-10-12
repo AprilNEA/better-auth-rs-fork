@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Rust ownership regression for custom-session's Promise.all callback scope.
 
 use super::*;
@@ -137,6 +141,7 @@ async fn list_callbacks_retain_caller_runtime_and_complete_after_first_error() -
         );
         let store = Arc::new(EphemeralStore::new(config.clone()));
         let root = AuthContext::<S>::new(config, store.clone())
+            .expect("fixture context initializes")
             .initialize_request_context()
             .await?;
         state.runtime.bind(&root)?;

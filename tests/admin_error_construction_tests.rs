@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(feature = "seaorm2")]
 
 #[path = "support/adapter_storage_snapshot.rs"]
@@ -45,7 +49,17 @@ fn config() -> AuthConfig {
             enabled: Some(false),
             ..Default::default()
         });
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config
 }
 
@@ -184,7 +198,10 @@ async fn check<S: AuthSchema>(store: impl AuthStore<S> + 'static, storage: Stora
         if case.expected_body.is_none() {
             assert!(body.is_undefined(), "{}", case.name);
         }
-        let response = error.to_auth_response().into_http_response()?;
+        let response = error
+            .to_auth_response()
+            .expect("fixture response succeeds")
+            .into_http_response()?;
         assert_eq!(response.status, case.http_status, "{}", case.name);
         let expected_bytes = case
             .expected_body

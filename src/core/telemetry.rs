@@ -61,13 +61,7 @@ pub(super) fn init_payload<S: AuthSchema>(
             .map(fields::configuration)
             .transpose()?,
     )?;
-    let mut logger = Map::from_iter([("log".into(), json!(config.logger.log.is_some()))]);
-    option(&mut logger, "disabled", config.logger.disabled)?;
-    option(
-        &mut logger,
-        "level",
-        config.logger.level.map(|level| level.as_str()),
-    )?;
+    let logger = config.logger.telemetry_options()?.json()?;
 
     let mut cache = Map::new();
     if let Some(config) = &config.session.cookie_cache {
@@ -477,21 +471,10 @@ fn database_hooks(hooks: &[DatabaseHookMetadata]) -> Map<String, Value> {
 pub(super) async fn start_init(
     telemetry: better_auth_core::observability::telemetry::Telemetry,
     payload: Value,
-) -> better_auth_core::AuthResult<()> {
-    use std::{future::poll_fn, task::Poll};
-    let mut task = Box::pin(async move { telemetry.publish("init", payload).await });
-    match poll_fn(|cx| Poll::Ready(task.as_mut().poll(cx))).await {
-        Poll::Ready(result) => result,
-        Poll::Pending => {
-            drop(tokio::spawn(async move {
-                if let Err(error) = task.await {
-                    better_auth_core::observability::logger::current().error(
-                        "Telemetry serialization failed",
-                        &[better_auth_core::observability::LogArgument::Error(&error)],
-                    );
-                }
-            }));
-            Ok(())
-        }
-    }
+) {
+    better_auth_core::background::start_unowned(
+        Box::pin(async move { telemetry.publish("init", payload).await }),
+        "telemetry init",
+    )
+    .await;
 }

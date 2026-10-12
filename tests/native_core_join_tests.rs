@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(feature = "seaorm2")]
 #![expect(
     clippy::unwrap_used,
@@ -389,7 +393,7 @@ async fn check_case(db: DatabaseConnection, fixture: &Value, limit: Option<f64>)
         Err(error) => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
             assert_eq!(error.status_code().unwrap(), 400);
-            let response = error.to_auth_response();
+            let response = error.to_auth_response().expect("fixture response succeeds");
             assert_eq!(
                 response
                     .api_error_headers()

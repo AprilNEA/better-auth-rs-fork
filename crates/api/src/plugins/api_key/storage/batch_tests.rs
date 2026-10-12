@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -255,7 +259,8 @@ async fn exercise_batch<S: AuthSchema>(
                 .base_url("http://api-key-cache-batch.test"),
         ),
         database,
-    );
+    )
+    .expect("fixture context initializes");
     let mut ids = Vec::new();
     let mut names = Vec::new();
     for row in 0..COUNT {
@@ -573,7 +578,7 @@ async fn failed_groups_preserve_first_error_without_stopping_independent_workers
         let context = AuthContext::new(
             Arc::new(AuthConfig::new("group-cache-list-contract-at-least-32-characters")),
             Arc::new(EphemeralStore::default()),
-        );
+        ).expect("fixture context initializes");
         let mut calls = storages.iter().map(|storage| storage.arm(Mode::Get)).collect::<Vec<_>>();
         let task = tokio::spawn(with_request_hook_context_value(
             RequestHookContext::from_request(&AuthRequest::new(HttpMethod::Get, "/api-key/list")).unwrap(),
@@ -722,7 +727,8 @@ async fn fractional_string_length_starts_one_worker_then_reads_both_indices() {
                 "fractional-cache-list-contract-at-least-32-characters",
             )),
             Arc::new(EphemeralStore::default()),
-        );
+        )
+        .expect("fixture context initializes");
         let mut calls = storage.arm(Mode::Get);
         let task = tokio::spawn(with_request_hook_context_value(
             RequestHookContext::from_request(&AuthRequest::new(HttpMethod::Get, "/api-key/list"))

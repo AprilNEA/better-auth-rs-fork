@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::{AuthError, FieldArray, FieldFunction, field_value::FieldArraySource};
 use std::sync::{
@@ -202,7 +206,8 @@ async fn dispatch(
     status: Option<u16>,
 ) -> (AuthResult<AuthResponse>, Vec<ResponseBody>, usize) {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let hooks = Hooks {
         phase: phase_name(phase),
         returned: returned.clone(),
@@ -484,8 +489,9 @@ async fn json_errors_keep_original_allocation_before_invalid_http_status() -> Au
 async fn api_error_and_explicit_responses_keep_their_http_paths() -> AuthResult<()> {
     for phase in ["before-raw", "before-json", "endpoint", "after-json"] {
         let sample = Sample::new("object-self")?;
-        let response =
-            AuthError::from(AuthResponse::json_value(418, sample.value.clone())).to_auth_response();
+        let response = AuthError::from(AuthResponse::json_value(418, sample.value.clone()))
+            .to_auth_response()
+            .expect("fixture response succeeds");
         let raw_error = response.body.field_value()?;
         assert!(
             raw_error

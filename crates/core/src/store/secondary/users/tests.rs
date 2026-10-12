@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::observability::{LogArgument, LogLevel, LogSink};
 use crate::store::{EphemeralStore, MemoryCacheAdapter, SecondaryStorage, transaction};
@@ -62,9 +66,15 @@ impl SecondaryStorage for GatedStorage {
 struct Logs(mpsc::UnboundedSender<(LogLevel, String, bool)>);
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         let structured_error = matches!(arguments, [LogArgument::Error(error)] if error.to_string() == "refresh failure");
         let _ = self.0.send((level, message.to_string(), structured_error));
+        Ok(())
     }
 }
 
@@ -83,7 +93,17 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
             release: Semaphore::new(0),
         });
         let mut config = crate::AuthConfig::default();
-        config.logger.log = Some(Arc::new(Logs(logger)));
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.log = Some(Arc::new(Logs(logger)));
+        }
         let config = Arc::new(config);
         let inner = Arc::new(EphemeralStore::new(config.clone()));
         let user = inner
@@ -125,12 +145,23 @@ async fn refresh_logs_to_instance_and_keeps_pending_peer_after_return()
         )?;
         let (caller_logger, mut caller_logs) = mpsc::unbounded_channel();
         let mut caller_config = crate::AuthConfig::default();
-        caller_config.logger.log = Some(Arc::new(Logs(caller_logger)));
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut caller_config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.log = Some(Arc::new(Logs(caller_logger)));
+        }
         let caller_config = Arc::new(caller_config);
         let caller = crate::AuthContext::new(
             caller_config.clone(),
             Arc::new(EphemeralStore::new(caller_config)),
-        );
+        )
+        .expect("fixture context initializes");
         let update_id = id.clone();
         let update = tokio::spawn(async move {
             caller

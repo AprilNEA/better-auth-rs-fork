@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -37,7 +41,7 @@ fn returned(kind: Output, phase: &str, error_status: u16) -> AuthResult<AuthResp
             if kind == Output::ThrowError {
                 Err(error)
             } else {
-                Ok(error.to_auth_response())
+                Ok(error.to_auth_response().expect("fixture response succeeds"))
             }
         }
     }
@@ -360,7 +364,8 @@ async fn native_status_tracks_endpoint_provenance_across_hook_replacements() -> 
         ),
     ];
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     for (name, before, endpoint, status, after, native, expected_http) in cases {
         let case = Case {
             name,

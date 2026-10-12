@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::super::{callback, generic_profile};
 use super::*;
 use better_auth_core::{
@@ -95,7 +99,10 @@ impl Harness {
         callback.query = Some(json!({"code": "native-profile-code", "state": state_id}));
         match self.dispatch(callback, state).await {
             Ok(response) => response.into_http_response(),
-            Err(error) if error.is_api_error()? => error.to_auth_response().into_http_response(),
+            Err(error) if error.is_api_error()? => error
+                .to_auth_response()
+                .expect("fixture response succeeds")
+                .into_http_response(),
             Err(error) => Err(error),
         }
     }

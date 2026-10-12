@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -80,7 +84,8 @@ async fn fixture(
     let config = Arc::new(config);
     let store: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(EphemeralStore::new(config.clone()));
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(config.clone(), store.clone());
+    let mut init =
+        AuthInitContext::new(config.clone(), store.clone()).expect("fixture context initializes");
     let verified = Arc::new(Mutex::new(Vec::new()));
     let seen = verified.clone();
     let plugin = SiwePlugin::new(
@@ -128,7 +133,7 @@ async fn fixture(
     }
     let parts = init.into_parts();
     let store = store.with_runtime(config.clone(), parts.database_hooks, model_fields)?;
-    let mut context = AuthContext::new(config, store);
+    let mut context = AuthContext::new(config, store).expect("fixture context initializes");
     context.extensions = parts.extensions;
     Ok((plugin, context, reads, verified))
 }
@@ -214,7 +219,7 @@ async fn large_chain_numbers_persist_before_cancelled_session_without_consuming_
     let error = plugin.verify(&request, &ctx).await.unwrap_err();
     assert!(error.is_api_error().unwrap());
     assert_eq!(error.status_code().unwrap(), 500);
-    let response = error.to_auth_response();
+    let response = error.to_auth_response().expect("fixture response succeeds");
     assert_eq!(
         response.api_error_status()?,
         better_auth_core::SchemaValue::Typed(500)
@@ -370,7 +375,7 @@ async fn native_and_http_siwe_errors_preserve_api_errors_and_nonce_consumption()
                         .collect::<Vec<_>>(),
                     expected.as_object().unwrap().keys().collect::<Vec<_>>()
                 );
-                error.to_auth_response()
+                error.to_auth_response().expect("fixture response succeeds")
             };
             let body = if http {
                 assert_eq!(response.status, status, "{mode} HTTP={http}");

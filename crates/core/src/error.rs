@@ -315,7 +315,10 @@ impl AuthError {
                 response.captured_headers = Some(headers);
                 Self::Response(response)
             }
-            other => match Self::from_returned_response(other.to_auth_response()) {
+            other => match other
+                .to_auth_response()
+                .and_then(Self::from_returned_response)
+            {
                 Ok(error) => error.capture_native_headers(headers),
                 Err(error) => error,
             },
@@ -382,12 +385,12 @@ impl AuthError {
     /// Serialize an HTTP endpoint failure without exposing ordinary runtime errors.
     pub fn to_http_response(self) -> AuthResult<crate::AuthResponse> {
         if self.is_api_error()? {
-            self.to_auth_response().into_http_response()
+            self.to_auth_response()?.into_http_response()
         } else {
             crate::observability::logger::default_logger().error(
                 "Authentication request failed",
                 &[crate::observability::LogArgument::Error(&self)],
-            );
+            )?;
             let mut response = crate::AuthResponse::new(500);
             response.status_text = "Internal Server Error".into();
             Ok(response)
@@ -491,7 +494,7 @@ impl AuthError {
                     crate::observability::logger::current().error(
                         "Internal server error",
                         &[crate::observability::LogArgument::Error(self)],
-                    );
+                    )?;
                     "Internal server error".to_string()
                 } else {
                     self.to_string()
@@ -510,14 +513,14 @@ impl AuthError {
     ///
     /// Named `to_auth_response` to avoid collision with Axum's
     /// `IntoResponse::into_response` when the `axum` feature is enabled.
-    pub fn to_auth_response(self) -> crate::types::AuthResponse {
+    pub fn to_auth_response(self) -> AuthResult<crate::types::AuthResponse> {
         if let Self::Response(error) = self {
             let mut response = crate::AuthResponse::native(None, error.value);
             response.set_endpoint_headers(None);
             if let Some(headers) = error.captured_headers {
                 response.capture_native_error_headers(headers);
             }
-            return response;
+            return Ok(response);
         }
         if let Self::PasswordHash(error) = self {
             crate::observability::logger::current().error(
@@ -525,28 +528,17 @@ impl AuthError {
                 &[crate::observability::LogArgument::Value(
                     &serde_json::json!(error),
                 )],
-            );
-            return crate::types::AuthResponse::new(500);
+            )?;
+            return Ok(crate::types::AuthResponse::new(500));
         }
         if self.is_api_error_instance(ApiErrorClass::BetterCall) {
-            return match self.into_thrown_value() {
-                Ok(value) => Self::from_thrown(value).to_auth_response(),
-                Err(error) => error.to_auth_response(),
-            };
+            let mut response = crate::AuthResponse::native(None, self.into_thrown_value()?);
+            response.set_endpoint_headers(None);
+            return Ok(response);
         }
-        let status = match self.status_code() {
-            Ok(status) => status,
-            Err(error) => return error.to_auth_response(),
-        };
-        let body = match self.body_value() {
-            Ok(body) => body,
-            Err(error) => return error.to_auth_response(),
-        };
-        // Native thrown values returned above; these convenience variants own a fixed status.
-        match status.typed() {
-            Ok(status) => crate::AuthResponse::native(Some(*status), body),
-            Err(error) => error.to_auth_response(),
-        }
+        let status = self.status_code()?;
+        let body = self.body_value()?;
+        Ok(crate::AuthResponse::native(Some(*status.typed()?), body))
     }
 
     pub fn bad_request(message: impl Into<String>) -> Self {
@@ -691,23 +683,39 @@ impl From<crate::types::AuthResponse> for AuthError {
 #[cfg(feature = "axum")]
 impl axum::response::IntoResponse for AuthError {
     fn into_response(self) -> axum::response::Response {
-        let response = match self.to_auth_response().into_http_response() {
-            Ok(response) => response,
-            Err(error) => return error.into_response(),
-        };
-        let body = match response.body.into_bytes() {
-            Ok(body) => body,
-            Err(error) => return error.into_response(),
-        };
-        let mut output = axum::response::Response::builder().status(response.status);
-        for (name, value) in response.headers {
-            output = output.header(name, value);
-        }
-        match output.body(axum::body::Body::from(body)) {
-            Ok(response) => response,
-            Err(error) => {
-                Self::internal(format!("Cannot build Axum response: {error}")).into_response()
-            }
+        finish_axum_response(self.to_auth_response())
+    }
+}
+
+/// Materialize native response values once at the Axum transport boundary.
+#[cfg(feature = "axum")]
+#[doc(hidden)]
+pub fn materialize_axum_response(
+    response: crate::AuthResponse,
+) -> AuthResult<axum::response::Response> {
+    let response = response.into_http_response()?;
+    let body = response.body.into_bytes()?;
+    let mut output = axum::response::Response::builder().status(response.status);
+    for (name, value) in response.headers {
+        output = output.header(name, value);
+    }
+    output
+        .body(axum::body::Body::from(body))
+        .map_err(|error| AuthError::internal(format!("Cannot build Axum response: {error}")))
+}
+
+/// Axum cannot return a conversion failure; report once without invoking application callbacks.
+#[cfg(feature = "axum")]
+#[doc(hidden)]
+pub fn finish_axum_response(response: AuthResult<crate::AuthResponse>) -> axum::response::Response {
+    match response.and_then(materialize_axum_response) {
+        Ok(response) => response,
+        Err(error) => {
+            crate::observability::report_terminal_error("axum response", error);
+            let mut response =
+                axum::response::Response::new(axum::body::Body::from("Internal server error"));
+            *response.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
+            response
         }
     }
 }
@@ -788,3 +796,7 @@ mod native_tests;
 
 #[cfg(test)]
 mod http_tests;
+
+#[cfg(test)]
+#[path = "error/logger_boundary_tests.rs"]
+mod logger_boundary_tests;

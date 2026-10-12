@@ -248,7 +248,7 @@ pub struct AuthRoute {
 
 /// Initialization context passed to plugin setup.
 pub struct AuthInitContext<S: AuthSchema> {
-    logger: crate::observability::LoggerConfig,
+    logger: crate::observability::Logger,
     request_runtime: crate::request_runtime::RequestRuntime,
     database_hooks: Vec<Arc<dyn crate::store::database_hooks::DatabaseHooks<S>>>,
     runtime: crate::plugin_runtime::PluginRuntime<S>,
@@ -265,6 +265,7 @@ pub struct AuthInitContext<S: AuthSchema> {
 /// Context passed to plugin methods. Clones retain the same mutable runtime URL.
 /// HTTP handlers and endpoint dispatches create separate runtime contexts.
 pub struct AuthContext<S: AuthSchema> {
+    logger: crate::observability::Logger,
     clock: Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>,
     pub(crate) request_runtime: crate::request_runtime::RequestRuntime,
     pub extensions: crate::RuntimeExtensions,
@@ -280,6 +281,7 @@ pub struct AuthContext<S: AuthSchema> {
 impl<S: AuthSchema> Clone for AuthContext<S> {
     fn clone(&self) -> Self {
         Self {
+            logger: self.logger.clone(),
             clock: self.clock.clone(),
             request_runtime: self.request_runtime.clone(),
             extensions: self.extensions.clone(),
@@ -463,19 +465,19 @@ impl AuthRoute {
 
 impl<S: AuthSchema> AuthInitContext<S> {
     /// Instance logger with renderer options resolved before plugin initialization.
-    pub fn logger(&self) -> &crate::observability::LoggerConfig {
+    pub fn logger(&self) -> &crate::observability::Logger {
         &self.logger
     }
 
-    pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> Self {
+    pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> AuthResult<Self> {
         let mut config = config;
         if config.resolved_logger.is_none() {
-            Arc::make_mut(&mut config).initialize_logger();
+            Arc::make_mut(&mut config).initialize_logger()?;
         }
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
-        Self {
-            logger: config.logger().clone(),
+        Ok(Self {
+            logger: config.logger()?,
             request_runtime: Default::default(),
             database_hooks: Vec::new(),
             runtime: Default::default(),
@@ -487,7 +489,7 @@ impl<S: AuthSchema> AuthInitContext<S> {
             secondary_storage: None,
             password_policy,
             metadata: MetadataMap::new(),
-        }
+        })
     }
 
     /// Run a plugin initializer while retaining the logger created for this instance.
@@ -500,7 +502,7 @@ impl<S: AuthSchema> AuthInitContext<S> {
 
     /// Resolve initial URL and trust options before plugin initialization.
     pub async fn initialize_request_context(&mut self) -> AuthResult<()> {
-        let mut context = AuthContext::new(self.config.clone(), self.database.clone());
+        let mut context = AuthContext::new(self.config.clone(), self.database.clone())?;
         context.request_runtime = self.request_runtime.clone();
         let context = context.initialize_request_context().await?;
         self.config = context.config.clone();
@@ -559,18 +561,19 @@ impl<S: AuthSchema> AuthContext<S> {
     }
 
     /// Instance logger with renderer options resolved before plugin initialization.
-    pub fn logger(&self) -> &crate::observability::LoggerConfig {
-        self.config.logger()
+    pub fn logger(&self) -> &crate::observability::Logger {
+        &self.logger
     }
 
-    pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> Self {
+    pub fn new(config: Arc<AuthConfig>, database: Arc<dyn AuthStore<S>>) -> AuthResult<Self> {
         let mut config = config;
         if config.resolved_logger.is_none() {
-            Arc::make_mut(&mut config).initialize_logger();
+            Arc::make_mut(&mut config).initialize_logger()?;
         }
         let email_provider = config.email_provider.clone();
         let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
-        Self {
+        Ok(Self {
+            logger: config.logger()?,
             clock: Arc::new(Utc::now),
             request_runtime: Default::default(),
             extensions: crate::RuntimeExtensions::default(),
@@ -581,32 +584,17 @@ impl<S: AuthSchema> AuthContext<S> {
             secondary_storage: None,
             password_policy,
             metadata: MetadataMap::new(),
-        }
+        })
     }
 
     pub fn with_metadata(
         config: Arc<AuthConfig>,
         database: Arc<dyn AuthStore<S>>,
         metadata: MetadataMap,
-    ) -> Self {
-        let mut config = config;
-        if config.resolved_logger.is_none() {
-            Arc::make_mut(&mut config).initialize_logger();
-        }
-        let email_provider = config.email_provider.clone();
-        let password_policy = crate::utils::password::PasswordRuntimePolicy::new(&config.password);
-        Self {
-            clock: Arc::new(Utc::now),
-            request_runtime: Default::default(),
-            extensions: crate::RuntimeExtensions::default(),
-            email_verification_policy: crate::email::EmailVerificationRuntimePolicy::default(),
-            config,
-            database,
-            email_provider,
-            secondary_storage: None,
-            password_policy,
-            metadata,
-        }
+    ) -> AuthResult<Self> {
+        let mut context = Self::new(config, database)?;
+        context.metadata = metadata;
+        Ok(context)
     }
 
     pub fn set_metadata(&mut self, key: impl Into<String>, value: serde_json::Value) {
@@ -869,7 +857,7 @@ mod tests {
         let config = Arc::new(AuthConfig::new("test-secret-min-32-chars-1234567"));
         let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
         let db = runtime.block_on(test_database());
-        let ctx = AuthContext::new(config.clone(), db);
+        let ctx = AuthContext::new(config.clone(), db).unwrap();
         assert!(ctx.email_provider.is_none());
         assert!(ctx.metadata.is_empty());
     }
@@ -888,8 +876,8 @@ mod tests {
         let config = Arc::new(config);
         let database = test_database().await;
         for context in [
-            AuthContext::new(config.clone(), database.clone()),
-            AuthContext::with_metadata(config.clone(), database.clone(), MetadataMap::new()),
+            AuthContext::new(config.clone(), database.clone())?,
+            AuthContext::with_metadata(config.clone(), database.clone(), MetadataMap::new())?,
         ] {
             let time = Arc::new(AtomicI64::new(NOW));
             let clock = time.clone();
@@ -933,7 +921,7 @@ mod tests {
         let config = Arc::new(AuthConfig::new("test-secret-min-32-chars-1234567"));
         let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
         let db = runtime.block_on(test_database());
-        let mut ctx = AuthContext::new(config, db);
+        let mut ctx = AuthContext::new(config, db).unwrap();
 
         ctx.set_metadata("key", serde_json::json!("value"));
         assert_eq!(ctx.get_metadata("key"), Some(&serde_json::json!("value")));
@@ -946,7 +934,7 @@ mod tests {
         let config = Arc::new(AuthConfig::new("test-secret-min-32-chars-1234567"));
         let runtime = tokio::runtime::Runtime::new().expect("runtime should build");
         let db = runtime.block_on(test_database());
-        let ctx = AuthContext::new(config, db);
+        let ctx = AuthContext::new(config, db).unwrap();
         assert!(ctx.email_provider().is_err());
     }
 
@@ -955,7 +943,7 @@ mod tests {
     async fn auth_context_require_session_unauthenticated() {
         let config = Arc::new(AuthConfig::new("test-secret-min-32-chars-1234567"));
         let db = test_database().await;
-        let ctx = AuthContext::new(config, db);
+        let ctx = AuthContext::new(config, db).unwrap();
         let req = AuthRequest::new(HttpMethod::Get, "/test");
         let result = ctx.require_session(&req).await;
         assert!(result.is_err());
@@ -978,7 +966,7 @@ mod tests {
         let session = sm.create_session(&user, None, None).await.unwrap();
 
         // Build request with the session token
-        let ctx = AuthContext::new(config.clone(), db);
+        let ctx = AuthContext::new(config.clone(), db).unwrap();
         let mut req = AuthRequest::new(HttpMethod::Get, "/test");
         let _ = req.headers.insert(
             "cookie".into(),

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::{AuthResponse, FieldMap, FieldValue};
 
@@ -12,7 +16,9 @@ fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthRe
     let brands = [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth]
         .map(|class| error.is_api_error_instance(class));
     let body = error.body_value()?;
-    let error = AuthError::from_returned_response(error.to_auth_response())?;
+    let error = AuthError::from_returned_response(
+        error.to_auth_response().expect("fixture response succeeds"),
+    )?;
     assert_eq!(error.status_value()?, raw_status);
     assert_eq!(
         [ApiErrorClass::BetterCall, ApiErrorClass::BetterAuth]
@@ -30,7 +36,10 @@ fn observe(error: AuthError, status: u16, keys: &[&str], bytes: &[u8]) -> AuthRe
             .unwrap_or_default(),
         keys
     );
-    let response = error.to_auth_response().into_http_response()?;
+    let response = error
+        .to_auth_response()
+        .expect("fixture response succeeds")
+        .into_http_response()?;
     assert_eq!(response.status, status);
     assert_eq!(response.body.bytes()?.as_ref(), bytes);
     Ok(body)

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![cfg(all(feature = "axum", feature = "seaorm2"))]
 #![expect(
     clippy::unwrap_used,
@@ -313,6 +317,7 @@ async fn paypal_code_account_info_and_refresh_use_the_complete_sqlite_dispatcher
             .await
             .unwrap_err()
             .to_auth_response()
+            .expect("fixture response succeeds")
             .into_http_response()
             .unwrap();
         assert_eq!(error.status, 401);
@@ -335,6 +340,7 @@ async fn paypal_code_account_info_and_refresh_use_the_complete_sqlite_dispatcher
         .await
         .unwrap_err()
         .to_auth_response()
+        .expect("fixture response succeeds")
         .into_http_response()
         .unwrap();
     assert_eq!(error.status, 418);

@@ -164,7 +164,12 @@ impl LogSink for Logger {
         clippy::panic,
         reason = "An unexpected logged error category must fail the contract instead of fabricating a native error."
     )]
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let arguments = arguments
             .iter()
             .map(|argument| match argument {
@@ -198,6 +203,7 @@ impl LogSink for Logger {
                 ("arguments".into(), arguments.into()),
             ],
         );
+        Ok(())
     }
 }
 
@@ -262,8 +268,18 @@ impl Harness {
     pub(crate) fn config(&self) -> AuthConfig {
         let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
         config.verification.store_in_database = false;
-        config.logger.level = Some(LogLevel::Debug);
-        config.logger.log = Some(Arc::new(Logger(self.state.clone())));
+        {
+            let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.level = Some(LogLevel::Debug);
+            logger_options.log = Some(Arc::new(Logger(self.state.clone())));
+        }
         let state = self.state.clone();
         config.advanced.database.generate_id =
             Some(IdGeneration::Custom(IdGenerator::new(move |request| {

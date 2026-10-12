@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Paired with contracts/oauth-proxy-runtime-url.test.ts at the proxy callback boundaries.
 
 #![expect(
@@ -36,12 +40,18 @@ enum OptionUrl {
 struct Logs(Mutex<Vec<(String, String, Vec<String>)>>);
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.0.lock().unwrap().push((
             level.as_str().into(),
             message.to_string(),
             arguments.iter().map(ToString::to_string).collect(),
         ));
+        Ok(())
     }
 }
 
@@ -69,10 +79,11 @@ impl Fixture {
         config.logger = LoggerConfig {
             log: Some(logs.clone()),
             ..Default::default()
-        };
+        }
+        .into();
         let config = Arc::new(config);
         let store = Arc::new(EphemeralStore::new(config.clone()));
-        let context = AuthContext::new(config, store.clone());
+        let context = AuthContext::new(config, store.clone()).expect("fixture context initializes");
         context.set_base_url(runtime);
         Self {
             context,

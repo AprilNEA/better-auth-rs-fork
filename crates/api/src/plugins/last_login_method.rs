@@ -216,7 +216,7 @@ impl<S: AuthSchema> DatabaseHooks<S> for LoginDatabaseHooks<S> {
             better_auth_core::observability::logger::current().error(
                 "Failed to update lastLoginMethod",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
         }
         Ok(())
     }
@@ -311,7 +311,7 @@ impl<S: AuthSchema> AuthPlugin<S> for LastLoginMethodPlugin<S> {
                             better_auth_core::observability::logger::current().error(
                                 "[LastLoginMethod] Error in beforeStoreCookie hook",
                                 &[better_auth_core::observability::LogArgument::Error(&error)],
-                            );
+                            )?;
                             return Ok(());
                         }
                     }

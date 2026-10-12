@@ -36,6 +36,9 @@ mod crud_tests;
 #[cfg(test)]
 mod expiration_tests;
 
+#[cfg(test)]
+mod background_tests;
+
 use handlers::*;
 use types::*;
 pub use types::{CreateKeyRequest, CreateKeyResponse, UpdateKeyRequest};
@@ -575,10 +578,10 @@ impl ApiKeyPlugin {
     }
 
     /// Throttled cleanup -- at most once per 10 seconds.
-    pub(super) async fn maybe_delete_expired(
+    async fn maybe_delete_expired(
         &self,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-    ) {
+    ) -> AuthResult<()> {
         let should_run = {
             let mut last = self
                 .last_expired_check
@@ -593,11 +596,42 @@ impl ApiKeyPlugin {
                 }
             }
         };
-        if should_run && let Err(error) = ctx.database.delete_expired_api_keys().await {
-            better_auth_core::observability::logger::current().error(
-                "Failed to delete expired API keys",
-                &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+        if should_run {
+            let _ = ctx.database.delete_expired_api_keys().await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn start_expired_cleanup(
+        &self,
+        ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+        defer: bool,
+        outer_catch: bool,
+    ) -> AuthResult<()> {
+        use better_auth_core::background::{
+            run_in_background_with_error_messages, start_unowned_with_error_messages,
+        };
+        const INNER: &[&str] = &["Failed to delete expired API keys:"];
+        const NESTED: &[&str] = &[
+            "Failed to delete expired API keys:",
+            "Failed to delete expired API keys:",
+        ];
+        let plugin = self.clone();
+        let context = ctx.clone();
+        let task = Box::pin(async move { plugin.maybe_delete_expired(&context).await });
+        let messages = if outer_catch { NESTED } else { INNER };
+        if defer {
+            run_in_background_with_error_messages(
+                task,
+                ctx.config.advanced.background_tasks.as_ref(),
+                ctx.logger(),
+                messages,
+            )
+            .await
+        } else {
+            start_unowned_with_error_messages(task, ctx.logger(), messages, "API key cleanup")
+                .await;
+            Ok(())
         }
     }
 

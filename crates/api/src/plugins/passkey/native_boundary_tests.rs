@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthConfig, AuthInitContext, AuthPlugin, CreatePasskey, FieldMap, FieldValue,
@@ -32,7 +36,8 @@ async fn install_fields(
 ) -> TestResult {
     let config = Arc::new(config);
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(config.clone(), raw.clone());
+    let mut init =
+        AuthInitContext::new(config.clone(), raw.clone()).expect("fixture context initializes");
     better_auth_core::AuthPlugin::<
         better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
     >::schema(&PasskeyPlugin::new(), &mut model_fields)?;
@@ -40,7 +45,7 @@ async fn install_fields(
     model_fields.register_model_fields(EntityRole::Passkey, fields)?;
     let parts = init.into_parts();
     let database = raw.with_runtime(config.clone(), hooks, model_fields)?;
-    fixture.ctx = AuthContext::new(config, database);
+    fixture.ctx = AuthContext::new(config, database).expect("fixture context initializes");
     fixture.ctx.metadata = parts.metadata;
     fixture.ctx.extensions = parts.extensions;
     Ok(())

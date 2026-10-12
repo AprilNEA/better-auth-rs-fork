@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -88,7 +92,7 @@ async fn active_query<S: AuthSchema>(
     );
     let config = Arc::new(config);
     let store = raw.with_runtime(config.clone(), Vec::new(), Default::default())?;
-    let context = AuthContext::new(config, store);
+    let context = AuthContext::new(config, store).expect("fixture context initializes");
     let listed = super::list_sessions_core(&owner.id.field_value(), &context).await?;
     if expect_active {
         assert_eq!(listed, [active.clone()]);
@@ -173,7 +177,7 @@ async fn session_lists_preserve_native_owner_selectors_without_string_coercion()
             expiry,
         )
         .await?;
-        let context = AuthContext::new(config, store);
+        let context = AuthContext::new(config, store).expect("fixture context initializes");
         // Replacing the declaration removes the native userId reference output conversion.
         let numeric_output = if renamed { 7.0.into() } else { "7".into() };
         for (owner, expected, output_owner) in [
@@ -226,7 +230,7 @@ async fn secondary_lists_keep_cache_field_presence_and_native_owner_keys() -> Au
         config.clone(),
         Default::default(),
     )?);
-    let context = AuthContext::new(config, store);
+    let context = AuthContext::new(config, store).expect("fixture context initializes");
     let listed = super::list_sessions_core(&7.0.into(), &context).await?;
     assert_eq!(listed.len(), 1);
     assert_eq!(

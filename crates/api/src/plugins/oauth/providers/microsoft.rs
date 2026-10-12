@@ -203,7 +203,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
     {
         better_auth_core::observability::logger::current().error(
             "Microsoft Entra ID token did not include a valid oid claim; unable to resolve a stable account identifier.", &[],
-        );
+        )?;
         return Ok(ProviderProfile::default());
     }
     if !options.disable_profile_photo && request.access_token.is_truthy()? {
@@ -237,7 +237,7 @@ pub(in crate::plugins::oauth) async fn fetch_user_info(
                 Err(error) => better_auth_core::observability::logger::current().error(
                     "Failed to read Microsoft profile photo",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                ),
+                )?,
             }
         }
     }

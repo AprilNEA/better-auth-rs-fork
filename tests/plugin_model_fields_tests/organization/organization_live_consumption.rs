@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth::plugins::organization::hooks::{OrganizationHooks, OrganizationTeamEvent};
 use better_auth::server_api::EndpointInput;
@@ -98,7 +102,10 @@ fn response(
         )?;
         assert_eq!(error.status_code()?, status);
         ordered(&error.body_value()?, expected)?;
-        error.to_auth_response().into_http_response()?
+        error
+            .to_auth_response()
+            .expect("fixture response succeeds")
+            .into_http_response()?
     };
     assert_eq!(actual.status, status);
     if native && status == 200 {

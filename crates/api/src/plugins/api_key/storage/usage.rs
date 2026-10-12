@@ -124,22 +124,23 @@ pub(in crate::plugins::api_key) async fn consume(
     if config.defer_updates {
         let deferred = snapshot.clone();
         let lookup_hash = lookup_hash.to_owned();
-        let _task = tokio::spawn(async move {
-            if let Err(error) = merge_usage(
-                storage,
-                &deferred,
-                &lookup_hash,
-                changed_rate,
-                changed_count,
-            )
-            .await
-            {
-                better_auth_core::observability::logger::current().error(
-                    "Deferred API key usage update failed",
-                    &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
-            }
-        });
+        better_auth_core::background::run_in_background_with_error_message(
+            Box::pin(async move {
+                let _ = merge_usage(
+                    storage,
+                    &deferred,
+                    &lookup_hash,
+                    changed_rate,
+                    changed_count,
+                )
+                .await?;
+                Ok(())
+            }),
+            ctx.config.advanced.background_tasks.as_ref(),
+            ctx.logger(),
+            "Failed to update API key:",
+        )
+        .await?;
         return Ok(ConsumeApiKeyResult::Allowed(Box::new(snapshot)));
     }
     Ok(ConsumeApiKeyResult::Allowed(Box::new(

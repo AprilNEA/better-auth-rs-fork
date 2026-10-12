@@ -25,7 +25,7 @@ pub(crate) async fn handle_sign_out(
                 better_auth_core::observability::logger::current().error(
                     "Failed to read session from database",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+                )?;
                 None
             }
         }
@@ -48,7 +48,7 @@ pub(crate) async fn handle_sign_out(
             better_auth_core::observability::logger::current().error(
                 "Failed to create provider logout URL",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
             return Ok(response);
         }
     };
@@ -148,7 +148,7 @@ async fn provider_logout_url(
                 better_auth_core::observability::logger::current().error(
                     &format!("Failed to create logout URL for provider \"{provider_id}\""),
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
+                )?;
             }
         }
     }

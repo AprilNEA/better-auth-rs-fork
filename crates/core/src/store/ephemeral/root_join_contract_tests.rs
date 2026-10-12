@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "The paired contract asserts complete results, logs, storage, and retained table identities."
@@ -15,7 +19,12 @@ struct Logs(parking_lot::Mutex<Vec<LogEntry>>);
 type LogEntry = (LogLevel, String, Vec<serde_json::Value>);
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         self.0.lock().push((
             level,
             message.to_string(),
@@ -32,6 +41,7 @@ impl LogSink for Logs {
                 })
                 .collect(),
         ));
+        Ok(())
     }
 }
 
@@ -56,16 +66,37 @@ async fn native_join_reads_missing_child_only_after_a_matching_base_row() -> Aut
         for disabled in [false, true] {
             let mut config = AuthConfig::default();
             config.advanced.database.joins = Some(true);
-            config.logger.disabled = Some(true);
+            {
+                let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.disabled = Some(true);
+            }
             let store = Arc::new(EphemeralStore::empty(Arc::new(config.clone())));
             let table = TableRef::new(store.operations.clone());
             let row = table.push(session())?;
             store
                 .operation(|op| op.replace_physical_table("session".into(), Some(table.clone())))?;
             let logs = Arc::new(Logs::default());
-            config.logger.disabled = Some(disabled);
-            config.logger.log = Some(logs.clone());
-            let context = AuthContext::new(Arc::new(config), store.clone());
+            {
+                let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.disabled = Some(disabled);
+                logger_options.log = Some(logs.clone());
+            }
+            let context = AuthContext::new(Arc::new(config), store.clone())
+                .expect("fixture context initializes");
             let result = context
                 .with_native_context(Default::default(), |_| async {
                     store

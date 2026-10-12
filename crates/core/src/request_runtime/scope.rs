@@ -18,7 +18,7 @@ impl Identity {
 #[derive(Clone)]
 struct Binding {
     identity: Identity,
-    logger: Option<crate::observability::LoggerConfig>,
+    logger: Option<crate::observability::Logger>,
     context: Arc<dyn Any + Send + Sync>,
 }
 
@@ -57,7 +57,7 @@ pub(super) fn run_runtime<S: AuthSchema, T>(
 
 fn run_with_logger<S: AuthSchema, T>(
     context: Arc<AuthContext<S>>,
-    logger: Option<crate::observability::LoggerConfig>,
+    logger: Option<crate::observability::Logger>,
     future: impl Future<Output = T>,
 ) -> impl Future<Output = T> {
     let mut contexts = CONTEXTS.try_with(Clone::clone).unwrap_or_default();
@@ -70,8 +70,8 @@ fn run_with_logger<S: AuthSchema, T>(
     CONTEXTS.scope(contexts, Box::pin(future))
 }
 
-/// Promise-all peers keep running after another resolver rejects.
-pub(crate) fn spawn<T: Send + 'static>(
+/// Keep the active request, logger, transaction, and tracing scopes in a spawned task.
+pub fn spawn<T: Send + 'static>(
     future: impl Future<Output = T> + Send + 'static,
 ) -> tokio::task::JoinHandle<T> {
     let contexts = CONTEXTS.try_with(Clone::clone).unwrap_or_default();
@@ -93,7 +93,7 @@ pub(crate) fn spawn<T: Send + 'static>(
     )
 }
 
-pub(super) fn current_logger() -> Option<crate::observability::LoggerConfig> {
+pub(super) fn current_logger() -> Option<crate::observability::Logger> {
     CONTEXTS
         .try_with(|contexts| {
             contexts

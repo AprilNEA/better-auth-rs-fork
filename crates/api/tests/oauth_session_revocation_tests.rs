@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -51,7 +55,7 @@ async fn fixture(config: Arc<AuthConfig>) -> Fixture {
         .unwrap();
     let store: Arc<dyn AuthStore<TestSchema>> =
         Arc::new(SeaOrmStore::<TestSchema>::new(config.clone(), database));
-    let ctx = AuthContext::new(config, store.clone());
+    let ctx = AuthContext::new(config, store.clone()).expect("fixture context initializes");
     let user = store
         .create_user(
             CreateUser::new()
@@ -350,6 +354,7 @@ async fn missing_token_endpoint_preserves_account_route_errors_and_stored_creden
             .await
             .unwrap_err()
             .to_auth_response()
+            .expect("fixture response succeeds")
             .into_http_response()
             .unwrap();
         assert_eq!(response.status, 400, "{path}");
@@ -437,7 +442,8 @@ async fn sign_out_preserves_stored_id_token_and_revokes_session() {
             },
         );
         let mut init =
-            AuthInitContext::new(fixture.ctx.config.clone(), fixture.ctx.database.clone());
+            AuthInitContext::new(fixture.ctx.config.clone(), fixture.ctx.database.clone())
+                .expect("fixture context initializes");
         plugin.on_init(&mut init).await.unwrap();
         fixture.ctx.extensions = init.into_parts().extensions;
         let mut request = request("/sign-out", &fixture.account_id, &fixture.cookie());

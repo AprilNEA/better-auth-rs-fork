@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Paired with memory-root-lifecycle.mjs and memory-root-order.mjs.
 
 use super::*;
@@ -461,7 +465,12 @@ async fn deleted_working_root_key_removes_a_concurrent_live_rebinding() -> AuthR
 #[derive(Default)]
 struct RootLogs(parking_lot::Mutex<Vec<serde_json::Value>>);
 impl LogSink for RootLogs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         assert_eq!(level, LogLevel::Error);
         let mut entry = vec![serde_json::Value::String(message.to_string())];
         entry.extend(arguments.iter().map(|argument| match argument {
@@ -469,6 +478,7 @@ impl LogSink for RootLogs {
             argument => serde_json::Value::String(argument.to_string()),
         }));
         self.0.lock().push(entry.into());
+        Ok(())
     }
 }
 
@@ -503,7 +513,17 @@ async fn schema_default_and_explicit_empty_roots_keep_create_and_error_timing() 
                 } else {
                     crate::id::IdGeneration::Database
                 });
-                config.logger.log = Some(logs.clone());
+                {
+                    let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                        #[allow(
+                            clippy::panic,
+                            clippy::panic_in_result_fn,
+                            reason = "The fixture modifies its existing authored logger options."
+                        )]
+                        panic!("fixture requires authored logger options");
+                    };
+                    logger_options.log = Some(logs.clone());
+                }
                 config.base_url = "http://memory-root.test".into();
                 let mut models = ModelFields::default();
                 models.register(
@@ -533,7 +553,8 @@ async fn schema_default_and_explicit_empty_roots_keep_create_and_error_timing() 
                 let context = crate::AuthContext::<super::super::StatelessSchema>::new(
                     store.config.clone(),
                     Arc::new(store.clone()),
-                );
+                )
+                .expect("fixture context initializes");
                 let (found, count, filtered) = context
                     .with_native_context(Default::default(), |_| async {
                         let found = store

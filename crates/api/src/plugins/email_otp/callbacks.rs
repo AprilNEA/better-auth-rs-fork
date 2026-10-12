@@ -142,6 +142,6 @@ pub(crate) async fn send_verification_override(
         ctx.config.advanced.background_tasks.as_ref(),
         ctx.logger(),
     )
-    .await;
+    .await?;
     Ok(())
 }

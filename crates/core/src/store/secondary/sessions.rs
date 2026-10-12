@@ -45,10 +45,10 @@ impl<S: AuthSchema> SecondaryStore<S> {
                         && !runtime.config.session.preserve_session_in_database()
                     {
                         if let Err(error) = result {
-                            runtime.config.logger().error(
+                            runtime.config.logger()?.error(
                                 "Failed to mirror committed session to secondary storage",
                                 &[crate::observability::LogArgument::Error(&error)],
-                            );
+                            )?;
                         }
                         Ok(())
                     } else {
@@ -278,10 +278,10 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 .delete_cached_sessions_value(&user_id, &references)
                 .await
             {
-                runtime.config.logger().error(
+                runtime.config.logger()?.error(
                     "Failed to delete committed user sessions from secondary storage",
                     &[crate::observability::LogArgument::Error(&error)],
-                );
+                )?;
             }
             Ok(())
         });

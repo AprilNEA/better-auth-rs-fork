@@ -83,7 +83,7 @@ pub(crate) fn delivery<S: AuthSchema>(
         better_auth_core::observability::logger::current().warn(
             "No email provider configured, skipping verification email",
             &[],
-        );
+        )?;
     }
     Ok(None)
 }

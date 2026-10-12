@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Plugin initialization rejects entities that cannot persist plugin state.
 #![cfg(feature = "seaorm2")]
 #![allow(
@@ -115,7 +119,8 @@ async fn plugins_reject_missing_user_fields_before_serving_requests()
             Database::connect("sqlite::memory:").await?,
         ));
         let mut context =
-            better_auth_core::AuthInitContext::new(std::sync::Arc::new(config()), store);
+            better_auth_core::AuthInitContext::new(std::sync::Arc::new(config()), store)
+                .expect("fixture context initializes");
         let result = plugin.on_init(&mut context).await;
         assert!(
             matches!(result, Err(AuthError::Config(ref message)) if message.contains(name) && message.contains(field)),

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -38,7 +42,8 @@ impl Fixture {
         let store: Arc<dyn AuthStore<StatelessSchema>> =
             Arc::new(EphemeralStore::new(auth_config.clone()));
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(auth_config.clone(), store.clone());
+        let mut init = AuthInitContext::new(auth_config.clone(), store.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<better_auth_core::store::StatelessSchema>::schema(
             &TwoFactorPlugin::with_config(config.clone()),
             &mut model_fields,
@@ -90,7 +95,7 @@ impl Fixture {
                 })
                 .await?;
         }
-        let mut ctx = AuthContext::new(auth_config, store);
+        let mut ctx = AuthContext::new(auth_config, store).expect("fixture context initializes");
         ctx.extensions = parts.extensions;
         ctx.metadata = parts.metadata;
         let mut request = AuthRequest::new(HttpMethod::Post, "/two-factor/verify-backup-code");
@@ -548,7 +553,7 @@ async fn finalization_preserves_selected_native_owner_token_and_cookie() -> Test
         vec![owners.clone()],
         fixture.fields.clone(),
     )?;
-    fixture.ctx = AuthContext::new(config, store);
+    fixture.ctx = AuthContext::new(config, store).expect("fixture context initializes");
     fixture
         .ctx
         .database

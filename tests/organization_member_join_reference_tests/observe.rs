@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use fixture::Operation;
 
@@ -38,7 +42,7 @@ fn assert_error(error: AuthError, expected: &Value) -> AuthResult<()> {
         Some("APIError") => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
             let status = error.status_code()?;
-            let response = error.to_auth_response();
+            let response = error.to_auth_response().expect("fixture response succeeds");
             let properties = error_field(expected, "properties")?;
             assert_eq!(json!(status), *error_field(properties, "statusCode")?);
             assert_eq!(

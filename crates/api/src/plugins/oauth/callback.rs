@@ -288,7 +288,7 @@ pub(super) async fn handle_callback(
             ctx.logger().error(
                 "",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
+            )?;
             return redirect_on_error("invalid_code", None);
         }
     };
@@ -334,7 +334,7 @@ pub(super) async fn handle_callback(
                 &[better_auth_core::observability::logger::LogArgument::Error(
                     &error,
                 )],
-            );
+            )?;
             return redirect_on_error("unable_to_get_user_info", None);
         }
     };

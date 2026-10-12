@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthInitContext, CreateMember, CreateOrganization, CreateOrganizationRole, FieldMap,
@@ -14,7 +18,8 @@ async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: Auth
         .references(ApiKeyReferences::Organization)
         .build();
     let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+    let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+        .expect("fixture context initializes");
     better_auth_core::AuthPlugin::<S>::schema(&plugin, &mut model_fields).unwrap();
     plugin.on_init(&mut init).await.unwrap();
     model_fields
@@ -77,7 +82,8 @@ async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: Auth
             ),
             (METADATA_AC.into(), serde_json::json!({"apiKey":["read"]})),
         ]),
-    );
+    )
+    .expect("fixture context initializes");
     let (user, session) = create_user_with_session(&ctx, "dynamic-owner@example.com").await;
     let mut organization = CreateOrganization::new("Machines", "machines");
     organization.id = Some("41".into());
@@ -177,7 +183,10 @@ async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: Auth
 async fn memory_organization_key_uses_projected_reference_and_dynamic_roles() {
     let config = Arc::new(crate::plugins::test_helpers::create_test_config());
     let store = Arc::new(EphemeralStore::new(config.clone()));
-    check_organization_reference(AuthContext::new(config, store)).await;
+    check_organization_reference(
+        AuthContext::new(config, store).expect("fixture context initializes"),
+    )
+    .await;
 }
 
 #[tokio::test]

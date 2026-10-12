@@ -211,7 +211,11 @@ where
     O: SeaOrmOrganizationSchema,
 {
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.disabled = Some(true);
+    config.logger = better_auth::observability::LoggerConfig {
+        disabled: Some(true),
+        ..Default::default()
+    }
+    .into();
     config.telemetry.enabled = false;
     let store =
         SeaOrmStore::<S>::new(config.clone(), database.clone()).with_organization_schema::<O>();

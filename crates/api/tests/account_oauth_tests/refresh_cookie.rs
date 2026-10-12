@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Token refresh preserves adapter values, Cookie property order, and explicit account sources.
 
 use super::*;
@@ -172,6 +176,7 @@ async fn assert_token_refresh_cookie_spread(path: &str, selection: RefreshSelect
         )
         .unwrap();
     let ctx = AuthContext::new(config, runtime)
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .unwrap();
@@ -423,6 +428,7 @@ async fn test_account_info_consumes_converted_cookie_expiry_and_refreshed_expiry
         oauth_config.providers.insert("google".into(), provider);
         let plugin = OAuthPlugin::with_config(oauth_config);
         let ctx = AuthContext::new(config, db)
+            .expect("fixture context initializes")
             .initialize_request_context()
             .await
             .unwrap();
@@ -555,6 +561,7 @@ async fn assert_refresh_cookie_survives_failure(profile: bool) {
         )
         .unwrap();
     let ctx = AuthContext::new(config, runtime)
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .unwrap();

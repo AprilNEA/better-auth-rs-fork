@@ -113,10 +113,15 @@ impl State {
     }
 }
 impl LogSink for State {
-    fn log(&self, _: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        _: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         let message = message.to_string();
         if !message.starts_with("Failed to run background task") {
-            return;
+            return Ok(());
         }
         let error = arguments.first().map(|argument| {
             let display = argument.to_string();
@@ -130,6 +135,7 @@ impl LogSink for State {
             .lock()
             .unwrap()
             .push(json!({"message":message,"error":error}));
+        Ok(())
     }
 }
 struct Hasher;
@@ -239,8 +245,18 @@ async fn run(
     let db = Database::connect("sqlite::memory:").await.unwrap();
     migrator::run_migrations(&db).await.unwrap();
     let mut config = AuthConfig::new(SECRET).base_url("http://localhost:3000");
-    config.logger.level = Some(LogLevel::Error);
-    config.logger.log = Some(state.clone());
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.level = Some(LogLevel::Error);
+        logger_options.log = Some(state.clone());
+    }
     if scheduling != "default" {
         let state = state.clone();
         config.advanced.background_tasks = Some(BackgroundTasks::new(move |task| {
@@ -347,7 +363,7 @@ async fn run(
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     let mut task_states = Vec::new();
     for task in tasks {
-        task.await.unwrap();
+        task.await.unwrap().unwrap();
         task_states.push("fulfilled");
     }
     let after = snapshot(&db).await;

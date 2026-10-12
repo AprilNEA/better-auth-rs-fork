@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{CreateOrganizationRole, UpdateOrganizationRole};
 
@@ -149,7 +153,7 @@ async fn check<S: AuthSchema>(
                     error.status_value()?,
                     FieldValue::from("INTERNAL_SERVER_ERROR")
                 );
-                error.to_auth_response()
+                error.to_auth_response().expect("fixture response succeeds")
             }
             other => {
                 return Err(AuthError::internal(format!(

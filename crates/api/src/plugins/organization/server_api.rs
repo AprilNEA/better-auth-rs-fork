@@ -122,7 +122,7 @@ impl OrganizationPlugin {
         let team_value = input.team_id.field_value();
         let team_value = team_value.is_truthy().then_some(team_value);
         if team_value.is_some() && !self.config.teams.enabled {
-            ctx.logger().error("Teams are not enabled", &[]);
+            ctx.logger().error("Teams are not enabled", &[])?;
             return Err(AuthError::from_status(
                 "BAD_REQUEST",
                 better_auth_core::FieldMap::from([(

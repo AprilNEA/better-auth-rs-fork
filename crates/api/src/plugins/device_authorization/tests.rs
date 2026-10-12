@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use std::collections::HashMap;
 use std::sync::{
     Arc,
@@ -68,7 +72,8 @@ async fn generated_code_configuration_checks_storage_limits_at_initialization() 
             .device_code_length(device)
             .user_code_length(user);
         let mut init =
-            better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+            better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+                .expect("fixture context initializes");
         assert_eq!(
             better_auth_core::AuthPlugin::on_init(&plugin, &mut init)
                 .await

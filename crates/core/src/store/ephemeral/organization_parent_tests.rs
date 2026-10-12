@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::indexing_slicing,
@@ -344,7 +348,7 @@ async fn check_case(fixture: &JsonValue) -> AuthResult<()> {
         Err(error) => {
             assert!(matches!(error, AuthError::Response(_)), "{error:?}");
             assert_eq!(error.status_code()?, 400);
-            let response = error.to_auth_response();
+            let response = error.to_auth_response().expect("fixture response succeeds");
             assert_eq!(
                 response
                     .api_error_headers()?

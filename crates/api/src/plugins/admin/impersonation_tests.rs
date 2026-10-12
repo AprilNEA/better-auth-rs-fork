@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -324,6 +328,7 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
         assert_eq!(
             error
                 .to_auth_response()
+                .expect("fixture response succeeds")
                 .into_http_response()?
                 .body
                 .bytes()?
@@ -370,6 +375,7 @@ async fn invalid_impersonation_cookies_preserve_both_sessions_and_user_lookup_or
     assert_eq!(
         error
             .to_auth_response()
+            .expect("fixture response succeeds")
             .into_http_response()?
             .body
             .bytes()?

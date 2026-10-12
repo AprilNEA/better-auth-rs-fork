@@ -61,7 +61,7 @@ impl OAuthSignInOptions<'_> {
                     self.request,
                     ctx,
                 )
-                .await;
+                .await?;
         }
         if required && !user.is_some_and(|user| user.email_verified().field_value().is_truthy()) {
             return Err(OAuthSignInError::Generic("email_not_verified".to_owned()));
@@ -87,13 +87,13 @@ impl OAuthSignInError {
             Self::Auth(error) => return Err(error),
             Self::Generic(message) if message == "email_not_verified" => {
                 AuthError::from_code("FORBIDDEN", "EMAIL_NOT_VERIFIED", "Email not verified")
-                    .to_auth_response()
+                    .to_auth_response()?
             }
             Self::Generic(message) => AuthResponse::json(
                 401,
                 &serde_json::json!({"code": "OAUTH_LINK_ERROR", "message": message}),
             )?,
-            Self::Banned(message) => AuthError::banned_user(message).to_auth_response(),
+            Self::Banned(message) => AuthError::banned_user(message).to_auth_response()?,
         })
     }
 
@@ -154,11 +154,11 @@ impl From<SessionIssueError> for OAuthSignInError {
 
 fn api_error_or(
     error: AuthError,
-    fallback: impl FnOnce(AuthError) -> OAuthSignInError,
+    fallback: impl FnOnce(AuthError) -> AuthResult<OAuthSignInError>,
 ) -> OAuthSignInError {
     match error.is_api_error() {
         Ok(true) => OAuthSignInError::Auth(error),
-        Ok(false) => fallback(error),
+        Ok(false) => fallback(error).unwrap_or_else(OAuthSignInError::Auth),
         Err(error) => OAuthSignInError::Auth(error),
     }
 }
@@ -167,13 +167,13 @@ fn account_query_error(
     error: AuthError,
     request: &AuthRequest,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> OAuthSignInError {
+) -> AuthResult<OAuthSignInError> {
     ctx.logger().error(
         "Better auth was unable to query your database.\nError: ",
         &[better_auth_core::observability::logger::LogArgument::Error(
             &error,
         )],
-    );
+    )?;
     let target = ctx
         .config
         .api_error
@@ -183,11 +183,11 @@ fn account_query_error(
         .unwrap_or_else(|| format!("{}/error", super::handlers::auth_base_url(ctx)));
     let location =
         better_auth_core::utils::url::append_query_params(&target, "error=internal_server_error");
-    OAuthSignInError::Auth(
+    Ok(OAuthSignInError::Auth(
         match location.and_then(|location| request.redirect(location)) {
             Ok(error) | Err(error) => error,
         },
-    )
+    ))
 }
 
 pub(super) async fn process_oauth_sign_in(
@@ -220,7 +220,9 @@ pub(super) async fn process_oauth_sign_in(
         .database
         .get_account_owner_value(&provider_id, &account_id)
         .await
-        .map_err(|error| account_query_error(error, options.request, ctx))?;
+        .map_err(|error| {
+            account_query_error(error, options.request, ctx).unwrap_or_else(OAuthSignInError::Auth)
+        })?;
 
     let mut endpoint = crate::plugins::endpoint_context::EndpointContext::new(
         Some(options.request),
@@ -385,7 +387,7 @@ pub(super) async fn process_oauth_sign_in(
                 better_auth_core::observability::logger::current().warn(
                     "Could not update user info during OAuth sign in; preserving existing user for session.",
                     &[],
-                );
+                )?;
             }
         }
         let user = match owner_user {
@@ -482,8 +484,10 @@ pub(super) async fn process_oauth_sign_in(
                 ctx.logger().error(
                     "Unable to link account",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
-                OAuthSignInError::Generic("unable to link account".to_owned())
+                )?;
+                Ok(OAuthSignInError::Generic(
+                    "unable to link account".to_owned(),
+                ))
             })
         })?
         .ok_or_else(|| OAuthSignInError::Generic("unable to link account".to_owned()))?;
@@ -512,7 +516,7 @@ pub(super) async fn process_oauth_sign_in(
             user_info,
             ctx,
         )
-        .await
+        .await?
         .unwrap_or_else(|| existing_user.clone());
         if options.override_user_info {
             let (id, update) = provider_profile_update(ctx, user_info, Some(&existing_user))?;
@@ -523,7 +527,7 @@ pub(super) async fn process_oauth_sign_in(
                 better_auth_core::observability::logger::current().warn(
                     "Could not update user info during OAuth sign in; preserving existing user for session.",
                     &[],
-                );
+                )?;
             }
         }
 
@@ -586,14 +590,14 @@ pub(super) async fn process_oauth_sign_in(
                             ..Default::default()
                         }
                         .into_user_fields()?;
-                        if let Err(error) = crate::plugins::user_admission::validate_create(
+                        if let Some(rejection) = crate::plugins::user_admission::validate_create(
                             &create_user,
                             source,
                             &endpoint,
                         )
-                        .await
+                        .await?
                         {
-                            return Err(error.into_auth_error());
+                            return Err(rejection.into_auth_error());
                         }
                         apply_default_role(&context, &mut create_user);
                         let user = tx
@@ -620,8 +624,10 @@ pub(super) async fn process_oauth_sign_in(
                 ctx.logger().error(
                     "Unable to create OAuth user",
                     &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
-                OAuthSignInError::Generic("unable to create user".to_owned())
+                )?;
+                Ok(OAuthSignInError::Generic(
+                    "unable to create user".to_owned(),
+                ))
             })
         })?;
         options
@@ -842,7 +848,7 @@ pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
     let mut fields = user.enumerable_fields_except(&["id"])?;
     let _ = fields.insert("id".into(), user_id);
     let _ = fields.insert("email".into(), lower_email(user)?);
-    crate::plugins::user_admission::validate(
+    if let Some(rejection) = crate::plugins::user_admission::validate(
         crate::plugins::user_admission::UserValidationData {
             user: fields,
             source: crate::plugins::user_admission::UserValidationSource::oauth(
@@ -851,8 +857,11 @@ pub(super) async fn validate_provider_user<S: better_auth_core::AuthSchema>(
         },
         endpoint,
     )
-    .await
-    .map_err(crate::plugins::user_admission::UserValidationRejection::into_auth_error)
+    .await?
+    {
+        return Err(rejection.into_auth_error());
+    }
+    Ok(())
 }
 
 pub(super) fn callback_path(request: &AuthRequest) -> &str {

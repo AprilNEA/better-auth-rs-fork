@@ -168,7 +168,7 @@ impl EmailOtpPlugin {
             endpoint.auth.config.advanced.background_tasks.as_ref(),
             endpoint.auth.logger(),
         )
-        .await;
+        .await?;
         Ok(())
     }
     pub(super) async fn create_otp(

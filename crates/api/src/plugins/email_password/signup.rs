@@ -138,7 +138,7 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                     auth.config.advanced.background_tasks.as_ref(),
                     auth.logger(),
                 )
-                .await;
+                .await?;
                 synthetic_response(&body, &create_user, &config, &auth)
             })
         })
@@ -190,7 +190,7 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                     ..Default::default()
                 }
                 .into_user_fields()?;
-                crate::plugins::user_admission::validate_create(
+                if let Some(rejection) = crate::plugins::user_admission::validate_create(
                     &create_user,
                     crate::plugins::user_admission::UserValidationSource::new(
                         "email-password",
@@ -198,10 +198,10 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                     ),
                     &endpoint,
                 )
-                .await
-                .map_err(
-                    crate::plugins::user_admission::UserValidationRejection::into_auth_error,
-                )?;
+                .await?
+                {
+                    return Err(rejection.into_auth_error());
+                }
                 apply_default_role(&admission_context, &mut create_user);
                 tx.create_user_fields_optional(create_user)
                     .await?
@@ -236,7 +236,7 @@ pub(super) async fn sign_up_core<S: AuthSchema>(
                     admission_context.logger().error(
                         "Failed to create user",
                         &[better_auth_core::observability::LogArgument::Error(&error)],
-                    );
+                    )?;
                     return Err(AuthError::from_code(
                         "UNPROCESSABLE_ENTITY",
                         "FAILED_TO_CREATE_USER",

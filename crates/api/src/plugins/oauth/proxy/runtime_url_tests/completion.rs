@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 #[tokio::test]
@@ -99,6 +103,7 @@ async fn completion_error_url_preserves_static_presence_and_runtime_origin() -> 
         request.query = Some(serde_json::json!({"callbackURL": "/complete"}));
         let root_config = Arc::new((*fixture.context.config).clone().base_url(ORIGIN));
         let root = AuthContext::new(root_config, fixture.store.clone())
+            .expect("fixture context initializes")
             .initialize_request_context()
             .await?;
         let desired_config = fixture.context.config.clone();

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -137,7 +141,8 @@ impl AuthPlugin<S> for Hooks {
 #[tokio::test]
 async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult<()> {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     for mode in [
         "before",
         "endpoint",
@@ -193,7 +198,7 @@ async fn json_headers_are_materialized_after_hooks_only_for_http() -> AuthResult
                 );
                 let returned = match result {
                     Ok(value) => value,
-                    Err(error) => error.to_auth_response(),
+                    Err(error) => error.to_auth_response().expect("fixture response succeeds"),
                 };
                 if http {
                     assert_eq!(returned.status, if failed { 400 } else { 200 });
@@ -343,7 +348,8 @@ async fn json_http_output_strips_request_headers_but_native_output_preserves_the
         "content-length",
     ];
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let route = AuthRoute::get("/header-filter", "headerFilter");
     let dispatcher =
         EndpointDispatcher::new(Arc::new(Vec::new()), Default::default(), [route.clone()]);
@@ -388,7 +394,9 @@ async fn json_http_output_strips_request_headers_but_native_output_preserves_the
                     .await
             };
             assert_eq!(result.is_err(), failed && !http);
-            let returned = result.unwrap_or_else(crate::AuthError::to_auth_response);
+            let returned = result.unwrap_or_else(|error| {
+                error.to_auth_response().expect("fixture response succeeds")
+            });
             let returned_body = if failed && !http {
                 returned.api_error_body()?.json()?
             } else {
@@ -537,7 +545,8 @@ impl AuthPlugin<S> for ExplicitHooks {
 async fn explicit_responses_keep_owned_headers_separate_until_http_materialization()
 -> AuthResult<()> {
     let config = crate::test_store::test_config();
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let owned = header_values(&explicit_response().headers);
     for mode in ["before", "endpoint", "replace"] {
         for override_type in [false, true] {

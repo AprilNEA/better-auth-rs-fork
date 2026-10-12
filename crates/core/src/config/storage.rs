@@ -3,7 +3,10 @@ use crate::store::StoreCapabilities;
 
 impl AuthConfig {
     /// Resolve omitted storage-dependent settings before plugin initialization.
-    pub fn resolve_storage_defaults(&mut self, capabilities: StoreCapabilities) {
+    pub fn resolve_storage_defaults(
+        &mut self,
+        capabilities: StoreCapabilities,
+    ) -> crate::AuthResult<()> {
         let session_expires_in = self.session.expires_in();
         let _ = self
             .account
@@ -27,20 +30,21 @@ impl AuthConfig {
             let _ = cache.strategy.get_or_insert(CookieCacheStrategy::Jwe);
             let _ = cache.refresh.get_or_insert(CookieCacheRefresh::Enabled);
         }
-        let logger = self.logger().clone();
+        let logger = self.logger()?;
         if let Some(cache) = &mut self.session.cookie_cache {
             if capabilities.server_sessions() {
                 if matches!(
                     cache.refresh,
                     Some(CookieCacheRefresh::Enabled | CookieCacheRefresh::After(_))
                 ) {
-                    logger.warn("session.cookie_cache.refresh is disabled when a database or secondary storage is configured", &[]);
+                    logger.warn("session.cookie_cache.refresh is disabled when a database or secondary storage is configured", &[])?;
                 }
                 cache.refresh = Some(CookieCacheRefresh::Disabled);
             } else {
                 let _ = cache.refresh.get_or_insert(CookieCacheRefresh::Disabled);
             }
         }
+        Ok(())
     }
 }
 
@@ -54,10 +58,12 @@ mod tests {
     fn stateless_defaults_respect_each_explicit_override() {
         let mut config = AuthConfig::new("test-secret-min-32-chars-123456789");
         config.session.expires_in = Some(Duration::hours(2));
-        config.resolve_storage_defaults(StoreCapabilities {
-            database: false,
-            secondary: false,
-        });
+        config
+            .resolve_storage_defaults(StoreCapabilities {
+                database: false,
+                secondary: false,
+            })
+            .unwrap();
         assert!(config.account.store_account_cookie());
         assert_eq!(
             config.account.store_state_strategy(),
@@ -78,10 +84,12 @@ mod tests {
             refresh: Some(CookieCacheRefresh::Disabled),
             ..Default::default()
         });
-        explicit.resolve_storage_defaults(StoreCapabilities {
-            database: false,
-            secondary: false,
-        });
+        explicit
+            .resolve_storage_defaults(StoreCapabilities {
+                database: false,
+                secondary: false,
+            })
+            .unwrap();
         assert!(!explicit.account.store_account_cookie());
         assert_eq!(
             explicit.account.store_state_strategy(),
@@ -102,10 +110,12 @@ mod tests {
             refresh: Some(CookieCacheRefresh::After(Duration::seconds(10))),
             ..Default::default()
         });
-        config.resolve_storage_defaults(StoreCapabilities {
-            database: false,
-            secondary: true,
-        });
+        config
+            .resolve_storage_defaults(StoreCapabilities {
+                database: false,
+                secondary: true,
+            })
+            .unwrap();
         assert!(config.account.store_account_cookie());
         assert_eq!(
             config.account.store_state_strategy(),

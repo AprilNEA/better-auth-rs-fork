@@ -11,7 +11,9 @@ mod url;
 
 pub use config::{BaseUrl, BaseUrlProtocol, DynamicBaseUrl, TrustedValues, TrustedValuesResolver};
 pub use cookies::{CookieSettings, ResolvedCookie};
-pub(crate) use scope::{Identity as RuntimeIdentity, spawn as spawn_with_request_context};
+pub(crate) use scope::Identity as RuntimeIdentity;
+#[doc(hidden)]
+pub use scope::spawn as spawn_with_request_context;
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -492,6 +494,6 @@ fn native_url_error(message: String) -> AuthError {
     }
 }
 
-pub(crate) fn current_logger() -> Option<crate::observability::LoggerConfig> {
+pub(crate) fn current_logger() -> Option<crate::observability::Logger> {
     scope::current_logger()
 }

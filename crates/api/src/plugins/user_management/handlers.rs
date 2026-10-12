@@ -191,7 +191,7 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         ctx.config.advanced.background_tasks.as_ref(),
         ctx.logger(),
     )
-    .await;
+    .await?;
     Ok(StatusResponse { status: true })
 }
 
@@ -322,7 +322,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
             ctx.config.advanced.background_tasks.as_ref(),
             ctx.logger(),
         )
-        .await;
+        .await?;
         return Ok(SuccessMessageResponse {
             success: true,
             message: "Verification email sent".into(),

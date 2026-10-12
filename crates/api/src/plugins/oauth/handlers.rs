@@ -254,7 +254,7 @@ pub(super) async fn complete_link_social(
                 email
             },
         );
-        crate::plugins::user_admission::validate(
+        if let Some(rejection) = crate::plugins::user_admission::validate(
             crate::plugins::user_admission::UserValidationData {
                 user,
                 source: crate::plugins::user_admission::UserValidationSource::explicit_oauth_link(
@@ -264,8 +264,11 @@ pub(super) async fn complete_link_social(
             },
             endpoint,
         )
-        .await
-        .map_err(crate::plugins::user_admission::UserValidationRejection::into_auth_error)
+        .await?
+        {
+            return Err(rejection.into_auth_error());
+        }
+        Ok(())
     }
     .await
     {
@@ -379,7 +382,7 @@ pub(super) async fn complete_link_social(
             )
             .await?;
 
-        let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
+        let _ = apply_link_user_info(link.user_id(), user_info, ctx).await?;
         return Ok(OAuthLinkOutcome::Linked);
     }
 
@@ -425,7 +428,7 @@ pub(super) async fn complete_link_social(
         return Ok(OAuthLinkOutcome::failed("unable_to_link_account"));
     }
 
-    let _ = apply_link_user_info(link.user_id(), user_info, ctx).await;
+    let _ = apply_link_user_info(link.user_id(), user_info, ctx).await?;
     Ok(OAuthLinkOutcome::Linked)
 }
 
@@ -678,7 +681,7 @@ async fn link_with_id_token_core(
             &response.value.model_property("user")?,
             ctx,
         )
-        .await;
+        .await?;
         return Ok(SocialSignInResponse {
             url: Some(String::new()),
             redirect: false,
@@ -791,7 +794,7 @@ async fn link_with_id_token_core(
         &response.value.model_property("user")?,
         ctx,
     )
-    .await;
+    .await?;
 
     Ok(SocialSignInResponse {
         url: Some(String::new()),
@@ -804,14 +807,14 @@ pub(super) async fn apply_link_user_info(
     user_id: &FieldValue,
     user_info: &FieldValue,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
-) -> Option<UserView> {
+) -> AuthResult<Option<UserView>> {
     if !ctx
         .config
         .account
         .account_linking
         .update_user_info_on_link()
     {
-        return None;
+        return Ok(None);
     }
     let result = async {
         ctx.database
@@ -834,13 +837,13 @@ pub(super) async fn apply_link_user_info(
     .await;
     // Upstream treats profile synchronization as optional after the account write succeeds.
     match result {
-        Ok(user) => user,
+        Ok(user) => Ok(user),
         Err(error) => {
             better_auth_core::observability::logger::current().warn(
                 "Could not update user info on account link",
                 &[better_auth_core::observability::LogArgument::Error(&error)],
-            );
-            None
+            )?;
+            Ok(None)
         }
     }
 }

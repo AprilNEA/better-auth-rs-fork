@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 #[path = "verification_permissions_tests.rs"]
@@ -509,7 +513,8 @@ async fn api_key_initialization_rejects_ambiguous_configurations() {
             ..Default::default()
         });
         let mut init =
-            better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+            better_auth_core::AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+                .expect("fixture context initializes");
         assert!(matches!(
             plugin.on_init(&mut init).await,
             Err(AuthError::Config(_))
@@ -528,7 +533,7 @@ async fn verification_preserves_database_failures() {
         config.clone(),
         connection,
     ));
-    let ctx = AuthContext::new(config, database);
+    let ctx = AuthContext::new(config, database).expect("fixture context initializes");
     let plugin = ApiKeyPlugin::builder().build();
     let error = plugin
         .verify_api_key(

@@ -262,7 +262,7 @@ fn observe(result: AuthResult<AuthResponse>) -> Value {
         Err(error) => (
             error
                 .to_auth_response()
-                .into_http_response()
+                .and_then(AuthResponse::into_http_response)
                 .expect("The fixture error must materialize"),
             true,
         ),

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use better_auth_core::{
     AuthInitContext, FieldValue, Utf16String,
@@ -103,7 +107,8 @@ async fn options_consume_native_descriptors_without_utf16_loss_or_stricter_base6
         ),
     ] {
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(ctx.config.clone(), raw.clone());
+        let mut init = AuthInitContext::new(ctx.config.clone(), raw.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<
             better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
         >::schema(&plugin, &mut model_fields)

@@ -15,9 +15,9 @@ struct Generator {
 #[async_trait]
 impl ApiKeyGenerator for Generator {
     async fn generate(&self, _: usize, _: Option<&str>) -> AuthResult<String> {
-        logger::current().error("generator:enter", &[]);
+        logger::current().error("generator:enter", &[])?;
         tokio::task::yield_now().await;
-        logger::current().error("generator:resumed", &[]);
+        logger::current().error("generator:resumed", &[])?;
         match &self.failure {
             Some(cause) => Err(AuthError::from_thrown(cause.clone())),
             None => Ok("facade-controlled-token".into()),
@@ -94,8 +94,19 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
             .into();
             let failure = fails.then_some(&cause);
             let mut b_config = config(ORIGIN_B);
-            b_config.logger.level = Some(LogLevel::Error);
-            b_config.logger.log = Some(observations.sink("B")?);
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut b_config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.level = Some(LogLevel::Error);
+                logger_options.log = Some(observations.sink("B")?);
+            }
             let (b_builder, b_store) = builder(b_config, &["apikey"])?;
             let b = b_builder
                 .plugin(ApiKeyPlugin::with_config(ApiKeyConfig {
@@ -118,8 +129,19 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
             let user_id = user.id.typed()?.clone();
             let stored_before = snapshot(&b_store)?;
             let mut a_config = config(ORIGIN_A);
-            a_config.logger.level = Some(LogLevel::Error);
-            a_config.logger.log = Some(observations.sink("A")?);
+            {
+                let better_auth_core::LoggerSource::Config(logger_options) = &mut a_config.logger
+                else {
+                    #[allow(
+                        clippy::panic,
+                        clippy::panic_in_result_fn,
+                        reason = "The fixture modifies its existing authored logger options."
+                    )]
+                    panic!("fixture requires authored logger options");
+                };
+                logger_options.level = Some(LogLevel::Error);
+                logger_options.log = Some(observations.sink("A")?);
+            }
             let (a_builder, a_store) = builder(a_config, &[])?;
             let a = a_builder.build().await?;
             lock(&observations.events)?.clear();

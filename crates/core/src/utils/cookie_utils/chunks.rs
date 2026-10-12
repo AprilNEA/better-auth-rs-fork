@@ -143,7 +143,7 @@ pub fn create_chunked_cookies(
             &[crate::observability::LogArgument::Value(
                 &serde_json::json!(name),
             )],
-        );
+        )?;
     }
     cookies.sort_by_key(|name, _| array_index(name).map_or((true, 0), |index| (false, index)));
     let mut payload = cookie.clone();

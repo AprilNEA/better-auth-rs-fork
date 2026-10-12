@@ -153,7 +153,17 @@ async fn observe(mode: Mode) -> Result<Case, Box<dyn Error>> {
         });
     }
     let mut config = AuthConfig::new(SECRET).base_url(ORIGIN);
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     let store = EphemeralStore::new(Arc::new(config.clone()));
     let auth = BetterAuth::<StatelessSchema>::new(config)

@@ -148,7 +148,17 @@ fn config(native: bool) -> AuthConfig {
     let mut config =
         AuthConfig::new("organization-list-relations-secret-at-least-thirty-two-characters")
             .base_url("http://list-relations.test");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.advanced.database.joins = Some(native);
     config
 }

@@ -130,7 +130,7 @@ mod tests {
 
         let config = test_config();
         let database = test_database().await;
-        let ctx = AuthContext::new(config, database);
+        let ctx = AuthContext::new(config, database).unwrap();
 
         let result = ctx.email_provider();
         assert!(result.is_err());

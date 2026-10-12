@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::observability::{LogArgument, LogLevel, LogSink};
 use crate::store::{
@@ -19,7 +23,12 @@ struct Logs {
 }
 
 impl LogSink for Logs {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         let arguments: Vec<_> = arguments
             .iter()
             .map(|argument| {
@@ -40,6 +49,7 @@ impl LogSink for Logs {
             message.to_string(),
             arguments
         ]));
+        Ok(())
     }
 }
 
@@ -88,16 +98,28 @@ impl SecondaryStorage for Storage {
 fn configuration(owner: &'static str, events: &Events, cause: &FieldValue) -> Arc<AuthConfig> {
     let mut config = AuthConfig::default();
     config.session.store_session_in_database = Some(true);
-    config.logger.disable_colors = Some(true);
-    config.logger.log = Some(Arc::new(Logs {
-        owner,
-        events: events.clone(),
-        cause: cause.clone(),
-    }));
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disable_colors = Some(true);
+        logger_options.log = Some(Arc::new(Logs {
+            owner,
+            events: events.clone(),
+            cause: cause.clone(),
+        }));
+    }
     config.advanced.database.generate_id = Some(crate::id::IdGeneration::Custom(
         crate::id::IdGenerator::new(|request| Ok(Some(format!("{}-created", request.model)))),
     ));
-    config.initialize_logger();
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     Arc::new(config)
 }
 
@@ -223,7 +245,8 @@ async fn secondary_logger_uses_own_instance_inside_another_endpoint() -> AuthRes
             )?;
             let config_a = configuration("A", &events, &cause);
             let inner_a = Arc::new(EphemeralStore::new(config_a.clone()));
-            let context_a = AuthContext::new(config_a, inner_a.clone());
+            let context_a =
+                AuthContext::new(config_a, inner_a.clone()).expect("fixture context initializes");
             let operation = async {
                 let created = if mode == "mirror-failure" {
                     let input = CreateSession {

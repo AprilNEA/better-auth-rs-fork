@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! Integration tests for Account and OAuth advanced options:
 //!
 //! 1. Token encryption: encrypted tokens stored in DB, decrypted via get-access-token
@@ -459,6 +463,7 @@ async fn test_encrypt_oauth_tokens_stored_encrypted_in_db() {
 
     // Now test via the get-access-token handler which should decrypt transparently
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -556,6 +561,7 @@ async fn test_get_access_token_preserves_plaintext_when_encryption_is_enabled() 
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -596,6 +602,7 @@ async fn test_refresh_token_migrates_plaintext_when_encryption_is_enabled() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -677,6 +684,7 @@ async fn test_refresh_token_persists_rotated_tokens_for_cookie_matched_account()
     );
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -758,6 +766,7 @@ async fn test_get_access_token_refresh_persists_rotated_tokens_for_cookie_matche
     );
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -834,6 +843,7 @@ async fn test_account_info_returns_provider_user_info_for_local_account_id() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -893,6 +903,7 @@ async fn test_get_access_token_without_cookie_returns_account_not_found() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -910,7 +921,7 @@ async fn test_get_access_token_without_cookie_returns_account_not_found() {
     let result = oauth_plugin.on_request(&req, &ctx).await;
     let resp = match result {
         Ok(Some(resp)) => resp,
-        Err(error) => error.to_auth_response(),
+        Err(error) => error.to_auth_response().expect("fixture response succeeds"),
         other => panic!("get-access-token should return a 400 response, got {other:?}"),
     }
     .into_http_response()
@@ -971,6 +982,7 @@ async fn test_get_access_token_rejects_cookie_for_the_wrong_user() {
     );
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -991,7 +1003,7 @@ async fn test_get_access_token_rejects_cookie_for_the_wrong_user() {
     let result = oauth_plugin.on_request(&req, &ctx).await;
     let resp = match result {
         Ok(Some(resp)) => resp,
-        Err(error) => error.to_auth_response(),
+        Err(error) => error.to_auth_response().expect("fixture response succeeds"),
         other => panic!("get-access-token should return a 400 response, got {other:?}"),
     }
     .into_http_response()
@@ -1021,6 +1033,7 @@ async fn test_account_info_returns_provider_not_configured_message() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1038,7 +1051,7 @@ async fn test_account_info_returns_provider_not_configured_message() {
     let result = oauth_plugin.on_request(&req, &ctx).await;
     let resp = match result {
         Ok(Some(resp)) => resp,
-        Err(error) => error.to_auth_response(),
+        Err(error) => error.to_auth_response().expect("fixture response succeeds"),
         other => panic!("account-info should return a 400 response, got {other:?}"),
     }
     .into_http_response()
@@ -1072,6 +1085,7 @@ async fn test_account_info_rejects_missing_access_token() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1127,6 +1141,7 @@ async fn test_unlink_last_account_blocked_by_default() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1181,6 +1196,7 @@ async fn test_unlink_last_account_allowed_when_configured() {
     .await;
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1271,6 +1287,7 @@ async fn test_unlink_non_last_account_always_allowed() {
         .unwrap();
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1363,6 +1380,7 @@ async fn test_account_linking_disabled_rejects_new_provider() {
     .unwrap();
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1452,6 +1470,7 @@ async fn test_link_social_returns_redirect_url_with_state() {
     });
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");
@@ -1519,6 +1538,7 @@ async fn test_callback_with_encryption_encrypts_tokens_for_new_user() {
     .unwrap();
 
     let ctx = AuthContext::new(config.clone(), db.clone())
+        .expect("fixture context initializes")
         .initialize_request_context()
         .await
         .expect("test request context should initialize");

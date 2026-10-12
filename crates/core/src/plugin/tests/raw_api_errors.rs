@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::unwrap_used,
     clippy::panic_in_result_fn,
@@ -169,14 +173,25 @@ impl Hooks {
     async fn run(&self, http: bool, status: SchemaValue<u16>) -> AuthResult<AuthResponse> {
         let mut config = (*crate::test_store::test_config()).clone();
         config.experimental.instrumentation.enabled = self.instrumentation;
-        config.logger.disabled = Some(true);
-        config.logger.level = Some(if self.debug {
-            LogLevel::Debug
-        } else {
-            LogLevel::Warn
-        });
+        {
+            let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+                #[allow(
+                    clippy::panic,
+                    clippy::panic_in_result_fn,
+                    reason = "The fixture modifies its existing authored logger options."
+                )]
+                panic!("fixture requires authored logger options");
+            };
+            logger_options.disabled = Some(true);
+            logger_options.level = Some(if self.debug {
+                LogLevel::Debug
+            } else {
+                LogLevel::Warn
+            });
+        }
         let config = Arc::new(config);
-        let mut context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+        let mut context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+            .expect("fixture context initializes");
         if self.router {
             context
                 .extensions
@@ -424,7 +439,11 @@ async fn phases_preserve_raw_error_identity_and_repeated_classification() -> Aut
             match outcome {
                 Err(error) => {
                     assert_raw(&error, &value);
-                    let captured = error.to_auth_response().captured_headers()?.unwrap();
+                    let captured = error
+                        .to_auth_response()
+                        .expect("fixture response succeeds")
+                        .captured_headers()?
+                        .unwrap();
                     assert_headers(&captured, &headers, if merged { &["owned=1"] } else { &[] });
                 }
                 Ok(response) if !http => {
@@ -804,7 +823,11 @@ async fn headers_preserve_independent_reads_and_stop_at_the_original_failure() -
         }
         assert_eq!(*events.lock().unwrap(), expected);
         if failed_read.is_none() {
-            let captured = error.to_auth_response().captured_headers()?.unwrap();
+            let captured = error
+                .to_auth_response()
+                .expect("fixture response succeeds")
+                .captured_headers()?
+                .unwrap();
             assert_headers(
                 &captured,
                 &[("x-handler", "1"), ("x-after", "1"), ("x-final", "third")],

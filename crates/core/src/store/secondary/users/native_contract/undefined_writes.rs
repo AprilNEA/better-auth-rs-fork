@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::observability::{LogArgument, LogLevel, LogSink};
 use values::Root;
@@ -112,7 +116,12 @@ struct Logger {
 }
 
 impl LogSink for Logger {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> crate::AuthResult<()> {
         let arguments: Vec<_> = arguments
             .iter()
             .map(|argument| match argument {
@@ -141,6 +150,7 @@ impl LogSink for Logger {
                 ("sameOriginal".into(), same_original.into()),
             ],
         );
+        Ok(())
     }
 }
 
@@ -161,12 +171,24 @@ async fn capture(scenario: &Json) -> AuthResult<Json> {
     let initial_index = cache.value(INDEX);
     let mut config = AuthConfig::default();
     config.session.store_session_in_database = Some(true);
-    config.logger.level = Some(LogLevel::Debug);
-    config.logger.log = Some(Arc::new(Logger {
-        observer: observer.clone(),
-        original: original.clone(),
-    }));
-    config.initialize_logger();
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.level = Some(LogLevel::Debug);
+        logger_options.log = Some(Arc::new(Logger {
+            observer: observer.clone(),
+            original: original.clone(),
+        }));
+    }
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     let config = Arc::new(config);
     let inner = Arc::new(
         EphemeralStore::from_storage(

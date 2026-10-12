@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "Contract assertions must fail the test while setup errors propagate through Result."
@@ -147,7 +151,17 @@ fn config() -> AuthConfig {
     let mut config =
         AuthConfig::new("effective-organization-declarations-at-least-thirty-two-characters")
             .base_url("http://effective-organization-declarations.test");
-    config.logger.disabled = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disabled = Some(true);
+    }
     config.telemetry.enabled = false;
     config
 }
@@ -388,7 +402,8 @@ async fn organization_partial_initialization_keeps_external_role_declarations_re
         let mut context = AuthInitContext::<StatelessSchema>::new(
             config.clone(),
             Arc::new(EphemeralStore::new(config.clone())),
-        );
+        )
+        .expect("fixture context initializes");
         let callbacks = Callbacks::default();
         let declaration = |name: &str| UserConfig {
             additional_fields: Some(

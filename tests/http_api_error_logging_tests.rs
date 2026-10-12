@@ -34,7 +34,17 @@ fn config(origin: &str) -> AuthConfig {
         AuthConfig::new("http-api-error-logging-secret-at-least-thirty-two-characters")
             .base_url(origin);
     config.telemetry.enabled = false;
-    config.logger.disable_colors = Some(true);
+    {
+        let better_auth_core::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.disable_colors = Some(true);
+    }
     config
 }
 

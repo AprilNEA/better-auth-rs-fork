@@ -420,7 +420,7 @@ impl<S: AuthSchema> SessionManager<S> {
                 crate::observability::logger::current().error(
                     "INTERNAL_SERVER_ERROR",
                     &[crate::observability::LogArgument::Error(&error)],
-                );
+                )?;
                 Err(AuthError::from_code(
                     "INTERNAL_SERVER_ERROR",
                     "FAILED_TO_GET_SESSION",

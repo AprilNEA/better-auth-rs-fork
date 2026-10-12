@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use better_auth::plugins::{UsernameConfig, UsernamePlugin};
 use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthSchema, BetterAuth};
 use better_auth_core::{AuthUser, CreateUser};
@@ -99,6 +103,7 @@ async fn username_login_only_sends_verification_when_required_and_logs_async_del
             let response = result
                 .unwrap_err()
                 .to_auth_response()
+                .expect("fixture response succeeds")
                 .into_http_response()
                 .unwrap();
             assert_eq!(response.status, 403);

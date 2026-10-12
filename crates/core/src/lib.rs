@@ -34,8 +34,8 @@ pub mod id;
 pub mod middleware;
 pub mod observability;
 pub use observability::{
-    ExperimentalConfig, InstrumentationConfig, LogArgument, LogLevel, LogSink, LoggerConfig,
-    TelemetryConfig,
+    ExperimentalConfig, InstrumentationConfig, LogArgument, LogLevel, LogSink, Logger,
+    LoggerConfig, LoggerOptions, LoggerSource, TelemetryConfig,
 };
 mod memory_query;
 mod memory_sort;

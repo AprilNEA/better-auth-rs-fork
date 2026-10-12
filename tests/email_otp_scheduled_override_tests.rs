@@ -182,7 +182,7 @@ async fn run(rollback: bool) -> Value {
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     let task_count = tasks.len();
     for task in tasks {
-        task.await.unwrap();
+        task.await.unwrap().unwrap();
     }
     json!({"rollback":rollback, "result":result, "events":*state.events.lock().unwrap(), "observations":*state.observations.lock().unwrap(), "count":count, "tasks":task_count})
 }

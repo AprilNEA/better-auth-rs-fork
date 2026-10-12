@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 #![expect(
     clippy::panic_in_result_fn,
     reason = "The concurrency contract checks original errors, completion order, and context retained after scope exit"
@@ -113,10 +117,13 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
                     ..Default::default()
                 };
                 let config = Arc::new(config);
-                let context = Arc::new(AuthContext::<StatelessSchema>::new(
-                    config.clone(),
-                    Arc::new(EphemeralStore::new(config)),
-                ));
+                let context = Arc::new(
+                    AuthContext::<StatelessSchema>::new(
+                        config.clone(),
+                        Arc::new(EphemeralStore::new(config)),
+                    )
+                    .expect("fixture context initializes"),
+                );
                 let marker: FieldValue =
                     FieldMap::from_iter([("original".into(), true.into())]).into();
                 let mut request = RequestHookContext::from_request(&AuthRequest::new(
@@ -200,10 +207,13 @@ async fn all_and_pair_wait_for_each_initial_poll_before_returning_a_synchronous_
             ..Default::default()
         };
         let config = Arc::new(config);
-        let context = Arc::new(AuthContext::<StatelessSchema>::new(
-            config.clone(),
-            Arc::new(EphemeralStore::new(config)),
-        ));
+        let context = Arc::new(
+            AuthContext::<StatelessSchema>::new(
+                config.clone(),
+                Arc::new(EphemeralStore::new(config)),
+            )
+            .expect("fixture context initializes"),
+        );
         let marker: FieldValue = FieldMap::from_iter([("original".into(), true.into())]).into();
         let mut request = RequestHookContext::from_request(&AuthRequest::new(
             HttpMethod::Get,

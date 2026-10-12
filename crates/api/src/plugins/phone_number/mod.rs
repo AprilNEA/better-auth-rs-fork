@@ -388,7 +388,7 @@ impl PhoneNumberPlugin {
                 ctx.config.advanced.background_tasks.as_ref(),
                 ctx.logger(),
             )
-            .await;
+            .await?;
         } else if let Some(task) = task {
             // The direct send endpoint propagates asynchronous failures without a handler.
             task.await?;
@@ -582,7 +582,7 @@ impl PhoneNumberPlugin {
                     ctx.config.advanced.background_tasks.as_ref(),
                     ctx.logger(),
                 )
-                .await;
+                .await?;
             }
             return Err(AuthError::from_code(
                 "UNAUTHORIZED",
@@ -630,7 +630,7 @@ impl PhoneNumberPlugin {
         } else {
             ctx.config.session.expires_in()
         };
-        let issued = issue_selected_user_session_optional(
+        let Some(issued) = issue_selected_user_session_optional(
             ctx,
             better_auth_core::FieldMap::from(ctx.internal_user_view(user).await?).into(),
             &meta,
@@ -638,11 +638,11 @@ impl PhoneNumberPlugin {
         )
         .await
         .map_err(SessionIssueError::into_auth_error)?
-        .ok_or_else(|| {
+        else {
             if !status {
-                ctx.logger().error("Failed to create session", &[]);
+                ctx.logger().error("Failed to create session", &[])?;
             }
-            AuthError::from_code(
+            return Err(AuthError::from_code(
                 if status {
                     "INTERNAL_SERVER_ERROR"
                 } else {
@@ -650,8 +650,8 @@ impl PhoneNumberPlugin {
                 },
                 "FAILED_TO_CREATE_SESSION",
                 "Failed to create session",
-            )
-        })?;
+            ));
+        };
         let mut output = better_auth_core::FieldMap::from([
             ("token".into(), issued.session.token().field_value()),
             (
@@ -698,7 +698,7 @@ impl PhoneNumberPlugin {
                 ctx.config.advanced.background_tasks.as_ref(),
                 ctx.logger(),
             )
-            .await;
+            .await?;
         }
         AuthResponse::json(None, &json!({"status":true}))
     }

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 
 #[test]
@@ -106,13 +110,19 @@ async fn live_object_read_errors_propagate_without_implicit_snapshots() {
     struct FailureLog(AtomicUsize, FieldValue);
 
     impl LogSink for FailureLog {
-        fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+        fn log(
+            &self,
+            level: LogLevel,
+            message: LogArgument<'_>,
+            arguments: &[LogArgument<'_>],
+        ) -> crate::AuthResult<()> {
             assert_eq!(level, LogLevel::Error);
             assert_eq!(message.to_string(), "Error parsing JSON");
             assert!(matches!(arguments, [LogArgument::Native(argument)]
                 if argument.own_property_keys().is_ok_and(|keys| keys == ["error"])
                     && argument.model_property("error").is_ok_and(|error| error.strict_equals(&self.1))));
             let _ = self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(())
         }
     }
 
@@ -158,10 +168,23 @@ async fn live_object_read_errors_propagate_without_implicit_snapshots() {
 
     let log = Arc::new(FailureLog(AtomicUsize::new(0), failure));
     let mut config = AuthConfig::default();
-    config.logger.log = Some(log.clone());
-    config.initialize_logger();
+    {
+        let crate::LoggerSource::Config(logger_options) = &mut config.logger else {
+            #[allow(
+                clippy::panic,
+                clippy::panic_in_result_fn,
+                reason = "The fixture modifies its existing authored logger options."
+            )]
+            panic!("fixture requires authored logger options");
+        };
+        logger_options.log = Some(log.clone());
+    }
+    config
+        .initialize_logger()
+        .expect("fixture initialization succeeds");
     let config = Arc::new(config);
-    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+    let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))
+        .expect("fixture context initializes");
     let parsed = context
         .with_endpoint_context(|_| async { crate::utils::json::safe_parse_field(&value) })
         .await;

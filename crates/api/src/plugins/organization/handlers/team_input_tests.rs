@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::organization::{OrganizationPlugin, OrganizationTeamsConfig};
 use crate::plugins::test_helpers::{
@@ -115,7 +119,8 @@ async fn invalid_team_input_precedes_policies_and_preserves_null_errors() {
         let response = handle_team_request(&create(body), &ctx, &config)
             .await
             .unwrap_err()
-            .to_auth_response();
+            .to_auth_response()
+            .expect("fixture response succeeds");
         assert_eq!(
             response.api_error_status().unwrap(),
             better_auth_core::SchemaValue::Typed(400)
@@ -163,7 +168,8 @@ async fn invalid_team_input_precedes_policies_and_preserves_null_errors() {
             let response = handle_team_request(&update(json!({field:null})), &ctx, &config)
                 .await
                 .unwrap_err()
-                .to_auth_response();
+                .to_auth_response()
+                .expect("fixture response succeeds");
             assert_eq!(
                 response.api_error_status().unwrap(),
                 better_auth_core::SchemaValue::Typed(400)

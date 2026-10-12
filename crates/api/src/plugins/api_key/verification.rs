@@ -236,8 +236,14 @@ impl ApiKeyPlugin {
         }
         let result = async {
             let captured = CapturedInput::new(input, &body)?;
-            self.validate_api_key(&captured, ctx, endpoint, input.config_id.is_none())
-                .await
+            let key = self
+                .validate_api_key(&captured, ctx, endpoint, input.config_id.is_none())
+                .await?;
+            let config = self.resolve_configuration(key.config_id.as_str())?;
+            if config.defer_updates {
+                self.start_expired_cleanup(ctx, true, true).await?;
+            }
+            Ok(key)
         }
         .await;
         let key = match result {
@@ -249,10 +255,12 @@ impl ApiKeyPlugin {
                     | ApiKeyVerificationError::Endpoint(error) => error,
                     ApiKeyVerificationError::Validation(_) => &error,
                 };
-                ctx.logger().error(
-                    "Failed to validate API key:",
-                    &[better_auth_core::observability::LogArgument::Error(cause)],
-                );
+                ctx.logger()
+                    .error(
+                        "Failed to validate API key:",
+                        &[better_auth_core::observability::LogArgument::Error(cause)],
+                    )
+                    .map_err(ApiKeyVerificationError::Endpoint)?;
                 return Err(match error {
                     ApiKeyVerificationError::Internal(error) => {
                         if error
@@ -470,7 +478,8 @@ impl ApiKeyPlugin {
                         | ApiKeyVerificationError::Rejected(error),
                     ) => return Err(error),
                 };
-                self.maybe_delete_expired(ctx).await;
+                self.start_expired_cleanup(ctx, config.defer_updates, true)
+                    .await?;
 
                 if config.references != ApiKeyReferences::User {
                     return Err(ApiKeyValidationError::new(

@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use crate::endpoint_dispatch::EndpointDispatcher;
 use crate::endpoint_input::ValidatedBody;
 use crate::hooks::current_request_hook_context;
@@ -35,7 +39,8 @@ fn validate_query(query: Option<Value>) -> AuthResult<Option<Value>> {
 
 #[tokio::test]
 async fn async_body_transform_finishes_before_query_headers_and_endpoint() {
-    let context = AuthContext::new(test_config(), test_database().await);
+    let context = AuthContext::new(test_config(), test_database().await)
+        .expect("fixture context initializes");
     for (page, headers, status, expected) in [
         ("1", true, 200, json!({"displayName": "Ada", "page": 1})),
         (

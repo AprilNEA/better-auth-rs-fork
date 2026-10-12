@@ -47,11 +47,17 @@ pub(super) fn error(error: &AuthError) -> Value {
 }
 
 impl LogSink for Recorder {
-    fn log(&self, level: LogLevel, message: LogArgument<'_>, arguments: &[LogArgument<'_>]) {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: LogArgument<'_>,
+        arguments: &[LogArgument<'_>],
+    ) -> better_auth_core::AuthResult<()> {
         self.push(json!({
             "kind": "logger", "level": level.as_str(), "message": log_value(&message),
             "args": arguments.iter().map(log_value).collect::<Vec<_>>(),
         }));
+        Ok(())
     }
 }
 

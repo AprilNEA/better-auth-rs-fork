@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 //! The access-token endpoint preserves native refresh values through the callback and Account write.
 
 use super::*;
@@ -194,6 +198,7 @@ async fn test_access_token_refresh_preserves_native_callback_values_and_fallback
             )
             .unwrap();
         let context = AuthContext::new(config, runtime)
+            .expect("fixture context initializes")
             .initialize_request_context()
             .await
             .unwrap();

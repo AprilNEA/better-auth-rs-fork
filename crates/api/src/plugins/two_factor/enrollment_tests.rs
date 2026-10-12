@@ -1,3 +1,7 @@
+#![allow(
+    clippy::expect_used,
+    reason = "Fixture setup and response assertions require successful fallible construction."
+)]
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::wire::SessionView;
@@ -79,9 +83,11 @@ impl Fixture {
         if reject_enrollment {
             store = store.hook(RejectEnrollment);
         }
-        let mut ctx = AuthContext::new(config, Arc::new(store));
+        let mut ctx =
+            AuthContext::new(config, Arc::new(store)).expect("fixture context initializes");
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
-        let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone());
+        let mut init = AuthInitContext::new(ctx.config.clone(), ctx.database.clone())
+            .expect("fixture context initializes");
         better_auth_core::AuthPlugin::<
             better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema,
         >::schema(&TwoFactorPlugin::new(), &mut model_fields)

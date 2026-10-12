@@ -50,8 +50,8 @@ pub mod core_paths {
 #[derive(Clone)]
 pub struct AuthConfig {
     /// Per-instance diagnostics. Custom sinks receive unformatted messages and arguments.
-    pub logger: crate::observability::LoggerConfig,
-    pub(crate) resolved_logger: Option<crate::observability::LoggerConfig>,
+    pub logger: crate::observability::LoggerSource,
+    pub(crate) resolved_logger: Option<crate::observability::Logger>,
     /// Experimental runtime instrumentation.
     pub experimental: crate::observability::ExperimentalConfig,
     /// Usage reporting is disabled by default.
@@ -686,15 +686,19 @@ impl Default for Argon2Config {
 impl AuthConfig {
     /// Read the instance logger without changing the original option presence.
     /// Before initialization, direct configuration logging uses the supplied options.
-    pub fn logger(&self) -> &crate::observability::LoggerConfig {
-        self.resolved_logger.as_ref().unwrap_or(&self.logger)
+    pub fn logger(&self) -> AuthResult<crate::observability::Logger> {
+        self.resolved_logger.as_ref().map_or_else(
+            || crate::observability::Logger::new(self.logger.clone()),
+            |logger| Ok(logger.clone()),
+        )
     }
 
     /// Resolve a new instance's logger before secret validation or plugin initialization.
     #[doc(hidden)]
-    pub fn initialize_logger(&mut self) {
+    pub fn initialize_logger(&mut self) -> AuthResult<()> {
         let _ = crate::observability::logger::default_logger();
-        self.resolved_logger = Some(self.logger.resolved());
+        self.resolved_logger = Some(crate::observability::Logger::new(self.logger.clone())?);
+        Ok(())
     }
 
     /// Evaluate Session creation defaults with plugin input precedence.
@@ -910,13 +914,13 @@ impl AuthConfig {
     }
     pub fn validate(&self) -> Result<(), AuthError> {
         if self.secrets.is_some() {
-            return self.encryption_secret().validate(self.logger());
+            return self.encryption_secret().validate(&self.logger()?);
         }
         if self.secret.is_empty() {
             return Err(AuthError::config("Secret key cannot be empty"));
         }
 
-        secrets::warn_secret_strength(&self.secret, self.logger());
+        secrets::warn_secret_strength(&self.secret, &self.logger()?)?;
         Ok(())
     }
 }
