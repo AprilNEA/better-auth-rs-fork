@@ -13,6 +13,8 @@ use std::sync::{Arc, Mutex};
 
 #[path = "observation_replay.rs"]
 mod replay;
+#[path = "replay_failures.rs"]
+mod replay_failures;
 
 mod values {
     use super::core as better_auth;
@@ -65,8 +67,12 @@ pub(super) fn role(model: &str) -> AuthResult<EntityRole> {
 }
 
 pub(super) fn cases(backend: &str) -> AuthResult<Vec<Value>> {
-    let fixture: Value =
-        serde_json::from_str(include_str!("../fixtures/shared-column-1.7.6.json"))?;
+    let source = match backend {
+        "memory" | "sqlite" => include_str!("../fixtures/shared-column-1.7.6.json"),
+        "postgres" | "mysql" => include_str!("../fixtures/shared-column-server-1.7.6.json"),
+        _ => return Err(AuthError::internal("Unknown shared-column backend")),
+    };
+    let fixture: Value = serde_json::from_str(source)?;
     let observation = fixture
         .as_array()
         .and_then(|items| items.iter().find(|item| item["backend"] == backend))
@@ -215,6 +221,7 @@ pub(super) async fn run(adapter: &impl Adapter, case: &Value, trace: &Trace) -> 
         .as_array()
         .ok_or_else(|| AuthError::internal("Missing shared-column operations"))?;
     assert_eq!(operations.len(), 8);
+    let mut failures = replay_failures::ReplayFailures::default();
     for operation in operations {
         let method = operation["method"]
             .as_str()
@@ -247,7 +254,16 @@ pub(super) async fn run(adapter: &impl Adapter, case: &Value, trace: &Trace) -> 
                     "properties": {},
                 });
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                let value = error.into_thrown_value()?;
+                actual["returned"] = false.into();
+                actual["error"] = json!({
+                    "name": values::observe(&value.model_property("name")?)?,
+                    "message": values::observe(&value.model_property("message")?)?,
+                    "sameCallbackError": false,
+                    "properties": values::observe(&value.enumerable_fields()?.into())?,
+                });
+            }
         }
         actual["events"] = json!(std::mem::take(&mut lock(trace)?.events));
         actual["stored"] = Value::Array(
@@ -263,14 +279,31 @@ pub(super) async fn run(adapter: &impl Adapter, case: &Value, trace: &Trace) -> 
                 })
                 .collect::<AuthResult<_>>()?,
         );
-        replay::assert_replay(
-            &actual,
-            operation,
-            &format!(
-                "shared-column/{}/{}/{}",
-                case["model"], case["mode"], operation["name"]
-            ),
+        let label = format!(
+            "shared-column/{}/{}/{}",
+            case["model"], case["mode"], operation["name"]
         );
+        let actual_fields = actual
+            .as_object()
+            .ok_or_else(|| AuthError::internal("The operation observation must be an object"))?;
+        let expected_fields = operation
+            .as_object()
+            .ok_or_else(|| AuthError::internal("The captured operation must be an object"))?;
+        failures.record(&label, || {
+            assert_eq!(
+                actual_fields.keys().collect::<Vec<_>>(),
+                expected_fields.keys().collect::<Vec<_>>(),
+                "{label}: own key order"
+            );
+        });
+        // A driver error difference must not prevent callback and persisted-state comparisons.
+        for (field, expected) in expected_fields {
+            let path = format!("{label}/{field}");
+            failures.record(&path, || {
+                replay::assert_replay(&actual[field], expected, &path)
+            });
+        }
     }
+    failures.finish();
     Ok(())
 }

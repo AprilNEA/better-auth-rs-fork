@@ -1,0 +1,122 @@
+{
+  "contract": "shared-physical-column-server",
+  "version": "1.7.6",
+  "status": "source capture and repeated-process equality passed; complete Rust server replay remains pending",
+  "run": "38251476111",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38251476111",
+  "commit": "3f7399959699699a07371eb9bc9713c3065c3f46",
+  "runConclusion": "success",
+  "captureTests": {
+    "backends": [
+      "memory",
+      "sqlite",
+      "postgres",
+      "mysql"
+    ],
+    "passed": 4,
+    "existingFrozenBackends": [
+      "memory",
+      "sqlite"
+    ]
+  },
+  "artifact": {
+    "path": "/private/tmp/better-auth-focused-log-38251476111/focused-check.log",
+    "bytes": 1915178,
+    "sha256": "12be80ae27673fbc76dde6908993195a7ea69de7ddeeee75f8498511150efa18"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/shared-column-capture.mjs",
+      "bytes": 9038,
+      "sha256": "2363e82acb65ff0023eeb276ff5c1a9d66c790f611bd725891e056e44a16b017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/shared-column-server-capture.test.ts",
+      "bytes": 1709,
+      "sha256": "8912269d4313df55f3628a67f47711c9587828b294dc9308eeee87a6ef4d5031"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/shared-column-capture.test.ts",
+      "bytes": 1780,
+      "sha256": "fa4e84e1fc12af0be9f53519e206785a4fccc1f61b4f580459ef786bb9cbbcb3"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/server-catalog-shared.mjs",
+      "bytes": 7735,
+      "sha256": "2d4e21ffda5120886e1b4152578f6a35d678143835f0265e6731b9834e4c265a"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/device-where-capture.mjs",
+      "bytes": 12999,
+      "sha256": "788f20e7c9bc382c8c863cbfe180024f7090c7909a04138be687094e89b33ae6"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/sqlite-catalog.ts",
+      "bytes": 2260,
+      "sha256": "f53afd791c4e687d9da4d4c9722956374bcf1dd6547e26add4bda91d1d2ce2cc"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2919,
+      "sha256": "ee3865321448cd61b3e0cbdbb444e0711702b9f59898e5adc5f94006a377d43b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/shared-column-server-1.7.6.json",
+    "bytes": 1364733,
+    "sha256": "7665efdb4c198007c5893bfbfb49cb2fb01c5ffc18cb237052515d507cbf7ccb"
+  },
+  "models": 10,
+  "casesPerBackend": 30,
+  "backends": [
+    "postgres",
+    "mysql"
+  ],
+  "records": [
+    {
+      "backend": "postgres",
+      "line": 36,
+      "byteOffset": 457164,
+      "bytes": 365843,
+      "sha256": "a3671b2030c4bde10cc4f2d4270fdb24ca509f385301cd3c5e2d101f14543654"
+    },
+    {
+      "backend": "postgres",
+      "line": 37,
+      "byteOffset": 823008,
+      "bytes": 365843,
+      "sha256": "a3671b2030c4bde10cc4f2d4270fdb24ca509f385301cd3c5e2d101f14543654"
+    },
+    {
+      "backend": "mysql",
+      "line": 39,
+      "byteOffset": 1188963,
+      "bytes": 363008,
+      "sha256": "ca2cd87da079b41ab8d15d88a87a877dfa110792e6e4392377fcd55d48209132"
+    },
+    {
+      "backend": "mysql",
+      "line": 40,
+      "byteOffset": 1551972,
+      "bytes": 363008,
+      "sha256": "ca2cd87da079b41ab8d15d88a87a877dfa110792e6e4392377fcd55d48209132"
+    }
+  ],
+  "extraction": "Retain each complete server observation in source order. Preserve configuration, declaration order, input, output, callback events, callback error identity, every recorded driver error property, stored values, catalog columns, and raw migration SQL. Both independent captures of each server backend are byte-identical. The Memory and SQLite fixtures and provenance remain byte-identical.",
+  "normalizations": [],
+  "errorBoundary": {
+    "driverErrorsPerBackend": 21,
+    "cases": "Seven native-native-number model scenarios reject update-first, update-undefined, and update-output-error.",
+    "observation": "The source records error.name, error.message, callback identity, and every enumerable own property with undefined values retained. JavaScript error prototypes, non-enumerable properties, descriptors, and host stacks remain outside this existing contract.",
+    "rustGap": "The current SeaORM map_db_err reduces driver errors to classified strings. Driver metadata and MySQL executed SQL require a shared production preservation boundary before complete strict replay can pass.",
+    "postgresProtocolGap": "The Rust shared parameter encoder currently emits SQL unknown literals. The source pg driver uses OID-unspecified text parameters. Integer conversion therefore occurs at a different protocol stage, with different position and where fields. SQLx 0.8.6 also does not expose the original PostgreSQL error packet length or every raw protocol field.",
+    "mysqlQueryGap": "The source mysql2 driver exposes its symbolic error code and complete interpolated lower-case SQL. SQLx 0.8.6 exposes SQLSTATE, numeric code, and message. The Rust SeaQuery statement and prepared parameter protocol remain distinct, so an error carrier alone cannot establish equality of the source sql property."
+  },
+  "artifactId": 11748885385,
+  "artifactName": "focused-check-reference-contracts-3f7399959699699a07371eb9bc9713c3065c3f46-1"
+}

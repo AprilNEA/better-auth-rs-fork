@@ -1,4 +1,4 @@
-//! Replay bare SQLite adapter operations through the production record engine.
+//! Replay bare SQL adapter operations through the production record engine.
 
 use super::{Entity, SeaOrmStore, map_db_err};
 use crate::{SeaOrmPluginModel, store::bundled_schema::BundledSchema};
@@ -7,7 +7,10 @@ use better_auth_core::{
     AuthConfig, AuthError, AuthResult, FieldMap, FieldValue, store::schema::EntityRole,
 };
 use sea_orm::sqlx::{Column, Row};
-use sea_orm::{ConnectionTrait, Database, DatabaseConnection, QueryOrder, QueryTrait};
+use sea_orm::{
+    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, DbBackend, QueryOrder,
+    QueryTrait,
+};
 use serde_json::Value;
 use std::marker::PhantomData;
 
@@ -151,16 +154,23 @@ impl<M: SeaOrmPluginModel> contract::Adapter for Adapter<M> {
             .map_err(map_db_err)?;
         rows.into_iter()
             .map(|row| {
-                let sqlite = row.try_as_sqlite_row().ok_or_else(|| {
-                    AuthError::internal("The shared-column contract requires SQLite driver rows")
-                })?;
-                sqlite
-                    .columns()
-                    .iter()
+                let columns = if let Some(raw) = row.try_as_sqlite_row() {
+                    column_names(raw)
+                } else if let Some(raw) = row.try_as_pg_row() {
+                    column_names(raw)
+                } else if let Some(raw) = row.try_as_mysql_row() {
+                    column_names(raw)
+                } else {
+                    return Err(AuthError::internal(
+                        "The shared-column contract requires a supported SQL driver row",
+                    ));
+                };
+                columns
+                    .into_iter()
                     .map(|column| {
                         Ok((
-                            column.name().to_owned(),
-                            crate::store::plugin_rows::value(&row, column.name())?,
+                            column.clone(),
+                            crate::store::plugin_rows::value(&row, &column)?,
                         ))
                     })
                     .collect()
@@ -169,10 +179,25 @@ impl<M: SeaOrmPluginModel> contract::Adapter for Adapter<M> {
     }
 }
 
-async fn database(case: &Value, model: &str) -> AuthResult<DatabaseConnection> {
-    let database = Database::connect("sqlite::memory:")
-        .await
-        .map_err(map_db_err)?;
+fn column_names<R: Row>(row: &R) -> Vec<String> {
+    row.columns()
+        .iter()
+        .map(|column| column.name().to_owned())
+        .collect()
+}
+
+async fn prepare(database: &DatabaseConnection, case: &Value, model: &str) -> AuthResult<()> {
+    let backend = database.get_database_backend();
+    let quote = if backend == DbBackend::MySql {
+        '`'
+    } else {
+        '"'
+    };
+    let id_type = if backend == DbBackend::MySql {
+        "VARCHAR(36)"
+    } else {
+        "TEXT"
+    };
     // Parent records supply the capture's referenced IDs; only the target table belongs to this contract.
     for (parent, id) in [
         ("user", "owner"),
@@ -181,14 +206,50 @@ async fn database(case: &Value, model: &str) -> AuthResult<DatabaseConnection> {
     ] {
         if parent != model {
             let _ = database
-                .execute_unprepared(&format!("CREATE TABLE \"{parent}\" (id TEXT PRIMARY KEY)"))
+                .execute_unprepared(&format!(
+                    "CREATE TABLE {quote}{parent}{quote} (id {id_type} PRIMARY KEY)"
+                ))
                 .await
                 .map_err(map_db_err)?;
             let _ = database
-                .execute_unprepared(&format!("INSERT INTO \"{parent}\" (id) VALUES ('{id}')"))
+                .execute_unprepared(&format!(
+                    "INSERT INTO {quote}{parent}{quote} (id) VALUES ('{id}')"
+                ))
                 .await
                 .map_err(map_db_err)?;
         }
+    }
+    if backend != DbBackend::Sqlite {
+        let migration = case["catalog"]["migration"]["initialSql"]
+            .as_str()
+            .ok_or_else(|| AuthError::internal("Missing captured server migration"))?;
+        let table = format!("create table {quote}{model}{quote} (");
+        let index_table = format!(" on {quote}{model}{quote} (");
+        let mut tables = 0;
+        for statement in migration
+            .split(';')
+            .map(str::trim)
+            .filter(|sql| !sql.is_empty())
+        {
+            assert!(
+                statement.starts_with("create table ") || statement.starts_with("create index ")
+            );
+            if statement.starts_with(&table) {
+                tables += 1;
+            } else if !(statement.starts_with("create index ") && statement.contains(&index_table))
+            {
+                continue;
+            }
+            let _ = database
+                .execute_unprepared(statement)
+                .await
+                .map_err(map_db_err)?;
+        }
+        assert_eq!(
+            tables, 1,
+            "The frozen migration must define one target table"
+        );
+        return Ok(());
     }
     let declarations = case["catalog"]["ddl"]
         .as_array()
@@ -203,16 +264,19 @@ async fn database(case: &Value, model: &str) -> AuthResult<DatabaseConnection> {
             }
         }
     }
-    Ok(database)
+    Ok(())
 }
 
-async fn replay<M: SeaOrmPluginModel>(case: &Value) -> AuthResult<()> {
+async fn replay<M: SeaOrmPluginModel>(
+    case: &Value,
+    database: DatabaseConnection,
+) -> AuthResult<()> {
     let (runtime, role, trace) = contract::runtime(case)?;
     let model = case["model"]
         .as_str()
         .ok_or_else(|| AuthError::internal("Missing captured SQL model"))?;
-    let mut store =
-        SeaOrmStore::<BundledSchema>::new(AuthConfig::default(), database(case, model).await?);
+    prepare(&database, case, model).await?;
+    let mut store = SeaOrmStore::<BundledSchema>::new(AuthConfig::default(), database);
     store.model_fields = runtime;
     contract::run(
         &Adapter::<M> {
@@ -227,22 +291,97 @@ async fn replay<M: SeaOrmPluginModel>(case: &Value) -> AuthResult<()> {
     .await
 }
 
+async fn replay_case(case: &Value, database: DatabaseConnection) -> AuthResult<()> {
+    match case["model"].as_str() {
+        Some("user") => replay::<user::Model>(case, database).await,
+        Some("session") => replay::<session::Model>(case, database).await,
+        Some("account") => replay::<account::Model>(case, database).await,
+        Some("verification") => replay::<verification::Model>(case, database).await,
+        Some("organization") => replay::<organization::Model>(case, database).await,
+        Some("member") => replay::<member::Model>(case, database).await,
+        Some("invitation") => replay::<invitation::Model>(case, database).await,
+        Some("team") => replay::<team::Model>(case, database).await,
+        Some("teamMember") => replay::<team_member::Model>(case, database).await,
+        Some("organizationRole") => replay::<organization_role::Model>(case, database).await,
+        _ => Err(AuthError::internal("Unknown captured SQL model")),
+    }
+}
+
 #[tokio::test]
 async fn shared_record_crud_matches_all_pinned_sqlite_column_collisions() -> AuthResult<()> {
     for case in contract::cases("sqlite")? {
-        match case["model"].as_str() {
-            Some("user") => replay::<user::Model>(&case).await?,
-            Some("session") => replay::<session::Model>(&case).await?,
-            Some("account") => replay::<account::Model>(&case).await?,
-            Some("verification") => replay::<verification::Model>(&case).await?,
-            Some("organization") => replay::<organization::Model>(&case).await?,
-            Some("member") => replay::<member::Model>(&case).await?,
-            Some("invitation") => replay::<invitation::Model>(&case).await?,
-            Some("team") => replay::<team::Model>(&case).await?,
-            Some("teamMember") => replay::<team_member::Model>(&case).await?,
-            Some("organizationRole") => replay::<organization_role::Model>(&case).await?,
-            _ => return Err(AuthError::internal("Unknown captured SQL model")),
-        }
+        let database = Database::connect("sqlite::memory:")
+            .await
+            .map_err(map_db_err)?;
+        replay_case(&case, database).await?;
     }
     Ok(())
+}
+
+type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+async fn isolated_server(backend: &str, case: Value) -> TestResult {
+    let variable = match backend {
+        "postgres" => "BETTER_AUTH_TEST_POSTGRES_URL",
+        "mysql" => "BETTER_AUTH_TEST_MYSQL_URL",
+        _ => return Err("Unknown shared-column server backend".into()),
+    };
+    let mut options = ConnectOptions::new(std::env::var(variable)?);
+    let _ = options.max_connections(1).sqlx_logging(false);
+    let database = Database::connect(options).await?;
+    let name = format!("ba_shared_columns_{}", uuid::Uuid::new_v4().simple());
+    let (create, select, drop) = if backend == "postgres" {
+        (
+            format!("CREATE SCHEMA {name}"),
+            format!("SET search_path TO {name}"),
+            format!("DROP SCHEMA {name} CASCADE"),
+        )
+    } else {
+        (
+            format!("CREATE DATABASE `{name}`"),
+            format!("USE `{name}`"),
+            format!("DROP DATABASE `{name}`"),
+        )
+    };
+    let _ = database.execute_unprepared(&create).await?;
+    let worker = database.clone();
+    let result = tokio::spawn(async move {
+        let _ = worker.execute_unprepared(&select).await?;
+        replay_case(&case, worker).await?;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    })
+    .await;
+    let cleanup = database.execute_unprepared(&drop).await;
+    let closed = database.close().await;
+    let _ = cleanup?;
+    closed?;
+    result??;
+    Ok(())
+}
+
+async fn replay_server(backend: &str) -> TestResult {
+    let mut failures = Vec::new();
+    for case in contract::cases(backend)? {
+        let label = format!("{backend}/{}/{}", case["model"], case["mode"]);
+        if let Err(error) = isolated_server(backend, case).await {
+            eprintln!("Shared-column replay failed: {label}: {error}");
+            failures.push(error);
+        }
+    }
+    if let Some(error) = failures.into_iter().next() {
+        return Err(error);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
+async fn live_postgres_shared_column_contract() -> TestResult {
+    replay_server("postgres").await
+}
+
+#[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
+async fn live_mysql_shared_column_contract() -> TestResult {
+    replay_server("mysql").await
 }

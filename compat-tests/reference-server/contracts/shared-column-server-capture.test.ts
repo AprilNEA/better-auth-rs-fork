@@ -10,6 +10,8 @@ for (const backend of ["postgres", "mysql"]) {
     await writeObservation(first.stdout);
     expect({ status: first.status, stderr: first.stderr }, `Capture evidence: ${first.directory}`).toStrictEqual({ status: 0, stderr: "" });
     const value = JSON.parse(readFileSync(first.output, "utf8"));
+    const fixture = JSON.parse(readFileSync(new URL("../../../tests/fixtures/shared-column-server-1.7.6.json", import.meta.url), "utf8"));
+    expect(JSON.stringify(value)).toBe(JSON.stringify(fixture.find((entry: { backend: string }) => entry.backend === backend)));
     expect(value.version).toBe("1.7.6");
     expect(value.backend).toBe(backend);
     expect(value.cases).toHaveLength(30);
