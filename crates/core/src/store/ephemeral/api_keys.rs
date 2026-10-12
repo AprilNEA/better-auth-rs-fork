@@ -42,11 +42,10 @@ impl ApiKeyStore for EphemeralStore {
     }
 
     async fn create_api_key(&self, input: CreateApiKey) -> AuthResult<ApiKey> {
-        let created_at = now();
         let mut fields = input.into_adapter_fields()?;
         fields.extend([
-            ("createdAt".into(), created_at.clone().into()),
-            ("updatedAt".into(), created_at.into()),
+            ("createdAt".into(), now().into()),
+            ("updatedAt".into(), now().into()),
             ("lastRefillAt".into(), FieldValue::Null),
             ("lastRequest".into(), FieldValue::Null),
         ]);
@@ -355,6 +354,47 @@ mod tests {
             metadata: None,
             enabled: true.into(),
         }
+    }
+
+    #[tokio::test]
+    async fn typed_creation_allocates_independent_date_objects() {
+        let store = EphemeralStore::default();
+        let key = store.create_api_key(input()).await.unwrap();
+        let created = key.created_at.field_value();
+        let updated = key.updated_at.field_value();
+        assert!(!created.strict_equals(&updated));
+        created
+            .set_model_property("createdOnly", true.into())
+            .unwrap();
+        assert!(
+            updated
+                .model_property("createdOnly")
+                .unwrap()
+                .is_undefined()
+        );
+        let stored = store
+            .get_api_key_by_id_value(&key.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(stored.created_at.field_value().strict_equals(&created));
+        assert!(stored.updated_at.field_value().strict_equals(&updated));
+        assert_eq!(
+            stored
+                .created_at
+                .field_value()
+                .model_property("createdOnly")
+                .unwrap(),
+            true.into()
+        );
+        assert!(
+            stored
+                .updated_at
+                .field_value()
+                .model_property("createdOnly")
+                .unwrap()
+                .is_undefined()
+        );
     }
 
     #[tokio::test]

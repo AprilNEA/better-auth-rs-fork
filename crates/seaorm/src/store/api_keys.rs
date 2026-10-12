@@ -30,18 +30,17 @@ where
     S: AuthSchema + Send + Sync,
 {
     async fn create_api_key(&self, input: CreateApiKey) -> AuthResult<ApiKey> {
-        let now = Utc::now();
         let mut fields = input.into_adapter_fields()?;
         fields.extend([
             ("lastRefillAt".to_owned(), FieldValue::Null),
             ("lastRequest".to_owned(), FieldValue::Null),
             (
                 "createdAt".to_owned(),
-                better_auth_core::FieldValue::Date((now).into()),
+                better_auth_core::FieldValue::Date(Utc::now().into()),
             ),
             (
                 "updatedAt".to_owned(),
-                better_auth_core::FieldValue::Date((now).into()),
+                better_auth_core::FieldValue::Date(Utc::now().into()),
             ),
         ]);
         ApiKey::from_field_values(

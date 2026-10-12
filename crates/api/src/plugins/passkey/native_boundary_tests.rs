@@ -344,3 +344,6 @@ mod public_key_authentication_tests;
 
 #[path = "credential_id_authentication_tests.rs"]
 mod credential_id_authentication_tests;
+
+#[path = "update_boundary_tests.rs"]
+mod update_boundary_tests;

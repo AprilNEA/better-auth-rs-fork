@@ -11,8 +11,7 @@ use serde_json::{Value as Json, json};
 
 mod catches;
 mod completion;
-#[path = "../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
+use crate::native_test_observation as observation;
 mod values;
 
 use observation::{NativeObservation, assert_replay};

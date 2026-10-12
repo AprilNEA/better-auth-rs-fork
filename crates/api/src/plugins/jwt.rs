@@ -400,9 +400,12 @@ impl JwtPlugin {
         for key in keys {
             let expiry = key.expires_at.field_value();
             if expiry.is_truthy() {
-                let live = keys::date_millis(&expiry, "key.expiresAt")?
-                    + self.config.grace_period.num_milliseconds() as f64
-                    > now;
+                let expiry = better_auth_core::query::field_add(
+                    &expiry.get_time_method("key.expiresAt")?,
+                    &(self.config.grace_period.num_milliseconds() as f64).into(),
+                )?;
+                let live = better_auth_core::query::field_compare(&expiry, &now.into())?
+                    == Some(std::cmp::Ordering::Greater);
                 if !live {
                     continue;
                 }

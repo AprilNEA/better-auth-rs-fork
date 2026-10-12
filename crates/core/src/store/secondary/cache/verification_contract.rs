@@ -20,8 +20,7 @@ use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
 
 mod object;
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
+use crate::native_test_observation as observation;
 mod read_write;
 #[path = "../../../../../../tests/support/replay_failures.rs"]
 mod replay_failures;

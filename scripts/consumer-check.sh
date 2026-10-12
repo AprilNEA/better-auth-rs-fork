@@ -112,6 +112,11 @@ export BETTER_AUTH_RATE_LIMIT_SCHEMA="$schema_dir/rate_limit_schema.rs"
 export BETTER_AUTH_ACCOUNT_VERIFICATION_SCHEMA="$schema_dir/account_verification_schema.rs"
 "$consumer_cli" generate --schema-config compat-tests/schema-consumer/user-session-fields-schema.json --output "$schema_dir/user_session_fields_schema.rs"
 export BETTER_AUTH_USER_SESSION_FIELDS_SCHEMA="$schema_dir/user_session_fields_schema.rs"
+for backend in sqlite postgres mysql; do
+  schema="$schema_dir/shared_declarations_${backend}.rs"
+  "$consumer_cli" generate --plugins organization --rate-limit-database --database "$backend" --schema-config compat-tests/schema-consumer/shared-declarations-schema.json --output "$schema"
+  export "BETTER_AUTH_SHARED_DECLARATIONS_${backend^^}_SCHEMA=$schema"
+done
 python3 - "$schema_dir" <<'PY'
 import json
 import pathlib

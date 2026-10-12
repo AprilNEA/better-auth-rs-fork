@@ -116,7 +116,11 @@ fn forbidden_user() -> AuthError {
 pub(super) fn verification_error(error: AuthError, registration: bool) -> AuthError {
     if !error.is_api_error_instance(ApiErrorClass::BetterAuth) {
         if let Err(error) = better_auth_core::observability::logger::current().error(
-            "Passkey verification failed",
+            if registration {
+                "Failed to verify registration"
+            } else {
+                "Failed to verify authentication"
+            },
             &[better_auth_core::observability::LogArgument::Error(&error)],
         ) {
             return error;

@@ -297,7 +297,7 @@ async fn selection_filters_native_algorithm_before_dates_and_defers_single_row_c
         .jwks(&EndpointContext::native(None, None, FieldValue::Null, &ctx))
         .await;
     assert!(
-        matches!(discovery, Err(AuthError::Internal(message)) if message == "key.expiresAt.getTime is not a function")
+        matches!(discovery, Err(AuthError::TypeError(message)) if message == "key.expiresAt.getTime is not a function")
     );
     let mut second = selected.clone();
     second.created_at = better_auth_core::FieldDate::from(Utc::now()).into();
@@ -388,3 +388,6 @@ async fn cookie_verification_uses_header_algorithm_only_when_configuration_and_r
 
 #[path = "native_json_tests.rs"]
 mod json_tests;
+
+#[path = "native_date_tests.rs"]
+mod date_tests;

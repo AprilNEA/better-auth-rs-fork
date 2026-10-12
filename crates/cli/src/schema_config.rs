@@ -19,6 +19,8 @@ mod plugin_display_field_tests;
 #[cfg(test)]
 mod plugin_record_policy_tests;
 #[cfg(test)]
+mod shared_declaration_tests;
+#[cfg(test)]
 mod two_factor_policy_tests;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, clap::ValueEnum)]
@@ -88,7 +90,7 @@ pub(crate) struct SchemaOptions {
     pub two_factor_legacy_schema: bool,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ModelConfig {
     pub model_name: Option<String>,
@@ -225,7 +227,7 @@ pub(crate) struct Field {
 
 impl SchemaConfig {
     pub(crate) fn validate(&self) -> Result<(), String> {
-        for (name, model) in &self.0 {
+        for name in self.0.keys() {
             if !matches!(
                 name.as_str(),
                 "user"
@@ -247,27 +249,6 @@ impl SchemaConfig {
                     | "organizationRole"
             ) {
                 return Err(format!("unknown schema model `{name}`"));
-            }
-            if !matches!(
-                name.as_str(),
-                "user"
-                    | "session"
-                    | "account"
-                    | "verification"
-                    | "apikey"
-                    | "deviceCode"
-                    | "passkey"
-                    | "jwks"
-                    | "walletAddress"
-                    | "twoFactor"
-                    | "organization"
-                    | "member"
-                    | "invitation"
-                    | "team"
-                    | "organizationRole"
-            ) && !model.additional_fields.is_empty()
-            {
-                return Err(format!("`{name}` does not support additionalFields"));
             }
         }
         Ok(())
@@ -629,27 +610,13 @@ impl Entity {
     }
 
     pub(crate) fn column(&self, registry_column: &str) -> Option<&str> {
-        if self.role.is_some_and(native_policy_role) {
-            self.registry_columns
-                .get(registry_column)
-                .map(String::as_str)
-        } else {
-            self.fields
-                .iter()
-                .find(|field| field.registry_column == Some(registry_column))
-                .map(|field| field.column.as_str())
-        }
+        self.registry_columns
+            .get(registry_column)
+            .map(String::as_str)
     }
 
     pub(crate) fn logical_column(&self, name: &str) -> Option<&str> {
-        if self.role.is_some_and(native_policy_role) {
-            self.logical_columns.get(name).map(String::as_str)
-        } else {
-            self.fields
-                .iter()
-                .find(|field| field.logical_name == name)
-                .map(|field| field.column.as_str())
-        }
+        self.logical_columns.get(name).map(String::as_str)
     }
 
     pub(crate) fn catalog_field(&self, column: &str) -> Option<&'static FieldDef> {
@@ -694,11 +661,7 @@ impl Field {
         if definition.is_primary_key {
             return Ok(());
         }
-        let kind = if role.is_some_and(native_policy_role) {
-            config.storage_type(database)?
-        } else {
-            config.rust_type()?
-        };
+        let kind = config.storage_type(database)?;
         let kind = if config.required != Some(false) && role != Some(EntityRole::OrganizationRole) {
             kind.to_owned()
         } else {
@@ -706,15 +669,8 @@ impl Field {
         };
         self.ty = syn::parse_str(&kind)
             .map_err(|error| format!("invalid built-in field type: {error}"))?;
-        self.column = resolve_field_name(
-            config.field_name.as_deref(),
-            if role.is_some_and(native_policy_role) {
-                &self.logical_name
-            } else {
-                definition.column_name.unwrap_or(definition.name)
-            },
-        )
-        .to_owned();
+        self.column =
+            resolve_field_name(config.field_name.as_deref(), &self.logical_name).to_owned();
         self.serialized = Some(self.column.clone());
         self.unique = Some(config.unique);
         self.attributes = Some(config.clone());

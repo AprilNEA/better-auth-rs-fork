@@ -638,22 +638,24 @@ impl<S: AuthSchema> PasskeyStore for SecondaryStore<S> {
     ) -> AuthResult<Vec<Passkey>> {
         self.inner.list_passkeys_by_user_value(user_id).await
     }
-    async fn update_passkey_authentication(
+    async fn update_passkey_authentication_optional(
         &self,
         id: &crate::SchemaValue<String>,
         update: UpdatePasskeyAuthentication,
-    ) -> AuthResult<Passkey> {
-        self.inner.update_passkey_authentication(id, update).await
+    ) -> AuthResult<Option<Passkey>> {
+        self.inner
+            .update_passkey_authentication_optional(id, update)
+            .await
     }
     async fn update_passkey_name(&self, id: &str, name: &str) -> AuthResult<Passkey> {
         self.inner.update_passkey_name(id, name).await
     }
-    async fn update_passkey(
+    async fn update_passkey_optional(
         &self,
         id: &crate::SchemaValue<String>,
         update: crate::UpdatePasskey,
-    ) -> AuthResult<Passkey> {
-        self.inner.update_passkey(id, update).await
+    ) -> AuthResult<Option<Passkey>> {
+        self.inner.update_passkey_optional(id, update).await
     }
     async fn delete_passkey(&self, id: &str) -> AuthResult<()> {
         self.inner.delete_passkey(id).await

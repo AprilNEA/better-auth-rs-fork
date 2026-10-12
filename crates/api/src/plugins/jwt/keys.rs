@@ -48,11 +48,18 @@ pub(super) fn latest(
             return std::cmp::Ordering::Equal;
         }
         let compare = || -> AuthResult<_> {
-            let right = date_millis(&right.created_at.field_value(), "b.createdAt")?;
-            let left = date_millis(&left.created_at.field_value(), "a.createdAt")?;
-            Ok((right - left)
-                .partial_cmp(&0.0)
-                .unwrap_or(std::cmp::Ordering::Equal))
+            let right = right
+                .created_at
+                .field_value()
+                .get_time_method("b.createdAt")?;
+            let left = left
+                .created_at
+                .field_value()
+                .get_time_method("a.createdAt")?;
+            Ok((better_auth_core::query::field_number(&right)?
+                - better_auth_core::query::field_number(&left)?)
+            .partial_cmp(&0.0)
+            .unwrap_or(std::cmp::Ordering::Equal))
         };
         match compare() {
             Ok(order) => order,
@@ -66,21 +73,6 @@ pub(super) fn latest(
         return Err(error);
     }
     Ok(candidates.into_iter().next())
-}
-
-pub(super) fn date_millis(value: &FieldValue, expression: &str) -> AuthResult<f64> {
-    value
-        .as_date()
-        .map(|value| value.milliseconds())
-        .ok_or_else(|| {
-            AuthError::internal(if value.is_null() {
-                "Cannot read properties of null (reading 'getTime')".into()
-            } else if value.is_undefined() {
-                "Cannot read properties of undefined (reading 'getTime')".into()
-            } else {
-                format!("{expression}.getTime is not a function")
-            })
-        })
 }
 
 pub(super) fn spread(fields: &mut FieldMap, value: FieldValue) -> AuthResult<()> {

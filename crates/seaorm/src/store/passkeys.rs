@@ -140,11 +140,11 @@ where
         self.project_passkey_models(models).await
     }
 
-    async fn update_passkey_authentication(
+    async fn update_passkey_authentication_optional(
         &self,
         id: &better_auth_core::SchemaValue<String>,
         update: UpdatePasskeyAuthentication,
-    ) -> AuthResult<Passkey> {
+    ) -> AuthResult<Option<Passkey>> {
         let (counter, mut fields) = match (P::Passkey::passkey_storage(), update) {
             (PasskeyStorage::Native, UpdatePasskeyAuthentication::Native { counter }) => {
                 (counter, FieldMap::new())
@@ -174,29 +174,26 @@ where
         let _ = fields.insert("counter".into(), counter.into_field());
         let selector = self.bind_plugin_query_field(EntityRole::Passkey, "id", id.field_value())?;
         let patch = self.prepare_passkey_fields(fields, false).await?;
-        let model = self
-            .update_passkey_patch(selector, patch)
+        let model = self.update_passkey_patch(selector, patch).await?;
+        Ok(self
+            .project_passkey_models(model.into_iter().collect())
             .await?
-            .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
-        Ok(self.project_passkey_models(vec![model]).await?.remove(0))
+            .pop())
     }
-    async fn update_passkey(
+    async fn update_passkey_optional(
         &self,
         id: &better_auth_core::SchemaValue<String>,
         update: UpdatePasskey,
-    ) -> AuthResult<Passkey> {
+    ) -> AuthResult<Option<Passkey>> {
         let selector = self.bind_plugin_query_field(EntityRole::Passkey, "id", id.field_value())?;
         let patch = self
             .prepare_passkey_fields(update.into_adapter_fields()?, false)
             .await?;
-        let row = self
-            .update_passkey_patch(selector, patch)
+        let row = self.update_passkey_patch(selector, patch).await?;
+        Ok(self
+            .project_passkey_models(row.into_iter().collect())
             .await?
-            .ok_or_else(|| AuthError::not_found("Passkey not found"))?;
-        self.project_passkey_models(vec![row])
-            .await?
-            .pop()
-            .ok_or_else(|| AuthError::internal("Passkey creation returned no record"))
+            .pop())
     }
     async fn delete_passkey(&self, id: &str) -> AuthResult<()> {
         self.delete_plugin_record::<P::Passkey>(

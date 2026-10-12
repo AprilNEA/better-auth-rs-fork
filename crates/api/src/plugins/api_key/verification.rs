@@ -1,4 +1,3 @@
-use better_auth_core::entity::AuthUser;
 use better_auth_core::store::ConsumeApiKeyResult;
 use better_auth_core::wire::{ApiKeyView, SessionView};
 use better_auth_core::{
@@ -522,7 +521,7 @@ impl ApiKeyPlugin {
                     visible_fields: None,
                     id: view.id,
                     token: key.to_owned().into(),
-                    user_id: user.id().into_owned(),
+                    user_id: view.reference_id,
                     created_at: now.into(),
                     updated_at: now.into(),
                     expires_at: better_auth_core::SchemaValue::from_field(expires_at),

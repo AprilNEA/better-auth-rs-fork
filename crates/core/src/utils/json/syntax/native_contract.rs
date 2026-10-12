@@ -2,8 +2,7 @@ use crate::{AuthError, AuthResult, FieldValue, Utf16String};
 use serde::Deserialize;
 use serde_json::{Value as Json, json, value::RawValue};
 
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
+use crate::native_test_observation as observation;
 
 #[derive(Deserialize)]
 struct Fixture<'a> {

@@ -10,8 +10,7 @@ use serde_json::{Value as Json, json};
 
 #[path = "native_contract/inputs.rs"]
 mod inputs;
-#[path = "../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
+use crate::native_test_observation as observation;
 #[path = "native_contract/properties.rs"]
 mod properties;
 

@@ -10,8 +10,12 @@ use better_auth_core::{
     AuthError, FieldDate, FieldFunction, FieldObject, FieldValue,
     background::{BackgroundTask, BackgroundTasks},
     id::{IdGeneration, IdGenerator},
-    store::{EphemeralStore, StatelessSchema, schema::EntityRole},
-    user_fields::UserFieldFactory,
+    store::{
+        EphemeralStore, StatelessSchema,
+        database_hooks::{DatabaseHookContext, DatabaseHookControl, DatabaseHooks},
+        schema::EntityRole,
+    },
+    types::CreateVerification,
 };
 use serde_json::{Value as Json, json};
 use std::sync::{
@@ -28,6 +32,30 @@ use source::source_value;
 
 const EMAIL: &str = "override-values@example.com";
 const NOW: i64 = 2_000_000_000_000;
+
+struct VerificationClock(chrono::DateTime<chrono::Utc>);
+
+#[better_auth_core::database_hooks()]
+impl DatabaseHooks<StatelessSchema> for VerificationClock {
+    async fn before_create_verification(
+        &self,
+        input: &mut CreateVerification,
+        _: &DatabaseHookContext<'_, StatelessSchema>,
+    ) -> AuthResult<DatabaseHookControl> {
+        let _ = input.created_at.typed()?;
+        let _ = input.updated_at.typed()?;
+        assert!(
+            !input
+                .created_at
+                .field_value()
+                .strict_equals(&input.updated_at.field_value())
+        );
+        // The source freezes global Date; this hook freezes the Store clock before field policies.
+        input.created_at = FieldDate::from(self.0).into();
+        input.updated_at = FieldDate::from(self.0).into();
+        Ok(DatabaseHookControl::Continue)
+    }
+}
 
 fn lock<T>(value: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
     value
@@ -157,20 +185,6 @@ async fn run(case: &Json) -> AuthResult<()> {
                 ids.fetch_add(1, Ordering::SeqCst) + 1
             )))
         })));
-    // Adapter factories own their clock separately from AuthContext. Freeze each existing declaration's default without replacing the declaration.
-    let declarations = config.verification.field_schema();
-    for name in ["createdAt", "updatedAt"] {
-        let mut field = declarations.fields().get(name).cloned().ok_or_else(|| {
-            AuthError::internal("Native verification timestamp declaration missing")
-        })?;
-        field.default_value_fn = Some(UserFieldFactory::new(move || {
-            Ok(FieldDate::from(now).into())
-        }));
-        let _ = config
-            .verification
-            .additional_fields
-            .insert(name.into(), field);
-    }
     config.logger = FieldObject::from(FieldMap::from([
         ("level".into(), "error".into()),
         (
@@ -210,15 +224,18 @@ async fn run(case: &Json) -> AuthResult<()> {
         ("updatedAt".into(), FieldDate::from(now).into()),
         ("id".into(), "owner".into()),
     ]);
-    let store = Arc::new(EphemeralStore::from_storage(
-        config.clone(),
-        [
-            ("user".into(), vec![user]),
-            ("session".into(), vec![]),
-            ("account".into(), vec![]),
-            ("verification".into(), vec![]),
-        ],
-    )?);
+    let store = Arc::new(
+        EphemeralStore::from_storage(
+            config.clone(),
+            [
+                ("user".into(), vec![user]),
+                ("session".into(), vec![]),
+                ("account".into(), vec![]),
+                ("verification".into(), vec![]),
+            ],
+        )?
+        .with_hooks(vec![Arc::new(VerificationClock(now))]),
+    );
     let plugin = EmailOtpPlugin::new().override_default_email_verification(true).callbacks(
         EmailOtpCallbacks::<StatelessSchema>::default().generate(|_, _, _| Ok(Some("123456".into())))
             .send({ let state=state.clone(); let delivery=delivery.clone(); move |message, endpoint| {

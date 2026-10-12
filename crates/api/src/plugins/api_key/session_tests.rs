@@ -4,6 +4,9 @@
 )]
 use super::*;
 
+#[path = "session_tests/reference.rs"]
+mod reference;
+
 // =======================================================================
 // Comprehensive integration tests (9 scenarios from the test plan)
 // =======================================================================

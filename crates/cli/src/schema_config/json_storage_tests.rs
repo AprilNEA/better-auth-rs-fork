@@ -57,7 +57,7 @@ pub(super) fn reference_policy(field: &syn::Field) -> syn::Result<Option<bool>> 
     clippy::indexing_slicing,
     reason = "Fixture and generated-model structure is a test precondition; absence must fail the test."
 )]
-fn sqlite_json_storage_changes_only_fresh_nonreference_application_fields() {
+fn sqlite_json_storage_applies_to_native_and_additional_nonreference_fields() {
     let config: SchemaConfig = serde_json::from_value(json!({
         "organization": { "additionalFields": {
             "requiredSettings": { "type": "json", "required": true },
@@ -123,7 +123,7 @@ fn sqlite_json_storage_changes_only_fresh_nonreference_application_fields() {
                 .ty
                 .to_token_stream()
                 .to_string(),
-            syn::parse_str::<syn::Type>("Option<Json>")
+            syn::parse_str::<syn::Type>(&format!("Option<{json_type}>"))
                 .expect("native JSON override type")
                 .to_token_stream()
                 .to_string()

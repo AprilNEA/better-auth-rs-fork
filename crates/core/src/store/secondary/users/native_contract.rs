@@ -15,8 +15,7 @@ use crate::{AuthConfig, FieldArray, FieldFunction, FieldObject, FromFieldMap};
 use serde_json::{Value as Json, json};
 use std::sync::{Arc, Mutex};
 
-#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
-mod observation;
+use crate::native_test_observation as observation;
 mod storage;
 mod undefined_writes;
 mod values;

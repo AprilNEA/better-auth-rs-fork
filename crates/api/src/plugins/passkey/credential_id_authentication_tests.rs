@@ -176,7 +176,11 @@ async fn authentication_preserves_projected_credential_ids_without_changing_sign
                     assert_eq!(info.get("credentialID"), Some(&projected));
                 }
             } else {
-                assert_error(response, "AUTHENTICATION_FAILED")?;
+                assert_eq!(response.status, 401);
+                assert_eq!(
+                    serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+                    json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
+                );
                 assert_eq!(*trace.sessions.events.lock().unwrap(), ["counter:0"]);
                 assert!(trace.sessions.owners.lock().unwrap().is_empty());
                 assert!(trace.verifications.lock().unwrap().is_empty());

@@ -4,7 +4,7 @@
 #[path = "json_tests.rs"]
 mod tests;
 
-use super::{ContainerIdentity, FieldDate, FieldMap, FieldObject, FieldValue, PrimitiveHint};
+use super::{ContainerIdentity, FieldMap, FieldObject, FieldValue, PrimitiveHint};
 use crate::{AuthError, AuthResult};
 use serde::{Serialize, ser::SerializeMap};
 use std::{
@@ -73,7 +73,7 @@ impl JsonState {
                     Some(FieldValue::Function(method)) => method.call_with(value, &[key.into()])?,
                     Some(_) => value.clone(),
                     None if matches!(self.preparation, Preparation::Json) => {
-                        default_date_json(date, value)?
+                        default_date_json(value)?
                     }
                     None => date
                         .iso_string()?
@@ -100,22 +100,12 @@ impl JsonState {
     }
 }
 
-fn default_date_json(date: &FieldDate, receiver: &FieldValue) -> AuthResult<FieldValue> {
+fn default_date_json(receiver: &FieldValue) -> AuthResult<FieldValue> {
     if matches!(receiver.primitive(PrimitiveHint::Number)?, FieldValue::Number(value) if !value.is_finite())
     {
         return Ok(FieldValue::Null);
     }
-    match date
-        .properties()
-        .get_with_receiver("toISOString", receiver)?
-    {
-        Some(FieldValue::Function(method)) => method.call_with(receiver, &[]),
-        Some(_) => Err(AuthError::type_error("toISOString is not a function")),
-        None => date
-            .iso_string()?
-            .map(FieldValue::String)
-            .ok_or_else(|| AuthError::RangeError("Invalid Date".into())),
-    }
+    receiver.to_iso_string_method("toISOString")
 }
 
 struct PreparedJson(FieldValue);

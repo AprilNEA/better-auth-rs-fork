@@ -14,6 +14,10 @@
 
 extern crate self as better_auth;
 
+#[cfg(test)]
+#[path = "../../../tests/support/secondary_native_observation.rs"]
+mod native_test_observation;
+
 mod api_key_start;
 pub use api_key_start::{ApiKeyStart, Utf16String};
 

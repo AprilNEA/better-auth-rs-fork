@@ -65,6 +65,88 @@ fn verification_catch_preserves_only_better_auth_instances() -> AuthResult<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn verification_catch_retains_original_error_and_logger_failure() -> AuthResult<()> {
+    use better_auth_core::{
+        FieldFunction,
+        store::{EphemeralStore, StatelessSchema},
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    for registration in [false, true] {
+        for logger_fails in [false, true] {
+            let original: FieldValue =
+                FieldMap::from([("cause".into(), "verification".into())]).into();
+            let logger_error: FieldValue =
+                FieldMap::from([("cause".into(), "logger".into())]).into();
+            let calls = Arc::new(AtomicUsize::new(0));
+            let logger: better_auth_core::FieldObject = FieldMap::from([
+                ("level".into(), "error".into()),
+                (
+                    "log".into(),
+                    FieldFunction::contextual({
+                        let original = original.clone();
+                        let logger_error = logger_error.clone();
+                        let calls = calls.clone();
+                        move |_, arguments| {
+                            assert_eq!(arguments.len(), 3);
+                            assert!(
+                                arguments
+                                    .first()
+                                    .is_some_and(|value| value.strict_equals(&"error".into()))
+                            );
+                            assert!(arguments.get(1).is_some_and(|value| value.strict_equals(
+                                &if registration {
+                                    "Failed to verify registration".into()
+                                } else {
+                                    "Failed to verify authentication".into()
+                                }
+                            )));
+                            assert!(
+                                arguments
+                                    .get(2)
+                                    .is_some_and(|value| value.strict_equals(&original))
+                            );
+                            calls.fetch_add(1, Ordering::SeqCst);
+                            if logger_fails {
+                                Err(AuthError::from_thrown(logger_error.clone()))
+                            } else {
+                                Ok(FieldValue::Undefined)
+                            }
+                        }
+                    })
+                    .into(),
+                ),
+            ])
+            .into();
+            let mut config = test_helpers::create_test_config();
+            config.logger = logger.into();
+            let config = Arc::new(config);
+            let ctx: AuthContext<StatelessSchema> =
+                AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)))?;
+            let error = ctx
+                .with_native_context(Default::default(), |_| async move {
+                    Ok(super::registration::verification_error(
+                        AuthError::from_thrown(original),
+                        registration,
+                    ))
+                })
+                .await?;
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+            if logger_fails {
+                assert!(
+                    error
+                        .raw_value()
+                        .is_some_and(|value| value.strict_equals(&logger_error))
+                );
+            } else {
+                assert_eq!(error.status_code()?, if registration { 500 } else { 400 });
+            }
+        }
+    }
+    Ok(())
+}
+
 fn passkey_plugin() -> PasskeyPlugin {
     PasskeyPlugin::new()
         .rp_id("localhost")

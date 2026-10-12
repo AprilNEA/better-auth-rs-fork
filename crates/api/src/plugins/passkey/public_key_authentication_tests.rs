@@ -107,9 +107,14 @@ async fn native_public_key_decoding_matches_upstream_without_relaxing_signature_
         )
         .await?;
         let response = authenticate(&fixture, &authenticator, owner.id.typed()?).await?;
-        assert_eq!(response.status, if allowed { 200 } else { 400 }, "{name}");
         if allowed {
             assert_login(response, owner.id.typed()?)?;
+        } else if name == "wrong signing key" {
+            assert_eq!(response.status, 401);
+            assert_eq!(
+                serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+                json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
+            );
         } else {
             assert_error(response, "AUTHENTICATION_FAILED")?;
         }

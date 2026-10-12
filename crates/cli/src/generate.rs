@@ -73,6 +73,14 @@ pub(crate) fn generate_schema(
             None => entity.fields,
         };
         let configured = config.0.get(&model_name(entity.mod_name));
+        // Database rate limiting replaces plugin field declarations after schema collection.
+        let rate_limit = configured
+            .filter(|_| rate_limit_database && entity.role == Some(EntityRole::RateLimit))
+            .map(|model| crate::schema_config::ModelConfig {
+                additional_fields: Default::default(),
+                ..model.clone()
+            });
+        let configured = rate_limit.as_ref().or(configured);
         let mut entity = Entity::resolve(entity, fields, configured, database, options)?;
         entity.resolve_ids(generation, database)?;
         definitions.push(entity);

@@ -58,6 +58,8 @@ use reference::{cache_key, modify_reference};
 mod batch_tests;
 #[cfg(test)]
 mod cache_metadata_tests;
+#[cfg(test)]
+mod date_methods_tests;
 
 /// Persistence used by an API Key configuration.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -128,19 +130,13 @@ fn serialize(key: &ApiKey) -> AuthResult<FieldValue> {
         let value = fields.get(name).cloned().unwrap_or_default();
         let value = if optional && (value.is_null() || value.is_undefined()) {
             FieldValue::Null
-        } else if let FieldValue::Date(date) = &value {
-            if !date.milliseconds().is_finite() {
-                return Err(AuthError::internal("Invalid time value"));
-            }
-            value
-                .json()?
-                .map(FieldValue::from_json)
-                .transpose()?
-                .unwrap_or_default()
         } else {
-            return Err(AuthError::internal(format!(
-                "{name}.toISOString is not a function"
-            )));
+            let result = value.to_iso_string_method(&format!("apiKey.{name}.toISOString"))?;
+            if optional && (result.is_null() || result.is_undefined()) {
+                FieldValue::Null
+            } else {
+                result
+            }
         };
         let _ = fields.insert(name.into(), value);
     }
@@ -217,8 +213,8 @@ async fn put_in_batch(
     fallback: bool,
     batch: &StorageBatch<'_>,
 ) -> Option<()> {
-    let value = batch.observe(serialize(key))?;
     let ttl = batch.observe(ttl(key))?;
+    let value = batch.observe(serialize(key))?;
     let hashed = batch.observe(cache_key("api-key:", &key.key_hash.field_value()))?;
     let id = batch.observe(cache_key("api-key:by-id:", &key.id.field_value()))?;
     let reference = batch.observe(cache_key(
@@ -346,10 +342,9 @@ pub(super) async fn create(
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     mut fields: FieldMap,
 ) -> AuthResult<Option<ApiKey>> {
-    let created_at = now();
     fields.extend([
-        ("createdAt".into(), created_at.clone().into()),
-        ("updatedAt".into(), created_at.into()),
+        ("createdAt".into(), now().into()),
+        ("updatedAt".into(), now().into()),
         ("lastRefillAt".into(), FieldValue::Null),
         ("lastRequest".into(), FieldValue::Null),
     ]);

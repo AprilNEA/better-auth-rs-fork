@@ -201,6 +201,21 @@ impl FieldValue {
         }
     }
 
+    /// Invoke `toISOString()` without calling `toJSON` or narrowing a custom method's result.
+    /// `expression` names the method in a non-callable error, such as `key.createdAt.toISOString`.
+    pub fn to_iso_string_method(&self, expression: &str) -> AuthResult<Self> {
+        match (self, self.method_property("toISOString")?) {
+            (_, Some(Self::Function(method))) => method.call_with(self, &[]),
+            (Self::Date(date), None) => date
+                .iso_string()?
+                .map(Self::String)
+                .ok_or_else(|| AuthError::RangeError("Invalid Date".into())),
+            _ => Err(AuthError::type_error(format!(
+                "{expression} is not a function"
+            ))),
+        }
+    }
+
     pub(super) fn method_property(&self, name: &str) -> AuthResult<Option<Self>> {
         if self.is_null() || self.is_undefined() {
             return self.model_property(name).map(Some);

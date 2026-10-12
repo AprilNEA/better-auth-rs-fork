@@ -2031,13 +2031,33 @@ pub trait PasskeyStore: Send + Sync {
         &self,
         id: &crate::SchemaValue<String>,
         update: UpdatePasskeyAuthentication,
-    ) -> AuthResult<Passkey>;
+    ) -> AuthResult<Passkey> {
+        self.update_passkey_authentication_optional(id, update)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Passkey not found"))
+    }
+    /// Retain an absent authentication update until the caller's business boundary.
+    async fn update_passkey_authentication_optional(
+        &self,
+        id: &crate::SchemaValue<String>,
+        update: UpdatePasskeyAuthentication,
+    ) -> AuthResult<Option<Passkey>>;
     /// Apply display fields and the optional counter in one adapter write.
     async fn update_passkey(
         &self,
         id: &crate::SchemaValue<String>,
         update: UpdatePasskey,
-    ) -> AuthResult<Passkey>;
+    ) -> AuthResult<Passkey> {
+        self.update_passkey_optional(id, update)
+            .await?
+            .ok_or_else(|| AuthError::not_found("Passkey not found"))
+    }
+    /// Apply the same patch while preserving the adapter's nullable result.
+    async fn update_passkey_optional(
+        &self,
+        id: &crate::SchemaValue<String>,
+        update: UpdatePasskey,
+    ) -> AuthResult<Option<Passkey>>;
     /// Update a string name through the shared passkey field policies.
     async fn update_passkey_name(&self, id: &str, name: &str) -> AuthResult<Passkey> {
         self.update_passkey(

@@ -613,6 +613,12 @@ run_stage() {
       cargo fmt --all -- --check
       local cache_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/api-key-date-methods-capture.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-date-identity.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-session-reference.test.ts \
+        ./compat-tests/reference-server/contracts/jwk-native-date-methods.test.ts \
+        ./compat-tests/reference-server/contracts/passkey-update-boundary.test.ts \
+        ./compat-tests/reference-server/contracts/passkey-projected-id.test.ts \
         ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
         ./compat-tests/reference-server/contracts/api-key-usage-success-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-delete-expired.test.ts \
@@ -631,11 +637,14 @@ run_stage() {
         ./compat-tests/reference-server/contracts/verification-otp-consumer-native-capture.test.ts \
         ./compat-tests/reference-server/contracts/verification-auth-consumer-native-capture.test.ts || cache_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --features better-auth-core/redis-cache --lib -- -D warnings || cache_status=1
+      cargo clippy --locked -p better-auth-seaorm -p better-auth-cli -- -D warnings || cache_status=1
+      cargo test --locked -p better-auth-cli schema_config || cache_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache --test api_key_delete_expired_tests -- -D warnings || cache_status=1
       cargo test --locked -p better-auth-core --features redis-cache --lib -- \
-        request_runtime::concurrent:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: wire::api_key_view::tests:: || cache_status=1
+        request_runtime::concurrent:: plugin::tests::auth_context_clock_survives_clone_and_native_dispatch utils::json::runtime:: utils::json::syntax:: field_value:: schema_value:: store::cache:: store::secondary:: store::ephemeral::api_keys:: passkey wire::api_key_view::tests:: || cache_status=1
       cargo test --locked -p better-auth-api --lib -- \
-        plugins::api_key:: plugins::jwt:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: || cache_status=1
+        plugins::api_key:: plugins::jwt:: plugins::passkey:: plugins::oauth:: plugins::email_otp:: plugins::phone_number:: plugins::two_factor:: plugins::password_management:: || cache_status=1
+      cargo test --locked -p better-auth-seaorm --lib -- store::plugin_record_tests:: store::plugin_rows::legacy_private_tests:: || cache_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test secondary_storage_hooks_tests --test session_initial_defaults_tests \
         --test api_key_delete_expired_tests || cache_status=1
@@ -700,7 +709,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts || logger_status=1
-      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --features axum --tests -- -D warnings || logger_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --features axum --lib -- -D warnings || logger_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test http_api_error_logging_tests --test observability_tests \
         --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \
@@ -1164,13 +1173,15 @@ run_stage() {
     passkey)
       cargo fmt --all -- --check
       cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings
-      cargo test --locked -p better-auth-core -p better-auth-api --lib passkey
+      cargo test --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib passkey
       cargo test --locked --features axum,seaorm2,redis-cache --test plugin_model_fields_tests --test plugin_list_limits_tests --test compat_passkey_tests --test passkey_additional_fields_tests --test two_factor_additional_fields_tests
       bun --no-install test \
         ./compat-tests/reference-server/contracts/passkey-aaguid-fields.test.ts \
         ./compat-tests/reference-server/contracts/passkey-live-fields.test.ts \
         ./compat-tests/reference-server/contracts/passkey-display-mapping.test.ts \
-        ./compat-tests/reference-server/contracts/passkey-fields.test.ts
+        ./compat-tests/reference-server/contracts/passkey-fields.test.ts \
+        ./compat-tests/reference-server/contracts/passkey-projected-id.test.ts \
+        ./compat-tests/reference-server/contracts/passkey-update-boundary.test.ts
       COMPAT_TEST_PROFILE=native-passkey cargo test --locked --test client_compat_tests -- \
         --ignored --nocapture --exact --test-threads=1 phase8_client_compat configuration_client_compat
       ;;

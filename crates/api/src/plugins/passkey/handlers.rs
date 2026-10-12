@@ -289,18 +289,12 @@ pub(super) async fn verify_authentication_core(
     };
 
     async {
-        let stored_passkey = match WebAuthnCredential::from_record(
+        let stored_passkey = WebAuthnCredential::from_record(
             &passkey,
             ctx.database.passkey_storage(),
             &credential_id,
-        ) {
-            Ok(passkey) => passkey,
-            Err(_) => return passkey_authentication_failure(),
-        };
-        let webauthn = match build_webauthn(config, &ctx.config, &origin) {
-            Ok(webauthn) => webauthn,
-            Err(_) => return passkey_authentication_failure(),
-        };
+        )?;
+        let webauthn = build_webauthn(config, &ctx.config, &origin)?;
 
         let mut state = match stored_state {
             StoredAuthenticationState::Passkey { state }
@@ -316,24 +310,31 @@ pub(super) async fn verify_authentication_core(
             .ast
             .set_allowed_credentials(vec![verification_credential]);
         let authentication_result = webauthn.authenticate_credential(&authentication, &state.ast);
+        if matches!(
+            authentication_result,
+            Ok(_)
+                | Err(webauthn_rs_core::error::WebauthnError::AuthenticationFailure)
+                | Err(webauthn_rs_core::error::WebauthnError::CredentialPossibleCompromise)
+        ) {
+            // The engine verifies signatures before counters; the upstream consumer reports counter errors first.
+            let data = webauthn_rs_core::internals::AuthenticatorData::<
+                webauthn_rs_core::proto::Authentication,
+            >::try_from(authentication.response.authenticator_data.as_ref())
+            .map_err(|error| AuthError::internal(error.to_string()))?;
+            validate_counter(data.counter, &passkey.counter().field_value())?;
+        }
         let authentication_result = match authentication_result {
             Ok(result) => result,
-            Err(_) => return passkey_authentication_failure(),
+            Err(webauthn_rs_core::error::WebauthnError::AuthenticationFailure) => {
+                return response_message(401, "Authentication failed");
+            }
+            Err(error) => return Err(AuthError::internal(error.to_string())),
         };
 
         if authentication_result.cred_id() != &stored_passkey.cred.cred_id {
             return passkey_authentication_failure();
         }
-        // Another challenge can advance the counter after this challenge captures its credentials.
         let counter = u64::from(authentication_result.counter());
-        let stored_counter =
-            match better_auth_core::query::field_number(&passkey.counter().field_value()) {
-                Ok(counter) => counter,
-                Err(_) => return passkey_authentication_failure(),
-            };
-        if (counter > 0 || stored_counter > 0.0) && counter as f64 <= stored_counter {
-            return passkey_authentication_failure();
-        }
         if let Some(hook) = &config.authentication.after_verification {
             let verification = super::PasskeyAuthenticationVerification {
                 verified: true,
@@ -368,13 +369,10 @@ pub(super) async fn verify_authentication_core(
             )
             .await?;
         }
-        let update = match stored_passkey.authentication_update(authentication_result.counter()) {
-            Ok(update) => update,
-            Err(_) => return passkey_authentication_failure(),
-        };
+        let update = stored_passkey.authentication_update(authentication_result.counter())?;
         let _updated_passkey = ctx
             .database
-            .update_passkey_authentication(&passkey.id().into_owned(), update)
+            .update_passkey_authentication_optional(&passkey.id().into_owned(), update)
             .await?;
 
         let user_id = passkey.user_id().into_owned();
@@ -417,6 +415,26 @@ pub(super) async fn verify_authentication_core(
     .map_err(|error| super::registration::verification_error(error, false))
 }
 
+fn validate_counter(counter: u32, stored: &FieldValue) -> AuthResult<()> {
+    use std::cmp::Ordering;
+
+    let counter = FieldValue::Number(f64::from(counter));
+    if (counter.is_truthy()
+        || better_auth_core::query::field_compare(stored, &0.0.into())? == Some(Ordering::Greater))
+        && matches!(
+            better_auth_core::query::field_compare(&counter, stored)?,
+            Some(Ordering::Less | Ordering::Equal)
+        )
+    {
+        return Err(AuthError::internal(format!(
+            "Response counter value {} was lower than expected {}",
+            counter.display_string()?,
+            stored.display_string()?
+        )));
+    }
+    Ok(())
+}
+
 pub(super) async fn list_user_passkeys_core(
     user_id: &FieldValue,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
@@ -455,8 +473,21 @@ pub(super) async fn update_passkey_core(
 
     let updated = ctx
         .database
-        .update_passkey_name(&body.id, &body.name)
-        .await?;
+        .update_passkey_optional(
+            &body.id.to_owned().into(),
+            better_auth_core::UpdatePasskey {
+                name: Some(body.name.clone()).into(),
+                ..Default::default()
+            },
+        )
+        .await?
+        .ok_or_else(|| {
+            AuthError::from_code(
+                "INTERNAL_SERVER_ERROR",
+                "FAILED_TO_UPDATE_PASSKEY",
+                "Failed to update passkey",
+            )
+        })?;
 
     Ok(PasskeyResponse {
         passkey: PasskeyView::from(&updated),

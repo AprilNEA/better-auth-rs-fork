@@ -160,11 +160,11 @@ impl PasskeyStore for EphemeralStore {
         self.project_passkey_refs(selected).await
     }
 
-    async fn update_passkey_authentication(
+    async fn update_passkey_authentication_optional(
         &self,
         id: &SchemaValue<String>,
         update: UpdatePasskeyAuthentication,
-    ) -> AuthResult<Passkey> {
+    ) -> AuthResult<Option<Passkey>> {
         let mut fields = FieldMap::new();
         let updated_at = match update {
             UpdatePasskeyAuthentication::Native { counter } => {
@@ -190,26 +190,26 @@ impl PasskeyStore for EphemeralStore {
         let selected = self
             .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;
-        self.project_passkey_refs(selected.into_iter().collect())
+        Ok(self
+            .project_passkey_refs(selected.into_iter().collect())
             .await?
-            .pop()
-            .ok_or_else(|| AuthError::not_found("Passkey not found"))
+            .pop())
     }
 
-    async fn update_passkey(
+    async fn update_passkey_optional(
         &self,
         id: &SchemaValue<String>,
         update: UpdatePasskey,
-    ) -> AuthResult<Passkey> {
+    ) -> AuthResult<Option<Passkey>> {
         let fields = update.into_adapter_fields()?;
         let private = self.passkey_private_fields(&fields, Some(Utc::now().into()))?;
         let selected = self
             .update_plugin_ref(EntityRole::Passkey, id, fields, private)
             .await?;
-        self.project_passkey_refs(selected.into_iter().collect())
+        Ok(self
+            .project_passkey_refs(selected.into_iter().collect())
             .await?
-            .pop()
-            .ok_or_else(|| AuthError::not_found("Passkey not found"))
+            .pop())
     }
 
     async fn delete_passkey(&self, id: &str) -> AuthResult<()> {
