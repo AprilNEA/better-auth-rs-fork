@@ -109,6 +109,27 @@ for mode in native-native-string native-native-number native-additional; do
   variable="BETTER_AUTH_SHARED_COLUMNS_${mode^^}_SCHEMA"
   export "${variable//-/_}=$schema"
 done
+python3 - "$schema_dir" <<'PY_USER_PLUGIN_CATALOG'
+import json
+from pathlib import Path
+import sys
+
+directory = Path(sys.argv[1])
+configurations = json.loads(Path("compat-tests/schema-consumer/user-plugin-catalog-config.json").read_text())
+manifest = []
+for name, case in configurations.items():
+    (directory / f"user_plugin_catalog_{name}.json").write_text(json.dumps(case["configuration"]))
+    manifest.append(f"{name}\t{','.join(case['plugins'])}\n")
+(directory / "user_plugin_catalog.tsv").write_text("".join(manifest))
+PY_USER_PLUGIN_CATALOG
+while IFS=$'\t' read -r case plugins; do
+  for backend in sqlite postgres mysql; do
+    schema="$schema_dir/user_plugin_catalog_${backend}_${case//-/_}.rs"
+    "$consumer_cli" generate --plugins "$plugins" --database "$backend" --schema-config "$schema_dir/user_plugin_catalog_${case}.json" --output "$schema"
+    variable="BETTER_AUTH_USER_PLUGIN_CATALOG_${backend^^}_${case^^}_SCHEMA"
+    export "${variable//-/_}=$schema"
+  done
+done < "$schema_dir/user_plugin_catalog.tsv"
 for backend in sqlite postgres mysql; do
   schema="$schema_dir/native_api_key_${backend}.rs"
   "$consumer_cli" generate --plugins api-key --database "$backend" --output "$schema"
@@ -499,6 +520,7 @@ server_catalog_tests=(
   ./compat-tests/reference-server/consumer-contracts/team-member-catalog.test.ts
 )
 if [[ $# -eq 0 && -n "${BETTER_AUTH_TEST_POSTGRES_URL:-}" ]]; then
+  cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml --test generated_user_plugin_catalog_postgres -- --ignored
   cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml --test 'generated_plugin_*' -- --ignored live_postgres_plugin_display_json live_postgres_api_key_usage_dates_match_complete_pinned_operations live_postgres_device_grant_and_redemption_match_upstream live_postgres_team_member_catalog_and_storage_match_upstream
   bun --no-install test "${server_catalog_tests[@]}" --test-name-pattern postgres
   cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml -- --ignored --exact tests::ids::live_postgres_generated_ids tests::server_catalog::live_postgres_user_account_catalog_matches_upstream tests::device_code_catalog::live_postgres_device_code_catalog_matches_upstream tests::wallet_catalog::live_postgres_wallet_catalog_and_storage_match_upstream tests::passkey_catalog::live_postgres_passkey_catalog_and_native_storage tests::two_factor_catalog::live_postgres_two_factor_catalog_and_native_storage tests::session_server::live_postgres_session_storage_matches_upstream tests::verification_server_catalog::live_postgres_verification_catalog_matches_upstream tests::jwk_server_catalog::live_postgres_jwk_catalog_matches_upstream tests::rate_limit_server_catalog::live_postgres_rate_limit_catalog_matches_upstream tests::rate_limit_server_catalog::live_postgres_rate_limit_counter_matches_upstream tests::member_server_catalog::live_postgres_member_catalog_matches_upstream tests::organization_role_server::live_postgres_organization_role_storage_matches_upstream tests::team_invitation_server::live_postgres_team_invitation_storage_matches_upstream
@@ -506,6 +528,7 @@ if [[ $# -eq 0 && -n "${BETTER_AUTH_TEST_POSTGRES_URL:-}" ]]; then
   cargo test --locked -p better-auth-seaorm --lib live_postgres_team_member_schema_upgrade_preserves_rows -- --ignored
 fi
 if [[ $# -eq 0 && -n "${BETTER_AUTH_TEST_MYSQL_URL:-}" ]]; then
+  cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml --test generated_user_plugin_catalog_mysql -- --ignored
   cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml --test 'generated_plugin_*' -- --ignored live_mysql_plugin_display_json live_mysql_api_key_usage_dates_match_complete_pinned_operations live_mysql_device_grant_and_redemption_match_upstream live_mysql_team_member_catalog_and_storage_match_upstream
   bun --no-install test "${server_catalog_tests[@]}" --test-name-pattern mysql
   cargo test --locked --manifest-path compat-tests/schema-consumer/Cargo.toml -- --ignored --exact tests::server_catalog::live_mysql_user_account_catalog_matches_upstream tests::device_code_catalog::live_mysql_device_code_catalog_matches_upstream tests::wallet_catalog::live_mysql_wallet_catalog_and_storage_match_upstream tests::passkey_catalog::live_mysql_passkey_catalog_and_native_storage tests::two_factor_catalog::live_mysql_two_factor_catalog_and_native_storage tests::session_server::live_mysql_session_storage_matches_upstream tests::verification_server_catalog::live_mysql_verification_catalog_matches_upstream tests::jwk_server_catalog::live_mysql_jwk_catalog_matches_upstream tests::rate_limit_server_catalog::live_mysql_rate_limit_catalog_matches_upstream tests::rate_limit_server_catalog::live_mysql_rate_limit_counter_matches_upstream tests::member_server_catalog::live_mysql_member_catalog_matches_upstream tests::organization_role_server::live_mysql_organization_role_storage_matches_upstream tests::team_invitation_server::live_mysql_team_invitation_storage_matches_upstream
