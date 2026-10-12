@@ -72,7 +72,7 @@ impl Authenticator {
         challenge: &[u8],
         transports: Option<&[&str]>,
     ) -> TestResult<RegisterPublicKeyCredential> {
-        let mut data = authenticator_data(0x45, 0);
+        let mut data = authenticator_data(0x45, 0, RP_ID);
         data.extend_from_slice(&[0; 16]);
         data.extend_from_slice(&u16::try_from(CREDENTIAL_ID.len())?.to_be_bytes());
         data.extend_from_slice(CREDENTIAL_ID);
@@ -88,7 +88,7 @@ impl Authenticator {
             "type": "public-key",
             "response": {
                 "attestationObject": URL_SAFE_NO_PAD.encode(attestation),
-                "clientDataJSON": URL_SAFE_NO_PAD.encode(client_data("webauthn.create", challenge)?)
+                "clientDataJSON": URL_SAFE_NO_PAD.encode(client_data("webauthn.create", challenge, ORIGIN)?)
             },
             "clientExtensionResults": {}
         });
@@ -104,8 +104,20 @@ impl Authenticator {
         counter: u32,
         user_handle: &[u8],
     ) -> TestResult<PublicKeyCredential> {
-        let data = authenticator_data(0x05, counter);
-        let client_data = client_data("webauthn.get", challenge)?;
+        self.authenticate_for(challenge, counter, user_handle, 0x05, ORIGIN, RP_ID)
+    }
+
+    fn authenticate_for(
+        &self,
+        challenge: &[u8],
+        counter: u32,
+        user_handle: &[u8],
+        flags: u8,
+        origin: &str,
+        rp_id: &str,
+    ) -> TestResult<PublicKeyCredential> {
+        let data = authenticator_data(flags, counter, rp_id);
+        let client_data = client_data("webauthn.get", challenge, origin)?;
         let mut signer = Signer::new(MessageDigest::sha256(), &self.key)?;
         signer.update(&data)?;
         signer.update(&sha256(&client_data))?;
@@ -124,18 +136,18 @@ impl Authenticator {
     }
 }
 
-fn authenticator_data(flags: u8, counter: u32) -> Vec<u8> {
-    let mut data = sha256(RP_ID.as_bytes()).to_vec();
+fn authenticator_data(flags: u8, counter: u32, rp_id: &str) -> Vec<u8> {
+    let mut data = sha256(rp_id.as_bytes()).to_vec();
     data.push(flags);
     data.extend_from_slice(&counter.to_be_bytes());
     data
 }
 
-fn client_data(kind: &str, challenge: &[u8]) -> TestResult<Vec<u8>> {
+fn client_data(kind: &str, challenge: &[u8], origin: &str) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
         "type": kind,
         "challenge": URL_SAFE_NO_PAD.encode(challenge),
-        "origin": ORIGIN,
+        "origin": origin,
         "crossOrigin": false
     }))?)
 }

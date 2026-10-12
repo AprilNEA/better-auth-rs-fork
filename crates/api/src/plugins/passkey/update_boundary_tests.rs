@@ -171,8 +171,7 @@ async fn nullable_updates_reach_authentication_and_rename_business_boundaries() 
 }
 
 #[tokio::test]
-async fn stale_counter_precedes_invalid_signature_without_persisting_authentication() -> TestResult
-{
+async fn counter_and_backup_flags_preserve_validation_order_without_persistence() -> TestResult {
     let path = std::env::temp_dir().join(format!(
         "better-auth-passkey-counter-{}.sqlite",
         uuid::Uuid::new_v4()
@@ -212,6 +211,7 @@ async fn stale_counter_precedes_invalid_signature_without_persisting_authenticat
                     arguments.get(1),
                     error.model_property("name")?,
                     error.model_property("message")?,
+                    error.enumerable_fields()?,
                 ]));
                 Ok(FieldValue::Undefined)
             })
@@ -275,7 +275,22 @@ async fn stale_counter_precedes_invalid_signature_without_persisting_authenticat
             Vec::new(),
         )
         .await?;
-        for signer in [&authenticator, &wrong_key] {
+        for (signer, flags, counter_valid, origin, rp_id) in [
+            (&authenticator, 0x05, false, ORIGIN, RP_ID),
+            (&wrong_key, 0x05, false, ORIGIN, RP_ID),
+            (&authenticator, 0x15, false, ORIGIN, RP_ID),
+            (&wrong_key, 0x15, false, ORIGIN, RP_ID),
+            (&authenticator, 0x15, true, ORIGIN, RP_ID),
+            (&wrong_key, 0x15, true, ORIGIN, RP_ID),
+            (
+                &authenticator,
+                0x15,
+                false,
+                "https://wrong-origin.test",
+                RP_ID,
+            ),
+            (&authenticator, 0x15, false, ORIGIN, "wrong-rp.test"),
+        ] {
             logs.lock().unwrap().clear();
             conversions.lock().unwrap().clear();
             let (pending, cookie) = options(
@@ -288,10 +303,20 @@ async fn stale_counter_precedes_invalid_signature_without_persisting_authenticat
                     ))
                     .await?,
             )?;
-            let signed = signer.authenticate(
+            let counter = if counter_valid {
+                3
+            } else if dynamic {
+                0
+            } else {
+                1
+            };
+            let signed = signer.authenticate_for(
                 &challenge(&pending)?,
-                if dynamic { 0 } else { 1 },
+                counter,
                 owner.id.typed()?.as_bytes(),
+                flags,
+                origin,
+                rp_id,
             )?;
             let input = request(
                 "/passkey/verify-authentication",
@@ -313,25 +338,54 @@ async fn stale_counter_precedes_invalid_signature_without_persisting_authenticat
                 })
             );
             assert!(!response.headers.contains_key("Set-Cookie"));
+            let (error_name, message) = if origin != ORIGIN {
+                (
+                    "Error",
+                    "The clients relying party origin does not match our servers information",
+                )
+            } else if rp_id != RP_ID {
+                (
+                    "Error",
+                    "The clients relying party id hash does not match the hash of our relying party id",
+                )
+            } else if counter_valid {
+                (
+                    "InvalidBackupFlags",
+                    "Single-device credential indicated that it was backed up, which should be impossible.",
+                )
+            } else if dynamic {
+                (
+                    "Error",
+                    "Response counter value 0 was lower than expected projected counter",
+                )
+            } else {
+                (
+                    "Error",
+                    "Response counter value 1 was lower than expected 2",
+                )
+            };
             assert_eq!(
                 *logs.lock().unwrap(),
                 [json!([
                     "error",
                     "Failed to verify authentication",
-                    "Error",
-                    if dynamic {
-                        "Response counter value 0 was lower than expected projected counter"
+                    error_name,
+                    message,
+                    if error_name == "InvalidBackupFlags" {
+                        json!({"name":"InvalidBackupFlags"})
                     } else {
-                        "Response counter value 1 was lower than expected 2"
+                        json!({})
                     },
                 ])]
             );
             assert_eq!(
                 *conversions.lock().unwrap(),
-                if dynamic {
-                    vec!["valueOf", "valueOf", "toString"]
-                } else {
+                if !dynamic || origin != ORIGIN || rp_id != RP_ID {
                     Vec::new()
+                } else if counter_valid {
+                    vec!["valueOf"]
+                } else {
+                    vec!["valueOf", "valueOf", "toString"]
                 }
             );
             assert_eq!(

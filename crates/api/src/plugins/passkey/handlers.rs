@@ -315,8 +315,9 @@ pub(super) async fn verify_authentication_core(
             Ok(_)
                 | Err(webauthn_rs_core::error::WebauthnError::AuthenticationFailure)
                 | Err(webauthn_rs_core::error::WebauthnError::CredentialPossibleCompromise)
+                | Err(webauthn_rs_core::error::WebauthnError::CredentialMayNotBeHardwareBound)
         ) {
-            // The engine verifies signatures before counters; the upstream consumer reports counter errors first.
+            // The engine checks backup flags and signatures before counters; upstream checks counters first.
             let data = webauthn_rs_core::internals::AuthenticatorData::<
                 webauthn_rs_core::proto::Authentication,
             >::try_from(authentication.response.authenticator_data.as_ref())
@@ -327,6 +328,14 @@ pub(super) async fn verify_authentication_core(
             Ok(result) => result,
             Err(webauthn_rs_core::error::WebauthnError::AuthenticationFailure) => {
                 return response_message(401, "Authentication failed");
+            }
+            Err(webauthn_rs_core::error::WebauthnError::CredentialMayNotBeHardwareBound) => {
+                let error = AuthError::internal(
+                    "Single-device credential indicated that it was backed up, which should be impossible.",
+                )
+                .into_thrown_value()?;
+                error.set_model_property("name", "InvalidBackupFlags".into())?;
+                return Err(AuthError::from_thrown(error));
             }
             Err(error) => return Err(AuthError::internal(error.to_string())),
         };

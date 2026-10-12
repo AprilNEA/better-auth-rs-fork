@@ -128,3 +128,60 @@ test("JWKS discovery preserves string addition and rejects a shadowed Date getTi
   expect(expiry.getTime).toBe(false);
   expect(memory).toStrictEqual({ user: [], session: [], account: [], verification: [], jwks: [] });
 });
+
+for (const fails of [false, true]) {
+  test(`JWKS discovery completes expiry filtering before public-key conversion: ${fails ? "failure" : "mutation"}`, async () => {
+    const events: Events = [];
+    const conversionError = new TypeError("public key conversion failed");
+    const expiryError = new TypeError("expiry method failed");
+    const publicKey = {
+      source: '{"marker":"before"}',
+      toString(...args: unknown[]) {
+        expect(this).toBe(publicKey);
+        expect(args).toStrictEqual([]);
+        events.push(["first", "toString"]);
+        if (fails) throw conversionError;
+        return this.source;
+      },
+    };
+    const expiry = {
+      getTime(...args: unknown[]) {
+        expect(this).toBe(expiry);
+        expect(args).toStrictEqual([]);
+        events.push(["second", "getTime"]);
+        if (fails) throw expiryError;
+        publicKey.source = '{"marker":"after"}';
+        return 4_102_444_800_000;
+      },
+    };
+    const rows = [
+      { ...key, id: "first", publicKey },
+      { ...key, id: "second", publicKey: '{"marker":"second"}', expiresAt: expiry },
+    ];
+    const memory = { user: [], session: [], account: [], verification: [], jwks: [] };
+    let reads = 0;
+    const auth = betterAuth({
+      database: memoryAdapter(memory), baseURL,
+      secret: "jwk-native-date-secret-at-least-32-characters",
+      logger: { disabled: true }, telemetry: { enabled: false }, rateLimit: { enabled: false },
+      plugins: [jwt({ adapter: { async getJwks() { reads++; return rows as any; } } })],
+    });
+    if (fails) {
+      await expect(auth.api.getJwks()).rejects.toBe(expiryError);
+      expect(events).toStrictEqual([["second", "getTime"]]);
+    } else {
+      expect(await auth.api.getJwks()).toStrictEqual({ keys: [
+        { alg: "EdDSA", crv: undefined, marker: "after", kid: "first" },
+        { alg: "EdDSA", crv: undefined, marker: "second", kid: "second" },
+      ] });
+      expect(events).toStrictEqual([["second", "getTime"], ["first", "toString"]]);
+    }
+    expect(publicKey.source).toBe(fails ? '{"marker":"before"}' : '{"marker":"after"}');
+    expect(rows).toStrictEqual([
+      { ...key, id: "first", publicKey },
+      { ...key, id: "second", publicKey: '{"marker":"second"}', expiresAt: expiry },
+    ]);
+    expect(reads).toBe(1);
+    expect(memory).toStrictEqual({ user: [], session: [], account: [], verification: [], jwks: [] });
+  });
+}

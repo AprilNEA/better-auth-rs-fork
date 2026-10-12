@@ -180,3 +180,105 @@ async fn discovery_preserves_get_time_string_addition_and_shadowed_date_methods(
     assert_eq!(reads.load(Ordering::SeqCst), 1);
     Ok(())
 }
+
+#[tokio::test]
+async fn discovery_finishes_expiry_filter_before_public_key_conversion() -> AuthResult<()> {
+    for fails in [false, true] {
+        let events = Events::default();
+        let conversion_error =
+            AuthError::type_error("public key conversion failed").into_thrown_value()?;
+        let expiry_error = AuthError::type_error("expiry method failed").into_thrown_value()?;
+        let observed = events.clone();
+        let public_key: FieldValue = FieldMap::from([
+            ("source".into(), "{\"marker\":\"before\"}".into()),
+            (
+                "toString".into(),
+                FieldFunction::contextual(move |receiver, arguments| {
+                    assert!(arguments.is_empty());
+                    observed.lock().unwrap().push(("first", "toString"));
+                    if fails {
+                        return Err(AuthError::from_thrown(conversion_error.clone()));
+                    }
+                    receiver.model_property("source")
+                })
+                .into(),
+            ),
+        ])
+        .into();
+        let mut first = key(JwtAlgorithm::EdDsa)?;
+        first.id = "first".to_owned().into();
+        first.public_key = SchemaValue::from_field(public_key.clone());
+        let mut second = first.clone();
+        second.id = "second".to_owned().into();
+        second.public_key = "{\"marker\":\"second\"}".to_owned().into();
+        let observed = events.clone();
+        let failure = expiry_error.clone();
+        let source = public_key.clone();
+        second.expires_at = SchemaValue::from_field(
+            FieldMap::from([
+                ("label".into(), "second".into()),
+                (
+                    "getTime".into(),
+                    FieldFunction::contextual(move |receiver, arguments| {
+                        assert_eq!(receiver.model_property("label")?, "second".into());
+                        assert!(arguments.is_empty());
+                        observed.lock().unwrap().push(("second", "getTime"));
+                        if fails {
+                            return Err(AuthError::from_thrown(failure.clone()));
+                        }
+                        source.set_model_property("source", "{\"marker\":\"after\"}".into())?;
+                        Ok(4_102_444_800_000.0.into())
+                    })
+                    .into(),
+                ),
+            ])
+            .into(),
+        );
+        let plugin = JwtPlugin::new();
+        let (ctx, reads) = context(&plugin, vec![first, second]).await?;
+        let result = plugin
+            .jwks(&EndpointContext::native(None, None, FieldValue::Null, &ctx))
+            .await;
+        if fails {
+            assert!(
+                result
+                    .unwrap_err()
+                    .into_thrown_value()?
+                    .strict_equals(&expiry_error)
+            );
+            assert_eq!(*events.lock().unwrap(), [("second", "getTime")]);
+        } else {
+            let expected = ["first", "second"].map(|id| {
+                FieldValue::from(FieldMap::from([
+                    ("alg".into(), "EdDSA".into()),
+                    ("crv".into(), FieldValue::Undefined),
+                    (
+                        "marker".into(),
+                        if id == "first" { "after" } else { "second" }.into(),
+                    ),
+                    ("kid".into(), id.into()),
+                ]))
+            });
+            assert_eq!(
+                result?.body.field_value()?,
+                FieldMap::from([("keys".into(), expected.to_vec().into())]).into(),
+            );
+            assert_eq!(
+                *events.lock().unwrap(),
+                [("second", "getTime"), ("first", "toString")],
+            );
+        }
+        assert_eq!(
+            public_key.model_property("source")?,
+            if fails {
+                "{\"marker\":\"before\"}"
+            } else {
+                "{\"marker\":\"after\"}"
+            }
+            .into(),
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 1);
+        assert!(ctx.database.list_jwks().await?.is_empty());
+    }
+    Ok(())
+}

@@ -395,7 +395,7 @@ impl JwtPlugin {
         let keys = keys.filter(|keys| !keys.is_empty()).ok_or_else(|| {
             AuthError::internal("No key sets found. Make sure you have a key in your database.")
         })?;
-        let mut public = Vec::new();
+        let mut live_keys = Vec::new();
         let now = Utc::now().timestamp_millis() as f64;
         for key in keys {
             let expiry = key.expires_at.field_value();
@@ -410,6 +410,10 @@ impl JwtPlugin {
                     continue;
                 }
             }
+            live_keys.push(key);
+        }
+        let mut public = Vec::with_capacity(live_keys.len());
+        for key in live_keys {
             let curve = key.crv.field_value();
             let mut value = FieldMap::from([
                 (

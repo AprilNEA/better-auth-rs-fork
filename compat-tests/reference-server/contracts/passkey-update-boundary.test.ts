@@ -9,8 +9,13 @@ import { withRestoredSchema } from "./schema-isolation.mjs";
 const origin = "http://passkey-null-update.test";
 const cookies = (response: Response) => response.headers.getSetCookie().map(value => value.split(";", 1)[0]).join("; ");
 
-for (const operation of ["authentication", "rename", "stale-counter", "stale-counter-signature", "stale-counter-dynamic", "stale-counter-dynamic-signature"] as const) {
-  test(`a null Passkey update reaches the ${operation} business boundary`, async () => {
+for (const operation of [
+  "authentication", "rename", "stale-counter", "stale-counter-signature", "stale-counter-dynamic", "stale-counter-dynamic-signature",
+  "stale-counter-flags", "stale-counter-flags-signature", "stale-counter-dynamic-flags", "stale-counter-dynamic-flags-signature",
+  "valid-counter-flags", "valid-counter-flags-signature", "valid-counter-dynamic-flags", "valid-counter-dynamic-flags-signature",
+  "stale-counter-flags-origin", "stale-counter-dynamic-flags-origin", "stale-counter-flags-rp", "stale-counter-dynamic-flags-rp",
+] as const) {
+  test(`Passkey preserves the ${operation} business boundary`, async () => {
     await withRestoredSchema(passkey().schema, async () => {
       const memory: Record<string, any[]> = { user: [], session: [], account: [], verification: [], passkey: [] };
       let remove = false;
@@ -19,6 +24,10 @@ for (const operation of ["authentication", "rename", "stale-counter", "stale-cou
       const updates: unknown[] = [];
       const conversions: string[] = [];
       const dynamic = operation.includes("dynamic");
+      const invalidFlags = operation.includes("flags");
+      const invalidOrigin = operation.endsWith("origin");
+      const invalidRp = operation.endsWith("rp");
+      const validCounter = operation.startsWith("valid-counter");
       const counterValue = {
         valueOf(...args: unknown[]) {
           expect(this).toBe(counterValue);
@@ -92,7 +101,7 @@ for (const operation of ["authentication", "rename", "stale-counter", "stale-cou
       expect(registered.status).toBe(200);
       expect(memory.passkey).toHaveLength(1);
       const stale = operation.startsWith("stale-counter");
-      if (stale) memory.passkey[0].counter = 2;
+      if (operation.includes("counter")) memory.passkey[0].counter = 2;
       const selected = structuredClone(memory.passkey[0]);
       const users = structuredClone(memory.user);
       const sessions = structuredClone(memory.session);
@@ -107,14 +116,20 @@ for (const operation of ["authentication", "rename", "stale-counter", "stale-cou
         const pending = await request("generate-authenticate-options");
         expect(pending.status).toBe(200);
         const options = await pending.json() as AuthenticationOptions;
-        const assertion = key.authenticate(options, origin, dynamic ? 0 : 1, 0x01, registration.user.id);
+        const assertion = key.authenticate(
+          invalidRp ? { ...options, rpId: "wrong-rp.test" } : options,
+          invalidOrigin ? "https://wrong-origin.test" : origin,
+          validCounter ? 3 : dynamic ? 0 : 1,
+          invalidFlags ? 0x15 : 0x01,
+          registration.user.id,
+        );
         if (operation.endsWith("signature")) {
           const signature = Buffer.from(assertion.response.signature, "base64url");
           signature[signature.length - 1] ^= 1;
           assertion.response.signature = signature.toString("base64url");
         }
         const result = await request("verify-authentication", cookies(pending), { response: assertion });
-        if (stale) {
+        if (stale || invalidFlags) {
           expect(result.status).toBe(400);
           expect(await result.json()).toStrictEqual({ code: "AUTHENTICATION_FAILED", message: "Authentication failed" });
           expect(result.headers.getSetCookie().some(value => value.startsWith(`${context.authCookies.sessionToken.name}=`))).toBe(false);
@@ -125,11 +140,20 @@ for (const operation of ["authentication", "rename", "stale-counter", "stale-cou
           const [level, message, error] = logs[0] as [unknown, unknown, Error];
           expect([level, message]).toStrictEqual(["error", "Failed to verify authentication"]);
           expect(error).toBeInstanceOf(Error);
-          expect(error.name).toBe("Error");
-          expect(error.message).toBe(dynamic
-            ? "Response counter value 0 was lower than expected projected counter"
-            : "Response counter value 1 was lower than expected 2");
-          expect(conversions).toStrictEqual(dynamic ? ["valueOf", "valueOf", "toString"] : []);
+          expect(error.name).toBe(invalidRp ? "UnexpectedRPIDHash" : validCounter ? "InvalidBackupFlags" : "Error");
+          expect(error.message).toBe(invalidOrigin
+            ? `Unexpected authentication response origin "https://wrong-origin.test", expected "${origin}"`
+            : invalidRp
+              ? "Unexpected RP ID hash"
+              : validCounter
+                ? "Single-device credential indicated that it was backed up, which should be impossible."
+                : dynamic
+                  ? "Response counter value 0 was lower than expected projected counter"
+                  : "Response counter value 1 was lower than expected 2");
+          expect(Object.keys(error)).toStrictEqual(invalidRp || validCounter ? ["name"] : []);
+          expect(conversions).toStrictEqual(!dynamic || invalidOrigin || invalidRp
+            ? []
+            : validCounter ? ["valueOf"] : ["valueOf", "valueOf", "toString"]);
           return;
         }
         expect(result.status).toBe(200);
