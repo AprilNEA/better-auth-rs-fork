@@ -1,11 +1,26 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { writeSync } from "node:fs";
 import { captureOrganizationQueryIdAliases, organizationQueryIdAliasScenarios } from "./organization-query-id-alias-capture.mjs";
 
 test("Organization queries retain first-ID aliases across direct, joined and atomic operations", async () => {
-  const observation = await captureOrganizationQueryIdAliases(captured => {
-    writeSync(1, `${JSON.stringify({ contract: "organization-query-id-alias", version: "1.7.6", backend: "memory", case: captured })}\n`);
-  });
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/organization-query-id-alias-1.7.6.json", import.meta.url)).json();
+  let observation;
+  try {
+    observation = await captureOrganizationQueryIdAliases(captured => {
+      writeSync(1, `${JSON.stringify({ contract: "organization-query-id-alias", version: "1.7.6", backend: "memory", case: captured })}\n`);
+    }, scenario => {
+      if (scenario === "team-update" || scenario === "organizationRole-update") {
+        const captured = fixture.cases.find(value => value.scenario === scenario);
+        expect(captured.steps[0].result.updatedAt.type).toBe("date");
+        // Replay the captured clock while preserving the native onUpdate callback and every observed field.
+        setSystemTime(new Date(captured.steps[0].result.updatedAt.value));
+      } else {
+        setSystemTime();
+      }
+    });
+  } finally {
+    setSystemTime();
+  }
   expect(observation.cases.map(captured => captured.scenario)).toStrictEqual(organizationQueryIdAliasScenarios);
   for (const captured of observation.cases) {
     expect(captured.steps.every(step => step.returned)).toBe(true);
@@ -33,6 +48,5 @@ test("Organization queries retain first-ID aliases across direct, joined and ato
       }
     }
   }
-  const fixture = await Bun.file(new URL("../../../tests/fixtures/organization-query-id-alias-1.7.6.json", import.meta.url)).json();
   expect(observation).toStrictEqual(fixture);
 });

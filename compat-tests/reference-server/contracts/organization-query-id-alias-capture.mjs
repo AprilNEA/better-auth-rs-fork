@@ -181,11 +181,14 @@ async function atomicCase(mutate) {
   return { scenario: `invitation-atomic-${mutate ? "mutated" : "retained"}-alias`, mutate, surface: "getOrgAdapter.updateInvitation", steps: [step] };
 }
 
-export async function captureOrganizationQueryIdAliases(onCase = () => {}) {
+export async function captureOrganizationQueryIdAliases(onCase = () => {}, beforeCase = () => {}) {
   const cases = [];
   const append = async captured => { cases.push(captured); await onCase(captured); };
   for (const model of models) {
-    for (const operation of ["find", "update", "delete"]) await append(await directCase(model, operation));
+    for (const operation of ["find", "update", "delete"]) {
+      await beforeCase(`${model}-${operation}`);
+      await append(await directCase(model, operation));
+    }
   }
   for (const joins of [false, true]) await append(await joinedCase(joins));
   for (const mutate of [false, true]) await append(await atomicCase(mutate));
@@ -227,17 +230,19 @@ export async function captureInvitationClaimSelectorUpdates(onCase = () => {}) {
 
 export async function captureInvitationClaimStatusPolicies(onCase = () => {}) {
   const cases = [];
-  for (const type of ["json", "string"]) {
+  for (const type of ["json", "string", "boolean", "nan"]) {
     const memory = storage();
     const selected = row("invitation", "invitation", "pending");
     delete selected.status;
-    selected.stored_status = type === "json" ? JSON.stringify("pending") : "pending";
+    selected.stored_status = type === "json" ? JSON.stringify("pending") : type === "boolean" ? false : "pending";
     memory.invitation.push(selected);
     const events = [];
     const current = await context(memory, { invitation: { status: {
-      type, fieldName: "stored_status", transform: {
+      type: type === "nan" ? "string" : type, fieldName: "stored_status", transform: {
         input(value) {
           events.push(["input", "invitation.status", observeValue(value)]);
+          if (type === "boolean") return value === "accepted";
+          if (type === "nan" && value === "accepted") return NaN;
           return type === "string" && value === "accepted" ? "claimed" : value;
         },
         output(value) {
@@ -248,7 +253,12 @@ export async function captureInvitationClaimStatusPolicies(onCase = () => {}) {
     } } });
     const input = { invitationId: "invitation", status: "accepted", fromStatus: "pending" };
     const step = await observedStep(memory, events, input, () => current.org.updateInvitation(input));
-    const captured = { scenario: `invitation-claim-status-${type}`, type, surface: "getOrgAdapter.updateInvitation", steps: [step] };
+    const steps = [step];
+    if (step.result !== null) {
+      const restore = { invitationId: "invitation", status: "pending", fromStatus: "accepted" };
+      steps.push(await observedStep(memory, events, restore, () => current.org.updateInvitation(restore)));
+    }
+    const captured = { scenario: `invitation-claim-status-${type}`, type, surface: "getOrgAdapter.updateInvitation", steps };
     cases.push(captured);
     await onCase(captured);
   }

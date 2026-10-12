@@ -8,20 +8,34 @@ test("Invitation claims apply declared status query and write policies", async (
   });
   expect(observation.cases.map(captured => captured.scenario)).toStrictEqual([
     "invitation-claim-status-json", "invitation-claim-status-string",
+    "invitation-claim-status-boolean", "invitation-claim-status-nan",
   ]);
   for (const captured of observation.cases) {
     const step = captured.steps[0];
-    const status = captured.type === "json" ? "accepted" : "claimed";
     expect(step.returned).toBe(true);
-    expect(step.result.status).toBe(status);
+    if (captured.type === "json") {
+      expect(step.result).toBeNull();
+      expect(step.events).toStrictEqual([["input", "invitation.status", "accepted"]]);
+      expect(step.after).toStrictEqual(step.before);
+      expect(captured.steps).toHaveLength(1);
+      continue;
+    }
+    const status = captured.type === "string" ? "claimed" : captured.type === "boolean" ? true : { type: "number", value: "NaN" };
+    expect(step.result.status).toStrictEqual(status);
     expect(step.events).toStrictEqual([
       ["input", "invitation.status", "accepted"], ["output", "invitation.status", status],
     ]);
     expect(step.after).toStrictEqual({
       ...step.before,
       invitation: step.before.invitation.map(row => ({
-        ...row, stored_status: captured.type === "json" ? JSON.stringify(status) : status,
+        ...row, stored_status: status,
       })),
     });
+    const restore = captured.steps[1];
+    expect(restore.returned).toBe(true);
+    expect(restore.result).toBeNull();
+    expect(restore.events).toStrictEqual([["input", "invitation.status", "pending"]]);
+    expect(restore.before).toStrictEqual(step.after);
+    expect(restore.after).toStrictEqual(step.after);
   }
 });

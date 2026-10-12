@@ -22,6 +22,8 @@ test("An explicit unique Member reference preserves singular first-ID-alias join
     ]);
     expect(step.after).toStrictEqual(step.before);
   }
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/organization-query-id-alias-unique-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
 });
 
 test("Invitation claims can update their selected ID column within one atomic write", async () => {
@@ -40,4 +42,6 @@ test("Invitation claims can update their selected ID column within one atomic wr
       ...row, status: "accepted", [captured.column]: "claimed-alias",
     })));
   }
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/invitation-claim-selector-update-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
 });

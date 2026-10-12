@@ -1,0 +1,362 @@
+{
+  "version": "1.7.6",
+  "backend": "memory",
+  "cases": [
+    {
+      "scenario": "member-user-fallback-unique",
+      "joins": false,
+      "surface": "getOrgAdapter.findMemberByOrgId",
+      "steps": [
+        {
+          "input": {
+            "userId": "user-alias",
+            "organizationId": "parent"
+          },
+          "before": {
+            "user": [
+              {
+                "id": "canonical-user",
+                "name": "Alias owner",
+                "email": "canonical-user@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "user-alias"
+              },
+              {
+                "id": "user-alias",
+                "name": "Decoy owner",
+                "email": "user-alias@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "unrelated-alias"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [
+              {
+                "id": "member",
+                "organizationId": "parent",
+                "userId": "user-alias",
+                "role": "member",
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            "invitation": [],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "userId": "user-alias",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "canonical-user",
+              "name": "Alias owner",
+              "email": "canonical-user@organization-query-id.test",
+              "image": null
+            }
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "userId",
+                "role",
+                "createdAt",
+                "id",
+                "user"
+              ]
+            },
+            {
+              "path": [
+                "user"
+              ],
+              "keys": [
+                "id",
+                "name",
+                "email",
+                "image"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "output",
+              "member.role",
+              "member"
+            ],
+            [
+              "output",
+              "user.name",
+              "Alias owner"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "id": "canonical-user",
+                "name": "Alias owner",
+                "email": "canonical-user@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "user-alias"
+              },
+              {
+                "id": "user-alias",
+                "name": "Decoy owner",
+                "email": "user-alias@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "unrelated-alias"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [
+              {
+                "id": "member",
+                "organizationId": "parent",
+                "userId": "user-alias",
+                "role": "member",
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            "invitation": [],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "member-user-native-unique",
+      "joins": true,
+      "surface": "getOrgAdapter.findMemberByOrgId",
+      "steps": [
+        {
+          "input": {
+            "userId": "user-alias",
+            "organizationId": "parent"
+          },
+          "before": {
+            "user": [
+              {
+                "id": "canonical-user",
+                "name": "Alias owner",
+                "email": "canonical-user@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "user-alias"
+              },
+              {
+                "id": "user-alias",
+                "name": "Decoy owner",
+                "email": "user-alias@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "unrelated-alias"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [
+              {
+                "id": "member",
+                "organizationId": "parent",
+                "userId": "user-alias",
+                "role": "member",
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            "invitation": [],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          },
+          "returned": true,
+          "result": {
+            "organizationId": "parent",
+            "userId": "user-alias",
+            "role": "member",
+            "createdAt": {
+              "type": "date",
+              "value": "2030-01-02T03:04:05.000Z"
+            },
+            "id": "member",
+            "user": {
+              "id": "canonical-user",
+              "name": "Alias owner",
+              "email": "canonical-user@organization-query-id.test",
+              "image": null
+            }
+          },
+          "keyOrder": [
+            {
+              "path": [],
+              "keys": [
+                "organizationId",
+                "userId",
+                "role",
+                "createdAt",
+                "id",
+                "user"
+              ]
+            },
+            {
+              "path": [
+                "user"
+              ],
+              "keys": [
+                "id",
+                "name",
+                "email",
+                "image"
+              ]
+            }
+          ],
+          "events": [
+            [
+              "output",
+              "member.role",
+              "member"
+            ],
+            [
+              "output",
+              "user.name",
+              "Alias owner"
+            ]
+          ],
+          "after": {
+            "user": [
+              {
+                "id": "canonical-user",
+                "name": "Alias owner",
+                "email": "canonical-user@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "user-alias"
+              },
+              {
+                "id": "user-alias",
+                "name": "Decoy owner",
+                "email": "user-alias@organization-query-id.test",
+                "emailVerified": false,
+                "image": null,
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "updatedAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                },
+                "lookup": "unrelated-alias"
+              }
+            ],
+            "session": [],
+            "account": [],
+            "verification": [],
+            "organization": [],
+            "member": [
+              {
+                "id": "member",
+                "organizationId": "parent",
+                "userId": "user-alias",
+                "role": "member",
+                "createdAt": {
+                  "type": "date",
+                  "value": "2030-01-02T03:04:05.000Z"
+                }
+              }
+            ],
+            "invitation": [],
+            "team": [],
+            "organizationRole": [],
+            "teamMember": []
+          }
+        }
+      ]
+    }
+  ]
+}
