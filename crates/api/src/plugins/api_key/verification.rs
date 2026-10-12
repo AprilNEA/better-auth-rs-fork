@@ -204,7 +204,7 @@ impl ApiKeyPlugin {
         let body = FieldValue::from_json(serde_json::Value::Object(body))?;
         let endpoint = ApiKeyEndpoint::new(ctx, None, None, &body);
         let session = self
-            .authenticate_api_key(endpoint, ctx)
+            .authenticate_api_key(endpoint, ctx, None)
             .await
             .map_err(ApiKeyVerificationError::Endpoint)?;
         let validated = super::request::validate_value("verifyApiKey", &body)
@@ -357,7 +357,8 @@ impl ApiKeyPlugin {
     ) -> AuthResult<Option<BeforeRequestAction>> {
         let body = req.input_field_value()?;
         let endpoint = ApiKeyEndpoint::from_request(ctx, req, &body);
-        let Some((session, user)) = self.authenticate_api_key(endpoint, ctx).await? else {
+        let Some((session, user)) = self.authenticate_api_key(endpoint, ctx, Some(req)).await?
+        else {
             return Ok(None);
         };
         // Upstream answers this path in its hook before the route method gate.
@@ -394,20 +395,18 @@ impl ApiKeyPlugin {
         &self,
         endpoint: ApiKeyEndpoint<'_>,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
+        request: Option<&AuthRequest>,
     ) -> AuthResult<Option<(SessionView, better_auth_core::wire::UserView)>> {
         // Upstream invokes extraction once in the hook matcher, then again in its handler.
-        match self.find_session_key(endpoint) {
-            Ok(None) => return Ok(None),
-            Ok(Some(_)) => {}
-            Err(error) => {
-                better_auth_core::observability::logger::current().error(
-                    "API key hook matcher failed",
-                    &[better_auth_core::observability::LogArgument::Error(&error)],
-                );
-                return Err(AuthResponse::json(500, &serde_json::json!({
-                    "message": "An error occurred during hook matcher execution. Check the logs for more details."
-                }))?.into());
-            }
+        if better_auth_core::hooks::run_before_hook_matcher(
+            &ctx.config,
+            request,
+            "plugin:api-key",
+            || self.find_session_key(endpoint),
+        )?
+        .is_none()
+        {
+            return Ok(None);
         }
         let context = better_auth_core::hooks::current_request_hook_context();
         let route = context

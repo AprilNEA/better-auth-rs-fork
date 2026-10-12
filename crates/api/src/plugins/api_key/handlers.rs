@@ -35,6 +35,7 @@ impl ApiKeyPlugin {
             .authenticate_api_key(
                 ApiKeyEndpoint::new(ctx, None, Some("/api-key/create"), &callback_body),
                 ctx,
+                None,
             )
             .await?;
         let validated = super::request::validate_value("/api-key/create", &callback_body)?;
@@ -84,6 +85,7 @@ impl ApiKeyPlugin {
             .authenticate_api_key(
                 ApiKeyEndpoint::new(ctx, None, Some("/api-key/update"), &callback_body),
                 ctx,
+                None,
             )
             .await?;
         let validated = super::request::validate_value("/api-key/update", &callback_body)?;

@@ -35,6 +35,14 @@ pub enum HttpMethod {
     Head,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) enum HookErrorStage {
+    #[default]
+    Unhandled,
+    Handler,
+    Matcher,
+}
+
 /// Authentication request wrapper
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
@@ -55,7 +63,7 @@ pub struct AuthRequest {
     /// Cookie updates from session middleware, shared by normalized request clones.
     response_headers: std::sync::Arc<std::sync::Mutex<request_headers::ResponseHeaders>>,
     response_status: std::sync::Arc<std::sync::Mutex<Option<crate::SchemaValue<u16>>>>,
-    hook_error_handled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    hook_error_stage: std::sync::Arc<parking_lot::Mutex<HookErrorStage>>,
     server_only: bool,
     server_context: std::sync::Arc<std::sync::Mutex<crate::FieldMap>>,
     headers_present: bool,
@@ -540,7 +548,7 @@ impl AuthRequest {
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
-            hook_error_handled: Default::default(),
+            hook_error_stage: Default::default(),
             server_only: false,
             server_context: Default::default(),
             headers_present: true,
@@ -574,7 +582,7 @@ impl AuthRequest {
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
-            hook_error_handled: Default::default(),
+            hook_error_stage: Default::default(),
             server_only: false,
             server_context: Default::default(),
             headers_present: true,
@@ -798,7 +806,7 @@ impl AuthRequest {
         Self {
             response_headers: Default::default(),
             response_status: Default::default(),
-            hook_error_handled: Default::default(),
+            hook_error_stage: Default::default(),
             ..self.clone()
         }
     }
@@ -806,19 +814,21 @@ impl AuthRequest {
     pub(crate) fn with_separate_response_status(&self) -> Self {
         Self {
             response_status: Default::default(),
-            hook_error_handled: Default::default(),
+            hook_error_stage: Default::default(),
             ..self.clone()
         }
     }
 
     pub(crate) fn mark_hook_error_handled(&self) {
-        self.hook_error_handled
-            .store(true, std::sync::atomic::Ordering::Release);
+        *self.hook_error_stage.lock() = HookErrorStage::Handler;
     }
 
-    pub(crate) fn take_hook_error_handled(&self) -> bool {
-        self.hook_error_handled
-            .swap(false, std::sync::atomic::Ordering::AcqRel)
+    pub(crate) fn mark_hook_matcher_error(&self) {
+        *self.hook_error_stage.lock() = HookErrorStage::Matcher;
+    }
+
+    pub(crate) fn take_hook_error_stage(&self) -> HookErrorStage {
+        std::mem::take(&mut self.hook_error_stage.lock())
     }
 
     /// Set the active endpoint's native status. Hook statuses remain local to that hook.

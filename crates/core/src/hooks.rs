@@ -1,5 +1,36 @@
 use crate::types::{AuthRequest, HttpMethod, RequestMeta};
 
+/// Evaluate a before-hook matcher before entering the matched handler's tracing span.
+/// Pass the dispatcher's hook request when present; direct native helpers can omit the request.
+pub fn run_before_hook_matcher<T>(
+    config: &crate::AuthConfig,
+    request: Option<&AuthRequest>,
+    source: &str,
+    matcher: impl FnOnce() -> crate::AuthResult<T>,
+) -> crate::AuthResult<T> {
+    match matcher() {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            config.logger.error(
+                &format!("An error occurred during {source} hook matcher execution:"),
+                &[crate::observability::LogArgument::Error(&error)],
+            );
+            if let Some(request) = request {
+                request.mark_hook_matcher_error();
+            }
+            Err(crate::AuthError::from_status(
+                "INTERNAL_SERVER_ERROR",
+                crate::FieldMap::from([(
+                    "message".into(),
+                    "An error occurred during hook matcher execution. Check the logs for more details."
+                        .into(),
+                )])
+                .into(),
+            ))
+        }
+    }
+}
+
 /// Request-derived data available to middleware, stores, and other hooks during request handling.
 #[derive(Debug, Clone)]
 pub struct RequestHookContext {

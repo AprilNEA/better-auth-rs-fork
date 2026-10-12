@@ -337,6 +337,26 @@ impl FieldValue {
         }
     }
 
+    /// Check property presence without reading the value, rejecting primitive receivers as JavaScript `in` does.
+    /// Object sources own prototype lookup. Arrays expose indices and length; Date and function handles have no named property storage.
+    pub fn has_property(&self, name: &str) -> AuthResult<bool> {
+        match self {
+            Self::Object(object) => object.has_property(name),
+            Self::Array(array) => match name {
+                "length" => Ok(true),
+                _ => match crate::utils::json::array_index(name) {
+                    Some(index) => Ok(array.own_indices()?.contains(&(index as usize))),
+                    None => Ok(false),
+                },
+            },
+            Self::Date(_) | Self::Function(_) => Ok(false),
+            _ => Err(AuthError::type_error(format!(
+                "Cannot use 'in' operator to search for '{name}' in {}",
+                String::from_utf16_lossy(self.display_utf16()?.as_utf16()),
+            ))),
+        }
+    }
+
     /// Copy own enumerable properties while retaining native child identities.
     /// String keys enumerate UTF-16 units, as in object spread and `Object.entries`.
     pub fn enumerable_fields(&self) -> AuthResult<FieldMap> {

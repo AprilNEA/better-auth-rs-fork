@@ -1,6 +1,33 @@
 use super::*;
 
 #[test]
+fn property_presence_distinguishes_undefined_from_absence_and_rejects_primitives() -> AuthResult<()>
+{
+    let object: FieldValue = FieldMap::from([("present".into(), FieldValue::Undefined)]).into();
+    assert!(object.has_property("present")?);
+    assert!(!object.has_property("absent")?);
+    let array: FieldValue = vec![FieldValue::Undefined].into();
+    assert!(array.has_property("length")?);
+    assert!(array.has_property("0")?);
+    assert!(!array.has_property("1")?);
+    assert!(!array.has_property("00")?);
+    for value in [
+        FieldValue::Undefined,
+        FieldValue::Null,
+        true.into(),
+        1.0.into(),
+        "phoneNumber".into(),
+        crate::Utf16String::from_units(vec![0xd800]).into(),
+    ] {
+        assert!(matches!(
+            value.has_property("phoneNumber"),
+            Err(AuthError::TypeError(_))
+        ));
+    }
+    Ok(())
+}
+
+#[test]
 fn model_properties_preserve_native_identity_and_nullish_access_errors() -> AuthResult<()> {
     let id = FieldValue::from(FieldMap::from([("native".into(), true.into())]));
     let record = FieldValue::from(FieldMap::from([("id".into(), id.clone())]));
@@ -30,7 +57,7 @@ fn model_properties_preserve_native_identity_and_nullish_access_errors() -> Auth
 fn live_object_read_errors_propagate_without_implicit_snapshots() {
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    struct FailedSource(AtomicUsize);
+    struct FailedSource(AtomicUsize, FieldValue);
 
     impl FieldObjectSource for FailedSource {
         fn own_keys(&self) -> AuthResult<Vec<String>> {
@@ -42,6 +69,13 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
             name: &str,
         ) -> AuthResult<Option<FieldPropertyDescriptor>> {
             Ok((name == "id").then_some(FieldPropertyDescriptor { enumerable: true }))
+        }
+
+        fn has_property(&self, name: &str) -> AuthResult<bool> {
+            if name == "failure" {
+                return Err(AuthError::from_thrown(self.1.clone()));
+            }
+            Ok(matches!(name, "id" | "inherited"))
         }
 
         fn get(&self, _: &str) -> AuthResult<Option<FieldValue>> {
@@ -67,7 +101,8 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
         }
     }
 
-    let source = Arc::new(FailedSource(AtomicUsize::new(0)));
+    let failure: FieldValue = FieldMap::from([("original".into(), true.into())]).into();
+    let source = Arc::new(FailedSource(AtomicUsize::new(0), failure.clone()));
     let object = FieldObject::from_source(source.clone());
     let value = FieldValue::Object(object.clone());
     let same_source = FieldValue::Object(FieldObject::from_source(source.clone()));
@@ -78,6 +113,13 @@ fn live_object_read_errors_propagate_without_implicit_snapshots() {
     assert!(matches!(
         crate::SchemaValue::<serde_json::Value>::from_field(value.clone()),
         crate::SchemaValue::Dynamic(_)
+    ));
+    assert!(matches!(value.has_property("id"), Ok(true)));
+    assert!(matches!(value.has_property("inherited"), Ok(true)));
+    assert!(matches!(value.has_property("absent"), Ok(false)));
+    assert!(matches!(
+        value.has_property("failure"),
+        Err(error) if error.raw_value().is_some_and(|value| value.strict_equals(&failure))
     ));
     assert_eq!(source.0.load(Ordering::SeqCst), 0);
 

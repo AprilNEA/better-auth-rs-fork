@@ -398,10 +398,10 @@ fn before_error<S: AuthSchema>(
     request: &AuthRequest,
     context: &AuthContext<S>,
 ) -> AuthResult<AuthError> {
-    let error = if request.take_hook_error_handled() {
-        error
-    } else {
-        endpoint_error(error, request)?
+    let error = match request.take_hook_error_stage() {
+        crate::types::HookErrorStage::Matcher => return Ok(error),
+        crate::types::HookErrorStage::Handler => error,
+        crate::types::HookErrorStage::Unhandled => endpoint_error(error, request)?,
     };
     if error.is_api_error()?
         && publishes_debug(context)
@@ -444,10 +444,11 @@ fn apply_after_result<S: AuthSchema>(
     match result {
         Ok(()) => response.merge_endpoint_headers(request.take_response_headers()?),
         Err(error) => {
-            let error = if request.take_hook_error_handled() {
-                error
-            } else {
-                endpoint_error(error, request)?
+            let error = match request.take_hook_error_stage() {
+                crate::types::HookErrorStage::Unhandled => endpoint_error(error, request)?,
+                crate::types::HookErrorStage::Handler | crate::types::HookErrorStage::Matcher => {
+                    error
+                }
             };
             if !error.is_api_error()? {
                 return Err(error);

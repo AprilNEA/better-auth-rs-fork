@@ -16,6 +16,8 @@ use super::helpers::{
 
 mod callbacks;
 mod hooks;
+#[cfg(test)]
+mod matcher_tests;
 mod native;
 mod request;
 #[cfg(test)]
@@ -838,19 +840,25 @@ better_auth_core::impl_auth_plugin!(PhoneNumberPlugin, "phone-number";
         async fn before_request(
             &self,
             req: &AuthRequest,
-            _ctx: &AuthContext<S>,
+            ctx: &AuthContext<S>,
         ) -> AuthResult<Option<better_auth_core::BeforeRequestAction>> {
-            if req.path() == "/update-user" {
-                let body = super::json_body::parse(req)?;
-                if body
-                    .as_ref()
-                    .and_then(|body| body.get("phoneNumber"))
-                    .is_some_and(|value| !value.is_null())
-                {
-                    return better_auth_core::observability::instrumentation::with_endpoint_hook(&_ctx.config, req, "before", "plugin:phone-number", async {
-                        Err(AuthError::from_code("BAD_REQUEST", "PHONE_NUMBER_CANNOT_BE_UPDATED", "Phone number cannot be updated"))
-                    }).await;
-                }
+            let matched = better_auth_core::hooks::run_before_hook_matcher(
+                &ctx.config,
+                Some(req),
+                "plugin:phone-number",
+                || {
+                    if req.path() != "/update-user" {
+                        return Ok(false);
+                    }
+                    let body = req.input_field_value()?;
+                    Ok(body.has_property("phoneNumber")?
+                        && !body.model_property("phoneNumber")?.is_null())
+                },
+            )?;
+            if matched {
+                return better_auth_core::observability::instrumentation::with_endpoint_hook(&ctx.config, req, "before", "plugin:phone-number", async {
+                    Err(AuthError::from_code("BAD_REQUEST", "PHONE_NUMBER_CANNOT_BE_UPDATED", "Phone number cannot be updated"))
+                }).await;
             }
             Ok(None)
         }

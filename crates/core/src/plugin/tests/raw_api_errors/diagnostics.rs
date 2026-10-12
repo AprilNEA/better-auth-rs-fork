@@ -7,6 +7,140 @@ use tracing::{
     span::{Attributes, Id, Record},
 };
 
+struct MatcherFailure {
+    value: FieldValue,
+    events: Events,
+}
+
+#[async_trait]
+impl AuthPlugin<S> for MatcherFailure {
+    fn name(&self) -> &'static str {
+        "matcher-failure"
+    }
+
+    fn routes(&self) -> Vec<AuthRoute> {
+        Vec::new()
+    }
+
+    async fn before_request(
+        &self,
+        request: &AuthRequest,
+        context: &AuthContext<S>,
+    ) -> AuthResult<Option<BeforeRequestAction>> {
+        crate::hooks::run_before_hook_matcher(
+            &context.config,
+            Some(request),
+            "plugin:matcher-failure",
+            || {
+                self.events.lock().unwrap().push("matcher".into());
+                Err(AuthError::from_thrown(self.value.clone()))
+            },
+        )
+    }
+
+    async fn on_request(
+        &self,
+        _: &AuthRequest,
+        _: &AuthContext<S>,
+    ) -> AuthResult<Option<AuthResponse>> {
+        Ok(None)
+    }
+}
+
+impl crate::observability::LogSink for MatcherFailure {
+    fn log(
+        &self,
+        level: LogLevel,
+        message: crate::observability::LogArgument<'_>,
+        arguments: &[crate::observability::LogArgument<'_>],
+    ) {
+        assert_eq!(level, LogLevel::Error);
+        assert!(matches!(
+            message,
+            crate::observability::LogArgument::Text(
+                "An error occurred during plugin:matcher-failure hook matcher execution:"
+            )
+        ));
+        let [crate::observability::LogArgument::Error(error)] = arguments else {
+            panic!("Expected the original matcher error as one logger argument");
+        };
+        assert_raw(error.downcast_ref::<AuthError>().unwrap(), &self.value);
+        self.events.lock().unwrap().push("log".into());
+    }
+}
+
+#[tokio::test]
+async fn matcher_failures_preserve_log_identity_and_skip_handler_error_recovery() -> AuthResult<()>
+{
+    for http in [false, true] {
+        let events = Events::default();
+        let unread: Getter = Arc::new(|| {
+            Err(AuthError::internal(
+                "Matcher wrappers must not read the original error",
+            ))
+        });
+        let value = probe(
+            FieldMap::new(),
+            ["name", "message", "headers", "errorStack", "stack"]
+                .map(|name| (name, unread.clone()))
+                .into(),
+        );
+        let mut config = (*crate::test_store::test_config()).clone();
+        config.logger.level = Some(LogLevel::Debug);
+        config.logger.disabled = Some(false);
+        config.logger.log = Some(Arc::new(MatcherFailure {
+            value: value.clone(),
+            events: events.clone(),
+        }));
+        let config = Arc::new(config);
+        let context = AuthContext::new(config.clone(), Arc::new(EphemeralStore::new(config)));
+        let hook = Arc::new(Hooks::new("none", FieldValue::Undefined, &events));
+        let route = AuthRoute::get("/matcher-error", "matcherError");
+        let dispatcher = EndpointDispatcher::new(
+            Arc::new(vec![Box::new(MatcherFailure {
+                value: value.clone(),
+                events: events.clone(),
+            }) as Box<dyn AuthPlugin<S>>]),
+            EndpointHooks {
+                before: Some(hook.clone()),
+                after: Some(hook),
+            },
+            [route.clone()],
+        );
+        let mut request = AuthRequest::new(HttpMethod::Get, "/matcher-error");
+        let handler = |_: AuthRequest| async {
+            Err(AuthError::internal(
+                "A matcher failure must stop before the endpoint handler",
+            ))
+        };
+        let result = if http {
+            dispatcher
+                .run(&mut request, true, &context, None, handler)
+                .await
+        } else {
+            dispatcher.native(request, route, &context, handler).await
+        };
+        let error = result.unwrap_err();
+        assert!(error.is_api_error_instance(crate::ApiErrorClass::BetterAuth));
+        assert!(!error.raw_value().unwrap().strict_equals(&value));
+        assert_eq!(error.status_value()?, "INTERNAL_SERVER_ERROR".into());
+        assert_eq!(error.status_code()?, 500);
+        assert_eq!(
+            error.body_value()?.enumerable_fields()?,
+            FieldMap::from([(
+                "message".into(),
+                "An error occurred during hook matcher execution. Check the logs for more details."
+                    .into(),
+            )])
+        );
+        assert_eq!(error.headers_value()?.enumerable_fields()?, FieldMap::new());
+        assert!(error.captured_headers_value().is_none());
+        assert!(!error.raw_value().unwrap().has_property("stack")?);
+        assert_eq!(*events.lock().unwrap(), ["before", "matcher", "log"]);
+    }
+    Ok(())
+}
+
 struct AccessProbe {
     inner: FieldObject,
     events: Events,
