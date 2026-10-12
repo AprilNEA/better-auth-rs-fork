@@ -1,21 +1,22 @@
 import { expect, test } from "bun:test";
-import { readFileSync, writeSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { callbackCases } from "./oauth-proxy-callback-cases.mjs";
 import { assertCallbackReplay } from "./oauth-proxy-callback-replay.mjs";
+import { writeObservation } from "./write-observation.mjs";
 
 const helper = new URL("./oauth-proxy-callback-capture.mjs", import.meta.url).pathname;
 const fixture = JSON.parse(readFileSync(new URL("../../../tests/fixtures/oauth-proxy-callback-1.7.6.json", import.meta.url), "utf8"));
 const processFixture = JSON.parse(readFileSync(new URL("../../../tests/fixtures/oauth-proxy-callback-process-1.7.6.json", import.meta.url), "utf8"));
 
-test("OAuth Proxy callback preserves native merge, parsing order, errors, and side effects", () => {
+test("OAuth Proxy callback preserves native merge, parsing order, errors, and side effects", async () => {
   const result = Bun.spawnSync({
     cmd: [process.execPath, "--no-install", helper],
     env: { ...process.env, NO_COLOR: "1" }, stdout: "pipe", stderr: "pipe",
     maxBuffer: 16 * 1024 * 1024, timeout: 25_000,
   });
-  writeSync(1, result.stdout);
+  await writeObservation(result.stdout);
   const processObservation = JSON.stringify({ contract: "oauth-proxy-callback-process", exitCode: result.exitCode, signalCode: result.signalCode, stderr: result.stderr.toString() });
-  writeSync(1, `${processObservation}\n`);
+  await writeObservation(`${processObservation}\n`);
   expect(result.exitCode).toBe(0);
   expect(result.stderr.toString()).toBe("");
   expect(JSON.parse(processObservation)).toStrictEqual(processFixture);

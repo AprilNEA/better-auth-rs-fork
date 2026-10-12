@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { writeSync } from "node:fs";
 import { captureInvitationClaimSelectorValues } from "./organization-query-id-alias-capture.mjs";
+import { writeObservation } from "./write-observation.mjs";
 
 test("Invitation selector writes retain native values and Memory transaction identity", async () => {
-  const observation = await captureInvitationClaimSelectorValues(captured => {
-    writeSync(1, `${JSON.stringify({ contract: "invitation-claim-selector-values", version: "1.7.6", backend: "memory", case: captured })}\n`);
+  const observation = await captureInvitationClaimSelectorValues(async captured => {
+    await writeObservation(`${JSON.stringify({ contract: "invitation-claim-selector-values", version: "1.7.6", backend: "memory", case: captured })}\n`);
   });
   expect(observation.version).toBe("1.7.6");
   expect(observation.backend).toBe("memory");

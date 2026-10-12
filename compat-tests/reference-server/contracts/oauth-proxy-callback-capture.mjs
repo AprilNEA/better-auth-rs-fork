@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, writeSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { APIError } from "better-call/error";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -9,6 +9,7 @@ import { callbackCases } from "./oauth-proxy-callback-cases.mjs";
 import { assertCallbackReplay, callbackHostObservations } from "./oauth-proxy-callback-replay.mjs";
 import { createProtectedFunctionObserver } from "./protected-function-shared.mjs";
 import { withClock } from "./email-verification-duration-capture.mjs";
+import { writeObservation } from "./write-observation.mjs";
 
 const version = "1.7.6";
 const now = 2_000_000_000_123;
@@ -303,7 +304,7 @@ async function captureCase(scenario, expected) {
     ];
     assert.deepEqual(events, expectedEvents);
   } catch (error) {
-    writeSync(1, `${JSON.stringify({ contract: "oauth-proxy-callback-failed-assertion", observation: observe() })}\n`);
+    await writeObservation(`${JSON.stringify({ contract: "oauth-proxy-callback-failed-assertion", observation: observe() })}\n`);
     throw error;
   }
   return { ...observe(), originalErrorUnchanged: true };
@@ -330,9 +331,9 @@ if (import.meta.main) {
       const expected = fixture.cases.find(record => record.name === scenario.name);
       const actual = await captureOAuthProxyCallback(scenario, expected);
       const serialized = JSON.stringify(actual);
-      writeSync(1, `${serialized}\n`);
+      await writeObservation(`${serialized}\n`);
       const observation = JSON.parse(serialized);
-      writeSync(1, `${JSON.stringify({
+      await writeObservation(`${JSON.stringify({
         contract: "oauth-proxy-callback-host", name: scenario.name,
         source: callbackHostObservations(expected, scenario),
         replay: callbackHostObservations(observation, scenario),
@@ -340,7 +341,7 @@ if (import.meta.main) {
       assertCallbackReplay(observation, expected, scenario);
     } catch (error) {
       failures.push(error);
-      writeSync(1, `${JSON.stringify({ contract: "oauth-proxy-callback-case-failed", name: scenario.name, error: { name: error.name, message: error.message, stack: error.stack } })}\n`);
+      await writeObservation(`${JSON.stringify({ contract: "oauth-proxy-callback-case-failed", name: scenario.name, error: { name: error.name, message: error.message, stack: error.stack } })}\n`);
     }
   }
   // Replay every independent case before reporting assertion failures.
