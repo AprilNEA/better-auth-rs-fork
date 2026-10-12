@@ -1,0 +1,69 @@
+{
+  "version": "1.7.6",
+  "status": "successful upstream source capture; complete runtime observations await strict Rust replay",
+  "run": "38208588462",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38208588462",
+  "commit": "3d0f5aadea06e43452e1b3878cbe1dc731014ad8",
+  "artifactName": "focused-check-reference-contracts-3d0f5aadea06e43452e1b3878cbe1dc731014ad8-1",
+  "artifactId": "11728074233",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38208588462.log",
+    "bytes": 2780381,
+    "sha256": "10e774873c292d297b0778b5ce9c93c04dec5323a08b766fdcb347ee2dda2640"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/json-parse-native-capture.mjs",
+      "bytes": 7657,
+      "sha256": "07d46a643b2413bba481884061160a99887aa06d09c47220c771adc75a8dc2c1"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/json-parse-native-inputs.mjs",
+      "bytes": 10230,
+      "sha256": "31d691d1059c60c526b5299f3bd2798c84149d51c7c12e9fe3579f4b372f0cfb"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/json-parse-native-capture.test.ts",
+      "bytes": 407,
+      "sha256": "8804c143199218e4a7936a9db4a00036ede33e1c74e7f9e84dff9f481fa1cf46"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-runtime.mjs",
+      "bytes": 3145,
+      "sha256": "69630e525760cf34de80dbc1ae8717093481316fc426cd50dc7b84e7a179d017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/email-verification-duration-capture.mjs",
+      "bytes": 11739,
+      "sha256": "03d3f3001d5db30af7dabf494b20b6f41a4d939919b3cda75e5aaa96bd6bf805"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/json-parse-native-1.7.6.json",
+    "bytes": 37491321,
+    "sha256": "982461f68b2dc451b1ddf27ceb48027e26f68a8db68bfb6db8ae9c471bc7975b"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1079,
+      "bytes": 2420500,
+      "sha256": "56d9cce589de644232f8999a08ee2b7ac58fa5ec15e83acef22216404f9eccc6"
+    }
+  ]
+}
