@@ -1,8 +1,8 @@
 use super::{
-    FieldValue,
+    FieldMap, FieldObject, FieldValue,
     structured_clone::{ArrayCloneSeed, CloneWrite},
 };
-use crate::AuthResult;
+use crate::{AuthError, AuthResult};
 use parking_lot::Mutex;
 use std::{
     any::Any,
@@ -18,7 +18,10 @@ use std::{
 /// Elements retain strong handles. Cycles retain their memory; this handle has no tracing garbage collection.
 /// Live arrays remain dynamic during infallible schema decoding so fallible getters retain their original errors.
 #[derive(Clone)]
-pub struct FieldArray(ArrayStorage);
+pub struct FieldArray {
+    storage: ArrayStorage,
+    properties: FieldObject,
+}
 
 #[derive(Clone)]
 enum ArrayStorage {
@@ -38,6 +41,17 @@ pub(crate) trait FieldArraySource: Send + Sync {
     fn own_indices(&self) -> AuthResult<Vec<usize>>;
     fn get(&self, index: usize) -> AuthResult<Option<FieldValue>>;
     fn identity(&self) -> usize;
+    fn properties(&self) -> &FieldObject;
+    fn set(&self, _index: usize, _value: FieldValue) -> AuthResult<()> {
+        Err(AuthError::type_error(
+            "The live array source does not support index assignment",
+        ))
+    }
+    fn set_length(&self, _length: usize) -> AuthResult<()> {
+        Err(AuthError::type_error(
+            "The live array source does not support length assignment",
+        ))
+    }
     fn clone_seed(&self) -> AuthResult<Option<ArrayCloneSeed>> {
         Ok(None)
     }
@@ -58,13 +72,94 @@ impl FieldArray {
         Vec::new().into()
     }
 
+    /// Create a sparse array with the given length and no own indexed properties.
+    pub fn with_length(length: u32) -> Self {
+        Self::with_length_and_properties(length, FieldMap::new().into())
+    }
+
+    /// Create a sparse array while retaining a live source for non-index properties.
+    pub fn with_length_and_properties(length: u32, properties: FieldObject) -> Self {
+        Self {
+            storage: ArrayStorage::Owned(Arc::new(Mutex::new(Some(ArrayValues {
+                length: length as usize,
+                entries: BTreeMap::new(),
+            })))),
+            properties,
+        }
+    }
+
+    /// Create a distinct array whose named property source owns accessors and descriptors.
+    /// Numeric indices and length remain part of the array's indexed storage.
+    /// Enumeration rejects those reserved names in the property source without reading their getters.
+    pub fn from_values_with_properties(values: Vec<FieldValue>, properties: FieldObject) -> Self {
+        Self {
+            storage: ArrayStorage::Owned(Arc::new(Mutex::new(Some(ArrayValues {
+                length: values.len(),
+                entries: values.into_iter().enumerate().collect(),
+            })))),
+            properties,
+        }
+    }
+
+    /// Borrow non-index properties. Array indices and length use indexed operations.
+    pub(crate) fn properties(&self) -> &FieldObject {
+        &self.properties
+    }
+
+    pub(crate) fn named_property_keys(&self) -> AuthResult<Vec<String>> {
+        let names = self.properties.own_keys()?;
+        for name in &names {
+            if name == "length" || crate::utils::json::array_index(name).is_some() {
+                return Err(AuthError::type_error(format!(
+                    "Array named property source contains reserved property '{name}'"
+                )));
+            }
+        }
+        Ok(names)
+    }
+
+    pub(crate) fn set(&self, index: usize, value: FieldValue) -> AuthResult<()> {
+        match &self.storage {
+            ArrayStorage::Owned(values) => {
+                let mut guard = values.lock();
+                let values = guard.get_or_insert_with(|| ArrayValues {
+                    length: 0,
+                    entries: BTreeMap::new(),
+                });
+                values.length = values.length.max(index + 1);
+                let _ = values.entries.insert(index, value);
+                Ok(())
+            }
+            ArrayStorage::Live(source) => source.set(index, value),
+        }
+    }
+
+    pub(crate) fn set_length(&self, length: usize) -> AuthResult<()> {
+        match &self.storage {
+            ArrayStorage::Owned(values) => {
+                let mut guard = values.lock();
+                let values = guard.get_or_insert_with(|| ArrayValues {
+                    length: 0,
+                    entries: BTreeMap::new(),
+                });
+                values.length = length;
+                values.entries.retain(|index, _| *index < length);
+                Ok(())
+            }
+            ArrayStorage::Live(source) => source.set_length(length),
+        }
+    }
+
     pub(crate) fn from_source(source: Arc<dyn FieldArraySource>) -> Self {
-        Self(ArrayStorage::Live(source))
+        Self {
+            properties: source.properties().clone(),
+            storage: ArrayStorage::Live(source),
+        }
     }
 
     /// Read the current array length, including missing indices.
     pub fn len(&self) -> AuthResult<usize> {
-        match &self.0 {
+        match &self.storage {
             ArrayStorage::Owned(values) => {
                 Ok(values.lock().as_ref().map_or(0, |values| values.length))
             }
@@ -79,7 +174,7 @@ impl FieldArray {
 
     /// Read one current index. `None` is a hole or an index outside the array.
     pub fn get(&self, index: usize) -> AuthResult<Option<FieldValue>> {
-        match &self.0 {
+        match &self.storage {
             ArrayStorage::Owned(values) => Ok(values
                 .lock()
                 .as_ref()
@@ -96,7 +191,7 @@ impl FieldArray {
 
     /// Capture present indices in numeric order without evaluating their values.
     pub fn own_indices(&self) -> AuthResult<Vec<usize>> {
-        let mut indices = match &self.0 {
+        let mut indices = match &self.storage {
             ArrayStorage::Owned(values) => values
                 .lock()
                 .as_ref()
@@ -160,9 +255,13 @@ impl FieldArray {
                 let _ = entries.insert(index, transform(value)?);
             }
         }
-        Ok(Self(ArrayStorage::Owned(Arc::new(Mutex::new(Some(
-            ArrayValues { length, entries },
-        ))))))
+        Ok(Self {
+            storage: ArrayStorage::Owned(Arc::new(Mutex::new(Some(ArrayValues {
+                length,
+                entries,
+            })))),
+            properties: FieldMap::new().into(),
+        })
     }
 
     /// Filter present indices in order, omitting missing indices from the new dense array.
@@ -188,14 +287,14 @@ impl FieldArray {
     }
 
     pub(crate) fn identity(&self) -> ArrayIdentity {
-        match &self.0 {
+        match &self.storage {
             ArrayStorage::Owned(values) => ArrayIdentity::Owned(Arc::as_ptr(values) as usize),
             ArrayStorage::Live(source) => ArrayIdentity::Live(source.identity()),
         }
     }
 
     pub(crate) fn source<T: 'static>(&self) -> Option<&T> {
-        match &self.0 {
+        match &self.storage {
             ArrayStorage::Live(source) => source.as_any()?.downcast_ref(),
             ArrayStorage::Owned(_) => None,
         }
@@ -203,7 +302,11 @@ impl FieldArray {
 
     // Infallible typed narrowing must preserve holes and must not evaluate fallible live getters.
     pub(crate) fn owned_values(&self) -> Option<Vec<FieldValue>> {
-        let ArrayStorage::Owned(values) = &self.0 else {
+        // A Vec cannot retain named properties or a dynamic property source.
+        if self.properties.is_live() || !self.properties.own_keys().ok()?.is_empty() {
+            return None;
+        }
+        let ArrayStorage::Owned(values) = &self.storage else {
             return None;
         };
         let values = values.lock();
@@ -219,14 +322,17 @@ impl FieldArray {
     }
 
     pub(crate) fn clone_seed(&self) -> AuthResult<ArrayCloneSeed> {
-        if let ArrayStorage::Live(source) = &self.0
+        if let ArrayStorage::Live(source) = &self.storage
             && let Some(seed) = source.clone_seed()?
         {
             return Ok(seed);
         }
         let target = Arc::new(Mutex::new(None));
         Ok(ArrayCloneSeed {
-            array: Self(ArrayStorage::Owned(target.clone())),
+            array: Self {
+                storage: ArrayStorage::Owned(target.clone()),
+                properties: FieldMap::new().into(),
+            },
             prepare: Box::new(move |length, entries| {
                 let length = entries
                     .iter()
@@ -252,12 +358,7 @@ impl Default for FieldArray {
 
 impl From<Vec<FieldValue>> for FieldArray {
     fn from(values: Vec<FieldValue>) -> Self {
-        Self(ArrayStorage::Owned(Arc::new(Mutex::new(Some(
-            ArrayValues {
-                length: values.len(),
-                entries: values.into_iter().enumerate().collect(),
-            },
-        )))))
+        Self::from_values_with_properties(values, FieldMap::new().into())
     }
 }
 
@@ -299,7 +400,7 @@ thread_local! {
 
 impl PartialEq for FieldArray {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
+        match (&self.storage, &other.storage) {
             (ArrayStorage::Owned(left), ArrayStorage::Owned(right)) => {
                 let identity = (self.identity(), other.identity());
                 let Some(_guard) = ComparisonGuard::enter(identity) else {
@@ -310,7 +411,9 @@ impl PartialEq for FieldArray {
                 let right = right.lock().clone();
                 match (left, right) {
                     (Some(left), Some(right)) => {
-                        left.length == right.length && left.entries == right.entries
+                        left.length == right.length
+                            && left.entries == right.entries
+                            && self.properties == other.properties
                     }
                     (None, None) => true,
                     _ => false,
@@ -323,7 +426,7 @@ impl PartialEq for FieldArray {
 
 impl fmt::Debug for FieldArray {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
+        match &self.storage {
             ArrayStorage::Owned(values) => {
                 let identity = self.identity();
                 let Some(_guard) = FormattingGuard::enter(identity) else {

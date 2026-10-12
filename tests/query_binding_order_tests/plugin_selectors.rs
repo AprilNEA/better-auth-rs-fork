@@ -20,7 +20,7 @@ use std::sync::{
 fn callback(trace: &Trace, allocation: &Arc<AtomicUsize>, event: &'static str) -> FieldValue {
     let trace = trace.clone();
     let allocation = allocation.clone();
-    let factory: UserFieldFactory = Arc::new(move || {
+    let factory: UserFieldFactory = UserFieldFactory::new(move || {
         record(&trace, event)?;
         let message = format!("plugin-selector-{event}");
         allocation.store(message.as_ptr() as usize, Ordering::SeqCst);

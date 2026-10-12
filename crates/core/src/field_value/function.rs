@@ -1,19 +1,18 @@
 //! Callable field values retain callback identity and borrowed invocation context.
 
-use crate::{AuthResult, FieldValue, user_fields::UserFieldFactory};
+use crate::{AuthResult, FieldMap, FieldObject, FieldValue};
 use std::{fmt, sync::Arc};
 
 /// A synchronous field function. Clones retain the original callback identity.
 #[derive(Clone)]
-pub struct FieldFunction(Callback);
+pub struct FieldFunction(Arc<Function>);
 
 type ContextualCallback =
     dyn Fn(&FieldValue, &[FieldValue]) -> AuthResult<FieldValue> + Send + Sync;
 
-#[derive(Clone)]
-enum Callback {
-    Factory(UserFieldFactory),
-    Contextual(Arc<ContextualCallback>),
+struct Function {
+    callback: Box<ContextualCallback>,
+    properties: FieldObject,
 }
 
 impl FieldFunction {
@@ -21,7 +20,23 @@ impl FieldFunction {
     pub fn contextual(
         callback: impl Fn(&FieldValue, &[FieldValue]) -> AuthResult<FieldValue> + Send + Sync + 'static,
     ) -> Self {
-        Self(Callback::Contextual(Arc::new(callback)))
+        Self::contextual_with_properties(callback, FieldMap::new().into())
+    }
+
+    /// Create a distinct function whose property source owns accessors and descriptors.
+    pub fn contextual_with_properties(
+        callback: impl Fn(&FieldValue, &[FieldValue]) -> AuthResult<FieldValue> + Send + Sync + 'static,
+        properties: FieldObject,
+    ) -> Self {
+        Self(Arc::new(Function {
+            callback: Box::new(callback),
+            properties,
+        }))
+    }
+
+    /// Borrow the function's own named properties without invoking the function.
+    pub fn properties(&self) -> &FieldObject {
+        &self.0.properties
     }
 
     /// Invoke the callback with an undefined receiver and no arguments.
@@ -30,29 +45,16 @@ impl FieldFunction {
     }
 
     /// Invoke the callback without changing its result, error, or argument handles.
-    /// Legacy factories ignore the receiver and arguments.
     pub fn call_with(
         &self,
         receiver: &FieldValue,
         arguments: &[FieldValue],
     ) -> AuthResult<FieldValue> {
-        match &self.0 {
-            Callback::Factory(factory) => factory(),
-            Callback::Contextual(callback) => callback(receiver, arguments),
-        }
+        (self.0.callback)(receiver, arguments)
     }
 
     pub(crate) fn identity(&self) -> usize {
-        match &self.0 {
-            Callback::Factory(factory) => Arc::as_ptr(factory) as *const () as usize,
-            Callback::Contextual(callback) => Arc::as_ptr(callback) as *const () as usize,
-        }
-    }
-}
-
-impl From<UserFieldFactory> for FieldFunction {
-    fn from(factory: UserFieldFactory) -> Self {
-        Self(Callback::Factory(factory))
+        Arc::as_ptr(&self.0) as usize
     }
 }
 
@@ -64,11 +66,7 @@ impl From<FieldFunction> for FieldValue {
 
 impl PartialEq for FieldFunction {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.0, &other.0) {
-            (Callback::Factory(left), Callback::Factory(right)) => Arc::ptr_eq(left, right),
-            (Callback::Contextual(left), Callback::Contextual(right)) => Arc::ptr_eq(left, right),
-            _ => false,
-        }
+        Arc::ptr_eq(&self.0, &other.0)
     }
 }
 

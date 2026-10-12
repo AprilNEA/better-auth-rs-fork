@@ -72,10 +72,9 @@ mod tests {
     use super::*;
     use crate::user_fields::{UserFieldConfig, UserFieldFactory};
     use crate::{FieldDate, FieldFunction, FromFieldMap, wire::UserView};
-    use std::sync::Arc;
 
     fn function() -> FieldValue {
-        let callback: UserFieldFactory = Arc::new(|| Ok(FieldValue::Undefined));
+        let callback: UserFieldFactory = UserFieldFactory::new(|| Ok(FieldValue::Undefined));
         FieldFunction::from(callback).into()
     }
 

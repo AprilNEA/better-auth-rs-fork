@@ -4,7 +4,7 @@
 #[path = "json_tests.rs"]
 mod tests;
 
-use super::{ContainerIdentity, FieldMap, FieldValue};
+use super::{ContainerIdentity, FieldDate, FieldMap, FieldObject, FieldValue, PrimitiveHint};
 use crate::{AuthError, AuthResult};
 use serde::{Serialize, ser::SerializeMap};
 use std::{
@@ -42,7 +42,7 @@ enum Preparation {
 struct JsonState {
     output: Output,
     preparation: Preparation,
-    active: RefCell<HashSet<ContainerIdentity>>,
+    active: RefCell<HashSet<JsonIdentity>>,
     source_error: RefCell<Option<AuthError>>,
     http_references: Option<RefCell<HttpReferences>>,
 }
@@ -55,15 +55,31 @@ impl JsonState {
         holder: Option<JsonIdentity>,
     ) -> AuthResult<PreparedJson> {
         let prepared = match value {
-            FieldValue::Object(object) if matches!(self.preparation, Preparation::Json) => {
-                match object.get("toJSON")? {
-                    Some(FieldValue::Function(method)) => method.call_with(value, &[key.into()])?,
+            FieldValue::Object(_) | FieldValue::Array(_) | FieldValue::Function(_)
+                if matches!(self.preparation, Preparation::Json) =>
+            {
+                match value.model_property("toJSON")? {
+                    FieldValue::Function(method) => method.call_with(value, &[key.into()])?,
                     _ => value.clone(),
                 }
             }
-            FieldValue::Date(date) => date
-                .iso_string()?
-                .map_or(FieldValue::Null, FieldValue::String),
+            FieldValue::Date(date) => {
+                let own = if matches!(self.preparation, Preparation::Json) {
+                    date.properties().get_with_receiver("toJSON", value)?
+                } else {
+                    None
+                };
+                match own {
+                    Some(FieldValue::Function(method)) => method.call_with(value, &[key.into()])?,
+                    Some(_) => value.clone(),
+                    None if matches!(self.preparation, Preparation::Json) => {
+                        default_date_json(date, value)?
+                    }
+                    None => date
+                        .iso_string()?
+                        .map_or(FieldValue::Null, FieldValue::String),
+                }
+            }
             _ => value.clone(),
         };
         let prepared = match &self.http_references {
@@ -81,6 +97,24 @@ impl JsonState {
 
     fn recover<T>(self, result: Result<T, serde_json::Error>) -> AuthResult<T> {
         result.map_err(|error| self.source_error.into_inner().unwrap_or(error.into()))
+    }
+}
+
+fn default_date_json(date: &FieldDate, receiver: &FieldValue) -> AuthResult<FieldValue> {
+    if matches!(receiver.primitive(PrimitiveHint::Number)?, FieldValue::Number(value) if !value.is_finite())
+    {
+        return Ok(FieldValue::Null);
+    }
+    match date
+        .properties()
+        .get_with_receiver("toISOString", receiver)?
+    {
+        Some(FieldValue::Function(method)) => method.call_with(receiver, &[]),
+        Some(_) => Err(AuthError::type_error("toISOString is not a function")),
+        None => date
+            .iso_string()?
+            .map(FieldValue::String)
+            .ok_or_else(|| AuthError::RangeError("Invalid Date".into())),
     }
 }
 
@@ -185,11 +219,22 @@ impl Serialize for JsonNode<'_> {
                     .serialize(serializer)
             }
             // A Date returned by toJSON is emitted without invoking its method again.
-            FieldValue::Date(_) => serializer.serialize_map(Some(0))?.end(),
+            FieldValue::Date(date) => serialize_properties(
+                date.properties(),
+                &self.0.0,
+                JsonIdentity::Date(std::sync::Arc::as_ptr(&date.0) as usize),
+                self.1,
+                serializer,
+            ),
             FieldValue::Array(values) => {
                 use serde::ser::SerializeSeq;
                 let identity = ContainerIdentity::Array(values.identity());
-                if !self.1.active.borrow_mut().insert(identity) {
+                if !self
+                    .1
+                    .active
+                    .borrow_mut()
+                    .insert(JsonIdentity::Container(identity))
+                {
                     return Err(self.1.error(AuthError::type_error(
                         "Converting circular structure to JSON",
                     )));
@@ -214,41 +259,52 @@ impl Serialize for JsonNode<'_> {
                     }
                     sequence.end()
                 })();
-                let _ = self.1.active.borrow_mut().remove(&identity);
+                let _ = self
+                    .1
+                    .active
+                    .borrow_mut()
+                    .remove(&JsonIdentity::Container(identity));
                 result
             }
-            FieldValue::Object(object) => {
-                let identity = ContainerIdentity::Object(object.identity());
-                if !self.1.active.borrow_mut().insert(identity) {
-                    return Err(self.1.error(AuthError::type_error(
-                        "Converting circular structure to JSON",
-                    )));
-                }
-                let result = (|| {
-                    let keys = object
-                        .enumerable_keys()
-                        .map_err(|error| self.1.error(error))?;
-                    let mut output = serializer.serialize_map(None)?;
-                    for name in keys {
-                        let value = object
-                            .get(&name)
-                            .map_err(|error| self.1.error(error))?
-                            .unwrap_or_default();
-                        serialize_entry(
-                            &mut output,
-                            &name,
-                            &value,
-                            self.1,
-                            Some(JsonIdentity::Container(identity)),
-                        )?;
-                    }
-                    output.end()
-                })();
-                let _ = self.1.active.borrow_mut().remove(&identity);
-                result
-            }
+            FieldValue::Object(object) => serialize_properties(
+                object,
+                &self.0.0,
+                JsonIdentity::Container(ContainerIdentity::Object(object.identity())),
+                self.1,
+                serializer,
+            ),
         }
     }
+}
+
+fn serialize_properties<S: serde::Serializer>(
+    object: &FieldObject,
+    receiver: &FieldValue,
+    identity: JsonIdentity,
+    state: &JsonState,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    if !state.active.borrow_mut().insert(identity) {
+        return Err(state.error(AuthError::type_error(
+            "Converting circular structure to JSON",
+        )));
+    }
+    let result = (|| {
+        let keys = object
+            .enumerable_keys()
+            .map_err(|error| state.error(error))?;
+        let mut output = serializer.serialize_map(None)?;
+        for name in keys {
+            let value = object
+                .get_with_receiver(&name, receiver)
+                .map_err(|error| state.error(error))?
+                .unwrap_or_default();
+            serialize_entry(&mut output, &name, &value, state, Some(identity))?;
+        }
+        output.end()
+    })();
+    let _ = state.active.borrow_mut().remove(&identity);
+    result
 }
 
 fn serialize_entry<S: SerializeMap>(

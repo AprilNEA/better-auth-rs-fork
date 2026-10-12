@@ -535,14 +535,9 @@ pub(super) async fn handle_account_info(
             .await
             .map_err(super::generic_profile::GenericProfileError::into_auth_error)?
     } else {
-        fetch_user_info_from_provider(
-            provider,
-            &OAuthTokenSet::from_fields(request.fields()),
-            request,
-            None,
-        )
-        .await?
-        .value
+        fetch_user_info_from_provider(provider, request, None)
+            .await?
+            .value
     };
     if !info.is_truthy() {
         return Err(super::social_profile::missing_profile());

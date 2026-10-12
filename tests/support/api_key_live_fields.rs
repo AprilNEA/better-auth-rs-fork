@@ -41,7 +41,9 @@ async fn observe<S: AuthSchema>(
         .fields_mut()
         .get_mut("label")
         .expect("declared label")
-        .on_update = Some(Arc::new(|| Ok("Live".into())));
+        .on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+        Ok("Live".into())
+    }));
     let writer = BetterAuth::new(config())
         .store_arc(raw.clone())
         .plugin(better_auth::plugins::ApiKeyPlugin::builder().build())

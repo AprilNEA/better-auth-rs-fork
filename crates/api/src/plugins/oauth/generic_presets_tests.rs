@@ -85,9 +85,8 @@ async fn preset_configuration_and_authorization_match_pinned_helpers() {
             options["postLogoutRedirectURI"].as_str().map(str::to_owned);
         config.disable_provider_logout =
             options["disableProviderLogout"].as_bool().unwrap_or(false);
-        config.disable_implicit_sign_up =
-            options["disableImplicitSignUp"].as_bool().unwrap_or(false);
-        config.disable_sign_up = options["disableSignUp"].as_bool().unwrap_or(false);
+        config.disable_implicit_sign_up = options["disableImplicitSignUp"].as_bool();
+        config.disable_sign_up = options["disableSignUp"].as_bool();
         config.override_user_info = options["overrideUserInfo"].as_bool().unwrap_or(false);
         if let Some(pkce) = options["pkce"].as_bool() {
             config.pkce = pkce;
@@ -127,6 +126,16 @@ async fn preset_configuration_and_authorization_match_pinned_helpers() {
         )
         .await
         .unwrap();
+        assert_eq!(
+            resolved.providers[id].config.disable_sign_up,
+            expected["disableSignUp"].as_bool(),
+            "{id}: disableSignUp presence"
+        );
+        assert_eq!(
+            resolved.providers[id].config.disable_implicit_sign_up,
+            expected["disableImplicitSignUp"].as_bool(),
+            "{id}: disableImplicitSignUp presence"
+        );
         let url = authorization::build_authorization_url(
             &resolved.providers[id],
             authorization::AuthorizationRequest {

@@ -72,13 +72,9 @@ async fn id_token_profile_is_preferred_and_mapping_cannot_change_account_subject
     let user = response.model_property("user").unwrap();
     let data = response.model_property("data").unwrap();
     assert_eq!(
-        resolve_account_subject(
-            &provider,
-            &OAuthTokenSet::from_fields(tokens.fields()),
-            &data
-        )
-        .await
-        .unwrap(),
+        resolve_account_subject(&provider, &tokens.fields().into(), &data)
+            .await
+            .unwrap(),
         FieldValue::from("immutable-subject")
     );
     assert_eq!(
@@ -394,13 +390,9 @@ async fn custom_generic_callbacks_preserve_native_tokens_and_separate_nonce_meta
     let response = fetch_profile(&provider, &request, None).await.unwrap();
     let data = response.model_property("data").unwrap();
     assert_eq!(
-        resolve_account_subject(
-            &provider,
-            &OAuthTokenSet::from_fields(request.fields()),
-            &data
-        )
-        .await
-        .unwrap(),
+        resolve_account_subject(&provider, &request.fields().into(), &data)
+            .await
+            .unwrap(),
         FieldValue::from("native-subject")
     );
     assert_eq!(
@@ -446,13 +438,9 @@ async fn custom_profile_and_subject_callbacks_receive_original_data() {
     let response = fetch_profile(&provider, &tokens, None).await.unwrap();
     let data = response.model_property("data").unwrap();
     assert_eq!(
-        resolve_account_subject(
-            &provider,
-            &OAuthTokenSet::from_fields(tokens.fields()),
-            &data
-        )
-        .await
-        .unwrap(),
+        resolve_account_subject(&provider, &tokens.fields().into(), &data)
+            .await
+            .unwrap(),
         FieldValue::from("tenant:42")
     );
     let user = response.model_property("user").unwrap();
@@ -516,13 +504,9 @@ async fn id_token_without_email_falls_back_to_userinfo_with_access_token() {
     let response = fetch_profile(&provider, &tokens, None).await.unwrap();
     let data = response.model_property("data").unwrap();
     assert_eq!(
-        resolve_account_subject(
-            &provider,
-            &OAuthTokenSet::from_fields(tokens.fields()),
-            &data
-        )
-        .await
-        .unwrap(),
+        resolve_account_subject(&provider, &tokens.fields().into(), &data)
+            .await
+            .unwrap(),
         FieldValue::from("userinfo-subject")
     );
     let user = response.model_property("user").unwrap();
@@ -592,9 +576,10 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             .await
             .unwrap();
         let data = response.model_property("data").unwrap();
-        let error = resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
-            .await
-            .unwrap_err();
+        let error =
+            resolve_account_subject(&provider, &better_auth_core::FieldMap::new().into(), &data)
+                .await
+                .unwrap_err();
         assert_eq!(
             error.message_value().unwrap(),
             FieldValue::from("OAUTH_ACCOUNT_SUBJECT_INVALID")
@@ -616,7 +601,7 @@ async fn account_subject_is_validated_before_local_account_lookup() {
             .unwrap();
         let data = response.model_property("data").unwrap();
         assert_eq!(
-            resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
+            resolve_account_subject(&provider, &better_auth_core::FieldMap::new().into(), &data)
                 .await
                 .unwrap(),
             FieldValue::from(expected)

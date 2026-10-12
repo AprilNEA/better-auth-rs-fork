@@ -288,7 +288,7 @@ async fn check<S: AuthSchema>(
     let mut policies = declaration([(
         "createdAt",
         UserFieldConfig {
-            on_update: Some(Arc::new({
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
                 let events = events.clone();
                 move || {
                     event(&events, "createdAt", "onUpdate", FieldValue::Undefined)?;
@@ -325,7 +325,9 @@ async fn check<S: AuthSchema>(
             "updatedAt".into(),
             UserFieldConfig {
                 field_type: UserFieldType::Date,
-                on_update: Some(Arc::new(|| Ok(date().into()))),
+                on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+                    Ok(date().into())
+                })),
                 ..Default::default()
             },
         );

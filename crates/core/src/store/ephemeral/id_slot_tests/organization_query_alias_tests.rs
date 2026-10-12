@@ -243,7 +243,7 @@ fn configured_store(
         let _ = configured.fields_mut().insert(
             "claimLookup".into(),
             UserFieldConfig {
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     record(
                         &trace,
                         json!(["onUpdate", "invitation.claimLookup", "claimed-alias"]),
@@ -279,7 +279,9 @@ fn configured_store(
         let mut declaration = required(native.fields().get("updatedAt"))?.clone();
         let _ = required(declaration.on_update.as_ref())?;
         // The source fixture replays this clock. System clock sampling is outside this field-policy contract.
-        declaration.on_update = Some(Arc::new(move || Ok(clock.clone().into())));
+        declaration.on_update = Some(crate::user_fields::UserFieldFactory::new(move || {
+            Ok(clock.clone().into())
+        }));
         let _ = configured
             .fields_mut()
             .insert("updatedAt".into(), declaration);
@@ -288,10 +290,6 @@ fn configured_store(
     Ok((store, fields))
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Each source step compares complete input, output, key order, callbacks, and persistence."
-)]
 async fn verify_case(case: &JsonValue) -> AuthResult<()> {
     let trace = Events::default();
     let (store, fields) = configured_store(case, &trace)?;
@@ -350,10 +348,6 @@ async fn verify_case(case: &JsonValue) -> AuthResult<()> {
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The fixture must contain the exact source version, backend, and ordered scenario set."
-)]
 async fn verify_fixture(source: &str, expected: Vec<String>) -> AuthResult<()> {
     let fixture: JsonValue = serde_json::from_str(source)?;
     assert_eq!(fixture["version"], "1.7.6");

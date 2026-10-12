@@ -8,7 +8,7 @@ use super::handlers::{
     callback_user_request, complete_link_social, fetch_user_info_for_code,
     initiate_oauth_flow_core, redirect_response,
 };
-use super::provider_tokens::validate_authorization_code_via_provider;
+use super::provider_tokens::validate_authorization_code_native_via_provider;
 use super::resolved::ResolvedOAuthConfig as OAuthConfig;
 use super::signin::{OAuthSignInOptions, process_oauth_sign_in};
 use super::state::{
@@ -265,25 +265,47 @@ pub(super) async fn handle_callback(
         return redirect_on_error("nonce_binding_missing", None);
     }
 
-    let tokens = match validate_authorization_code_via_provider(
-        provider,
-        &code,
-        &format!("{}/callback/{}", auth_base_url(ctx), provider_name),
-        Some(&payload.code_verifier),
-        merged.get("device_id").map(String::as_str),
-    )
-    .await
+    let token_input = better_auth_core::FieldMap::from([
+        ("code".into(), code.into()),
+        ("codeVerifier".into(), payload.code_verifier.clone().into()),
+        (
+            "deviceId".into(),
+            merged
+                .get("device_id")
+                .cloned()
+                .map(Into::into)
+                .unwrap_or_default(),
+        ),
+        (
+            "redirectURI".into(),
+            format!("{}/callback/{}", auth_base_url(ctx), provider_name).into(),
+        ),
+    ])
+    .into();
+    let tokens = match validate_authorization_code_native_via_provider(provider, &token_input).await
     {
         Ok(tokens) => tokens,
-        Err(_) => return redirect_on_error("invalid_code", None),
+        Err(error) => {
+            ctx.logger().error(
+                "",
+                &[better_auth_core::observability::LogArgument::Error(&error)],
+            );
+            return redirect_on_error("invalid_code", None);
+        }
     };
+    if !tokens.is_truthy() {
+        return redirect_on_error("invalid_code", None);
+    }
 
     let profile = fetch_user_info_for_code(
         provider,
-        &tokens,
         callback_user_request(
             &tokens,
-            merged.get("user").map(String::as_str),
+            &merged
+                .get("user")
+                .cloned()
+                .map(Into::into)
+                .unwrap_or_default(),
             payload.id_token_nonce.as_deref(),
         )?,
         payload.id_token_nonce.as_deref(),
@@ -335,7 +357,7 @@ pub(super) async fn handle_callback(
             complete_link_social(
                 &user_info,
                 &account,
-                &tokens.scopes,
+                &better_auth_core::SchemaValue::Dynamic(tokens.model_property("scopes")?),
                 link,
                 Some(&provider_profile),
                 &endpoint,

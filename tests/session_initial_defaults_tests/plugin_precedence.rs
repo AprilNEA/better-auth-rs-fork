@@ -37,10 +37,12 @@ fn field(
     let events = events.clone();
     UserFieldConfig {
         field_name: Some(storage.into()),
-        default_value_fn: Some(Arc::new(move || {
-            record(&events, FieldEvent::Default(source))?;
-            Ok(value.into())
-        })),
+        default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                record(&events, FieldEvent::Default(source))?;
+                Ok(value.into())
+            },
+        )),
         ..Default::default()
     }
 }

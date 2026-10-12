@@ -182,6 +182,7 @@ fn payload(stage: usize) -> FieldValue {
 }
 
 struct ArrayProbe {
+    properties: crate::FieldObject,
     owner: RowRef<FieldMap>,
     trace: Events,
     reads: AtomicUsize,
@@ -192,6 +193,9 @@ struct ArrayProbe {
 }
 
 impl FieldArraySource for ArrayProbe {
+    fn properties(&self) -> &crate::FieldObject {
+        &self.properties
+    }
     fn len(&self) -> AuthResult<usize> {
         Ok(2)
     }
@@ -252,6 +256,7 @@ fn probe(
 ) -> Arc<ArrayProbe> {
     let calls = trace.clone();
     Arc::new(ArrayProbe {
+        properties: FieldMap::new().into(),
         owner,
         trace: trace.clone(),
         reads: AtomicUsize::new(0),

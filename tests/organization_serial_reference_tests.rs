@@ -38,7 +38,9 @@ fn reference(trace: Option<Arc<Mutex<Vec<Value>>>>) -> UserFieldConfig {
             ..Default::default()
         }),
         default_value: Some(FieldValue::from(" 001 ")),
-        on_update: Some(Arc::new(|| Ok(FieldValue::from(" 1 ")))),
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+            Ok(FieldValue::from(" 1 "))
+        })),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(move |value| {
                 if let Some(trace) = &input_trace {

@@ -55,7 +55,9 @@ fn fields(label_column: &str) -> UserConfig {
                     UserFieldConfig {
                         required: Some(false),
                         default_value: Some(Value::from("created")),
-                        on_update: Some(Arc::new(|| Ok(Value::from("updated")))),
+                        on_update: Some(better_auth::config::UserFieldFactory::new(|| {
+                            Ok(Value::from("updated"))
+                        })),
                         ..Default::default()
                     },
                 ),

@@ -87,27 +87,31 @@ impl<S: AuthSchema> AuthPlugin<S> for Policy {
         };
         if self.defaults {
             let defaults = self.state.clone();
-            field.default_value_fn = Some(Arc::new(move || {
-                let value = FieldMap::from_iter([("source".into(), "default".into())]).into();
-                event(
-                    &mut defaults.lock().expect("display default state"),
-                    target,
-                    "default",
-                    &value,
-                )?;
-                Ok(value)
-            }));
+            field.default_value_fn = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value = FieldMap::from_iter([("source".into(), "default".into())]).into();
+                    event(
+                        &mut defaults.lock().expect("display default state"),
+                        target,
+                        "default",
+                        &value,
+                    )?;
+                    Ok(value)
+                },
+            ));
             let updates = self.state.clone();
-            field.on_update = Some(Arc::new(move || {
-                let value = FieldMap::from_iter([("source".into(), "onUpdate".into())]).into();
-                event(
-                    &mut updates.lock().expect("display update state"),
-                    target,
-                    "onUpdate",
-                    &value,
-                )?;
-                Ok(value)
-            }));
+            field.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value = FieldMap::from_iter([("source".into(), "onUpdate".into())]).into();
+                    event(
+                        &mut updates.lock().expect("display update state"),
+                        target,
+                        "onUpdate",
+                        &value,
+                    )?;
+                    Ok(value)
+                },
+            ));
         }
         context.register_model_fields(
             target.role(),

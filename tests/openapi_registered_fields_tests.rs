@@ -108,10 +108,12 @@ impl<S: AuthSchema> AuthPlugin<S> for RegisteredFields {
                 "label",
                 UserFieldConfig {
                     field_name: Some("stored_wallet_label".into()),
-                    default_value_fn: Some(Arc::new(move || {
-                        let _ = defaults.default.fetch_add(1, Ordering::SeqCst);
-                        Ok("wallet-default".into())
-                    })),
+                    default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                        move || {
+                            let _ = defaults.default.fetch_add(1, Ordering::SeqCst);
+                            Ok("wallet-default".into())
+                        },
+                    )),
                     transform: Some(FieldTransforms {
                         input: Some(UserFieldTransform::new(move |value| {
                             let _ = inputs.input.fetch_add(1, Ordering::SeqCst);

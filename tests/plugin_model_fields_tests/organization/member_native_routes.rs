@@ -38,8 +38,9 @@ struct Values {
 
 impl Values {
     fn new() -> Self {
-        let function: UserFieldFactory =
-            Arc::new(|| Err(AuthError::internal("Member output function must not run")));
+        let function: UserFieldFactory = UserFieldFactory::new(|| {
+            Err(AuthError::internal("Member output function must not run"))
+        });
         let function: FieldValue = FieldValue::Function(function.into());
         let shared: FieldValue = FieldMap::from_iter([("native".into(), true.into())]).into();
         let nested: FieldValue = FieldMap::from_iter([
@@ -289,7 +290,11 @@ async fn check<S: AuthSchema>(
                             "updatedAt".into(),
                             UserFieldConfig {
                                 field_type: UserFieldType::Date,
-                                on_update: Some(Arc::new(|| Ok(date().into()))),
+                                on_update: Some(
+                                    better_auth_core::user_fields::UserFieldFactory::new(|| {
+                                        Ok(date().into())
+                                    }),
+                                ),
                                 ..Default::default()
                             },
                         )]

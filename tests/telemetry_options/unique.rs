@@ -20,7 +20,7 @@ fn factory(
     kind: &'static str,
     value: &'static str,
 ) -> UserFieldFactory {
-    Arc::new(move || {
+    UserFieldFactory::new(move || {
         record(&calls, model, kind)?;
         Ok(value.into())
     })

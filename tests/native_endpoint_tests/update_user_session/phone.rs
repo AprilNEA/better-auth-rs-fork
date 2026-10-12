@@ -135,7 +135,9 @@ async fn phone_clear_policy_belongs_to_the_user_update_hook_and_preserves_fallba
                 "updatedAt".into(),
                 UserFieldConfig {
                     field_type: UserFieldType::Date,
-                    on_update: Some(Arc::new(|| Ok(date()))),
+                    on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+                        Ok(date())
+                    })),
                     ..Default::default()
                 },
             );

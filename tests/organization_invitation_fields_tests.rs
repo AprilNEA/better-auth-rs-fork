@@ -149,12 +149,14 @@ async fn failed_acceptance_compensates_invitation_updates_without_committing_mem
             .fields_mut()
             .get_mut("marker")
             .unwrap()
-            .on_update = Some(Arc::new(move || {
-            Ok(FieldValue::from(format!(
-                "updated-{}",
-                count.fetch_add(1, Ordering::SeqCst) + 1
-            )))
-        }));
+            .on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                Ok(FieldValue::from(format!(
+                    "updated-{}",
+                    count.fetch_add(1, Ordering::SeqCst) + 1
+                )))
+            },
+        ));
         if !teams_enabled {
             options
                 .schema
@@ -246,12 +248,14 @@ async fn claim_output_and_compensation_errors_preserve_the_upstream_failure_stag
             .fields_mut()
             .get_mut("marker")
             .unwrap();
-        marker.on_update = Some(Arc::new(move || {
-            Ok(FieldValue::from(format!(
-                "updated-{}",
-                count.fetch_add(1, Ordering::SeqCst) + 1
-            )))
-        }));
+        marker.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                Ok(FieldValue::from(format!(
+                    "updated-{}",
+                    count.fetch_add(1, Ordering::SeqCst) + 1
+                )))
+            },
+        ));
         if claim_output_failure {
             marker.transform.get_or_insert_default().output =
                 Some(UserFieldTransform::new(|value| {
@@ -379,12 +383,14 @@ async fn team_deletion_rolls_back_read_and_update_output_errors() {
             .fields_mut()
             .get_mut("marker")
             .unwrap();
-        marker.on_update = Some(Arc::new(move || {
-            Ok(FieldValue::from(format!(
-                "updated-{}",
-                count.fetch_add(1, Ordering::SeqCst) + 1
-            )))
-        }));
+        marker.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                Ok(FieldValue::from(format!(
+                    "updated-{}",
+                    count.fetch_add(1, Ordering::SeqCst) + 1
+                )))
+            },
+        ));
         marker.transform.get_or_insert_default().output = Some(UserFieldTransform::new(|value| {
             if value == FieldValue::from("read-fail") || value == FieldValue::from("updated-2") {
                 Err(AuthError::bad_request("invitation output failed"))

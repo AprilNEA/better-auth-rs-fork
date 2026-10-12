@@ -213,7 +213,9 @@ async fn sign_in(
                 &OAuthTokenSet {
                     access_token: Some("new-access".into()).into(),
                     ..Default::default()
-                },
+                }
+                .fields()
+                .into(),
             )?,
             OAuthSignInOptions {
                 request,

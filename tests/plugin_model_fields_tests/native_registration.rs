@@ -112,10 +112,10 @@ fn callback(events: &Events, phase: &'static str, field: &'static str) -> UserFi
 fn declarations(model: Model, events: &Events) -> UserConfig {
     let factory = |phase: &'static str, value: f64| {
         let events = events.clone();
-        Arc::new(move || {
+        better_auth_core::user_fields::UserFieldFactory::new(move || {
             trace_lock(&events)?.push(json!([phase, model.field()]));
             Ok(value.into())
-        }) as better_auth_core::user_fields::UserFieldFactory
+        })
     };
     UserConfig {
         additional_fields: Some(

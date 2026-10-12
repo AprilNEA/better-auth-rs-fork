@@ -240,7 +240,7 @@ async fn check<S: AuthSchema>(
                     "updatedAt",
                     UserFieldConfig {
                         field_type: UserFieldType::Date,
-                        on_update: Some(Arc::new({
+                        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
                             let events = events.clone();
                             move || {
                                 event(&events, ["session.updatedAt".into(), "onUpdate".into()])?;

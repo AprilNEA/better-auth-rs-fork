@@ -41,7 +41,7 @@ async fn raw_initialization_preserves_physical_records_before_runtime_queries() 
     let _ = config.user.fields_mut().insert(
         "profileExtra".into(),
         UserFieldConfig {
-            default_value_fn: Some(Arc::new(|| {
+            default_value_fn: Some(crate::user_fields::UserFieldFactory::new(|| {
                 Err(AuthError::internal(
                     "Raw initialization must not evaluate defaults",
                 ))

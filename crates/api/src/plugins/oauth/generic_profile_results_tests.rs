@@ -247,12 +247,8 @@ async fn generic_profile_results_match_pinned_helper_and_callback_contracts() ->
                 return Ok(json!({"kind":"absent"}));
             }
             let data = response.model_property("data")?;
-            let subject = resolve_account_subject(
-                &provider,
-                &OAuthTokenSet::from_fields(tokens.fields()),
-                &data,
-            )
-            .await?;
+            let subject =
+                resolve_account_subject(&provider, &tokens.fields().into(), &data).await?;
             Ok(Value::Object(
                 FieldMap::from([
                     ("kind".into(), "profile".into()),

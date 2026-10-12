@@ -1,5 +1,5 @@
 use super::*;
-use better_auth_core::FieldDate;
+use better_auth_core::{FieldDate, FieldFunction};
 
 #[test]
 fn token_record_preserves_presence_order_and_slot_mutation() {
@@ -71,7 +71,7 @@ fn native_token_handles_survive_request_conversion() {
 fn scope_consumers_apply_join_and_trim_at_their_own_boundaries() -> AuthResult<()> {
     let scopes = SchemaValue::Dynamic(vec![" openid ".into(), FieldValue::Null, 7.0.into()].into());
     assert_eq!(
-        joined_scopes(&scopes)?.display_utf16()?,
+        joined_scopes(&scopes.field_value())?.display_utf16()?,
         " openid ,,7".into()
     );
     assert!(merge_scopes(&"email".into(), &scopes).is_err());
@@ -81,8 +81,8 @@ fn scope_consumers_apply_join_and_trim_at_their_own_boundaries() -> AuthResult<(
         merge_scopes(&"email, openid".into(), &scopes)?.display_utf16()?,
         "email,openid,profile".into()
     );
-    assert!(joined_scopes(&SchemaValue::Dynamic(7.0.into())).is_err());
-    assert!(joined_scopes(&SchemaValue::Dynamic(FieldValue::Null))?.is_undefined());
+    assert!(joined_scopes(&7.0.into()).is_err());
+    assert!(joined_scopes(&FieldValue::Null)?.is_undefined());
     Ok(())
 }
 
@@ -92,12 +92,20 @@ fn callback_metadata_preserves_real_presence_order_and_extension_fields() -> Aut
         ("accessToken".into(), "access".into()),
         ("user".into(), "overridden".into()),
     ]));
-    let request = crate::plugins::oauth::handlers::callback_user_request(&tokens, None, None)?;
+    let request = crate::plugins::oauth::handlers::callback_user_request(
+        &tokens.fields().into(),
+        &FieldValue::Undefined,
+        None,
+    )?;
     assert!(request.user.field_value().is_undefined());
     assert!(request.fields().contains_key("user"));
     assert!(!request.fields().contains_key("expectedIdTokenNonce"));
     for input in [Some("null"), Some("invalid JSON")] {
-        let request = crate::plugins::oauth::handlers::callback_user_request(&tokens, input, None)?;
+        let request = crate::plugins::oauth::handlers::callback_user_request(
+            &tokens.fields().into(),
+            &input.map(FieldValue::from).unwrap_or_default(),
+            None,
+        )?;
         assert!(
             request
                 .fields()
@@ -108,8 +116,8 @@ fn callback_metadata_preserves_real_presence_order_and_extension_fields() -> Aut
     let tokens =
         OAuthTokenSet::from_fields(FieldMap::from([("accessToken".into(), "access".into())]));
     let request = crate::plugins::oauth::handlers::callback_user_request(
-        &tokens,
-        Some(r#"{"name":{"firstName":"Ada"},"custom":{"retained":true}}"#),
+        &tokens.fields().into(),
+        &r#"{"name":{"firstName":"Ada"},"custom":{"retained":true}}"#.into(),
         Some("nonce"),
     )?;
     let fields = request.fields();
@@ -136,8 +144,8 @@ fn callback_metadata_preserves_real_presence_order_and_extension_fields() -> Aut
         ("expectedIdTokenNonce".into(), "old nonce".into()),
     ]));
     let request = crate::plugins::oauth::handlers::callback_user_request(
-        &existing,
-        Some("false"),
+        &existing.fields().into(),
+        &"false".into(),
         Some("new nonce"),
     )?;
     assert_eq!(
@@ -153,5 +161,68 @@ fn callback_metadata_preserves_real_presence_order_and_extension_fields() -> Aut
         request.expected_id_token_nonce.field_value(),
         "new nonce".into()
     );
+    Ok(())
+}
+
+#[test]
+fn scope_join_ignores_to_string_and_retains_custom_method_results() -> AuthResult<()> {
+    let scopes: FieldValue = vec!["openid".into(), "email".into()].into();
+    scopes.set_model_property(
+        "toString",
+        FieldFunction::contextual(|_, _| {
+            Err(AuthError::internal("Scope joining must not call toString"))
+        })
+        .into(),
+    )?;
+    assert_eq!(joined_scopes(&scopes)?, "openid,email".into());
+
+    for scopes in [
+        scopes,
+        FieldMap::new().into(),
+        FieldDate::from_milliseconds(0.0).into(),
+        FieldFunction::contextual(|_, _| Ok(FieldValue::Undefined)).into(),
+    ] {
+        let result: FieldValue = FieldMap::from([("native".into(), true.into())]).into();
+        let expected_receiver = scopes.clone();
+        let expected_result = result.clone();
+        scopes.set_model_property(
+            "join",
+            FieldFunction::contextual(move |receiver, arguments| {
+                assert!(receiver.strict_equals(&expected_receiver));
+                assert_eq!(arguments, &[FieldValue::from(",")]);
+                Ok(expected_result.clone())
+            })
+            .into(),
+        )?;
+        let joined = joined_scopes(&scopes);
+        scopes.set_model_property("join", FieldValue::Undefined)?;
+        assert!(joined?.strict_equals(&result));
+    }
+    Ok(())
+}
+
+#[test]
+fn scope_join_rejects_noncallable_array_overrides_and_preserves_original_errors() -> AuthResult<()>
+{
+    let scopes: FieldValue = vec!["openid".into(), "email".into()].into();
+    for method in [FieldValue::Undefined, FieldValue::Null, false.into()] {
+        scopes.set_model_property("join", method)?;
+        assert!(
+            matches!(joined_scopes(&scopes), Err(AuthError::TypeError(message)) if message == "tokens.scopes?.join is not a function")
+        );
+    }
+    let original: FieldValue = FieldMap::from([("message".into(), "join error".into())]).into();
+    let error = original.clone();
+    scopes.set_model_property(
+        "join",
+        FieldFunction::contextual(move |_, _| Err(AuthError::from_thrown(error.clone()))).into(),
+    )?;
+    let result = joined_scopes(&scopes);
+    assert!(
+        matches!(result, Err(error) if error.raw_value().is_some_and(|value| value.strict_equals(&original)))
+    );
+    for nullish in [FieldValue::Undefined, FieldValue::Null] {
+        assert!(joined_scopes(&nullish)?.is_undefined());
+    }
     Ok(())
 }

@@ -14,10 +14,11 @@ use std::sync::{
 fn hidden_native_user_function_rejects_public_clone_before_filtering() -> AuthResult<()> {
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = calls.clone();
-    let factory: crate::user_fields::UserFieldFactory = Arc::new(move || {
-        let _ = observed.fetch_add(1, Ordering::SeqCst);
-        Ok(FieldValue::Undefined)
-    });
+    let factory: crate::user_fields::UserFieldFactory =
+        crate::user_fields::UserFieldFactory::new(move || {
+            let _ = observed.fetch_add(1, Ordering::SeqCst);
+            Ok(FieldValue::Undefined)
+        });
     let function = FieldValue::Function(crate::FieldFunction::from(factory));
     let mut config = UserConfig::default();
     let _ = config.fields_mut().insert(
@@ -57,10 +58,11 @@ async fn session_public_clone_failure_precedes_request_snapshot_and_keeps_stored
     for user_field in [false, true] {
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = calls.clone();
-        let factory: crate::user_fields::UserFieldFactory = Arc::new(move || {
-            let _ = observed.fetch_add(1, Ordering::SeqCst);
-            Ok(FieldValue::Undefined)
-        });
+        let factory: crate::user_fields::UserFieldFactory =
+            crate::user_fields::UserFieldFactory::new(move || {
+                let _ = observed.fetch_add(1, Ordering::SeqCst);
+                Ok(FieldValue::Undefined)
+            });
         let function = FieldValue::Function(crate::FieldFunction::from(factory));
         let output = function.clone();
         let field = UserFieldConfig {

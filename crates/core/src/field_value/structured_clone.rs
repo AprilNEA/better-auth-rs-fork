@@ -289,6 +289,7 @@ enum Node {
         seed: ArrayCloneSeed,
         length: usize,
         entries: Vec<(usize, FieldValue, Edge)>,
+        properties: Vec<(String, Edge)>,
     },
     Object {
         seed: ObjectCloneSeed,
@@ -333,21 +334,35 @@ impl<'a> Graph<'a> {
         self.sources.push((identity, value.clone()));
         self.nodes.push(Node::Pending);
         let node = match value {
-            FieldValue::Date(date) => Node::Date(FieldDate(Arc::new(*date.0))),
+            FieldValue::Date(date) => Node::Date(FieldDate::from_milliseconds(date.milliseconds())),
             FieldValue::Array(array) => {
                 let seed = array.clone_seed()?;
                 let length = array.len()?;
+                let indices = array.own_indices()?;
+                let names = array.named_property_keys()?;
                 let mut entries = Vec::new();
-                for index in array.own_indices()? {
+                for index in indices {
                     if let Some(value) = array.get(index)? {
                         let edge = self.visit(&value)?;
                         entries.push((index, value, edge));
+                    }
+                }
+                let mut properties = Vec::new();
+                for name in names {
+                    if array
+                        .properties()
+                        .own_property_descriptor(&name)?
+                        .is_some_and(|descriptor| descriptor.enumerable)
+                        && let Some(child) = array.properties().get_with_receiver(&name, value)?
+                    {
+                        properties.push((name, self.visit(&child)?));
                     }
                 }
                 Node::Array {
                     seed,
                     length,
                     entries,
+                    properties,
                 }
             }
             FieldValue::Object(object) => {
@@ -423,11 +438,17 @@ impl<'a> Graph<'a> {
                     seed,
                     length,
                     entries,
+                    properties,
                 } => {
                     let entries = entries
                         .into_iter()
                         .map(|(index, _, edge)| (index, edge.resolve(&values)))
                         .collect();
+                    let properties = properties
+                        .into_iter()
+                        .map(|(name, edge)| (name, edge.resolve(&values)))
+                        .collect();
+                    publish.push(seed.array.properties().prepare_fields(properties)?);
                     publish.push((seed.prepare)(length, entries)?);
                 }
                 _ => {}

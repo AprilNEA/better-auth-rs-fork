@@ -189,7 +189,11 @@ mod tests {
     }
 
     #[test]
-    fn session_query_coerces_native_values_without_serializing_them() {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "The regression propagates query errors and asserts exact native coercion and field presence."
+    )]
+    fn session_query_coerces_native_values_without_serializing_them() -> AuthResult<()> {
         for (value, expected) in [
             (FieldValue::Number(f64::NAN), false),
             (FieldValue::Number(f64::INFINITY), true),
@@ -202,21 +206,21 @@ mod tests {
                 ("disableRefresh".into(), FieldValue::Undefined),
                 ("ignored".into(), true.into()),
             ]);
-            let output = session_query_value(input.into()).unwrap();
+            let output = session_query_value(input.into())?;
+            let output = output
+                .as_object()
+                .ok_or_else(|| AuthError::internal("Expected a native query object"))?;
             assert_eq!(
-                output.as_object().unwrap().snapshot_fields().unwrap(),
+                output.snapshot_fields()?,
                 crate::FieldMap::from([
                     ("disableCookieCache".into(), expected.into()),
                     ("disableRefresh".into(), FieldValue::Undefined),
                 ])
             );
         }
-        assert!(
-            session_query_value(FieldValue::Undefined)
-                .unwrap()
-                .is_undefined()
-        );
+        assert!(session_query_value(FieldValue::Undefined)?.is_undefined());
         assert!(session_query_value(FieldValue::Null).is_err());
+        Ok(())
     }
 
     #[tokio::test]
@@ -265,14 +269,14 @@ pub fn number(value: &Value) -> AuthResult<f64> {
 /// Apply ECMAScript `Number` conversion without erasing Date or non-finite values.
 pub fn field_number(value: &FieldValue) -> AuthResult<f64> {
     match value {
-        FieldValue::Undefined | FieldValue::Function(_) => Ok(f64::NAN),
+        FieldValue::Undefined => Ok(f64::NAN),
         FieldValue::Null => Ok(0.0),
         FieldValue::Bool(value) => Ok(if *value { 1.0 } else { 0.0 }),
         FieldValue::Number(value) => Ok(*value),
-        FieldValue::Date(value) => Ok(value.milliseconds()),
-        FieldValue::Object(_) | FieldValue::Array(_) => {
-            field_number(&value.primitive(PrimitiveHint::Number)?)
-        }
+        FieldValue::Date(_)
+        | FieldValue::Object(_)
+        | FieldValue::Array(_)
+        | FieldValue::Function(_) => field_number(&value.number_primitive()?),
         value => {
             let Ok(text) = value.display_utf16()?.to_utf8() else {
                 return Ok(f64::NAN);
@@ -303,7 +307,9 @@ pub fn field_date(value: &FieldValue) -> AuthResult<crate::FieldDate> {
         FieldValue::Date(date) => {
             return Ok(crate::FieldDate::from_milliseconds(date.milliseconds()));
         }
-        FieldValue::Array(_) | FieldValue::Object(_) => value.primitive(PrimitiveHint::Default)?,
+        FieldValue::Array(_) | FieldValue::Object(_) | FieldValue::Function(_) => {
+            value.primitive(PrimitiveHint::Default)?
+        }
         value => value.clone(),
     };
     Ok(match primitive {

@@ -303,7 +303,7 @@ async fn memory_team_deletion_rolls_back_invitation_output_errors() {
         let count = updates.clone();
         let mut failing = config.clone();
         let marker = failing.invitation.fields_mut().get_mut("marker").unwrap();
-        marker.on_update = Some(Arc::new(move || {
+        marker.on_update = Some(crate::user_fields::UserFieldFactory::new(move || {
             Ok(Value::from(format!(
                 "updated-{}",
                 count.fetch_add(1, Ordering::SeqCst) + 1

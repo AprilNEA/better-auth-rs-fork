@@ -2,7 +2,6 @@ use better_auth::FieldValue;
 use better_auth::config::{FieldTransforms, UserFieldTransform};
 use better_auth::config::{UserConfig, UserFieldConfig, UserFieldType};
 use better_auth::plugins::organization::OrganizationConfig;
-use std::sync::Arc;
 
 fn text(input: &'static str, output: &'static str) -> UserFieldConfig {
     let suffix = |suffix: &'static str| {
@@ -85,7 +84,9 @@ pub fn configure(config: &mut OrganizationConfig) {
                         field_type: UserFieldType::Date,
                         required: Some(false),
                         input: Some(false),
-                        on_update: Some(Arc::new(|| Ok("2020-01-02T03:04:05.000Z".into()))),
+                        on_update: Some(better_auth::config::UserFieldFactory::new(|| {
+                            Ok("2020-01-02T03:04:05.000Z".into())
+                        })),
                         ..Default::default()
                     },
                 ),

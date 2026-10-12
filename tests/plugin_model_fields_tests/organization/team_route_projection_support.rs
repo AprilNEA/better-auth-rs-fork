@@ -88,7 +88,7 @@ fn read_sentinel(field: &'static str, events: &Events) -> UserFieldConfig {
 fn route_fields(case: Case, events: &Events) -> UserConfig {
     let calls = AtomicUsize::new(0);
     let called = events.clone();
-    let function: UserFieldFactory = Arc::new(move || {
+    let function: UserFieldFactory = UserFieldFactory::new(move || {
         called.push("team.name", "called", FieldValue::Undefined)?;
         Ok("Visible Team A".into())
     });

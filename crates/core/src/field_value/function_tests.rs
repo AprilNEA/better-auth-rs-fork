@@ -1,5 +1,5 @@
 use super::*;
-use crate::{AuthError, FieldDate, FieldMap};
+use crate::{AuthError, FieldDate, FieldMap, user_fields::UserFieldFactory};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
@@ -78,14 +78,11 @@ fn calls_without_context_supply_undefined_and_no_arguments() -> AuthResult<()> {
 fn repeated_factory_adaptation_keeps_identity_and_result_handles() -> AuthResult<()> {
     let result = FieldValue::from(FieldMap::new());
     let returned = result.clone();
-    let factory: UserFieldFactory = Arc::new(move || Ok(returned.clone()));
+    let factory: UserFieldFactory = UserFieldFactory::new(move || Ok(returned.clone()));
     let first = FieldFunction::from(factory.clone());
     let second = FieldFunction::from(factory.clone());
     assert_eq!(first, second);
-    assert_eq!(
-        first.identity(),
-        Arc::as_ptr(&factory) as *const () as usize
-    );
+    assert_eq!(first.identity(), factory.function().identity());
     assert_eq!(first.identity(), second.identity());
     assert!(first.call()?.strict_equals(&result));
     assert!(
@@ -93,7 +90,7 @@ fn repeated_factory_adaptation_keeps_identity_and_result_handles() -> AuthResult
             .call_with(&FieldValue::Null, &["ignored".into()])?
             .strict_equals(&result)
     );
-    let distinct: UserFieldFactory = Arc::new(move || Ok(result.clone()));
+    let distinct: UserFieldFactory = UserFieldFactory::new(move || Ok(result.clone()));
     assert_ne!(first, FieldFunction::from(distinct));
     Ok(())
 }
@@ -112,7 +109,7 @@ fn calls_preserve_the_original_error_allocation() -> AuthResult<()> {
             })
         };
         let function = if legacy {
-            FieldFunction::from(Arc::new(fail) as UserFieldFactory)
+            FieldFunction::from(UserFieldFactory::new(fail))
         } else {
             FieldFunction::contextual(move |_, _| fail())
         };

@@ -494,7 +494,9 @@ async fn assert_refresh_cookie_survives_failure(profile: bool) {
         "updatedAt".into(),
         UserFieldConfig {
             field_type: UserFieldType::Date,
-            on_update: Some(Arc::new(move || Ok(timestamp.clone().into()))),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || Ok(timestamp.clone().into()),
+            )),
             ..Default::default()
         },
     );

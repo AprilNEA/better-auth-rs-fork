@@ -120,14 +120,18 @@ pub fn session_field_schema(
         (
             "createdAt".into(),
             UserFieldConfig {
-                default_value_fn: Some(std::sync::Arc::new(|| Ok(chrono::Utc::now().into()))),
+                default_value_fn: Some(crate::user_fields::UserFieldFactory::new(|| {
+                    Ok(chrono::Utc::now().into())
+                })),
                 ..field(UserFieldType::Date, true)
             },
         ),
         (
             "updatedAt".into(),
             UserFieldConfig {
-                on_update: Some(std::sync::Arc::new(|| Ok(chrono::Utc::now().into()))),
+                on_update: Some(crate::user_fields::UserFieldFactory::new(|| {
+                    Ok(chrono::Utc::now().into())
+                })),
                 ..field(UserFieldType::Date, true)
             },
         ),

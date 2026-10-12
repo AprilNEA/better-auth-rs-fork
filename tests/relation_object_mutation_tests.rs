@@ -259,10 +259,12 @@ async fn check<S: AuthSchema>(
                 } else {
                     UserFieldType::String
                 },
-                on_update: Some(Arc::new(move || {
-                    event(&update, "unexpected-onUpdate", &name.into())?;
-                    Ok(FieldValue::Undefined)
-                })),
+                on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    move || {
+                        event(&update, "unexpected-onUpdate", &name.into())?;
+                        Ok(FieldValue::Undefined)
+                    },
+                )),
                 transform: Some(FieldTransforms {
                     input: Some(UserFieldTransform::new(move |value| {
                         event(&input, "unexpected-input", &value)?;

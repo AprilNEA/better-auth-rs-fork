@@ -164,7 +164,7 @@ async fn exercise(mode: &'static str, storage: &'static str) -> AuthResult<()> {
         ..Default::default()
     });
     if mode == "clone" {
-        let callback: UserFieldFactory = Arc::new(|| Ok(FieldValue::Undefined));
+        let callback: UserFieldFactory = UserFieldFactory::new(|| Ok(FieldValue::Undefined));
         let function = FieldValue::Function(FieldFunction::from(callback));
         let _ = auth.session.fields_mut().insert(
             "activeTeamId".into(),

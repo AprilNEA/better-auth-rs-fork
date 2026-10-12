@@ -1,0 +1,127 @@
+[
+  {
+    "contract": "native-named-properties",
+    "kind": "array",
+    "keys": [
+      "0",
+      "2",
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadKeys": [
+      "0",
+      "2",
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadAlias": true,
+    "spreadSelected": true,
+    "spreadEvents": [
+      "get:true"
+    ],
+    "json": "[\"first\",null,\"last\"]",
+    "jsonEvents": [],
+    "cloneEvents": [
+      "get:true"
+    ],
+    "clone": {
+      "keys": [
+        "0",
+        "2",
+        "alias",
+        "ownUndefined",
+        "selected"
+      ],
+      "ownUndefined": true,
+      "aliasRetained": true,
+      "aliasFresh": true,
+      "arrayLength": 3
+    }
+  },
+  {
+    "contract": "native-named-properties-to-json",
+    "kind": "array",
+    "custom": "{\"value\":\"custom\"}",
+    "receiver": true,
+    "arguments": [
+      "value"
+    ],
+    "events": []
+  },
+  {
+    "contract": "native-named-properties",
+    "kind": "date",
+    "keys": [
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadKeys": [
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadAlias": true,
+    "spreadSelected": true,
+    "spreadEvents": [
+      "get:true"
+    ],
+    "json": "\"1970-01-01T00:00:00.000Z\"",
+    "jsonEvents": [],
+    "cloneEvents": [],
+    "clone": {
+      "keys": [],
+      "ownUndefined": false,
+      "aliasRetained": true,
+      "aliasFresh": true,
+      "date": "1970-01-01T00:00:00.000Z"
+    }
+  },
+  {
+    "contract": "native-named-properties-to-json",
+    "kind": "date",
+    "custom": "{\"value\":\"custom\"}",
+    "receiver": true,
+    "arguments": [
+      "value"
+    ],
+    "events": []
+  },
+  {
+    "contract": "native-named-properties",
+    "kind": "function",
+    "keys": [
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadKeys": [
+      "alias",
+      "ownUndefined",
+      "selected"
+    ],
+    "spreadAlias": true,
+    "spreadSelected": true,
+    "spreadEvents": [
+      "get:true"
+    ],
+    "jsonEvents": [],
+    "cloneEvents": [],
+    "clone": {
+      "name": "DataCloneError",
+      "message": "The object can not be cloned."
+    }
+  },
+  {
+    "contract": "native-named-properties-to-json",
+    "kind": "function",
+    "custom": "{\"value\":\"custom\"}",
+    "receiver": true,
+    "arguments": [
+      "value"
+    ],
+    "events": []
+  }
+]

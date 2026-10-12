@@ -276,14 +276,16 @@ fn query_source_reordering_invalidates_raw_and_typed_caches() -> AuthResult<()> 
     let negative = request.input_query_field_value()?;
     request.set_endpoint_query(ValidatedInput::native(negative.clone(), 1_u32));
     request.query = Some(serde_json::from_str("0.0")?);
-    assert_eq!(negative.as_f64().unwrap().to_bits(), (-0.0_f64).to_bits());
+    assert_eq!(
+        negative.as_f64().map(f64::to_bits),
+        Some((-0.0_f64).to_bits())
+    );
     assert_eq!(
         request
             .input_query_field_value()?
             .as_f64()
-            .unwrap()
-            .to_bits(),
-        0.0_f64.to_bits()
+            .map(f64::to_bits),
+        Some(0.0_f64.to_bits())
     );
     assert!(request.validated_query::<u32>().is_none());
     Ok(())
@@ -304,7 +306,11 @@ async fn native_query_validation_does_not_cross_the_legacy_json_bridge() -> Auth
             "validated".to_owned(),
         ))
     });
-    let output = route.query_validator.unwrap().validate(&request).await?;
+    let output = route
+        .query_validator
+        .ok_or_else(|| AuthError::internal("Expected a native query validator"))?
+        .validate(&request)
+        .await?;
     assert!(value.strict_equals(&output.field_value()));
     request.set_endpoint_query(output);
     assert_eq!(
@@ -318,7 +324,7 @@ async fn native_query_validation_does_not_cross_the_legacy_json_bridge() -> Auth
     assert!(
         legacy
             .query_validator
-            .unwrap()
+            .ok_or_else(|| AuthError::internal("Expected a JSON query validator"))?
             .validate(&request)
             .await
             .is_err()
@@ -371,7 +377,12 @@ fn query_patch_retains_native_values_and_the_existing_recursive_merge() -> AuthR
     assert!(!original.strict_equals(&merged));
     assert!(merged.model_property("retained")?.strict_equals(&retained));
     assert!(merged.model_property("date")?.strict_equals(&date));
-    assert!(merged.model_property("nan")?.as_f64().unwrap().is_nan());
+    assert!(
+        merged
+            .model_property("nan")?
+            .as_f64()
+            .is_some_and(f64::is_nan)
+    );
     assert!(merged.model_property("list")?.strict_equals(&replacement));
     assert_eq!(
         merged.model_property("nested")?.json()?,

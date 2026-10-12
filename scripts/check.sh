@@ -649,6 +649,8 @@ run_stage() {
       local json_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/native-json.test.ts \
+        ./compat-tests/reference-server/contracts/native-named-properties.test.ts \
+        ./compat-tests/reference-server/contracts/native-coercion-properties.test.ts \
         ./compat-tests/reference-server/contracts/invitation-claim-selector-values.test.ts \
         ./compat-tests/reference-server/contracts/raw-api-errors.test.ts \
         ./compat-tests/reference-server/contracts/error-construction.test.ts \
@@ -670,6 +672,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-input.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-runtime-url.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-native-token.test.ts \
+        ./compat-tests/reference-server/contracts/oauth-proxy-callback.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --features axum \
@@ -682,7 +686,7 @@ run_stage() {
         --test oauth_proxy_request_url_tests --test request_runtime_mutation_tests \
         --test dynamic_runtime_tests --test http_api_error_logging_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
+        error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::defu:: utils::jwt:: utils::jwe:: utils::url:: wire:: \
         request_runtime:: query:: plugin::tests::async_body_dispatch:: \
         store::ephemeral::id_slot_tests::organization_query_alias_tests::selector_values:: \
         observability::logger:: observability::telemetry:: \

@@ -232,7 +232,7 @@ async fn check_write<S: AuthSchema>(
         (
             "createdAt",
             UserFieldConfig {
-                on_update: Some(Arc::new({
+                on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
                     let events = events.clone();
                     move || {
                         event(&events, "createdAt", "onUpdate", FieldValue::Undefined)?;

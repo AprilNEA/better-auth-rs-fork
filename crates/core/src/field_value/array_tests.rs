@@ -11,6 +11,7 @@ type OnRead = Box<dyn Fn(usize) -> AuthResult<()> + Send + Sync>;
 
 struct Source {
     length: usize,
+    properties: FieldObject,
     entries: Mutex<BTreeMap<usize, FieldValue>>,
     on_read: OnRead,
     target: Mutex<Option<FieldArray>>,
@@ -21,6 +22,9 @@ fn poisoned<T>(_: std::sync::PoisonError<T>) -> AuthError {
 }
 
 impl FieldArraySource for Source {
+    fn properties(&self) -> &FieldObject {
+        &self.properties
+    }
     fn len(&self) -> AuthResult<usize> {
         Ok(self.length)
     }
@@ -57,6 +61,7 @@ fn array_object_rest_preserves_holes_exclusions_and_shared_values_after_getter_d
         let reads = reads.clone();
         Source {
             length: 5,
+            properties: FieldMap::new().into(),
             entries: Mutex::new(
                 [
                     (0, child.clone()),
@@ -113,6 +118,7 @@ fn clone_reads_arrays_depth_first_and_preserves_holes_and_own_undefined() -> Aut
     let log = events.clone();
     let outer = Arc::new(Source {
         length: 4,
+        properties: FieldMap::new().into(),
         entries: Mutex::new(
             [
                 (1, 1.into()),
@@ -131,6 +137,7 @@ fn clone_reads_arrays_depth_first_and_preserves_holes_and_own_undefined() -> Aut
     let log = events.clone();
     let nested = FieldArray::from_source(Arc::new(Source {
         length: 1,
+        properties: FieldMap::new().into(),
         entries: Mutex::new([(0, "nested".into())].into()),
         on_read: Box::new(move |index| {
             log.lock()
@@ -181,6 +188,7 @@ fn clone_reads_arrays_depth_first_and_preserves_holes_and_own_undefined() -> Aut
 fn direct_array_cycles_share_one_clone_identity_and_json_rejects_the_cycle() -> AuthResult<()> {
     let source = Arc::new(Source {
         length: 2,
+        properties: FieldMap::new().into(),
         entries: Mutex::new(BTreeMap::new()),
         on_read: Box::new(|_| Ok(())),
         target: Mutex::new(None),
@@ -224,6 +232,7 @@ fn array_getter_errors_retain_allocation_stop_reads_and_prevent_deferred_publica
     let log = events.clone();
     let source = Arc::new(Source {
         length: 2,
+        properties: FieldMap::new().into(),
         entries: Mutex::new([(0, true.into()), (1, false.into())].into()),
         on_read: Box::new(move |index| {
             log.lock().map_err(poisoned)?.push(index);
@@ -274,6 +283,7 @@ fn live_array_schema_narrowing_is_lazy_and_json_retains_original_getter_errors()
         let error = Arc::new(Mutex::new(Some(AuthError::Internal(message))));
         let array = FieldArray::from_source(Arc::new(Source {
             length: 2,
+            properties: FieldMap::new().into(),
             entries: Mutex::new([(0, "first".into()), (1, "unread".into())].into()),
             on_read: Box::new(move |index| {
                 observed.lock().map_err(poisoned)?.push(index);

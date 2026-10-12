@@ -80,7 +80,9 @@ async fn fixture() -> AuthResult<Fixture> {
             "updatedAt".into(),
             UserFieldConfig {
                 field_type: UserFieldType::Date,
-                on_update: Some(Arc::new(move || Ok(updated_at.into()))),
+                on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    move || Ok(updated_at.into()),
+                )),
                 ..Default::default()
             },
         );

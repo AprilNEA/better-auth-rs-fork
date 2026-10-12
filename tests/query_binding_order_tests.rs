@@ -81,10 +81,12 @@ fn config(trace: &Trace, reject: &Arc<AtomicBool>) -> AuthConfig {
     let _ = config.user.fields_mut().insert(
         "image".into(),
         UserFieldConfig {
-            default_value_fn: Some(Arc::new(move || {
-                record(&default_trace, "image-default")?;
-                Ok("creation-only-image".into())
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    record(&default_trace, "image-default")?;
+                    Ok("creation-only-image".into())
+                },
+            )),
             ..Default::default()
         },
     );
@@ -94,10 +96,12 @@ fn config(trace: &Trace, reject: &Arc<AtomicBool>) -> AuthConfig {
         "updatedAt".into(),
         UserFieldConfig {
             field_type: UserFieldType::Date,
-            on_update: Some(Arc::new(move || {
-                record(&update_trace, "updated-on-update")?;
-                Ok(date().into())
-            })),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    record(&update_trace, "updated-on-update")?;
+                    Ok(date().into())
+                },
+            )),
             transform: Some(FieldTransforms {
                 input: Some(UserFieldTransform::new(move |value| {
                     record(&input_trace, "updated-input")?;

@@ -824,7 +824,7 @@ mod tests {
 
         let json =
             serde_json::to_value(SessionView::from(&session)).expect("serialize session view");
-        assert_eq!(json["expiresAt"].is_string(), true);
+        assert!(json["expiresAt"].is_string());
         assert_eq!(json["ipAddress"], "127.0.0.1");
         assert_eq!(json["activeOrganizationId"], "org-1");
     }

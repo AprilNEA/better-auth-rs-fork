@@ -243,9 +243,10 @@ mod tests {
     #[test]
     fn native_and_custom_aliases_follow_one_declaration_order() {
         for custom_first in [true, false] {
-            let mut schema = ModelFields::default();
-            schema.schema_models =
-                Some(vec![(EntityRole::User, "user"), (EntityRole::Team, "team")]);
+            let mut schema = ModelFields {
+                schema_models: Some(vec![(EntityRole::User, "user"), (EntityRole::Team, "team")]),
+                ..Default::default()
+            };
             if custom_first {
                 schema
                     .register_custom_model("badge", Some("shared"), UserConfig::default())

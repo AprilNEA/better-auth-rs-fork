@@ -173,7 +173,7 @@ async fn memory_session_id_alias_updates_preserve_storage_order_and_output() -> 
         stored.additional_fields = [("aliasId".into(), public_id.into())].into();
         assert_eq!(result, stored);
         let expected_event = json!(["alias-output", required(stored_id.json()?)?]);
-        assert_eq!(events(&trace)?, [expected_event.clone()]);
+        assert_eq!(events(&trace)?, std::slice::from_ref(&expected_event));
         assert_eq!(
             required(store.get_session(stored.token.typed().unwrap()).await?)?,
             stored

@@ -36,7 +36,24 @@ pub trait FieldObjectSource: Send + Sync {
         Ok(self.own_keys()?.iter().any(|key| key == name))
     }
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>>;
+    /// Read a property with the native receiver that owns this source.
+    fn get_with_receiver(
+        &self,
+        name: &str,
+        _receiver: &FieldValue,
+    ) -> AuthResult<Option<FieldValue>> {
+        self.get(name)
+    }
     fn set(&self, name: String, value: FieldValue) -> AuthResult<Option<FieldValue>>;
+    /// Assign a property without reading its previous value or replacing setter errors.
+    fn set_with_receiver(
+        &self,
+        name: String,
+        value: FieldValue,
+        _receiver: &FieldValue,
+    ) -> AuthResult<()> {
+        self.set(name, value).map(drop)
+    }
     fn delete(&self, name: &str) -> AuthResult<Option<FieldValue>>;
     fn snapshot_fields(&self) -> AuthResult<FieldMap>;
     fn identity(&self) -> usize;
@@ -177,13 +194,21 @@ impl FieldObject {
 
     /// Read one current property without retaining a source lock.
     pub fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
+        self.get_with_receiver(name, &FieldValue::Object(self.clone()))
+    }
+
+    pub(crate) fn get_with_receiver(
+        &self,
+        name: &str,
+        receiver: &FieldValue,
+    ) -> AuthResult<Option<FieldValue>> {
         match &self.0 {
             ObjectStorage::Owned(fields) => Ok(fields
                 .lock()
                 .map_err(|_| AuthError::internal("Field object lock poisoned"))?
                 .get(name)
                 .cloned()),
-            ObjectStorage::Live(source) => source.get(name),
+            ObjectStorage::Live(source) => source.get_with_receiver(name, receiver),
         }
     }
 
@@ -213,6 +238,33 @@ impl FieldObject {
                 .map_err(|_| AuthError::internal("Field object lock poisoned"))?
                 .insert(name, value)),
             ObjectStorage::Live(source) => source.set(name, value),
+        }
+    }
+
+    pub(crate) fn assign(
+        &self,
+        name: &str,
+        value: FieldValue,
+        receiver: &FieldValue,
+    ) -> AuthResult<()> {
+        match &self.0 {
+            ObjectStorage::Owned(_) => self.set(name, value).map(drop),
+            ObjectStorage::Live(source) => source.set_with_receiver(name.into(), value, receiver),
+        }
+    }
+
+    pub(crate) fn prepare_fields(
+        &self,
+        fields: FieldMap,
+    ) -> AuthResult<super::structured_clone::CloneWrite> {
+        match &self.0 {
+            ObjectStorage::Owned(target) => Ok(super::structured_clone::prepare_clone(
+                target.clone(),
+                fields,
+            )),
+            ObjectStorage::Live(_) => Err(AuthError::internal(
+                "Structured clone requires an owned property target",
+            )),
         }
     }
 

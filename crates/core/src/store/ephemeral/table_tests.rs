@@ -31,7 +31,7 @@ fn filters_reenter_the_store_and_replace_the_captured_array() -> AuthResult<()> 
                     let live = nested.capture_table(EntityRole::Account)?;
                     nested.replace_table(
                         EntityRole::Account,
-                        live.without_refs(&[second.clone()])?,
+                        live.without_refs(std::slice::from_ref(&second))?,
                     )?;
                     let rebound = nested.capture_table(EntityRole::Account)?;
                     let _ = rebound.push(row("discarded-by-outer-replacement"))?;
@@ -138,6 +138,7 @@ impl FieldObjectSource for ComparisonSource {
             let table = TableRef {
                 rows,
                 gate: gate.clone(),
+                properties: FieldMap::new().into(),
             };
             let _ = table.push(row("appended-during-comparison"))?;
         }

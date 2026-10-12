@@ -175,7 +175,7 @@ mod tests {
             let release_reads = Cell::new(0);
             let version_reads = Cell::new(0);
             let container_reads = Cell::new(0);
-            let mut release = || {
+            let release = || {
                 release_reads.set(release_reads.get() + 1);
                 Ok(if release_reads.get() == 1 {
                     first
@@ -184,7 +184,7 @@ mod tests {
                 }
                 .into())
             };
-            let system_release = detect_release(&mut release);
+            let system_release = detect_release(release);
             let is_wsl = detect_wsl(
                 release,
                 || {
@@ -236,11 +236,11 @@ mod tests {
     fn uname_errors_preserve_empty_release_and_proc_fallback() {
         let release_reads = Cell::new(0);
         let version_reads = Cell::new(0);
-        let mut release = || {
+        let release = || {
             release_reads.set(release_reads.get() + 1);
             Err(io::ErrorKind::PermissionDenied.into())
         };
-        let system_release = detect_release(&mut release);
+        let system_release = detect_release(release);
         let is_wsl = detect_wsl(
             release,
             || {
@@ -326,11 +326,11 @@ mod tests {
             let marker_reads = Cell::new(0);
             let docker_reads = Cell::new(0);
             for (microsoft, current) in [(true, initial), (false, !initial), (true, !initial)] {
-                let mut release = || {
+                let release = || {
                     release_reads.set(release_reads.get() + 1);
                     Ok("6.17.0".into())
                 };
-                assert_eq!(detect_release(&mut release), "6.17.0");
+                assert_eq!(detect_release(release), "6.17.0");
                 let is_wsl = detect_wsl(
                     release,
                     || {

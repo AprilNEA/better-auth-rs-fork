@@ -142,7 +142,6 @@ async fn limited_signed_profiles_match_pinned_on_code_direct_and_account_reads()
                 .unwrap();
                 social_profile::fetch_user_info_with_claims(
                     &resolved,
-                    &OAuthTokenSet::from_fields(request.fields()),
                     request,
                     Some("ordinary-facebook-nonce"),
                     verified,
@@ -152,21 +151,15 @@ async fn limited_signed_profiles_match_pinned_on_code_direct_and_account_reads()
             } else if entry == "code" {
                 social_profile::fetch_user_info_for_code(
                     &resolved,
-                    &OAuthTokenSet::from_fields(request.fields()),
                     request,
                     Some("ordinary-facebook-nonce"),
                 )
                 .await
                 .unwrap()
             } else {
-                social_profile::fetch_user_info_from_provider(
-                    &resolved,
-                    &OAuthTokenSet::from_fields(request.fields()),
-                    request,
-                    None,
-                )
-                .await
-                .unwrap()
+                social_profile::fetch_user_info_from_provider(&resolved, request, None)
+                    .await
+                    .unwrap()
             };
             assert_eq!(
                 public_response(response),
@@ -209,7 +202,6 @@ async fn limited_mapper_error_retains_the_original_application_error() {
             config,
             generic: None,
         },
-        &OAuthTokenSet::from_fields(profile_request.fields()),
         profile_request,
         Some("ordinary-facebook-nonce"),
     )

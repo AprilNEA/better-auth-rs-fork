@@ -97,12 +97,14 @@ fn configure(
             token.field_name = Some("storedToken".into());
             let events = events.clone();
             let calls = AtomicUsize::new(0);
-            token.default_value_fn = Some(Arc::new(move || {
-                let value =
-                    FieldValue::from(format!("D{}", calls.fetch_add(1, Ordering::SeqCst) + 1));
-                emit(&events, Event::Default("token", value.clone()))?;
-                Ok(value)
-            }));
+            token.default_value_fn = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value =
+                        FieldValue::from(format!("D{}", calls.fetch_add(1, Ordering::SeqCst) + 1));
+                    emit(&events, Event::Default("token", value.clone()))?;
+                    Ok(value)
+                },
+            ));
         }
         Scenario::OutputToken => {
             token.transform = Some(FieldTransforms {
@@ -159,10 +161,12 @@ fn configure(
                     } else {
                         UserFieldType::String
                     },
-                    default_value_fn: Some(Arc::new(move || {
-                        emit(&events, Event::Default(event_name, value.clone()))?;
-                        Ok(value.clone())
-                    })),
+                    default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                        move || {
+                            emit(&events, Event::Default(event_name, value.clone()))?;
+                            Ok(value.clone())
+                        },
+                    )),
                     ..Default::default()
                 };
                 let _ = config.session.fields_mut().insert(name, field);

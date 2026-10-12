@@ -1,9 +1,4 @@
 //! Paired with organization-detail-dependencies.test.ts against Better Auth 1.7.6.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract propagates setup errors and asserts complete values, callback order, and storage."
-)]
-
 use super::super::test_support::snapshot_tree;
 use super::*;
 use crate::FieldDate;

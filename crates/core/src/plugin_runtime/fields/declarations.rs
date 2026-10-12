@@ -226,11 +226,15 @@ impl ModelFields {
                     }
                     (EntityRole::Invitation | EntityRole::OrganizationRole, "createdAt") => {
                         declaration.default_value_fn =
-                            Some(Arc::new(|| Ok(Value::Date(chrono::Utc::now().into()))));
+                            Some(crate::user_fields::UserFieldFactory::new(|| {
+                                Ok(Value::Date(chrono::Utc::now().into()))
+                            }));
                     }
                     (EntityRole::Team | EntityRole::OrganizationRole, "updatedAt") => {
                         declaration.on_update =
-                            Some(Arc::new(|| Ok(Value::Date(chrono::Utc::now().into()))));
+                            Some(crate::user_fields::UserFieldFactory::new(|| {
+                                Ok(Value::Date(chrono::Utc::now().into()))
+                            }));
                     }
                     _ => {}
                 }
@@ -252,7 +256,7 @@ impl ModelFields {
             }
             if let Some(field) = fields.fields_mut().get_mut("lastRequest") {
                 field.bigint = Some(true);
-                field.default_value_fn = Some(Arc::new(|| {
+                field.default_value_fn = Some(crate::user_fields::UserFieldFactory::new(|| {
                     Ok(chrono::Utc::now().timestamp_millis().into())
                 }));
             }

@@ -49,17 +49,19 @@ async fn increment_overrides_set_policies_for_the_same_physical_column() -> Auth
                             UserFieldConfig {
                                 field_type: UserFieldType::Number,
                                 field_name: Some("request_count".into()),
-                                on_update: Some(Arc::new({
-                                    let setters = setters.clone();
-                                    move || {
-                                        let _ = setters.fetch_add(1, Ordering::SeqCst);
-                                        if fail_input {
-                                            Err(AuthError::internal("counter input rejected"))
-                                        } else {
-                                            Ok(99.0.into())
+                                on_update: Some(
+                                    better_auth_core::user_fields::UserFieldFactory::new({
+                                        let setters = setters.clone();
+                                        move || {
+                                            let _ = setters.fetch_add(1, Ordering::SeqCst);
+                                            if fail_input {
+                                                Err(AuthError::internal("counter input rejected"))
+                                            } else {
+                                                Ok(99.0.into())
+                                            }
                                         }
-                                    }
-                                })),
+                                    }),
+                                ),
                                 transform: Some(FieldTransforms {
                                     output: Some(UserFieldTransform::new({
                                         let outputs = outputs.clone();

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { assertObservationReplay } from "./observation-replay.mjs";
 import { writeObservation } from "./write-observation.mjs";
 
 test("native named properties retain identity across spread, JSON, and structured clone", async () => {
@@ -35,7 +36,7 @@ test("native named properties retain identity across spread, JSON, and structure
           arrayLength: Array.isArray(copy) ? copy.length : undefined,
           date: copy instanceof Date ? copy.toISOString() : undefined },
     };
-    records.push(record);
+    records.push({ contract: "native-named-properties", ...record });
     await writeObservation(`${JSON.stringify({ contract: "native-named-properties", ...record })}\n`);
     expect(spread.alias).toBe(child);
     expect(spread.selected).toBe(child);
@@ -63,11 +64,14 @@ test("native named properties retain identity across spread, JSON, and structure
     value.toJSON = function (...args: any[]) { receiver = this; arguments_ = args; return "custom"; };
     const custom = JSON.stringify({ value });
     const customRecord = { kind, custom, receiver: receiver === value, arguments: arguments_, events };
+    records.push({ contract: "native-named-properties-to-json", ...customRecord });
     await writeObservation(`${JSON.stringify({ contract: "native-named-properties-to-json", ...customRecord })}\n`);
     expect(custom).toBe('{"value":"custom"}');
     expect(receiver).toBe(value);
     expect(arguments_).toStrictEqual(["value"]);
     expect(events).toStrictEqual([]);
   }
-  expect(records).toHaveLength(3);
+  expect(records).toHaveLength(6);
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/native-named-properties-1.7.6.json", import.meta.url)).json();
+  assertObservationReplay(JSON.parse(JSON.stringify(records)), fixture, "native-named-properties");
 });

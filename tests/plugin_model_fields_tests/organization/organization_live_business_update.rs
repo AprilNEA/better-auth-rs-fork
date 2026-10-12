@@ -21,7 +21,7 @@ fn values(mode: Metadata, events: &Events) -> (FieldValue, FieldValue) {
         .into();
         return (source, expected);
     }
-    let function: UserFieldFactory = Arc::new({
+    let function: UserFieldFactory = UserFieldFactory::new({
         let events = events.clone();
         move || {
             event(&events, ["metadata.function".into(), "called".into()])?;

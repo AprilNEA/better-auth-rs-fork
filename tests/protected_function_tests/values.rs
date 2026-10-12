@@ -48,7 +48,7 @@ impl Harness {
     fn new(result: &str) -> Self {
         let calls = Arc::new(Calls::default());
         let returned_calls = calls.clone();
-        let returned_factory: UserFieldFactory = Arc::new(move || {
+        let returned_factory: UserFieldFactory = UserFieldFactory::new(move || {
             let _ = returned_calls.returned.fetch_add(1, Ordering::SeqCst);
             Ok("returned-function-value".into())
         });
@@ -56,7 +56,7 @@ impl Harness {
         let returned_value = returned.clone();
         let result = result.to_owned();
         let factory_calls = calls.clone();
-        let factory: UserFieldFactory = Arc::new(move || {
+        let factory: UserFieldFactory = UserFieldFactory::new(move || {
             let _ = factory_calls.factory.fetch_add(1, Ordering::SeqCst);
             match result.as_str() {
                 "string" => Ok("factory-value".into()),

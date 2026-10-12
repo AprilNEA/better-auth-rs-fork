@@ -386,7 +386,9 @@ fn user_input_factory_and_transform_propagate_original_failures() -> AuthResult<
         };
         let field = if factory {
             UserFieldConfig {
-                default_value_fn: Some(Arc::new(rejected)),
+                default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    rejected,
+                )),
                 ..Default::default()
             }
         } else {
@@ -405,13 +407,15 @@ fn user_input_factory_and_transform_propagate_original_failures() -> AuthResult<
                     (
                         "later".into(),
                         UserFieldConfig {
-                            default_value_fn: Some(Arc::new({
-                                let trace = trace.clone();
-                                move || {
-                                    record(&trace, "later".into())?;
-                                    Ok("later".into())
-                                }
-                            })),
+                            default_value_fn: Some(
+                                better_auth_core::user_fields::UserFieldFactory::new({
+                                    let trace = trace.clone();
+                                    move || {
+                                        record(&trace, "later".into())?;
+                                        Ok("later".into())
+                                    }
+                                }),
+                            ),
                             ..Default::default()
                         },
                     ),

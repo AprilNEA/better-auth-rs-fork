@@ -94,14 +94,18 @@ impl Calls {
             required: Some(false),
             returned: Some(false),
             unique: Some(false),
-            default_value_fn: Some(Arc::new(move || {
-                let _ = default.callbacks.fetch_add(1, Ordering::Relaxed);
-                Err(AuthError::internal("Discarded RateLimit default ran"))
-            })),
-            on_update: Some(Arc::new(move || {
-                let _ = update.callbacks.fetch_add(1, Ordering::Relaxed);
-                Err(AuthError::internal("Discarded RateLimit update ran"))
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let _ = default.callbacks.fetch_add(1, Ordering::Relaxed);
+                    Err(AuthError::internal("Discarded RateLimit default ran"))
+                },
+            )),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let _ = update.callbacks.fetch_add(1, Ordering::Relaxed);
+                    Err(AuthError::internal("Discarded RateLimit update ran"))
+                },
+            )),
             transform: Some(FieldTransforms {
                 input: Some(self.transform("input")),
                 output: Some(self.transform("output")),

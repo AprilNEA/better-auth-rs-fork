@@ -89,11 +89,12 @@ mod tests {
             ("alias".into(), date.clone().into()),
             ("ownUndefined".into(), FieldValue::Undefined),
         ]))?;
-        let factory: crate::user_fields::UserFieldFactory = std::sync::Arc::new(|| {
-            Err(crate::AuthError::internal(
-                "Public cloning must not invoke functions",
-            ))
-        });
+        let factory: crate::user_fields::UserFieldFactory =
+            crate::user_fields::UserFieldFactory::new(|| {
+                Err(crate::AuthError::internal(
+                    "Public cloning must not invoke functions",
+                ))
+            });
         session.token =
             SchemaValue::from_field(FieldValue::Function(crate::FieldFunction::from(factory)));
         session.active = true;

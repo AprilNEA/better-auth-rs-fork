@@ -184,10 +184,9 @@ async fn fetch(
         ..Default::default()
     };
     let tokens = OAuthTokenSet::from_fields(request.fields());
-    let response =
-        social_profile::fetch_user_info_for_code(&resolved.providers[id], &tokens, request, None)
-            .await
-            .unwrap();
+    let response = social_profile::fetch_user_info_for_code(&resolved.providers[id], request, None)
+        .await
+        .unwrap();
     assert_eq!(keys(&response.value), ["user", "data"]);
     (response, resolved, tokens)
 }

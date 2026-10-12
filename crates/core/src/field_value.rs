@@ -5,7 +5,6 @@ use chrono::{DateTime, Datelike, Utc};
 use indexmap::IndexMap;
 use serde_json::Value as JsonValue;
 use std::{
-    collections::HashSet,
     ops::{Deref, DerefMut},
     sync::Arc,
 };
@@ -26,36 +25,53 @@ pub(crate) use structured_clone::{ArrayCloneSeed, prepare_clone};
 mod json;
 pub(crate) use json::{project_input_json, stringify_http};
 mod primitive;
+mod property;
 pub(crate) use primitive::PrimitiveHint;
 pub mod serde;
 
-/// An immutable Date object. Clones retain identity, including for an invalid Date.
+/// A Date with an immutable timestamp and shared named properties.
 /// `PartialEq` compares stored milliseconds; use `same_object` for object identity.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FieldDate(Arc<Option<i64>>);
+#[derive(Clone)]
+pub struct FieldDate(Arc<DateState>);
+
+struct DateState {
+    milliseconds: Option<i64>,
+    properties: FieldObject,
+}
 
 impl FieldDate {
     /// Apply ECMAScript TimeClip while retaining valid milliseconds beyond Chrono's range.
     pub fn from_milliseconds(milliseconds: f64) -> Self {
+        Self::from_milliseconds_with_properties(milliseconds, FieldMap::new().into())
+    }
+
+    /// Create a distinct Date whose property source owns accessors and descriptors.
+    pub fn from_milliseconds_with_properties(milliseconds: f64, properties: FieldObject) -> Self {
         let clipped = (milliseconds.is_finite() && milliseconds.abs() <= 8_640_000_000_000_000.0)
             .then(|| milliseconds.trunc() as i64);
-        Self(Arc::new(clipped))
+        Self(Arc::new(DateState {
+            milliseconds: clipped,
+            properties,
+        }))
     }
 
     /// Create a distinct invalid Date object.
     pub fn invalid() -> Self {
-        Self(Arc::new(None))
+        Self::from_milliseconds(f64::NAN)
     }
 
     /// Read the Date timestamp. Invalid dates return NaN.
     pub fn milliseconds(&self) -> f64 {
-        self.0.map_or(f64::NAN, |milliseconds| milliseconds as f64)
+        self.0
+            .milliseconds
+            .map_or(f64::NAN, |milliseconds| milliseconds as f64)
     }
 
     /// Convert a valid Date to Chrono. Invalid dates return `None`.
     /// Valid dates outside Chrono's range return an error instead of becoming invalid dates.
     pub fn to_datetime(&self) -> AuthResult<Option<DateTime<Utc>>> {
         self.0
+            .milliseconds
             .map(|milliseconds| {
                 crate::utils::date::from_milliseconds(milliseconds as f64).ok_or_else(|| {
                     AuthError::internal("Valid Date milliseconds exceed Chrono's supported range")
@@ -65,7 +81,7 @@ impl FieldDate {
     }
 
     fn iso_string(&self) -> AuthResult<Option<String>> {
-        let Some(milliseconds) = *self.0 else {
+        let Some(milliseconds) = self.0.milliseconds else {
             return Ok(None);
         };
         const YEAR_2000: i64 = 946_684_800_000;
@@ -92,11 +108,33 @@ impl FieldDate {
     pub fn same_object(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
+
+    /// Borrow the Date's own named properties without reading the timestamp.
+    pub fn properties(&self) -> &FieldObject {
+        &self.0.properties
+    }
+}
+
+impl PartialEq for FieldDate {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.milliseconds == other.0.milliseconds
+    }
+}
+
+impl Eq for FieldDate {}
+
+impl std::fmt::Debug for FieldDate {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("FieldDate")
+            .field(&self.0.milliseconds)
+            .finish()
+    }
 }
 
 impl From<DateTime<Utc>> for FieldDate {
     fn from(value: DateTime<Utc>) -> Self {
-        Self(Arc::new(Some(value.timestamp_millis())))
+        Self::from_milliseconds(value.timestamp_millis() as f64)
     }
 }
 
@@ -318,103 +356,6 @@ impl FieldValue {
         }
     }
 
-    /// Read a named model field without narrowing its value or a non-null receiver.
-    /// Null and undefined reject property access; other non-record values have no model fields.
-    pub fn model_property(&self, name: &str) -> AuthResult<Self> {
-        let nullish = match self {
-            Self::Null => Some("null"),
-            Self::Undefined => Some("undefined"),
-            _ => None,
-        };
-        if let Some(nullish) = nullish {
-            return Err(AuthError::type_error(format!(
-                "Cannot read properties of {nullish} (reading '{name}')"
-            )));
-        }
-        match self.as_object() {
-            Some(fields) => Ok(fields.get(name)?.unwrap_or_default()),
-            None => Ok(Self::Undefined),
-        }
-    }
-
-    /// Check property presence without reading the value, rejecting primitive receivers as JavaScript `in` does.
-    /// Object sources own prototype lookup. Arrays expose indices and length; Date and function handles have no named property storage.
-    // shortcut: Primitive error text lacks source-expression provenance; retain that provenance before matching engine-specific diagnostics.
-    pub fn has_property(&self, name: &str) -> AuthResult<bool> {
-        match self {
-            Self::Object(object) => object.has_property(name),
-            Self::Array(array) => match name {
-                "length" => Ok(true),
-                _ => match crate::utils::json::array_index(name) {
-                    Some(index) => Ok(array.own_indices()?.contains(&(index as usize))),
-                    None => Ok(false),
-                },
-            },
-            Self::Date(_) | Self::Function(_) => Ok(false),
-            _ => Err(AuthError::type_error(format!(
-                "Cannot use 'in' operator to search for '{name}' in {}",
-                String::from_utf16_lossy(self.display_utf16()?.as_utf16()),
-            ))),
-        }
-    }
-
-    /// Copy own enumerable properties while retaining native child identities.
-    /// String keys enumerate UTF-16 units, as in object spread and `Object.entries`.
-    pub fn enumerable_fields(&self) -> AuthResult<FieldMap> {
-        Ok(match self {
-            Self::Object(_) => return self.enumerable_fields_except(&[]),
-            Self::Array(values) => {
-                let mut fields = FieldMap::new();
-                for index in values.own_indices()? {
-                    if let Some(value) = values.get(index)? {
-                        let _ = fields.insert(index.to_string(), value);
-                    }
-                }
-                fields
-            }
-            Self::String(value) => string_fields(value.encode_utf16()),
-            Self::Utf16String(value) => string_fields(value.as_utf16().iter().copied()),
-            _ => FieldMap::new(),
-        })
-    }
-
-    /// Copy object-rest properties without reading an excluded property's getter.
-    pub fn enumerable_fields_except(&self, excluded: &[&str]) -> AuthResult<FieldMap> {
-        match self {
-            Self::Object(object) => {
-                let mut fields = FieldMap::new();
-                for name in object.own_keys()? {
-                    if !excluded.contains(&name.as_str())
-                        && object
-                            .own_property_descriptor(&name)?
-                            .is_some_and(|descriptor| descriptor.enumerable)
-                    {
-                        let value = object.get(&name)?.unwrap_or_default();
-                        let _ = fields.insert(name, value);
-                    }
-                }
-                Ok(fields)
-            }
-            Self::Array(array) => {
-                let mut fields = FieldMap::new();
-                for index in array.own_indices()? {
-                    let name = index.to_string();
-                    if !excluded.contains(&name.as_str())
-                        && let Some(value) = array.get(index)?
-                    {
-                        let _ = fields.insert(name, value);
-                    }
-                }
-                Ok(fields)
-            }
-            _ => {
-                let mut fields = self.enumerable_fields()?;
-                fields.retain(|name, _| !excluded.contains(&name.as_str()));
-                Ok(fields)
-            }
-        }
-    }
-
     /// Evaluate JavaScript truthiness without serializing numbers or objects.
     pub fn is_truthy(&self) -> bool {
         match self {
@@ -554,63 +495,6 @@ impl From<FieldMap> for FieldValue {
 mod object_tests;
 #[cfg(test)]
 mod tests;
-
-impl FieldValue {
-    /// Apply JavaScript string conversion while retaining unpaired UTF-16 code units.
-    pub fn display_utf16(&self) -> AuthResult<crate::Utf16String> {
-        self.display_utf16_with_active(&mut HashSet::new())
-    }
-
-    fn display_utf16_with_active(
-        &self,
-        active: &mut HashSet<ArrayIdentity>,
-    ) -> AuthResult<crate::Utf16String> {
-        Ok(match self {
-            Self::Undefined => "undefined".into(),
-            Self::Null => "null".into(),
-            Self::String(value) => value.as_str().into(),
-            Self::Utf16String(value) => value.clone(),
-            Self::Bool(value) => value.to_string().into(),
-            Self::Number(value) => crate::schema_value::number_string(*value).into(),
-            Self::Function(_) => {
-                // ponytail: Rust callbacks have no JavaScript source text; explicit reflection is required for function coercion.
-                return Err(AuthError::internal(
-                    "JavaScript function source is unavailable for this Rust field callback",
-                ));
-            }
-            Self::Object(_) => self
-                .primitive(PrimitiveHint::String)?
-                .display_utf16_with_active(active)?,
-            Self::Date(value) => match value.to_datetime()? {
-                Some(value) => value
-                    .with_timezone(&chrono::Local)
-                    .format("%a %b %d %Y %H:%M:%S GMT%z (%Z)")
-                    .to_string()
-                    .into(),
-                None => "Invalid Date".into(),
-            },
-            Self::Array(values) => {
-                let identity = values.identity();
-                if !active.insert(identity) {
-                    return Ok("".into());
-                }
-                let mut units = Vec::new();
-                for (index, value) in values.iter()?.enumerate() {
-                    let value = value?;
-                    if index != 0 {
-                        units.push(u16::from(b','));
-                    }
-                    if !value.is_undefined() && !value.is_null() {
-                        units
-                            .extend_from_slice(value.display_utf16_with_active(active)?.as_utf16());
-                    }
-                }
-                let _ = active.remove(&identity);
-                crate::Utf16String::from_units(units)
-            }
-        })
-    }
-}
 
 impl From<JsonValue> for FieldValue {
     fn from(value: JsonValue) -> Self {

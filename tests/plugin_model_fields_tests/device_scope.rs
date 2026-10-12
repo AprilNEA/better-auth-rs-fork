@@ -24,14 +24,16 @@ fn policy(trace: Arc<Mutex<Trace>>, failure: Arc<AtomicU8>) -> UserFieldConfig {
     UserFieldConfig {
         required: Some(false),
         default_value: Some(" Default ".into()),
-        on_update: Some(Arc::new(move || {
-            update_trace
-                .lock()
-                .expect("Device scope update trace lock poisoned")
-                .events
-                .push("onUpdate".into());
-            Ok(" Renewed ".into())
-        })),
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                update_trace
+                    .lock()
+                    .expect("Device scope update trace lock poisoned")
+                    .events
+                    .push("onUpdate".into());
+                Ok(" Renewed ".into())
+            },
+        )),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(move |value| {
                 trace_lock(&trace)?
@@ -253,7 +255,9 @@ async fn awaited_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     let (sender, mut calls) = mpsc::unbounded_channel();
     let policy = UserFieldConfig {
         required: Some(false),
-        on_update: Some(Arc::new(|| Ok("Renewed".into()))),
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+            Ok("Renewed".into())
+        })),
         transform: Some(FieldTransforms {
             input: Some(awaited(sender.clone(), "input")),
             output: Some(awaited(sender, "output")),

@@ -378,14 +378,10 @@ async fn paypal_profiles_preserve_http_data_mapping_and_optional_verified_token(
                     .unwrap_or_default(),
             ),
         ]));
-        let result = social_profile::fetch_user_info_for_code(
-            &resolved(config),
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await
-        .unwrap();
+        let result =
+            social_profile::fetch_user_info_for_code(&resolved(config), profile_request, None)
+                .await
+                .unwrap();
         assert_eq!(
             public_response(result),
             sample["result"],
@@ -438,22 +434,9 @@ async fn paypal_explicit_verifier_runs_once_for_direct_and_stored_profile_reads(
             )
             .await
             .unwrap();
-            social_profile::fetch_user_info_with_claims(
-                &provider,
-                &OAuthTokenSet::from_fields(request.fields()),
-                request,
-                None,
-                verified,
-            )
-            .await
+            social_profile::fetch_user_info_with_claims(&provider, request, None, verified).await
         } else {
-            social_profile::fetch_user_info_from_provider(
-                &provider,
-                &OAuthTokenSet::from_fields(request.fields()),
-                request,
-                None,
-            )
-            .await
+            social_profile::fetch_user_info_from_provider(&provider, request, None).await
         }
         .unwrap();
         assert_eq!(
@@ -488,14 +471,10 @@ async fn paypal_optional_token_requires_the_explicit_application_verifier() {
         id_token: (Some(signed.token.clone())).into(),
         ..Default::default()
     };
-    let response = social_profile::fetch_user_info_for_code(
-        &resolved(config),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await
-    .unwrap();
+    let response =
+        social_profile::fetch_user_info_for_code(&resolved(config), profile_request, None)
+            .await
+            .unwrap();
     assert!(response.value.is_null());
     assert!(seen.lock().unwrap().is_empty());
     assert_eq!(server.requests.lock().unwrap().len(), 1);
@@ -567,14 +546,9 @@ async fn paypal_default_mapper_catch_and_custom_callbacks_keep_distinct_errors()
                 access_token: (Some("ordinary-access".into())).into(),
                 ..Default::default()
             };
-            social_profile::fetch_user_info_for_code(
-                &resolved(config),
-                &OAuthTokenSet::from_fields(profile_request.fields()),
-                profile_request,
-                None,
-            )
-            .await
-            .map(public_response)
+            social_profile::fetch_user_info_for_code(&resolved(config), profile_request, None)
+                .await
+                .map(public_response)
         };
         if let Some(error) = sample.get("error") {
             assert!(

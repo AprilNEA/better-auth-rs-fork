@@ -617,7 +617,7 @@ async fn invitation_claim_accepts_its_own_selector_update() -> AuthResult<()> {
         let _ = fields.invitation.fields_mut().insert(
             "claimLookup".into(),
             UserFieldConfig {
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     Ok("claimed-alias".into())
                 })),
@@ -678,7 +678,7 @@ async fn invitation_claim_accepts_its_own_nan_selector() -> AuthResult<()> {
         let _ = fields.invitation.fields_mut().insert(
             "claimLookup".into(),
             UserFieldConfig {
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     Ok(f64::NAN.into())
                 })),
@@ -746,7 +746,7 @@ async fn invitation_claim_rejects_null_selector_deletion_or_undefined() -> AuthR
         let _ = fields.invitation.fields_mut().insert(
             "claimLookup".into(),
             UserFieldConfig {
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     Ok(
                         if observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
                             Value::Null

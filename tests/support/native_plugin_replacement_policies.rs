@@ -94,26 +94,30 @@ impl Policy {
         if self.defaults {
             let state = self.state.clone();
             let target = self.target.clone();
-            field.default_value_fn = Some(Arc::new(move || {
-                let value = target.value(2)?;
-                state.lock().expect("replacement default state").event(
-                    "default",
-                    &target.field,
-                    &value,
-                )?;
-                Ok(value)
-            }));
+            field.default_value_fn = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value = target.value(2)?;
+                    state.lock().expect("replacement default state").event(
+                        "default",
+                        &target.field,
+                        &value,
+                    )?;
+                    Ok(value)
+                },
+            ));
             let state = self.state.clone();
             let target = self.target.clone();
-            field.on_update = Some(Arc::new(move || {
-                let value = target.value(3)?;
-                state.lock().expect("replacement update state").event(
-                    "onUpdate",
-                    &target.field,
-                    &value,
-                )?;
-                Ok(value)
-            }));
+            field.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value = target.value(3)?;
+                    state.lock().expect("replacement update state").event(
+                        "onUpdate",
+                        &target.field,
+                        &value,
+                    )?;
+                    Ok(value)
+                },
+            ));
         }
         let marker = |phase| {
             let state = self.state.clone();

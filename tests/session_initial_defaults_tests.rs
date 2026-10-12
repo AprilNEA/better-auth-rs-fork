@@ -169,15 +169,17 @@ fn config(case: Case, pure: bool, events: &Sender<Event>) -> AuthConfig {
         }
     } else {
         UserFieldConfig {
-            default_value_fn: Some(Arc::new(move || {
-                let value = if case == Case::FactoryUndefinedId {
-                    FieldValue::Undefined
-                } else {
-                    "C".into()
-                };
-                emit(&id_events, Event::Default("id", value.clone()))?;
-                Ok(value)
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let value = if case == Case::FactoryUndefinedId {
+                        FieldValue::Undefined
+                    } else {
+                        "C".into()
+                    };
+                    emit(&id_events, Event::Default("id", value.clone()))?;
+                    Ok(value)
+                },
+            )),
             ..Default::default()
         }
     };
@@ -186,17 +188,20 @@ fn config(case: Case, pure: bool, events: &Sender<Event>) -> AuthConfig {
     let label = UserFieldConfig {
         field_name: Some("active_organization_id".into()),
         required: Some(case == Case::RequiredNull),
-        default_value_fn: Some(Arc::new(move || {
-            let value = FieldValue::from(format!("D{}", calls.fetch_add(1, Ordering::SeqCst) + 1));
-            emit(&label_events, Event::Default("label", value.clone()))?;
-            if case == Case::DefaultFailure {
-                return Err(AuthError::FieldInput {
-                    code: "SESSION_DEFAULT_REJECTED",
-                    message: "session default failure".into(),
-                });
-            }
-            Ok(value)
-        })),
+        default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                let value =
+                    FieldValue::from(format!("D{}", calls.fetch_add(1, Ordering::SeqCst) + 1));
+                emit(&label_events, Event::Default("label", value.clone()))?;
+                if case == Case::DefaultFailure {
+                    return Err(AuthError::FieldInput {
+                        code: "SESSION_DEFAULT_REJECTED",
+                        message: "session default failure".into(),
+                    });
+                }
+                Ok(value)
+            },
+        )),
         ..Default::default()
     };
     config.session.additional_fields = Some([("id".into(), id), ("label".into(), label)].into());

@@ -155,6 +155,9 @@ impl<'de> Deserialize<'de> for Utf16String {
     }
 }
 
+/// API key display prefixes retain their existing public type name.
+pub type ApiKeyStart = Utf16String;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,6 +255,3 @@ mod tests {
         assert!(Utf16String::from("😀") < Utf16String::from("\u{e000}"));
     }
 }
-
-/// API key display prefixes retain their existing public type name.
-pub type ApiKeyStart = Utf16String;

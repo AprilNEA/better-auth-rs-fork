@@ -251,10 +251,12 @@ async fn failure_increment_skips_input_and_checks_raw_count_before_locking() -> 
                     (
                         "secret".into(),
                         UserFieldConfig {
-                            on_update: Some(Arc::new(move || {
-                                let _ = factories.fetch_add(1, Ordering::SeqCst);
-                                Ok("updated by factory".into())
-                            })),
+                            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                                move || {
+                                    let _ = factories.fetch_add(1, Ordering::SeqCst);
+                                    Ok("updated by factory".into())
+                                },
+                            )),
                             ..Default::default()
                         },
                     ),

@@ -109,7 +109,9 @@ async fn user_and_session_references_keep_aliases_bindings_and_single_output_tra
         .fields_mut()
         .insert("owner".into(), field.clone());
     let mut session_field = field;
-    session_field.on_update = Some(Arc::new(|| Ok((-0.0).into())));
+    session_field.on_update = Some(better_auth::config::UserFieldFactory::new(|| {
+        Ok((-0.0).into())
+    }));
     config
         .session
         .fields_mut()

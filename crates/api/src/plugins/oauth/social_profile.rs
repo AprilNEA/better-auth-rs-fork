@@ -2,7 +2,7 @@ use better_auth_core::{AuthError, AuthResult, FieldValue};
 
 use super::google;
 use super::id_token::VerifiedIdToken;
-use super::providers::{OAuthTokenSet, OAuthUserInfoRequest, OAuthUserInfoResponse};
+use super::providers::{OAuthUserInfoRequest, OAuthUserInfoResponse};
 use super::resolved::ResolvedProvider;
 
 #[path = "social_profile_native.rs"]
@@ -15,7 +15,7 @@ pub(super) use http::{fetch_http_profile, fetch_native as fetch_native_profile};
 
 pub(super) async fn resolve_account_subject(
     provider: &ResolvedProvider,
-    subject_tokens: &OAuthTokenSet,
+    subject_tokens: &FieldValue,
     raw_profile: &FieldValue,
     legacy_subject: Option<&LegacySubject>,
 ) -> AuthResult<FieldValue> {
@@ -28,9 +28,8 @@ pub(super) async fn resolve_account_subject(
         .await;
     }
     let subject = if let Some(resolver) = &provider.config.account_subject {
-        let tokens = OAuthUserInfoRequest::from_fields(subject_tokens.fields());
         resolver
-            .resolve_subject_native(&tokens, raw_profile)
+            .resolve_subject_native(subject_tokens, raw_profile)
             .await?
     } else if let Some(subject) = provider.config.builtin_account_subject(raw_profile)? {
         subject
@@ -48,16 +47,14 @@ pub(super) async fn resolve_account_subject(
 
 pub(super) async fn fetch_user_info_from_provider(
     provider: &ResolvedProvider,
-    subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
 ) -> AuthResult<ProviderProfile> {
-    fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, None).await
+    fetch_user_info_with_claims(provider, request, expected_nonce, None).await
 }
 
 pub(super) async fn fetch_user_info_with_claims(
     provider: &ResolvedProvider,
-    _subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
     claims: Option<VerifiedIdToken>,
@@ -263,7 +260,6 @@ pub(super) async fn fetch_user_info_with_claims(
 
 pub(super) async fn fetch_user_info_for_code(
     provider: &ResolvedProvider,
-    subject_tokens: &OAuthTokenSet,
     request: OAuthUserInfoRequest,
     expected_nonce: Option<&str>,
 ) -> AuthResult<ProviderProfile> {
@@ -300,7 +296,7 @@ pub(super) async fn fetch_user_info_for_code(
     } else {
         None
     };
-    fetch_user_info_with_claims(provider, subject_tokens, request, expected_nonce, claims).await
+    fetch_user_info_with_claims(provider, request, expected_nonce, claims).await
 }
 
 async fn map_legacy_profile(

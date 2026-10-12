@@ -22,8 +22,12 @@ pub(super) fn configure(profile: &str, config: &mut AuthConfig) {
             (
                 "deviceLabel".into(),
                 UserFieldConfig {
-                    default_value_fn: Some(Arc::new(|| Ok("factory".into()))),
-                    on_update: Some(Arc::new(|| Ok("tick".into()))),
+                    default_value_fn: Some(better_auth::config::UserFieldFactory::new(|| {
+                        Ok("factory".into())
+                    })),
+                    on_update: Some(better_auth::config::UserFieldFactory::new(|| {
+                        Ok("tick".into())
+                    })),
                     transform: Some(FieldTransforms {
                         input: Some(suffix(":input")),
                         output: Some(suffix(":output")),

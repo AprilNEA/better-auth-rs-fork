@@ -60,10 +60,12 @@ impl<S: AuthSchema> AuthPlugin<S> for RateLimitModel {
                         UserFieldConfig {
                             required: Some(true),
                             input: Some(false),
-                            default_value_fn: Some(Arc::new(move || {
-                                let _ = calls.fetch_add(1, Ordering::SeqCst);
-                                Ok("plugin-label".into())
-                            })),
+                            default_value_fn: Some(
+                                better_auth_core::user_fields::UserFieldFactory::new(move || {
+                                    let _ = calls.fetch_add(1, Ordering::SeqCst);
+                                    Ok("plugin-label".into())
+                                }),
+                            ),
                             ..Default::default()
                         },
                     ),

@@ -1,5 +1,4 @@
 use better_auth::config::{FieldTransforms, UserFieldTransform};
-use std::sync::Arc;
 
 use better_auth::{
     AuthConfig, BetterAuth, FieldMap, FieldValue, SchemaValue,
@@ -21,7 +20,9 @@ fn label(column: &str) -> UserFieldConfig {
         required: Some(false),
         field_name: Some(column.into()),
         default_value: Some("default".into()),
-        on_update: Some(Arc::new(|| Ok("updated".into()))),
+        on_update: Some(better_auth::config::UserFieldFactory::new(|| {
+            Ok("updated".into())
+        })),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(|value| {
                 if value.is_undefined() {

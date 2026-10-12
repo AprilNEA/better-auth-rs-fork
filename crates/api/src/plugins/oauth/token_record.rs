@@ -102,15 +102,10 @@ impl SchemaField for OAuthCallbackUserName {
 }
 
 /// Optional chaining checks nullish values before invoking Array.join.
-pub(in crate::plugins::oauth) fn joined_scopes(
-    value: &SchemaValue<Vec<String>>,
-) -> AuthResult<FieldValue> {
-    match value.field_value() {
+pub(in crate::plugins::oauth) fn joined_scopes(value: &FieldValue) -> AuthResult<FieldValue> {
+    match value {
         FieldValue::Null | FieldValue::Undefined => Ok(FieldValue::Undefined),
-        value @ FieldValue::Array(_) => Ok(value.display_utf16()?.into()),
-        _ => Err(AuthError::type_error(
-            "tokens.scopes?.join is not a function",
-        )),
+        value => value.join_method(&",".into(), "tokens.scopes?"),
     }
 }
 

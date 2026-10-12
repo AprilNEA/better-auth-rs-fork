@@ -78,16 +78,18 @@ pub(crate) fn policies_with_revision(
                         field_type: UserFieldType::Number,
                         field_name: Some("stored_revision".into()),
                         required: Some(false),
-                        default_value_fn: Some(Arc::new({
-                            let events = events.clone();
-                            move || {
-                                if let Some(events) = &events {
-                                    push(events, json!(["default", "revision"]));
+                        default_value_fn: Some(
+                            better_auth_core::user_fields::UserFieldFactory::new({
+                                let events = events.clone();
+                                move || {
+                                    if let Some(events) = &events {
+                                        push(events, json!(["default", "revision"]));
+                                    }
+                                    Ok(revision[0].into())
                                 }
-                                Ok(revision[0].into())
-                            }
-                        })),
-                        on_update: Some(Arc::new({
+                            }),
+                        ),
+                        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
                             let events = events.clone();
                             move || {
                                 if let Some(events) = &events {

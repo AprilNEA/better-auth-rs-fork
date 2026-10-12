@@ -41,14 +41,18 @@ impl Trace {
             field_type: UserFieldType::Date,
             field_name: Some(column.into()),
             required: Some(false),
-            default_value_fn: Some(Arc::new(move || {
-                default.emit("default", FieldValue::Undefined)?;
-                Ok(date(1000.0))
-            })),
-            on_update: Some(Arc::new(move || {
-                update.emit("update", FieldValue::Undefined)?;
-                Ok(date(2000.0))
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    default.emit("default", FieldValue::Undefined)?;
+                    Ok(date(1000.0))
+                },
+            )),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    update.emit("update", FieldValue::Undefined)?;
+                    Ok(date(2000.0))
+                },
+            )),
             transform: Some(FieldTransforms {
                 input: Some(UserFieldTransform::new(move |value| {
                     input.emit("input", value.clone())?;

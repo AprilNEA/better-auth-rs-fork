@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use super::fetch_user_info_for_code;
 use crate::plugins::oauth::{
-    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthTokenSet, OAuthUserInfoHandler,
-    OAuthUserInfoRequest, resolved::ResolvedProvider,
+    OAuthProfile, OAuthProfileMapper, OAuthProvider, OAuthUserInfoHandler, OAuthUserInfoRequest,
+    resolved::ResolvedProvider,
 };
 
 struct EmptyProfile(Arc<Mutex<Vec<&'static str>>>);
@@ -71,13 +71,7 @@ async fn custom_null_skips_default_http_and_mapper() -> AuthResult<()> {
             access_token: (Some("ordinary-profile-token".into())).into(),
             ..Default::default()
         };
-        let result = fetch_user_info_for_code(
-            &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await?;
+        let result = fetch_user_info_for_code(&provider, profile_request, None).await?;
         assert!(result.value.is_null());
         assert_eq!(
             *calls
@@ -214,13 +208,7 @@ mod discord {
                 access_token: (Some("ordinary-profile-token".into())).into(),
                 ..Default::default()
             };
-            let response = fetch_user_info_for_code(
-                &provider,
-                &OAuthTokenSet::from_fields(profile_request.fields()),
-                profile_request,
-                None,
-            )
-            .await?;
+            let response = fetch_user_info_for_code(&provider, profile_request, None).await?;
             server.await??;
             assert_eq!(
                 crate::plugins::oauth::profile_test_support::json(response),

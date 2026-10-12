@@ -130,7 +130,7 @@ async fn check<S: AuthSchema>(
     details::seed_member(Arc::clone(&raw), false, "member-a", "team-a", "user-a").await?;
     let events = Events::default();
     let invoked = events.clone();
-    let function: UserFieldFactory = Arc::new(move || {
+    let function: UserFieldFactory = UserFieldFactory::new(move || {
         trace_lock(&invoked.values)?.push(vec!["team.name".into(), "called".into()].into());
         Ok("Callback Team".into())
     });

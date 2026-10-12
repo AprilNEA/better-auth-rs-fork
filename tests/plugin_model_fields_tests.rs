@@ -176,7 +176,9 @@ async fn passkey_contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResu
     let input_events = events.clone();
     let output_events = events.clone();
     let policy = UserFieldConfig {
-        on_update: Some(Arc::new(|| Ok("Renewed".into()))),
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+            Ok("Renewed".into())
+        })),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(move |value| {
                 trace_lock(&input_events)?.push(format!(

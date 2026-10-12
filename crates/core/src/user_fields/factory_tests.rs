@@ -13,7 +13,7 @@ fn emit(events: &Sender<&'static str>, event: &'static str) -> AuthResult<()> {
 
 fn fields(events: &Sender<&'static str>) -> UserConfig {
     let factory_events = events.clone();
-    let factory: UserFieldFactory = Arc::new(move || {
+    let factory: UserFieldFactory = UserFieldFactory::new(move || {
         emit(&factory_events, "factory")?;
         Err(AuthError::FieldInput {
             code: "FACTORY_REJECTED",
@@ -23,7 +23,7 @@ fn fields(events: &Sender<&'static str>) -> UserConfig {
     let input_events = events.clone();
     let output_events = events.clone();
     let later_events = events.clone();
-    let later: UserFieldFactory = Arc::new(move || {
+    let later: UserFieldFactory = UserFieldFactory::new(move || {
         emit(&later_events, "later")?;
         Ok("later".into())
     });
@@ -134,7 +134,7 @@ fn public_input_preserves_undefined_results_and_skips_callbacks_for_undefined_in
             (
                 "factory".into(),
                 UserFieldConfig {
-                    default_value_fn: Some(Arc::new(move || {
+                    default_value_fn: Some(crate::user_fields::UserFieldFactory::new(move || {
                         emit(&factory_events, "factory")?;
                         Ok(Value::Undefined)
                     })),
@@ -262,10 +262,12 @@ fn synthetic_output_uses_complete_declarations_and_preserves_undefined_factory_r
                 (
                     "factory".into(),
                     UserFieldConfig {
-                        default_value_fn: Some(Arc::new(move || {
-                            emit(&events, "factory")?;
-                            Ok(Value::Undefined)
-                        })),
+                        default_value_fn: Some(crate::user_fields::UserFieldFactory::new(
+                            move || {
+                                emit(&events, "factory")?;
+                                Ok(Value::Undefined)
+                            },
+                        )),
                         ..optional(None)
                     },
                 ),
@@ -281,7 +283,7 @@ fn synthetic_output_uses_complete_declarations_and_preserves_undefined_factory_r
                     "hidden".into(),
                     UserFieldConfig {
                         returned: Some(false),
-                        default_value_fn: Some(Arc::new(|| {
+                        default_value_fn: Some(crate::user_fields::UserFieldFactory::new(|| {
                             Err(AuthError::internal("hidden factory ran"))
                         })),
                         ..Default::default()

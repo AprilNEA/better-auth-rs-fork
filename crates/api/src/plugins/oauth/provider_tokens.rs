@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::Value;
 
-use super::generic::{OAuthCodeExchange, RefreshTokenParameters};
+use super::generic::RefreshTokenParameters;
 use super::providers::OAuthTokenSet;
 use super::resolved::ResolvedProvider;
 use super::token::{AuthorizationCodeRequest, TokenAuthentication, TokenGrantType, TokenRequest};
@@ -101,6 +101,7 @@ async fn refresh_tokens(
     apply_default_expiry(OAuthTokenSet::from_fields(fields), provider)
 }
 
+#[cfg(test)]
 pub(super) async fn validate_authorization_code_via_provider(
     provider: &ResolvedProvider,
     code: &str,
@@ -108,37 +109,69 @@ pub(super) async fn validate_authorization_code_via_provider(
     code_verifier: Option<&str>,
     device_id: Option<&str>,
 ) -> AuthResult<OAuthTokenSet> {
-    let result = exchange_code(provider, code, redirect_uri, code_verifier, device_id).await;
-    if provider.generic.is_none() && provider.config.is_paypal() {
-        super::providers::paypal::token_result(result, TokenGrantType::AuthorizationCode)
-    } else {
-        result
+    let request = better_auth_core::FieldMap::from([
+        ("code".into(), code.into()),
+        (
+            "codeVerifier".into(),
+            code_verifier.map(FieldValue::from).unwrap_or_default(),
+        ),
+        (
+            "deviceId".into(),
+            device_id.map(FieldValue::from).unwrap_or_default(),
+        ),
+        ("redirectURI".into(), redirect_uri.into()),
+    ])
+    .into();
+    let tokens = validate_authorization_code_native_via_provider(provider, &request).await?;
+    Ok(OAuthTokenSet::from_fields(tokens.enumerable_fields()?))
+}
+
+pub(super) async fn validate_authorization_code_native_via_provider(
+    provider: &ResolvedProvider,
+    input: &FieldValue,
+) -> AuthResult<FieldValue> {
+    if let Some(handler) = provider
+        .generic
+        .as_ref()
+        .and_then(|generic| generic.config.get_token.as_ref())
+    {
+        let tokens = handler.get_token_native(input).await?;
+        return apply_default_expiry_native(tokens, provider);
     }
+    let result = exchange_code(provider, input).await;
+    let tokens = if provider.generic.is_none() && provider.config.is_paypal() {
+        super::providers::paypal::token_result(result, TokenGrantType::AuthorizationCode)?
+    } else {
+        result?
+    };
+    apply_default_expiry_native(tokens.fields().into(), provider)
 }
 
 async fn exchange_code(
     provider: &ResolvedProvider,
-    code: &str,
-    redirect_uri: &str,
-    code_verifier: Option<&str>,
-    device_id: Option<&str>,
+    input: &FieldValue,
 ) -> AuthResult<OAuthTokenSet> {
     let generic = provider.generic.as_ref().map(|generic| &generic.config);
-    if let Some(handler) = generic.and_then(|generic| generic.get_token.as_ref()) {
-        let tokens = handler
-            .get_token(OAuthCodeExchange {
-                code,
-                redirect_uri,
-                code_verifier,
-                device_id,
-            })
-            .await?;
-        return apply_default_expiry(OAuthTokenSet::from_fields(tokens.fields()), provider);
-    }
+    let code = super::providers::token_http::form_string(&input.model_property("code")?)?;
     if generic.is_none() && provider.config.wechat_refresh_url().is_some() {
-        return super::providers::wechat::exchange_code(&provider.config, code).await;
+        return super::providers::wechat::exchange_code(&provider.config, &code).await;
     }
     let token_endpoint = token_endpoint(provider)?;
+    let redirect_uri =
+        super::providers::token_http::form_string(&input.model_property("redirectURI")?)?;
+    let code_verifier = input.model_property("codeVerifier")?;
+    let code_verifier = if provider.forwards_code_verifier() && code_verifier.is_truthy() {
+        Some(super::providers::token_http::form_string(&code_verifier)?)
+    } else {
+        None
+    };
+    let device_id = input.model_property("deviceId")?;
+    let device_id =
+        if generic.is_none() && !provider.config.omits_device_id() && device_id.is_truthy() {
+            Some(super::providers::token_http::form_string(&device_id)?)
+        } else {
+            None
+        };
     let mut social_headers = HeaderMap::new();
     if generic.is_none() && provider.config.is_reddit() {
         let _ = social_headers.insert("accept", HeaderValue::from_static("text/plain"));
@@ -146,28 +179,20 @@ async fn exchange_code(
     }
     let empty_params = HashMap::new();
     let mut request = TokenRequest::authorization_code(AuthorizationCodeRequest {
-        code,
+        code: &code,
         redirect_uri: provider
             .config
             .redirect_uri
             .as_deref()
             .filter(|uri| !uri.is_empty())
-            .unwrap_or(redirect_uri),
-        code_verifier: if provider.forwards_code_verifier() {
-            code_verifier
-        } else {
-            None
-        },
+            .unwrap_or(&redirect_uri),
+        code_verifier: code_verifier.as_deref(),
         client_key: if generic.is_none() {
             provider.config.code_client_key()
         } else {
             None
         },
-        device_id: if generic.is_some() || provider.config.omits_device_id() {
-            None
-        } else {
-            device_id
-        },
+        device_id: device_id.as_deref(),
         headers: generic
             .map(|generic| &generic.authorization_headers)
             .unwrap_or(&social_headers),
@@ -178,7 +203,7 @@ async fn exchange_code(
     });
     authenticate_request(&mut request, provider, TokenGrantType::AuthorizationCode).await?;
     let value = request.send(token_endpoint).await?;
-    apply_default_expiry(parse_token_response(value)?, provider)
+    parse_token_response(value)
 }
 
 fn token_endpoint(provider: &ResolvedProvider) -> AuthResult<&str> {
@@ -256,22 +281,29 @@ fn expiry_from(now: DateTime<Utc>, seconds: f64) -> AuthResult<FieldDate> {
 }
 
 fn apply_default_expiry(
-    mut tokens: OAuthTokenSet,
+    tokens: OAuthTokenSet,
     provider: &ResolvedProvider,
 ) -> AuthResult<OAuthTokenSet> {
-    if !tokens.access_token_expires_at.is_truthy()?
-        && let Some(seconds) = provider
-            .generic
-            .as_ref()
-            .and_then(|generic| generic.config.access_token_expires_in)
+    let tokens = apply_default_expiry_native(tokens.fields().into(), provider)?;
+    Ok(OAuthTokenSet::from_fields(tokens.enumerable_fields()?))
+}
+
+fn apply_default_expiry_native(
+    tokens: FieldValue,
+    provider: &ResolvedProvider,
+) -> AuthResult<FieldValue> {
+    let Some(generic) = &provider.generic else {
+        return Ok(tokens);
+    };
+    if !tokens
+        .model_property_at("accessTokenExpiresAt", "tokens.accessTokenExpiresAt")?
+        .is_truthy()
+        && let Some(seconds) = generic
+            .config
+            .access_token_expires_in
             .filter(|seconds| FieldValue::Number(*seconds).is_truthy())
     {
-        let fields = tokens.fields();
-        tokens.field_order = fields.keys().cloned().collect();
-        if !fields.contains_key("accessTokenExpiresAt") {
-            tokens.field_order.push("accessTokenExpiresAt".into());
-        }
-        tokens.access_token_expires_at = Some(expiry_at(seconds)?).into();
+        tokens.set_model_property("accessTokenExpiresAt", expiry_at(seconds)?.into())?;
     }
     Ok(tokens)
 }
@@ -332,8 +364,12 @@ fn parse_token_response_with_clock(
 mod duration_tests;
 
 #[cfg(test)]
+#[path = "native_token_tests.rs"]
+mod native_tests;
+
+#[cfg(test)]
 mod tests {
-    use super::super::generic::{GenericOAuthConfig, OAuthTokenHandler};
+    use super::super::generic::{GenericOAuthConfig, OAuthCodeExchange, OAuthTokenHandler};
     use super::super::providers::OAuthProvider;
     use super::super::resolved::ResolvedGenericOAuth;
     use super::super::token::{TokenEndpointAuth, TokenEndpointRequestContext, TokenRequestHook};

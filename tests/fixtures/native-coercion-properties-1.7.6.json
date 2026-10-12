@@ -1,0 +1,401 @@
+[
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "number",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 7
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "string",
+    "events": [
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "string-result"
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "fallback",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "get-throws",
+    "events": [
+      "get:valueOf:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "call-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "non-callable",
+    "events": [
+      "get:valueOf:true",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "number",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 7
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "string",
+    "events": [
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "string-result"
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "fallback",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "get-throws",
+    "events": [
+      "get:valueOf:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "call-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "non-callable",
+    "events": [
+      "get:valueOf:true",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "number",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 7
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "string",
+    "events": [
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "string-result"
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "fallback",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "get-throws",
+    "events": [
+      "get:valueOf:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "call-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "non-callable",
+    "events": [
+      "get:valueOf:true",
+      "get:toString:true",
+      "call:toString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": 8
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-nan",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "null"
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-iso",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toISOString:true",
+      "call:toISOString:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "\"custom-iso\""
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-iso-get-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toISOString:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-iso-call-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toISOString:true",
+      "call:toISOString:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-iso-non-callable",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0",
+      "get:toISOString:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "TypeError",
+      "message": "toISOString is not a function",
+      "sameOriginal": false
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-invalid-finite",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "RangeError",
+      "message": "Invalid Date",
+      "sameOriginal": false
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-valueof-get-throws",
+    "events": [
+      "get:valueOf:true"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "date",
+    "mode": "json-valueof-call-throws",
+    "events": [
+      "get:valueOf:true",
+      "call:valueOf:true:0"
+    ],
+    "outcome": {
+      "kind": "thrown",
+      "name": "Error",
+      "message": "original native coercion error",
+      "sameOriginal": true
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "array",
+    "mode": "join",
+    "events": [
+      "get:join:true",
+      "call:join:true:0"
+    ],
+    "outcome": {
+      "kind": "returned",
+      "value": "joined"
+    }
+  },
+  {
+    "contract": "native-coercion-properties",
+    "kind": "function",
+    "mode": "native-number",
+    "events": [],
+    "outcome": {
+      "kind": "returned",
+      "value": {
+        "type": "number",
+        "value": "NaN"
+      }
+    }
+  }
+]

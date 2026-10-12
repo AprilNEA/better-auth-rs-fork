@@ -49,7 +49,7 @@ pub(super) async fn subject(
 ) -> FieldValue {
     resolve_account_subject(
         provider,
-        tokens,
+        &tokens.fields().into(),
         &property(profile, "data"),
         profile.legacy_subject.as_ref(),
     )

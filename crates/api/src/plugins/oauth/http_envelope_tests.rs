@@ -97,16 +97,9 @@ async fn run(
         access_token: Some("ordinary-access".into()).into(),
         ..Default::default()
     };
-    let tokens = OAuthTokenSet::from_fields(request.fields());
     let result = context
         .with_native_context(NativeRequest::default(), |_| async {
-            social_profile::fetch_user_info_for_code(
-                &resolved.providers[id],
-                &tokens,
-                request,
-                None,
-            )
-            .await
+            social_profile::fetch_user_info_for_code(&resolved.providers[id], request, None).await
         })
         .await;
     Run {

@@ -346,7 +346,7 @@ mod tests {
         )
     }
 
-    async fn forbidden_message(response: Option<AuthResponse>) -> String {
+    fn forbidden_message(response: Option<AuthResponse>) -> String {
         let response = response
             .expect("expected rejection response")
             .into_http_response()
@@ -362,7 +362,7 @@ mod tests {
     async fn cookie_backed_requests_require_a_trusted_origin() {
         let mw = CsrfMiddleware::new(CsrfConfig::new(), test_auth_config(vec![]));
         let req = make_request("/sign-out", Some("http://evil.com"), true, &[]);
-        let message = forbidden_message(mw.before_request(&req).await.unwrap()).await;
+        let message = forbidden_message(mw.before_request(&req).await.unwrap());
         assert_eq!(message, INVALID_ORIGIN);
     }
 
@@ -371,7 +371,7 @@ mod tests {
     async fn cookie_backed_requests_require_origin_or_referer() {
         let mw = CsrfMiddleware::new(CsrfConfig::new(), test_auth_config(vec![]));
         let req = make_request("/sign-out", None, true, &[]);
-        let message = forbidden_message(mw.before_request(&req).await.unwrap()).await;
+        let message = forbidden_message(mw.before_request(&req).await.unwrap());
         assert_eq!(message, MISSING_OR_NULL_ORIGIN);
     }
 
@@ -415,8 +415,7 @@ mod tests {
                 .await
                 .err()
                 .map(|error| error.to_auth_response()),
-        )
-        .await;
+        );
         assert_eq!(message, CROSS_SITE_NAVIGATION_LOGIN_BLOCKED);
     }
 
@@ -435,8 +434,7 @@ mod tests {
                         .await
                         .err()
                         .map(|error| error.to_auth_response()),
-                )
-                .await;
+                );
                 assert_eq!(message, INVALID_ORIGIN);
             }
             for headers in [
@@ -470,7 +468,7 @@ mod tests {
             .into_bytes(),
         );
 
-        let message = forbidden_message(mw.before_request(&req).await.unwrap()).await;
+        let message = forbidden_message(mw.before_request(&req).await.unwrap());
         assert_eq!(message, INVALID_CALLBACK_URL);
     }
 

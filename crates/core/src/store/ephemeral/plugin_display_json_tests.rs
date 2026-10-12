@@ -260,7 +260,9 @@ async fn json_passkey_display_updates_preserve_credential_state() -> AuthResult<
                 "aaguid",
                 UserFieldConfig {
                     field_name: Some("stored_aaguid".into()),
-                    on_update: Some(Arc::new(|| Ok(vec![2.into(), 3.into()].into()))),
+                    on_update: Some(crate::user_fields::UserFieldFactory::new(|| {
+                        Ok(vec![2.into(), 3.into()].into())
+                    })),
                     ..json_field()
                 },
             ),

@@ -438,7 +438,6 @@ async fn github_email_presence_and_fallback_match_pinned_normal_json() {
         };
         let response = crate::plugins::oauth::social_profile::fetch_user_info_for_code(
             &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )

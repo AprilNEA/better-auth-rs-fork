@@ -265,7 +265,6 @@ async fn custom_handler_errors_remain_outside_the_default_profile_catch() {
         let profile_request = OAuthUserInfoRequest::default();
         let error = social_profile::fetch_user_info_for_code(
             &resolved.providers[id],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -534,7 +533,6 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
                 let tokens = OAuthTokenSet::from_fields(profile_request.fields());
                 let response = social_profile::fetch_user_info_for_code(
                     &resolved.providers[id],
-                    &tokens,
                     profile_request,
                     None,
                 )
@@ -605,7 +603,6 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
             };
             let response = social_profile::fetch_user_info_for_code(
                 &resolved.providers[id],
-                &OAuthTokenSet::from_fields(profile_request.fields()),
                 profile_request,
                 None,
             )
@@ -638,7 +635,6 @@ async fn normal_profiles_and_mapper_precedence_match_pinned_provider_results() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["gitlab"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -672,7 +668,6 @@ async fn cloudflare_api_failures_return_no_profile_before_mapping() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["cloudflare"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -713,7 +708,6 @@ async fn linear_missing_viewer_returns_no_profile_before_mapping() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["linear"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -753,7 +747,6 @@ async fn cloudflare_mapper_errors_propagate() {
     };
     let error = social_profile::fetch_user_info_for_code(
         &resolved.providers["cloudflare"],
-        &OAuthTokenSet::from_fields(profile_request.fields()),
         profile_request,
         None,
     )
@@ -823,7 +816,6 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["atlassian"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -838,7 +830,6 @@ async fn atlassian_missing_token_and_null_profile_skip_mapping() {
     };
     let result = social_profile::fetch_user_info_for_code(
         &resolved.providers["atlassian"],
-        &OAuthTokenSet::from_fields(profile_request.fields()),
         profile_request,
         None,
     )
@@ -894,7 +885,6 @@ async fn reddit_placeholder_follows_mapper_email_presence() {
         };
         let response = social_profile::fetch_user_info_for_code(
             &resolved.providers["reddit"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -945,7 +935,6 @@ async fn reddit_http_failure_skips_mapper_and_mapper_error_propagates() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["reddit"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )
@@ -994,7 +983,6 @@ async fn zoom_http_failure_skips_mapper_and_mapper_error_propagates() {
         };
         let result = social_profile::fetch_user_info_for_code(
             &resolved.providers["zoom"],
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )

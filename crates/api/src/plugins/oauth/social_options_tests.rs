@@ -366,8 +366,7 @@ async fn social_profile_mapping_matches_upstream_and_keeps_subject()
             let provider = config.providers.get(id).ok_or("missing provider")?;
             let tokens = OAuthTokenSet::from_fields(profile_request.fields());
             let response =
-                handlers::fetch_user_info_for_code(provider, &tokens, profile_request, None)
-                    .await?;
+                handlers::fetch_user_info_for_code(provider, profile_request, None).await?;
             assert_eq!(
                 profile_test::subject(provider, &tokens, &response)
                     .await
@@ -562,7 +561,6 @@ async fn social_profile_callback_errors_propagate_without_running_later_callback
         };
         let error = handlers::fetch_user_info_for_code(
             config.providers.get("google").ok_or("missing provider")?,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             None,
         )

@@ -79,12 +79,12 @@ impl OAuthProfileMapper for Callbacks {
 impl OAuthAccountSubject for Callbacks {
     async fn resolve_subject_native(
         &self,
-        tokens: &OAuthUserInfoRequest,
+        tokens: &FieldValue,
         profile: &FieldValue,
     ) -> AuthResult<FieldValue> {
         self.0.tracking.lock().unwrap().subject_input = Some(profile.clone());
         let same = profile.strict_equals(&self.0.raw);
-        let tokens = observe::native(&tokens.fields().into())?;
+        let tokens = observe::native(tokens)?;
         self.0
             .log
             .event(json!({"kind": "subject", "sameProfile": same, "tokens": tokens}));

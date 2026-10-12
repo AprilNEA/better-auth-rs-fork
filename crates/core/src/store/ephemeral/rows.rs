@@ -427,6 +427,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::mutable_key_type,
+        reason = "TransactionId hashes immutable scalars and stable object handles; this test verifies native HashSet membership."
+    )]
     fn transaction_keys_preserve_native_types_and_object_identity() {
         let date = FieldValue::Date(crate::FieldDate::from_milliseconds(1.0));
         let array = FieldValue::from(vec![FieldValue::Number(1.0)]);

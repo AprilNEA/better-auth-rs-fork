@@ -18,7 +18,9 @@ fn policy_with_error(
     UserFieldConfig {
         required: Some(true),
         default_value: Some("Fallback".into()),
-        on_update: Some(Arc::new(|| Ok("Renewed".into()))),
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+            Ok("Renewed".into())
+        })),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(move |value| {
                 trace_lock(&events)?.push(format!(

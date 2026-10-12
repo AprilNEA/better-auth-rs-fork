@@ -99,7 +99,9 @@ async fn observe<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, case: &Value) -> Aut
                     "aaguid",
                     UserFieldConfig {
                         required: Some(false),
-                        on_update: Some(Arc::new(move || Ok(after.into()))),
+                        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                            move || Ok(after.into()),
+                        )),
                         ..Default::default()
                     },
                 ),

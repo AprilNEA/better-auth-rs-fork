@@ -490,7 +490,10 @@ async fn cycles_reach_transaction_work_then_keep_earlier_model_publication_on_js
             &[user("Published".into())],
             std::slice::from_ref(&expected_live),
         )?;
-        assert_eq!(captured_keys.snapshot()?, [expected_live.clone()]);
+        assert_eq!(
+            captured_keys.snapshot()?,
+            std::slice::from_ref(&expected_live)
+        );
         assert_eq!(owner.shallow_fields()?, user("Before".into()));
         assert_eq!(callback_value, expected_clone);
         let live_user = required(users(&store)?.row_at(0)?)?;

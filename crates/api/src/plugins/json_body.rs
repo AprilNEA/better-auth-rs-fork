@@ -35,7 +35,12 @@ pub(crate) fn native_invalid_type(
     expected: &str,
     value: Option<&FieldValue>,
 ) -> String {
-    let actual = match value {
+    let actual = native_type_name(value);
+    format!("[{location}] Invalid input: expected {expected}, received {actual}")
+}
+
+pub(crate) fn native_type_name(value: Option<&FieldValue>) -> &'static str {
+    match value {
         None | Some(FieldValue::Undefined) => "undefined",
         Some(FieldValue::Null) => "null",
         Some(FieldValue::Bool(_)) => "boolean",
@@ -48,8 +53,7 @@ pub(crate) fn native_invalid_type(
         Some(FieldValue::Array(_)) => "array",
         Some(FieldValue::Object(_)) => "object",
         Some(FieldValue::Function(_)) => "function",
-    };
-    format!("[{location}] Invalid input: expected {expected}, received {actual}")
+    }
 }
 
 pub(crate) fn validation_error(message: &str) -> AuthError {

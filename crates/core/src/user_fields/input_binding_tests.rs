@@ -188,7 +188,7 @@ async fn literal_undefined_default_skips_binding_but_default_factory_runs() {
                         }),
                         default_value: Some(Value::Undefined),
                         default_value_fn: factory
-                            .then(|| Arc::new(|| Ok(Value::Undefined)) as UserFieldFactory),
+                            .then(|| UserFieldFactory::new(|| Ok(Value::Undefined))),
                         ..Default::default()
                     },
                 )]

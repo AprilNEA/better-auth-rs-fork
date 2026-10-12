@@ -21,10 +21,12 @@ impl DocumentationOverlay {
         let inputs = self.0.clone();
         let outputs = self.0.clone();
         UserFieldConfig {
-            default_value_fn: Some(Arc::new(move || {
-                let _ = defaults.default.fetch_add(1, Ordering::SeqCst);
-                Ok("documentation-default".into())
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let _ = defaults.default.fetch_add(1, Ordering::SeqCst);
+                    Ok("documentation-default".into())
+                },
+            )),
             transform: Some(FieldTransforms {
                 input: Some(UserFieldTransform::new(move |value| {
                     let _ = inputs.input.fetch_add(1, Ordering::SeqCst);

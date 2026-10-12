@@ -15,7 +15,7 @@ use better_auth_core::{
 use super::authorization::{AuthorizationRequest, build_authorization_url};
 use super::encryption::encrypt_token_set;
 pub(super) use super::provider_tokens::refresh_tokens_via_provider;
-use super::providers::{OAuthTokenSet, OAuthUserInfoRequest};
+use super::providers::OAuthUserInfoRequest;
 use super::resolved::{ResolvedOAuthConfig as OAuthConfig, ResolvedProvider};
 pub(super) use super::social_profile::{fetch_user_info_for_code, fetch_user_info_from_provider};
 use super::state::{
@@ -48,18 +48,19 @@ fn generate_pkce() -> (String, String) {
 }
 
 pub(super) fn callback_user_request(
-    tokens: &super::providers::OAuthTokenSet,
-    user_data: Option<&str>,
+    tokens: &FieldValue,
+    user_data: &FieldValue,
     expected_nonce: Option<&str>,
 ) -> AuthResult<OAuthUserInfoRequest> {
-    let mut fields = tokens.fields();
+    let user = if user_data.is_truthy() {
+        better_auth_core::utils::json::safe_parse_field(user_data)?
+    } else {
+        FieldValue::Null
+    };
+    let mut fields = tokens.enumerable_fields()?;
     if let Some(nonce) = expected_nonce.filter(|nonce| !nonce.is_empty()) {
         let _ = fields.insert("expectedIdTokenNonce".into(), nonce.into());
     }
-    let user = match user_data.filter(|user| !user.is_empty()) {
-        Some(user) => better_auth_core::utils::json::safe_parse_field(&user.into())?,
-        None => FieldValue::Null,
-    };
     let _ = fields.insert(
         "user".into(),
         if user.is_null() {
@@ -394,7 +395,7 @@ pub(super) async fn complete_link_social(
     )?;
     let mut fields = FieldMap::from([("userId".into(), link.user_id().clone())]);
     fields.extend(account.clone());
-    let scope = super::providers::joined_scopes(scopes)?;
+    let scope = super::providers::joined_scopes(&scopes.field_value())?;
     fields.extend([
         (
             "accessToken".into(),
@@ -446,7 +447,7 @@ async fn sign_in_with_id_token_core(
     let claims =
         super::id_token::verify_in_endpoint(&body.provider, provider, id_token, &endpoint).await?;
 
-    let subject_tokens = OAuthTokenSet::from_fields(FieldMap::from([
+    let subject_tokens: FieldValue = FieldMap::from([
         ("idToken".into(), id_token.token.clone().into()),
         (
             "accessToken".into(),
@@ -472,11 +473,11 @@ async fn sign_in_with_id_token_core(
                 .map(better_auth_core::SchemaField::into_field)
                 .unwrap_or_default(),
         ),
-    ]));
+    ])
+    .into();
     let user_info = super::social_profile::fetch_user_info_with_claims(
         provider,
-        &subject_tokens,
-        OAuthUserInfoRequest::from_fields(subject_tokens.fields()),
+        OAuthUserInfoRequest::from_fields(subject_tokens.enumerable_fields()?),
         id_token.nonce.as_deref(),
         claims,
     )
@@ -574,7 +575,7 @@ async fn link_with_id_token_core(
     let claims =
         super::id_token::verify_in_endpoint(&body.provider, provider, id_token, &endpoint).await?;
 
-    let subject_tokens = OAuthTokenSet::from_fields(FieldMap::from([
+    let subject_tokens: FieldValue = FieldMap::from([
         ("idToken".into(), id_token.token.clone().into()),
         (
             "accessToken".into(),
@@ -592,11 +593,11 @@ async fn link_with_id_token_core(
                 .map(Into::into)
                 .unwrap_or_default(),
         ),
-    ]));
+    ])
+    .into();
     let response = super::social_profile::fetch_user_info_with_claims(
         provider,
-        &subject_tokens,
-        OAuthUserInfoRequest::from_fields(subject_tokens.fields()),
+        OAuthUserInfoRequest::from_fields(subject_tokens.enumerable_fields()?),
         id_token.nonce.as_deref(),
         claims,
     )

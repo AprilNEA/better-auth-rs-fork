@@ -273,13 +273,7 @@ async fn fetch(config: OAuthProvider, input: Value) -> AuthResult<social_profile
         access_token: (input["accessToken"].as_str().map(str::to_owned)).into(),
         ..Default::default()
     };
-    social_profile::fetch_user_info_for_code(
-        &resolved(config),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await
+    social_profile::fetch_user_info_for_code(&resolved(config), profile_request, None).await
 }
 
 struct Mapper {

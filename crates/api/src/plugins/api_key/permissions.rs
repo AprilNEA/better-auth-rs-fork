@@ -306,7 +306,7 @@ mod tests {
     fn function_permissions_preserve_property_and_action_boundaries() {
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = calls.clone();
-        let factory: UserFieldFactory = Arc::new(move || {
+        let factory: UserFieldFactory = UserFieldFactory::new(move || {
             let _ = observed.fetch_add(1, Ordering::SeqCst);
             Ok(FieldValue::Undefined)
         });

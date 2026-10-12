@@ -346,7 +346,9 @@ async fn pending_team_scope_patch_is_used_by_the_next_scoped_lookup() -> AuthRes
     let _ = fields.team.fields_mut().insert(
         "organizationId".into(),
         UserFieldConfig {
-            on_update: Some(Arc::new(|| Ok("other".into()))),
+            on_update: Some(crate::user_fields::UserFieldFactory::new(|| {
+                Ok("other".into())
+            })),
             ..Default::default()
         },
     );

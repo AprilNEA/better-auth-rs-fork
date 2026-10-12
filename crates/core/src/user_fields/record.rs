@@ -5,7 +5,6 @@ use super::{
 use crate::AuthResult;
 use crate::store::schema::resolve_field_name;
 use crate::{FieldMap, FieldObject, FieldValue as Value};
-use std::sync::Arc;
 
 /// Raw logical fields and mapped storage fields, before adapter output policies run.
 pub struct AdapterRecord {
@@ -127,7 +126,7 @@ fn field(field_type: UserFieldType, required: bool) -> UserFieldConfig {
 }
 
 fn timestamp(default: bool, update: bool) -> UserFieldConfig {
-    let now: UserFieldFactory = Arc::new(|| Ok(chrono::Utc::now().into()));
+    let now: UserFieldFactory = UserFieldFactory::new(|| Ok(chrono::Utc::now().into()));
     UserFieldConfig {
         default_value_fn: default.then(|| now.clone()),
         on_update: update.then_some(now),

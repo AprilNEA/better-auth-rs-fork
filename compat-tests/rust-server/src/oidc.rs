@@ -106,7 +106,7 @@ pub fn configure(mut plugin: OAuthPlugin) -> OAuthPlugin {
                 config.override_user_info = std::env::var("COMPAT_PROFILE")
                     .is_ok_and(|profile| profile == "organization-jwt");
             }
-            "oidc-no-signup" => config.disable_sign_up = true,
+            "oidc-no-signup" => config.disable_sign_up = Some(true),
             "oidc-parameters" => {
                 config.discovery_headers.insert(
                     "x-compat-discovery",

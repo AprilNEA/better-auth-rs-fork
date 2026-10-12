@@ -79,7 +79,11 @@ async fn registration<S: AuthSchema>(
                             "logo".into(),
                             UserFieldConfig {
                                 default_value: Some(" Default ".into()),
-                                on_update: Some(Arc::new(|| Ok(" Updated ".into()))),
+                                on_update: Some(
+                                    better_auth_core::user_fields::UserFieldFactory::new(|| {
+                                        Ok(" Updated ".into())
+                                    }),
+                                ),
                                 ..policy("organization.logo", &events)
                             },
                         ),

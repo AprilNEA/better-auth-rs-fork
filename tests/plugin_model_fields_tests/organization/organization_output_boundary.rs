@@ -147,7 +147,7 @@ fn output(name: &'static str, events: &Events, value: Option<FieldValue>) -> Use
 fn session_field(events: &Events) -> UserFieldConfig {
     UserFieldConfig {
         field_type: UserFieldType::Date,
-        on_update: Some(Arc::new({
+        on_update: Some(better_auth_core::user_fields::UserFieldFactory::new({
             let events = events.clone();
             move || {
                 event(&events, ["session.updatedAt".into(), "onUpdate".into()])?;
@@ -260,7 +260,7 @@ async fn clone_failure<S: AuthSchema>(
     let mut before = storage.snapshot().await?;
     let events = Events::default();
     let function: UserFieldFactory =
-        Arc::new(|| Err(AuthError::internal("Hidden output function must not run")));
+        UserFieldFactory::new(|| Err(AuthError::internal("Hidden output function must not run")));
     let mut plugin = OrganizationConfig::default();
     plugin.schema.organization = declaration([(
         "name",

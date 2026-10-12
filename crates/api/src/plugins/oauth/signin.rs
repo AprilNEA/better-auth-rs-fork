@@ -646,16 +646,16 @@ pub(super) async fn process_oauth_sign_in(
 pub(super) fn token_account(
     provider_name: &str,
     account_id: &FieldValue,
-    tokens: &OAuthTokenSet,
+    tokens: &FieldValue,
 ) -> AuthResult<better_auth_core::FieldMap> {
     let mut account = better_auth_core::FieldMap::from([
         ("providerId".into(), provider_name.into()),
         ("accountId".into(), account_id.clone()),
     ]);
-    account.extend(tokens.fields());
+    account.extend(tokens.enumerable_fields()?);
     let _ = account.insert(
         "scope".into(),
-        super::providers::joined_scopes(&tokens.scopes)?,
+        super::providers::joined_scopes(&tokens.model_property("scopes")?)?,
     );
     Ok(account)
 }
@@ -792,7 +792,7 @@ pub(crate) async fn sign_in_verified_profile(
         provider_name,
         &resolved,
         &user,
-        &token_account(provider_name, &account_id, &tokens)?,
+        &token_account(provider_name, &account_id, &tokens.fields().into())?,
         OAuthSignInOptions {
             request: req,
             profile: Some(&profile),

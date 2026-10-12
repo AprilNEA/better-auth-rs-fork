@@ -66,7 +66,9 @@ pub fn configure(config: &mut OrganizationConfig, profile: &str) {
                             input: Some(replace("create", "delete")),
                             output: Some(replace("delete", "update")),
                         }),
-                        on_update: Some(Arc::new(|| Ok(r#"{"member":["create"]}"#.into()))),
+                        on_update: Some(better_auth::config::UserFieldFactory::new(|| {
+                            Ok(r#"{"member":["create"]}"#.into())
+                        })),
                         ..Default::default()
                     },
                 ),

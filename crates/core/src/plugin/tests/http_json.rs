@@ -5,9 +5,12 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-struct SelfArray(Weak<Self>);
+struct SelfArray(Weak<Self>, crate::FieldObject);
 
 impl FieldArraySource for SelfArray {
+    fn properties(&self) -> &crate::FieldObject {
+        &self.1
+    }
     fn len(&self) -> AuthResult<usize> {
         Ok(1)
     }
@@ -70,8 +73,10 @@ impl Sample {
                 sample.bytes = Some(r#"{"self":"[Circular ref-0]"}"#);
             }
             "array-self" => {
-                sample.value =
-                    FieldArray::from_source(Arc::new_cyclic(|weak| SelfArray(weak.clone()))).into();
+                sample.value = FieldArray::from_source(Arc::new_cyclic(|weak| {
+                    SelfArray(weak.clone(), FieldMap::new().into())
+                }))
+                .into();
                 sample.bytes = Some(r#"["[Circular ref-0]"]"#);
             }
             "indirect" => {

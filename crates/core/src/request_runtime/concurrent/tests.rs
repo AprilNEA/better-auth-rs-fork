@@ -106,9 +106,12 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
     for kind in [Join::All, Join::Pair] {
         for first in [0, 1] {
             for late_error in [false, true] {
-                let mut config = AuthConfig::default();
-                config.base_url =
-                    crate::request_runtime::BaseUrl::Static("http://retained.test".into());
+                let config = AuthConfig {
+                    base_url: crate::request_runtime::BaseUrl::Static(
+                        "http://retained.test".into(),
+                    ),
+                    ..Default::default()
+                };
                 let config = Arc::new(config);
                 let context = Arc::new(AuthContext::<StatelessSchema>::new(
                     config.clone(),
@@ -192,8 +195,10 @@ async fn all_and_pair_preserve_original_first_error_and_finish_started_peers_wit
 async fn all_and_pair_wait_for_each_initial_poll_before_returning_a_synchronous_error()
 -> AuthResult<()> {
     for kind in [Join::All, Join::Pair] {
-        let mut config = AuthConfig::default();
-        config.base_url = crate::request_runtime::BaseUrl::Static("http://retained.test".into());
+        let config = AuthConfig {
+            base_url: crate::request_runtime::BaseUrl::Static("http://retained.test".into()),
+            ..Default::default()
+        };
         let config = Arc::new(config);
         let context = Arc::new(AuthContext::<StatelessSchema>::new(
             config.clone(),

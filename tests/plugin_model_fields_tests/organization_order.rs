@@ -83,18 +83,22 @@ fn declared(model: &str, events: &Events) -> AuthResult<UserConfig> {
                 }
                 .into(),
             ),
-            default_value_fn: Some(Arc::new(move || {
-                trace_lock(&default)
-                    .expect("Label default trace lock must remain available")
-                    .push(json!(["label", "default"]));
-                Ok(" Label ".into())
-            })),
-            on_update: Some(Arc::new(move || {
-                trace_lock(&update)
-                    .expect("Label update trace lock must remain available")
-                    .push(json!(["label", "onUpdate"]));
-                Ok(" Updated ".into())
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    trace_lock(&default)
+                        .expect("Label default trace lock must remain available")
+                        .push(json!(["label", "default"]));
+                    Ok(" Label ".into())
+                },
+            )),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    trace_lock(&update)
+                        .expect("Label update trace lock must remain available")
+                        .push(json!(["label", "onUpdate"]));
+                    Ok(" Updated ".into())
+                },
+            )),
             ..policy("label", events)
         },
     );
@@ -109,19 +113,23 @@ fn declared(model: &str, events: &Events) -> AuthResult<UserConfig> {
             "Organization field order must declare logo",
         )?;
         let default = events.clone();
-        logo.default_value_fn = Some(Arc::new(move || {
-            trace_lock(&default)
-                .expect("Logo default trace lock must remain available")
-                .push(json!(["logo", "default"]));
-            Ok(" Logo ".into())
-        }));
+        logo.default_value_fn = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                trace_lock(&default)
+                    .expect("Logo default trace lock must remain available")
+                    .push(json!(["logo", "default"]));
+                Ok(" Logo ".into())
+            },
+        ));
         let update = events.clone();
-        logo.on_update = Some(Arc::new(move || {
-            trace_lock(&update)
-                .expect("Logo update trace lock must remain available")
-                .push(json!(["logo", "onUpdate"]));
-            Ok(" Next Logo ".into())
-        }));
+        logo.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                trace_lock(&update)
+                    .expect("Logo update trace lock must remain available")
+                    .push(json!(["logo", "onUpdate"]));
+                Ok(" Next Logo ".into())
+            },
+        ));
     }
     Ok(result)
 }

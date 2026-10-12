@@ -609,10 +609,18 @@ fn init_header_validation_follows_wrapper_headers_and_precedes_body_json() -> Au
     Ok(())
 }
 
-#[derive(Default)]
-struct MutableArray(Mutex<Vec<FieldValue>>);
+struct MutableArray(Mutex<Vec<FieldValue>>, crate::FieldObject);
+
+impl Default for MutableArray {
+    fn default() -> Self {
+        Self(Mutex::default(), crate::FieldMap::new().into())
+    }
+}
 
 impl FieldArraySource for MutableArray {
+    fn properties(&self) -> &crate::FieldObject {
+        &self.1
+    }
     fn len(&self) -> AuthResult<usize> {
         Ok(self.0.lock().unwrap().len())
     }

@@ -18,7 +18,7 @@ fn function(result: &str, calls: &Arc<AtomicUsize>, returned: &Arc<AtomicUsize>)
     let result = result.to_owned();
     let calls = calls.clone();
     let returned = returned.clone();
-    let factory: UserFieldFactory = Arc::new(move || {
+    let factory: UserFieldFactory = UserFieldFactory::new(move || {
         let _ = calls.fetch_add(1, Ordering::SeqCst);
         Ok(match result.as_str() {
             "string" => "factory-value".into(),
@@ -35,7 +35,7 @@ fn function(result: &str, calls: &Arc<AtomicUsize>, returned: &Arc<AtomicUsize>)
             .into(),
             "function" => {
                 let returned = returned.clone();
-                let returned_factory: UserFieldFactory = Arc::new(move || {
+                let returned_factory: UserFieldFactory = UserFieldFactory::new(move || {
                     let _ = returned.fetch_add(1, Ordering::SeqCst);
                     Ok("returned-function-value".into())
                 });
@@ -318,7 +318,7 @@ fn candidate_expression_errors_retain_the_original_allocation() -> AuthResult<()
         for operator in [WhereOperator::Eq, WhereOperator::In] {
             let allocation = Arc::new(AtomicUsize::new(0));
             let original = allocation.clone();
-            let factory: UserFieldFactory = Arc::new(move || {
+            let factory: UserFieldFactory = UserFieldFactory::new(move || {
                 let message = "original-candidate-error".to_owned();
                 original.store(message.as_ptr() as usize, Ordering::SeqCst);
                 Err(AuthError::Internal(message))
@@ -360,7 +360,7 @@ fn all_condition_expressions_parse_before_any_driver_parameter_is_encoded() -> A
             let returned = Arc::new(AtomicUsize::new(0));
             let original = allocation.clone();
             let called = calls.clone();
-            let factory: UserFieldFactory = Arc::new(move || {
+            let factory: UserFieldFactory = UserFieldFactory::new(move || {
                 let _ = called.fetch_add(1, Ordering::SeqCst);
                 let message = "original-condition-error".to_owned();
                 original.store(message.as_ptr() as usize, Ordering::SeqCst);

@@ -158,7 +158,8 @@ fn user_row_clone_preserves_presence_order_and_interleaved_native_shadows() -> A
 
 #[test]
 fn ordinary_row_writes_discard_hidden_user_state_even_without_field_changes() -> AuthResult<()> {
-    let writes: [fn(&RowRef<FieldMap>) -> AuthResult<()>; 5] = [
+    type Write = fn(&RowRef<FieldMap>) -> AuthResult<()>;
+    let writes: [Write; 5] = [
         |row| row.set_field("id".into(), "user".into()).map(|_| ()),
         |row| row.delete_field("absent").map(|_| ()),
         |row| row.apply_patch(FieldMap::new()),

@@ -57,7 +57,9 @@ async fn duplicate_signup_filters_custom_synthetic_user_without_writes() -> Auth
             "factory".into(),
             UserFieldConfig {
                 required: Some(false),
-                default_value_fn: Some(Arc::new(|| Ok(FieldValue::Undefined))),
+                default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    || Ok(FieldValue::Undefined),
+                )),
                 ..Default::default()
             },
         ),
@@ -247,15 +249,17 @@ async fn check_synthetic_transaction<S: AuthSchema>(
         "probe".into(),
         UserFieldConfig {
             required: Some(false),
-            default_value_fn: Some(Arc::new(move || {
-                if denied.load(Ordering::SeqCst) {
-                    default_events.lock().unwrap().push("default");
-                    if mode == "default" {
-                        return Err(AuthError::internal("synthetic default failed"));
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    if denied.load(Ordering::SeqCst) {
+                        default_events.lock().unwrap().push("default");
+                        if mode == "default" {
+                            return Err(AuthError::internal("synthetic default failed"));
+                        }
                     }
-                }
-                Ok("parsed".into())
-            })),
+                    Ok("parsed".into())
+                },
+            )),
             ..Default::default()
         },
     );

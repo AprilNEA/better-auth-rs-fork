@@ -468,10 +468,12 @@ async fn physical_aliases_and_field_policies_do_not_hide_unconfigured_required_c
         better_auth_core::user_fields::UserFieldConfig {
             field_name: Some("storedLabel".into()),
             required: Some(false),
-            default_value_fn: Some(Arc::new(move || {
-                let _ = calls.fetch_add(1, Ordering::SeqCst);
-                Ok("default".into())
-            })),
+            default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    let _ = calls.fetch_add(1, Ordering::SeqCst);
+                    Ok("default".into())
+                },
+            )),
             ..Default::default()
         },
     );

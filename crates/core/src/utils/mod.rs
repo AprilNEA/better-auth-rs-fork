@@ -2,6 +2,7 @@
 
 pub mod cookie_utils;
 pub mod date;
+pub mod defu;
 pub(crate) mod email;
 pub mod ip;
 pub mod json;

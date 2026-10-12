@@ -3,7 +3,6 @@ use crate::user_fields::{
     FieldTransforms, UserConfig, UserFieldConfig, UserFieldTransform, UserFieldType,
 };
 use crate::{FieldMap, SchemaValue};
-use std::sync::Arc;
 
 fn only_row(store: &EphemeralStore) -> AuthResult<FieldMap> {
     let mut rows = store.plugin_storage_rows(EntityRole::ApiKey)?;
@@ -148,7 +147,9 @@ async fn memory_usage_binds_replaced_guards_and_applies_set_after_increment() ->
                         UserFieldConfig {
                             field_type: UserFieldType::Number,
                             field_name: Some("counter".into()),
-                            on_update: Some(Arc::new(|| Ok(99.0.into()))),
+                            on_update: Some(crate::user_fields::UserFieldFactory::new(|| {
+                                Ok(99.0.into())
+                            })),
                             ..Default::default()
                         },
                     ),

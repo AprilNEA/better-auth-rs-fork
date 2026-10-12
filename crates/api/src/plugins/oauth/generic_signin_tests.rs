@@ -432,7 +432,12 @@ async fn sign_in_preserves_scopes_and_account_cookie_while_explicit_link_merges_
                 additional_fields: Default::default(),
             }
             .into_native(),
-            &super::signin::token_account("generic", &"stable-subject".into(), &incoming).unwrap(),
+            &super::signin::token_account(
+                "generic",
+                &"stable-subject".into(),
+                &incoming.fields().into(),
+            )
+            .unwrap(),
             &incoming.scopes,
             &super::state::OAuthStateLink::new(
                 stored.user_id.field_value(),

@@ -172,13 +172,7 @@ pub(super) async fn invoke(
         config,
         generic: None,
     };
-    let result = fetch_user_info_from_provider(
-        &provider,
-        &OAuthTokenSet::from_fields(request.fields()),
-        request,
-        None,
-    )
-    .await;
+    let result = fetch_user_info_from_provider(&provider, request, None).await;
     Run { result, probe }
 }
 

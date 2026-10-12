@@ -293,8 +293,7 @@ async fn microsoft_profile_photo_and_mapper_match_pinned_results() -> TestResult
         };
         let provider = resolved(config);
         let tokens = OAuthTokenSet::from_fields(profile_request.fields());
-        let response =
-            fetch_user_info_from_provider(&provider, &tokens, profile_request, None).await?;
+        let response = fetch_user_info_from_provider(&provider, profile_request, None).await?;
         assert_eq!(
             profile_test_support::subject(&provider, &tokens, &response)
                 .await
@@ -364,13 +363,7 @@ async fn microsoft_custom_handler_precedes_the_profile_mapper() -> TestResult<()
         access_token: (Some("ordinary-access".into())).into(),
         ..Default::default()
     };
-    let response = fetch_user_info_from_provider(
-        &resolved(config),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await?;
+    let response = fetch_user_info_from_provider(&resolved(config), profile_request, None).await?;
     assert_eq!(
         profile_test_support::json(response),
         fixture["custom"]["result"]
@@ -421,7 +414,6 @@ async fn microsoft_signed_ordinary_tenants_use_the_shared_oidc_boundary() -> Tes
         let tokens = OAuthTokenSet::from_fields(profile_request.fields());
         let response = super::social_profile::fetch_user_info_with_claims(
             &provider,
-            &tokens,
             profile_request,
             Some("ordinary-nonce"),
             verified,

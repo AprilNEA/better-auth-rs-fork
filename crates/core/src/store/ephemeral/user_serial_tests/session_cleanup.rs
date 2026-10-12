@@ -345,7 +345,7 @@ async fn preserved_serial_sessions_apply_owner_on_update_once_per_batch() -> Aut
                     field: "id".into(),
                     ..Default::default()
                 }),
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     let _ = callback_calls.fetch_add(1, Ordering::Relaxed);
                     Ok(Value::Number(2.0))
                 })),
@@ -410,7 +410,7 @@ async fn serial_session_creation_defaults_override_core_before_explicit_fields()
                     field: "id".into(),
                     ..Default::default()
                 }),
-                default_value_fn: Some(Arc::new(move || {
+                default_value_fn: Some(crate::user_fields::UserFieldFactory::new(move || {
                     let _ = callback_calls.fetch_add(1, Ordering::Relaxed);
                     Ok(Value::from("2"))
                 })),

@@ -225,7 +225,9 @@ pub fn organization_fields<S: AuthSchema, T: AuthStore<S> + 'static>(
             .fields_mut()
             .get_mut("detail")
             .unwrap()
-            .on_update = Some(Arc::new(move || Ok(value.into())));
+            .on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || Ok(value.into()),
+        ));
     }
     fields
 }

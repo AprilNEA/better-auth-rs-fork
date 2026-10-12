@@ -798,6 +798,13 @@ impl<S: AuthSchema> AuthContext<S> {
     }
 }
 
+impl<S: AuthSchema> AuthInitParts<S> {
+    /// Preserve the initialized trust snapshot and auth-instance identity in the final context.
+    pub fn apply_request_runtime(&self, context: &mut AuthContext<S>) {
+        context.request_runtime = self.request_runtime.clone();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     mod async_body_dispatch;
@@ -915,12 +922,5 @@ mod tests {
 
         let (found_user, _found_session) = ctx.require_session(&req).await.unwrap();
         assert_eq!(found_user.id(), user.id());
-    }
-}
-
-impl<S: AuthSchema> AuthInitParts<S> {
-    /// Preserve the initialized trust snapshot and auth-instance identity in the final context.
-    pub fn apply_request_runtime(&self, context: &mut AuthContext<S>) {
-        context.request_runtime = self.request_runtime.clone();
     }
 }

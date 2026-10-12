@@ -71,10 +71,12 @@ fn policies(mapping: &str, events: Option<&Trace>, failure: &Arc<AtomicU8>) -> U
         if let Some(events) = events {
             if name == "aaguid" {
                 let events = events.clone();
-                field.on_update = Some(Arc::new(move || {
-                    push(&events, json!(["onUpdate", "aaguid"]));
-                    Ok(format!(" {UPDATED} ").into())
-                }));
+                field.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    move || {
+                        push(&events, json!(["onUpdate", "aaguid"]));
+                        Ok(format!(" {UPDATED} ").into())
+                    },
+                ));
             }
             let input_events = events.clone();
             let output_events = events.clone();

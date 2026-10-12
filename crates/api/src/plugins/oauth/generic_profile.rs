@@ -3,7 +3,7 @@ use better_auth_core::{AuthError, AuthResult, FieldMap, FieldValue, Utf16String}
 use serde_json::{Map, Value};
 
 use super::generic::GenericOAuthProfileContext;
-use super::providers::{OAuthTokenSet, OAuthUserInfoRequest};
+use super::providers::OAuthUserInfoRequest;
 use super::resolved::ResolvedGenericOAuth;
 
 #[cfg(test)]
@@ -35,13 +35,12 @@ impl GenericProfileError {
 
 pub(super) async fn resolve_account_subject(
     provider: &ResolvedGenericOAuth,
-    subject_tokens: &OAuthTokenSet,
+    subject_tokens: &FieldValue,
     profile: &FieldValue,
 ) -> AuthResult<FieldValue> {
     let subject = if let Some(resolver) = &provider.config.account_subject {
-        let subject_tokens = OAuthUserInfoRequest::from_fields(subject_tokens.fields());
         resolver
-            .resolve_subject_native(&subject_tokens, profile)
+            .resolve_subject_native(subject_tokens, profile)
             .await?
     } else {
         let field = if provider.is_oidc { "sub" } else { "id" };

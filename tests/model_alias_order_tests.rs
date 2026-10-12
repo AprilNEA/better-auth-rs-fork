@@ -150,7 +150,11 @@ impl<S: AuthSchema> AuthPlugin<S> for Policies {
                             "updatedAt".into(),
                             UserFieldConfig {
                                 field_type: UserFieldType::Date,
-                                on_update: Some(Arc::new(|| Ok(date().into()))),
+                                on_update: Some(
+                                    better_auth_core::user_fields::UserFieldFactory::new(|| {
+                                        Ok(date().into())
+                                    }),
+                                ),
                                 ..Default::default()
                             },
                         ),

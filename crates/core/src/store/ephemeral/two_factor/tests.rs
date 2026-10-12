@@ -86,7 +86,7 @@ async fn lock_uses_projected_counter_but_retains_physical_atomic_guard() -> Auth
                         UserFieldConfig {
                             field_type: UserFieldType::Date,
                             field_name: Some("deadline".into()),
-                            on_update: Some(Arc::new(move || {
+                            on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                                 let _ = observed.fetch_add(1, Ordering::SeqCst);
                                 Ok(FieldValue::Null)
                             })),
@@ -146,7 +146,7 @@ async fn backup_cas_applies_input_mapping_and_retains_commit_after_output_error(
                     UserFieldConfig {
                         field_name: Some("codes".into()),
                         transform: Some(FieldTransforms {
-                            input: Some(UserFieldTransform::new(|value| Ok(value))),
+                            input: Some(UserFieldTransform::new(Ok)),
                             output: Some(UserFieldTransform::new(move |value| {
                                 if throw.load(Ordering::SeqCst) {
                                     Err(AuthError::internal("projected backup failure"))

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { assertObservationReplay } from "./observation-replay.mjs";
 import { createProtectedFunctionObserver } from "./protected-function-shared.mjs";
 import { writeObservation } from "./write-observation.mjs";
 
@@ -59,4 +60,6 @@ test("native coercion consumes named methods in runtime order", async () => {
     }
   }
   expect(records).toHaveLength(scenarios.length);
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/native-coercion-properties-1.7.6.json", import.meta.url)).json();
+  assertObservationReplay(records, fixture, "native-coercion-properties");
 });

@@ -41,7 +41,31 @@ pub struct FieldValidators {
 }
 
 /// Synchronous default or update factory. Errors stop field processing before persistence.
-pub type UserFieldFactory = Arc<dyn Fn() -> AuthResult<Value> + Send + Sync>;
+#[derive(Clone, Debug)]
+pub struct UserFieldFactory(crate::FieldFunction);
+
+impl UserFieldFactory {
+    /// Retain one function identity across field declarations and their clones.
+    pub fn new(factory: impl Fn() -> AuthResult<Value> + Send + Sync + 'static) -> Self {
+        Self(crate::FieldFunction::contextual(move |_, _| factory()))
+    }
+
+    /// Invoke the factory without converting its return value or error.
+    pub fn call(&self) -> AuthResult<Value> {
+        self.0.call()
+    }
+
+    /// Borrow the shared function, including its named properties.
+    pub fn function(&self) -> &crate::FieldFunction {
+        &self.0
+    }
+}
+
+impl From<UserFieldFactory> for crate::FieldFunction {
+    fn from(factory: UserFieldFactory) -> Self {
+        factory.0
+    }
+}
 
 /// Referenced model and logical field, shared with the application's migration configuration.
 #[derive(Clone, Debug, Default)]
@@ -361,7 +385,7 @@ impl UserFieldConfig {
             && value.is_undefined()
             && let Some(update) = &self.on_update
         {
-            value = update()?;
+            value = update.call()?;
         }
         Ok(Some(value))
     }

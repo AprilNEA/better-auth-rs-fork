@@ -209,13 +209,7 @@ async fn check_case(fixture: &Fixture, case: &Case) -> TestResult<()> {
             access_token: (Some("ordinary-access".into())).into(),
             ..Default::default()
         };
-        let info = fetch_user_info_for_code(
-            &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await?;
+        let info = fetch_user_info_for_code(&provider, profile_request, None).await?;
         same(
             &crate::plugins::oauth::profile_test_support::json(info),
             &case.user_info,

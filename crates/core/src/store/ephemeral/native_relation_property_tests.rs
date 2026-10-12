@@ -1,9 +1,4 @@
 //! Paired with the pinned native-join-property-collision upstream contract.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "The paired contract propagates setup errors and asserts full output, identity, callbacks, and durable storage."
-)]
-
 use super::test_support::snapshot_tree as snapshot;
 use super::*;
 use crate::store::{JoinValue, RuntimeStore, schema::EntityRole};

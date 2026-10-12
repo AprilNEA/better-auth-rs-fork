@@ -127,9 +127,7 @@ async fn twitch_profiles_match_the_pinned_ordinary_contract() -> TestResult<()> 
     {
         let profile_request = tokens(&fixture, &case["profile"])?;
         let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
-        let response =
-            fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None)
-                .await?;
+        let response = fetch_user_info_from_provider(&provider, profile_request, None).await?;
         assert_eq!(
             profile_test::subject(&provider, &subject_tokens, &response)
                 .await
@@ -194,8 +192,7 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
     let profile_request = tokens(&fixture, &fixture["profiles"][0]["profile"])?;
     let provider = resolved(config.clone());
     let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
-    let response =
-        fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None).await?;
+    let response = fetch_user_info_from_provider(&provider, profile_request, None).await?;
     assert_eq!(
         profile_test::subject(&provider, &subject_tokens, &response)
             .await
@@ -210,13 +207,7 @@ async fn twitch_mapper_and_custom_handler_match_the_pinned_contract() -> TestRes
     config.map_profile_to_user = Some(Arc::new(Mapper(custom_inputs.clone())));
     config.get_user_info = Some(Arc::new(Custom(calls.clone())));
     let profile_request = tokens(&fixture, &fixture["profiles"][0]["profile"])?;
-    let response = fetch_user_info_from_provider(
-        &resolved(config),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await?;
+    let response = fetch_user_info_from_provider(&resolved(config), profile_request, None).await?;
     assert_eq!(profile_test::json(response), fixture["customResult"]);
     assert_eq!(json!(*calls.lock().await), fixture["customCalls"]);
     assert_eq!(

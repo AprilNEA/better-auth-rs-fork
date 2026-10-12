@@ -56,13 +56,15 @@ fn name_mapping_policies(
     };
     if let Some(events) = events {
         let updates = events.clone();
-        field.on_update = Some(Arc::new(move || {
-            updates
-                .lock()
-                .expect("mapped name trace lock")
-                .push(json!(["onUpdate", "name"]));
-            Ok(" Renewed ".into())
-        }));
+        field.on_update = Some(better_auth_core::user_fields::UserFieldFactory::new(
+            move || {
+                updates
+                    .lock()
+                    .expect("mapped name trace lock")
+                    .push(json!(["onUpdate", "name"]));
+                Ok(" Renewed ".into())
+            },
+        ));
         let inputs = events.clone();
         let input_failure = failure.clone();
         field.transform = Some(FieldTransforms {

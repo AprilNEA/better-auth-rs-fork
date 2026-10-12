@@ -63,9 +63,8 @@ async fn run(input: Input) -> AuthResult<Value> {
             UserFieldConfig {
                 required: Some(false),
                 returned: Some(name != "scope" || input.operation != "list-accounts"),
-                on_update: (name == "scope").then(|| {
-                    Arc::new(|| Ok("after".into())) as better_auth::config::UserFieldFactory
-                }),
+                on_update: (name == "scope")
+                    .then(|| better_auth::config::UserFieldFactory::new(|| Ok("after".into()))),
                 transform: Some(FieldTransforms {
                     output: Some(UserFieldTransform::new(|value| {
                         Ok(if value.is_null() || value.is_undefined() {

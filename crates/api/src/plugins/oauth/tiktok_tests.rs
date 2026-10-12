@@ -286,8 +286,7 @@ async fn tiktok_profiles_preserve_envelope_and_skip_mapper_like_pinned_capture()
             ..Default::default()
         };
         let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
-        let response =
-            fetch_user_info_from_provider(&provider, &subject_tokens, profile_request, None).await;
+        let response = fetch_user_info_from_provider(&provider, profile_request, None).await;
         server.abort();
         let response = response?;
         assert_eq!(

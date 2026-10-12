@@ -170,10 +170,12 @@ async fn check<S: AuthSchema>(
         UserFieldConfig {
             field_name: Some("idToken".into()),
             required: Some(false),
-            on_update: Some(Arc::new(move || {
-                stamp_events.lock().unwrap().push("input:stamp".into());
-                Ok("updated-stamp".into())
-            })),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    stamp_events.lock().unwrap().push("input:stamp".into());
+                    Ok("updated-stamp".into())
+                },
+            )),
             ..Default::default()
         },
     );

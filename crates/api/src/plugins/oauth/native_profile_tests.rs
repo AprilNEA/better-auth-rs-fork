@@ -11,7 +11,7 @@ use better_auth_core::{AuthError, AuthResult, FieldMap, FieldValue};
 use serde_json::json;
 
 use super::{
-    GenericOAuthConfig, OAuthAccountSubject, OAuthProfileMapper, OAuthProvider, OAuthTokenSet,
+    GenericOAuthConfig, OAuthAccountSubject, OAuthProfileMapper, OAuthProvider,
     OAuthUserInfoHandler, OAuthUserInfoRequest,
     generic::{GenericOAuthProfileContext, GenericOAuthUserInfoHandler},
     generic_profile::{fetch_profile, resolve_account_subject},
@@ -113,7 +113,7 @@ async fn generic_mapper_mutation_precedes_default_reads_and_retains_native_alias
     );
     assert_eq!(*callbacks.events.lock().unwrap(), ["get", "map"]);
     assert_eq!(
-        resolve_account_subject(&provider, &OAuthTokenSet::default(), &data)
+        resolve_account_subject(&provider, &better_auth_core::FieldMap::new().into(), &data)
             .await
             .unwrap(),
         FieldValue::from("23")
@@ -147,7 +147,7 @@ impl OAuthProfileMapper for CustomResponse {
 impl OAuthAccountSubject for CustomResponse {
     async fn resolve_subject_native(
         &self,
-        _: &OAuthUserInfoRequest,
+        _: &FieldValue,
         _: &FieldValue,
     ) -> AuthResult<FieldValue> {
         self.events.lock().unwrap().push("subject");
@@ -181,14 +181,9 @@ async fn custom_social_profile_preserves_the_complete_response_identity() {
         config,
         generic: None,
     };
-    let response = fetch_user_info_from_provider(
-        &provider,
-        &OAuthTokenSet::default(),
-        OAuthUserInfoRequest::default(),
-        None,
-    )
-    .await
-    .unwrap();
+    let response = fetch_user_info_from_provider(&provider, OAuthUserInfoRequest::default(), None)
+        .await
+        .unwrap();
     assert!(response.value.strict_equals(&value));
     assert!(
         response

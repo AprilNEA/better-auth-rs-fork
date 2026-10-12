@@ -1,0 +1,195 @@
+{
+  "version": "1.7.6",
+  "status": "successful upstream capture; Rust replay pending",
+  "run": "38203719120",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38203719120",
+  "commit": "d1893645e72f431667dddb78ec2eecc8fdb40079",
+  "artifactName": "focused-check-reference-contracts-d1893645e72f431667dddb78ec2eecc8fdb40079-1",
+  "artifactId": "11726775466",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38203719120.log",
+    "bytes": 7107,
+    "sha256": "c1c6ede5c26672e678922a17f700b8e88d61ba4718623b612bc9b5fc13b423c3"
+  },
+  "source": {
+    "path": "compat-tests/reference-server/contracts/native-coercion-properties.test.ts",
+    "sha256": "7901944fd25c3766d165e2b5c4f88ea4c34b7c5e43899ff1ebcb9ee9f07c311a"
+  },
+  "fixture": {
+    "path": "tests/fixtures/native-coercion-properties-1.7.6.json",
+    "bytes": 8276,
+    "sha256": "aa84a9933c01f0adef4809712a7bf3acbdd0e8becd5c6cde601b174d2f4b946c"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1080,
+      "bytes": 165,
+      "sha256": "a346aeed1c7502852b59ad30a8d2fa9a9894cd459f029fa236e07da5e446157d"
+    },
+    {
+      "line": 29,
+      "byteOffset": 1245,
+      "bytes": 181,
+      "sha256": "bbcc17733c74b607c6c735a85788f26f30ac747c5f996e4cb2963879bc7ad6e8"
+    },
+    {
+      "line": 30,
+      "byteOffset": 1426,
+      "bytes": 210,
+      "sha256": "db631d772125f3cf73d0428cfb8416764053c1ece7b05bb439ce11055c012c23"
+    },
+    {
+      "line": 31,
+      "byteOffset": 1636,
+      "bytes": 213,
+      "sha256": "21a31b661cc1cfaeb624173745f2c251e486845eb8d2652c58d3d247397cdcf5"
+    },
+    {
+      "line": 32,
+      "byteOffset": 1849,
+      "bytes": 236,
+      "sha256": "c821bee35129293c2bd309c8fb5a2d9230bd49213a1bf9009780dba5e620e5a2"
+    },
+    {
+      "line": 33,
+      "byteOffset": 2085,
+      "bytes": 192,
+      "sha256": "0ac71e56ef4a11cc37fac09e50d1bc9231842bbc86a5804ac5481f33ee67b0f3"
+    },
+    {
+      "line": 34,
+      "byteOffset": 2277,
+      "bytes": 164,
+      "sha256": "175507055655b7a7de043133bf570fbc18fa5db11fb6773122cd4d97efbdfac8"
+    },
+    {
+      "line": 35,
+      "byteOffset": 2441,
+      "bytes": 180,
+      "sha256": "cd41d3ec0769e0edacc328a1c999982ce7dcb649d91a194de87ac377cd11bf2a"
+    },
+    {
+      "line": 36,
+      "byteOffset": 2621,
+      "bytes": 209,
+      "sha256": "1954b02f15fd76920ad4004e4a39370d5aed5b64b9c34803a23f62b8bd6c2e9a"
+    },
+    {
+      "line": 37,
+      "byteOffset": 2830,
+      "bytes": 212,
+      "sha256": "eda017fa4903802df6a824982fc2c5ce2bb3252c6604591f3e4ff621386f837e"
+    },
+    {
+      "line": 38,
+      "byteOffset": 3042,
+      "bytes": 235,
+      "sha256": "85dcf469293c7f9244f1714681973964bc82672dbaa2c43f7227ea77b7bc8c4c"
+    },
+    {
+      "line": 39,
+      "byteOffset": 3277,
+      "bytes": 191,
+      "sha256": "f51cad4f42a953bcec0d0b955705dc41185c4a8d3e3f4c5f3249dc4655a17774"
+    },
+    {
+      "line": 40,
+      "byteOffset": 3468,
+      "bytes": 168,
+      "sha256": "1a587d242ef98dc238272e48674b3bb876c71962c25380ed48e8903531f0b6ff"
+    },
+    {
+      "line": 41,
+      "byteOffset": 3636,
+      "bytes": 184,
+      "sha256": "e7213de24a0ebeb611822d4e6cee5aed56d05a24f089795815461c6cfab7ae40"
+    },
+    {
+      "line": 42,
+      "byteOffset": 3820,
+      "bytes": 213,
+      "sha256": "9b1f3b47d05db15af7644eb913be778117807b527c2e2e0df69e6831c83c34d9"
+    },
+    {
+      "line": 43,
+      "byteOffset": 4033,
+      "bytes": 216,
+      "sha256": "894a5ac86593ba5dbaaf0cda3a2ec45d24129cf2ddb8f0fee2d7bcee57dd6369"
+    },
+    {
+      "line": 44,
+      "byteOffset": 4249,
+      "bytes": 239,
+      "sha256": "fa340a3a51dcdbac63c04336725a98211202f61fa2f79c7b920bca25b27e6a26"
+    },
+    {
+      "line": 45,
+      "byteOffset": 4488,
+      "bytes": 195,
+      "sha256": "39673c238b7770dbc9a715ecef06b4ea573e59088f0ea2d39cac1c92e1cb0b36"
+    },
+    {
+      "line": 46,
+      "byteOffset": 4683,
+      "bytes": 171,
+      "sha256": "2c5de0897c9635ba0b7d668c301bbce40a53fa685eaa6be05ba1e6fdcd80da99"
+    },
+    {
+      "line": 47,
+      "byteOffset": 4854,
+      "bytes": 230,
+      "sha256": "576e98d43a66f9c608fa8a8bca083474badc656736a0172337f44e513f8ea4ae"
+    },
+    {
+      "line": 48,
+      "byteOffset": 5084,
+      "bytes": 266,
+      "sha256": "92f80eeac071778fcb8538bfaea0c2fdfc3ab7db9f6a81f8a65b57f2794b6cf4"
+    },
+    {
+      "line": 49,
+      "byteOffset": 5350,
+      "bytes": 293,
+      "sha256": "591cc8e47df4d50959bcaa127eefe7f1b4065c081bf4861885f8c6776d9a7dc5"
+    },
+    {
+      "line": 50,
+      "byteOffset": 5643,
+      "bytes": 272,
+      "sha256": "960ab76d2cbc63ad6263204582cd71bf4f73db1848c42433dc7f669c6cf5f44b"
+    },
+    {
+      "line": 51,
+      "byteOffset": 5915,
+      "bytes": 231,
+      "sha256": "a90b4feb2d7939bdb3cc979c127487da15ac25c34ee6ea718fc15ce5c2db253e"
+    },
+    {
+      "line": 52,
+      "byteOffset": 6146,
+      "bytes": 225,
+      "sha256": "6a33b7e10b4762e5e6c739780ff52f2888454f7ad728ed9983c317f76112cb22"
+    },
+    {
+      "line": 53,
+      "byteOffset": 6371,
+      "bytes": 248,
+      "sha256": "4c1927406cf45902c6c7c945a978c475d48275b4a04dd8ac81cba6dbbc2df8d4"
+    },
+    {
+      "line": 54,
+      "byteOffset": 6619,
+      "bytes": 164,
+      "sha256": "274d047a5c994c401d2e5e36e3139de1be665f91c59003ac2dced74123d3ad8d"
+    },
+    {
+      "line": 55,
+      "byteOffset": 6783,
+      "bytes": 165,
+      "sha256": "b2a8c42a5e5a49a60aed5c9883164be6486d3969b70a7b150dc758802f105ae2"
+    }
+  ],
+  "preservation": "Preserve every captured property and key order. Format 28 complete JSON records as an array.",
+  "normalizations": []
+}

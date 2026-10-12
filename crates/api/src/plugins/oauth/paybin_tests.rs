@@ -161,21 +161,10 @@ async fn verified_paybin_profiles_and_mapper_data_match_pinned_results() {
             let profile_request = server.request();
             let subject_tokens = OAuthTokenSet::from_fields(profile_request.fields());
             let response = if code_flow {
-                social_profile::fetch_user_info_for_code(
-                    &resolved,
-                    &subject_tokens,
-                    profile_request,
-                    None,
-                )
-                .await
+                social_profile::fetch_user_info_for_code(&resolved, profile_request, None).await
             } else {
-                social_profile::fetch_user_info_from_provider(
-                    &resolved,
-                    &subject_tokens,
-                    profile_request,
-                    None,
-                )
-                .await
+                social_profile::fetch_user_info_from_provider(&resolved, profile_request, None)
+                    .await
             }
             .unwrap();
             assert_eq!(
@@ -263,13 +252,9 @@ async fn paybin_missing_profile_custom_handlers_and_mapper_keep_original_results
         } else {
             Default::default()
         };
-        let result = social_profile::fetch_user_info_for_code(
-            &resolved(provider),
-            &OAuthTokenSet::from_fields(profile_request.fields()),
-            profile_request,
-            None,
-        )
-        .await;
+        let result =
+            social_profile::fetch_user_info_for_code(&resolved(provider), profile_request, None)
+                .await;
         let mut events = calls.lock().unwrap().clone();
         events.extend(seen.lock().unwrap().iter().map(|_| "mapper".to_owned()));
         match result {
@@ -328,15 +313,10 @@ async fn application_verified_paybin_profile_uses_the_completed_signature_check(
     .await
     .unwrap();
     let profile_request = server.request();
-    let profile = social_profile::fetch_user_info_with_claims(
-        &provider,
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-        verified,
-    )
-    .await
-    .unwrap();
+    let profile =
+        social_profile::fetch_user_info_with_claims(&provider, profile_request, None, verified)
+            .await
+            .unwrap();
     assert_eq!(profile_test_support::data(&profile), server.claims);
     assert_eq!(
         *server.paths.lock().unwrap(),

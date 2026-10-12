@@ -285,7 +285,7 @@ async fn run(input: Input) -> AuthResult<Value> {
                 "factory".into(),
                 UserFieldConfig {
                     required: Some(true),
-                    default_value_fn: Some(Arc::new(move || {
+                    default_value_fn: Some(better_auth::config::UserFieldFactory::new(move || {
                         let _ = counter.fetch_add(1, Ordering::SeqCst);
                         Ok("factory".into())
                     })),
@@ -390,10 +390,12 @@ async fn run(input: Input) -> AuthResult<Value> {
                         (
                             "factory".into(),
                             UserFieldConfig {
-                                default_value_fn: Some(Arc::new(move || {
-                                    let _ = counter.fetch_add(1, Ordering::SeqCst);
-                                    Ok("factory".into())
-                                })),
+                                default_value_fn: Some(better_auth::config::UserFieldFactory::new(
+                                    move || {
+                                        let _ = counter.fetch_add(1, Ordering::SeqCst);
+                                        Ok("factory".into())
+                                    },
+                                )),
                                 ..Default::default()
                             },
                         ),

@@ -154,10 +154,11 @@ mod tests {
 
     fn function(calls: &Arc<AtomicUsize>) -> FieldValue {
         let observed = calls.clone();
-        let factory: crate::user_fields::UserFieldFactory = Arc::new(move || {
-            let _ = observed.fetch_add(1, Ordering::SeqCst);
-            Ok(FieldValue::Undefined)
-        });
+        let factory: crate::user_fields::UserFieldFactory =
+            crate::user_fields::UserFieldFactory::new(move || {
+                let _ = observed.fetch_add(1, Ordering::SeqCst);
+                Ok(FieldValue::Undefined)
+            });
         FieldValue::Function(crate::FieldFunction::from(factory))
     }
 

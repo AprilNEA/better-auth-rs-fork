@@ -391,10 +391,12 @@ async fn builder_retains_application_user_fields_before_plugin_merge() -> AuthRe
         let _ = plugin.fields_mut().insert(
             "shared".into(),
             UserFieldConfig {
-                default_value_fn: Some(Arc::new(move || {
-                    *trace_lock(&observed_defaults)? += 1;
-                    Ok("plugin-shared".into())
-                })),
+                default_value_fn: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    move || {
+                        *trace_lock(&observed_defaults)? += 1;
+                        Ok("plugin-shared".into())
+                    },
+                )),
                 ..Default::default()
             },
         );

@@ -87,7 +87,7 @@ pub(super) async fn auth<S: AuthSchema>(
         ),
     ]);
     let called = events.clone();
-    let function: UserFieldFactory = Arc::new(move || {
+    let function: UserFieldFactory = UserFieldFactory::new(move || {
         called.push("team.name", "called", FieldValue::Undefined)?;
         Ok("called".into())
     });
@@ -130,7 +130,9 @@ pub(super) async fn auth<S: AuthSchema>(
         "updatedAt",
         UserFieldConfig {
             field_type: UserFieldType::Date,
-            on_update: Some(Arc::new(|| Ok(date(0).into()))),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(|| {
+                Ok(date(0).into())
+            })),
             transform: Some(FieldTransforms {
                 input: Some({
                     let events = events.clone();

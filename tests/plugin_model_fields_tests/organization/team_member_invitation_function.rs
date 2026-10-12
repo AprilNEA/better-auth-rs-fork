@@ -49,7 +49,7 @@ fn function_fields(events: &Events, case: Case) -> UserConfig {
     let mut fields = parent_fields(events);
     let calls = AtomicUsize::new(0);
     let invoked = events.clone();
-    let function: UserFieldFactory = Arc::new(move || {
+    let function: UserFieldFactory = UserFieldFactory::new(move || {
         invoked.push("team.name", "call", FieldValue::Undefined)?;
         Ok("Visible Team A".into())
     });

@@ -10,14 +10,14 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/fixtures/invitation-claim-selector-values-1.7.6.json"
     )))?;
-    assert_eq!(fixture["version"], "1.7.6");
-    assert_eq!(fixture["backend"], "memory");
-    let cases = required(fixture["cases"].as_array())?;
+    assert_eq!(required(fixture.get("version"))?, "1.7.6");
+    assert_eq!(required(fixture.get("backend"))?, "memory");
+    let cases = required(required(fixture.get("cases"))?.as_array())?;
     assert_eq!(
         cases
             .iter()
-            .map(|case| case["scenario"].clone())
-            .collect::<Vec<_>>(),
+            .map(|case| required(case.get("scenario")).cloned())
+            .collect::<AuthResult<Vec<_>>>()?,
         [
             "invitation-own-selector-id-nan",
             "invitation-own-selector-id-object",
@@ -27,8 +27,9 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
         .map(JsonValue::from),
     );
     for case in cases {
-        let column = required(case["column"].as_str())?;
-        let replacement = match required(case["kind"].as_str())? {
+        let scenario = required(case.get("scenario"))?;
+        let column = required(required(case.get("column"))?.as_str())?;
+        let replacement = match required(required(case.get("kind"))?.as_str())? {
             "nan" => Value::Number(f64::NAN),
             "object" => FieldMap::from([
                 ("marker".into(), "claimed-object".into()),
@@ -52,7 +53,7 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
         let _ = fields.invitation.fields_mut().insert(
             "claimLookup".into(),
             UserFieldConfig {
-                on_update: Some(Arc::new(move || {
+                on_update: Some(crate::user_fields::UserFieldFactory::new(move || {
                     record(
                         &update_trace,
                         json!([
@@ -68,17 +69,18 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
         );
         let store = EphemeralStore::new(Arc::new(AuthConfig::default()));
         store.configure_organization_fields(fields)?;
-        let steps = required(case["steps"].as_array())?;
+        let steps = required(required(case.get("steps"))?.as_array())?;
         assert_eq!(steps.len(), 2);
-        seed(&store, &steps[0]["before"])?;
+        let first = required(steps.first())?;
+        seed(&store, required(first.get("before"))?)?;
         let original = store.operation(|operation| {
             required(operation.capture_table(EntityRole::Invitation)?.row_at(0)?)
         })?;
         let before = memory(&store)?;
         // The direct Rust helper has no fromStatus argument. Aggregate acceptance covers the pending predicate.
         assert_eq!(
-            steps[0]["input"],
-            json!({"invitationId":"invitation-alias", "status":"accepted", "fromStatus":"pending"})
+            required(first.get("input"))?,
+            &json!({"invitationId":"invitation-alias", "status":"accepted", "fromStatus":"pending"})
         );
         let returned: Value = required(
             store
@@ -92,13 +94,14 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
         .into();
         let returned_lookup = returned.model_property("claimLookup")?;
         for (index, result) in [(0, returned), (1, true.into())] {
+            let step = required(steps.get(index))?;
             let before = if index == 0 {
                 before.clone()
             } else {
                 let before = memory(&store)?;
                 assert_eq!(
-                    steps[index]["input"],
-                    json!({"operation":"read-only-adapter-transaction"})
+                    required(step.get("input"))?,
+                    &json!({"operation":"read-only-adapter-transaction"})
                 );
                 let committed =
                     crate::store::transaction(&store, |_| Box::pin(async { Ok(true) })).await?;
@@ -131,9 +134,10 @@ async fn selector_values_retain_claim_output_and_adapter_transaction_identity() 
                 "identities",
             ] {
                 assert_eq!(
-                    steps[index][key], observed[key],
+                    required(step.get(key))?,
+                    required(observed.get(key))?,
                     "{}/{index}/{key}",
-                    case["scenario"]
+                    scenario
                 );
             }
         }

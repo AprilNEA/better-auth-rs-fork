@@ -300,13 +300,7 @@ async fn fetch(
     let profile_request = OAuthUserInfoRequest::from_fields(better_auth_core::FieldMap::from_json(
         token.as_object().unwrap().clone(),
     )?);
-    social_profile::fetch_user_info_for_code(
-        &resolved(config),
-        &OAuthTokenSet::from_fields(profile_request.fields()),
-        profile_request,
-        None,
-    )
-    .await
+    social_profile::fetch_user_info_for_code(&resolved(config), profile_request, None).await
 }
 
 #[tokio::test]

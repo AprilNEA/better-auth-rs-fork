@@ -304,8 +304,7 @@ async fn apple_signed_profiles_preserve_callback_names_mapper_precedence_and_dat
         };
         let tokens = OAuthTokenSet::from_fields(profile_request.fields());
         let response =
-            social_profile::fetch_user_info_for_code(&provider, &tokens, profile_request, None)
-                .await?;
+            social_profile::fetch_user_info_for_code(&provider, profile_request, None).await?;
         assert_eq!(
             profile_test_support::subject(&provider, &tokens, &response)
                 .await
@@ -380,7 +379,6 @@ async fn apple_valid_signed_tokens_use_audience_precedence_and_both_nonce_forms(
         };
         let response = social_profile::fetch_user_info_with_claims(
             &provider,
-            &OAuthTokenSet::from_fields(profile_request.fields()),
             profile_request,
             request.nonce.as_deref(),
             verified,

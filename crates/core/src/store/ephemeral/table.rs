@@ -13,6 +13,7 @@ type RowArray<T> = Vec<Option<Arc<Mutex<RowCell<T>>>>>;
 pub(super) struct TableRef<T> {
     rows: Arc<Mutex<RowArray<T>>>,
     gate: MemoryGate,
+    properties: crate::FieldObject,
 }
 
 pub(super) struct ReconcilePlan<T> {
@@ -51,6 +52,7 @@ impl<T> Clone for TableRef<T> {
     fn clone(&self) -> Self {
         Self {
             rows: self.rows.clone(),
+            properties: self.properties.clone(),
             gate: self.gate.clone(),
         }
     }
@@ -61,6 +63,7 @@ impl<T> TableRef<T> {
         Self {
             gate,
             rows: Arc::default(),
+            properties: crate::FieldMap::new().into(),
         }
     }
 
@@ -70,6 +73,7 @@ impl<T> TableRef<T> {
                 rows.into_iter().map(|row| Some(row.0)).collect(),
             )),
             gate,
+            properties: crate::FieldMap::new().into(),
         }
     }
 
@@ -107,6 +111,7 @@ impl<T> TableRef<T> {
         let _operation = self.gate.lock();
         Ok(Self {
             rows: Arc::new(Mutex::new(self.lock()?.clone())),
+            properties: crate::FieldMap::new().into(),
             gate: self.gate.clone(),
         })
     }
@@ -210,6 +215,9 @@ impl<T: ObjectRow> TableRef<T> {
 }
 
 impl<T: ObjectRow> crate::field_value::FieldArraySource for TableRef<T> {
+    fn properties(&self) -> &crate::FieldObject {
+        &self.properties
+    }
     fn len(&self) -> AuthResult<usize> {
         self.len()
     }

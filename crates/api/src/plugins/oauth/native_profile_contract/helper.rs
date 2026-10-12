@@ -1,6 +1,4 @@
-use super::super::{
-    OAuthTokenSet, OAuthUserInfoRequest, generic_profile, resolved::ResolvedGenericOAuth,
-};
+use super::super::{OAuthUserInfoRequest, generic_profile, resolved::ResolvedGenericOAuth};
 use super::*;
 use better_auth_core::{AuthConfig, store::EphemeralStore};
 
@@ -37,7 +35,7 @@ pub(super) async fn capture(scenario: Scenario) -> AuthResult<Value> {
             })?;
             let subject = generic_profile::resolve_account_subject(
                 &provider,
-                &OAuthTokenSet::from_fields(tokens),
+                &tokens.into(),
                 &info.model_property("data")?,
             )
             .await?;

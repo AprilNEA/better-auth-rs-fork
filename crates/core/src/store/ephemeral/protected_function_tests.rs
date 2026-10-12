@@ -164,7 +164,7 @@ impl Harness {
         let scenario = &case["observation"]["scenario"];
         let counts = Arc::new(Counts::default());
         let called = counts.clone();
-        let returned_factory: UserFieldFactory = Arc::new(move || {
+        let returned_factory: UserFieldFactory = UserFieldFactory::new(move || {
             let _ = called.returned.fetch_add(1, Ordering::SeqCst);
             Ok("returned-function-value".into())
         });
@@ -172,7 +172,7 @@ impl Harness {
         let result = scenario["result"].as_str().unwrap().to_owned();
         let returned_value = returned.clone();
         let called = counts.clone();
-        let factory: UserFieldFactory = Arc::new(move || {
+        let factory: UserFieldFactory = UserFieldFactory::new(move || {
             let _ = called.factory.fetch_add(1, Ordering::SeqCst);
             match result.as_str() {
                 "string" => Ok("factory-value".into()),

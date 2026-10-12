@@ -101,7 +101,7 @@ google.disable_implicit_sign_up = Some(true);
 let oauth = OAuthPlugin::new().add_provider("google", google);
 ```
 
-Social `scopes`, `disable_implicit_sign_up`, and `disable_sign_up` retain omission through `Option`. Omitted sign-up switches resolve to false. Except for Zoom, built-in providers add their default scopes, configured scopes, and request scopes; Discord places request scopes before configured scopes. Explicit empty lists retain the defaults. Set `disable_default_scope = true` to request only the configured and request scopes. To migrate an old complete scope override, wrap the list in `Some` and enable `disable_default_scope`. Custom social providers retain request-scope replacement semantics. Generic OAuth options keep their existing types and merge behavior.
+Social `scopes`, `disable_implicit_sign_up`, and `disable_sign_up` retain omission through `Option`. Generic OAuth uses the same optional sign-up switches. Omitted switches permit sign-up and remain absent in native callback payloads; `Some(false)` remains an explicit false value. Except for Zoom, built-in providers add their default scopes, configured scopes, and request scopes; Discord places request scopes before configured scopes. Explicit empty lists retain the defaults. Set `disable_default_scope = true` to request only the configured and request scopes. To migrate an old complete scope override, wrap the list in `Some` and enable `disable_default_scope`. Custom social providers retain request-scope replacement semantics. Generic OAuth scope merging remains unchanged.
 
 `OAuthProvider::client_key` defaults to `None`. A nonempty value adds `client_key` to the authorization-code form for built-in providers that pass the common options upstream. PayPal, Reddit, WeChat, and custom providers ignore this field. The shared refresh flow and Generic OAuth do not consume this option. Configure `client_id` and `client_secret` separately.
 
@@ -379,7 +379,7 @@ The helpers map each provider response before calling the configured `map_profil
 
 When `token_endpoint_auth` is omitted, a configured secret selects `ClientSecretPost`; otherwise the public-client method is used. Set the method required by the provider. `None` and `PrivateKeyJwt` cannot be combined with `client_secret`.
 
-Use `authorization_url_params` for additional authorization parameters, `token_url_params` and `authorization_headers` for code exchange, and `refresh_token_params` for token refresh. Refresh parameters may be static or implement `OAuthRefreshParameters` to use the authenticated request. Reserved grant and authorization parameters cannot be replaced by these extra parameters. Implement `OAuthTokenHandler` through `get_token` when the provider needs a custom code exchange.
+Use `authorization_url_params` for additional authorization parameters, `token_url_params` and `authorization_headers` for code exchange, and `refresh_token_params` for token refresh. Refresh parameters may be static or implement `OAuthRefreshParameters` to use the authenticated request. Reserved grant and authorization parameters cannot be replaced by these extra parameters. Implement `OAuthTokenHandler::get_token` for a typed custom code exchange. Implement `get_token_native` to receive the original ordered `FieldValue` input and return native token values. The native path preserves omitted properties, explicit undefined, Date, arrays, functions, and object identity through expiry defaults and account-subject callbacks. Token object spread occurs only when the user-info callback or account construction requires it. The typed callback remains an explicit string-input bridge.
 
 ### Profiles and account identity
 
@@ -399,7 +399,7 @@ The account subject comes from the original profile's `sub` for OIDC or `id` for
 
 ### Sign-up and email verification
 
-Set `disable_sign_up: true` to reject new users through this provider. Existing users can continue signing in. `disable_implicit_sign_up: true` instead requires `requestSignUp: true` for new users. These settings apply to the configured provider; configure other sign-up mechanisms separately.
+Set `disable_sign_up: Some(true)` to reject new users through this provider. Existing users can continue signing in. `disable_implicit_sign_up: Some(true)` instead requires `requestSignUp: true` for new users. These settings apply to the configured provider; configure other sign-up mechanisms separately. Migrate previous explicit Boolean values by wrapping them in `Some`; leave omitted configuration as `None`.
 
 Set `require_email_verification: true` to withhold sessions from users whose email remains unverified. Attach an email verification plugin to send verification messages:
 

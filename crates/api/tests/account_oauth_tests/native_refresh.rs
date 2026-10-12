@@ -151,7 +151,9 @@ async fn test_access_token_refresh_preserves_native_callback_values_and_fallback
             "updatedAt".into(),
             UserFieldConfig {
                 field_type: UserFieldType::Date,
-                on_update: Some(Arc::new(move || Ok(updated_value.clone().into()))),
+                on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                    move || Ok(updated_value.clone().into()),
+                )),
                 ..Default::default()
             },
         );

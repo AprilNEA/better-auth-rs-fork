@@ -25,7 +25,56 @@ pub struct OAuthCodeExchange<'a> {
 #[async_trait]
 pub trait OAuthTokenHandler: Send + Sync {
     /// Exchange the authorization code without creating a local session.
-    async fn get_token(&self, request: OAuthCodeExchange<'_>) -> AuthResult<OAuthTokenSet>;
+    async fn get_token(&self, _request: OAuthCodeExchange<'_>) -> AuthResult<OAuthTokenSet> {
+        Err(AuthError::internal(
+            "This OAuth token handler does not implement the typed callback",
+        ))
+    }
+
+    /// Return the original token value before expiry defaults, truthiness checks, or object spread.
+    /// The default invokes the typed callback only for a string or absent verifier.
+    async fn get_token_native(&self, request: &FieldValue) -> AuthResult<FieldValue> {
+        let code = request.model_property("code")?;
+        let redirect_uri = request.model_property("redirectURI")?;
+        let verifier = request.model_property("codeVerifier")?;
+        let device = request.model_property("deviceId")?;
+        let code_verifier = match &verifier {
+            FieldValue::Undefined => None,
+            FieldValue::String(value) => Some(value.as_str()),
+            _ => {
+                return Err(AuthError::type_error(
+                    "The typed OAuth token callback requires a string or undefined code verifier",
+                ));
+            }
+        };
+        let device_id = match &device {
+            FieldValue::Undefined => None,
+            FieldValue::String(value) => Some(value.as_str()),
+            _ => {
+                return Err(AuthError::type_error(
+                    "The typed OAuth token callback requires a string or undefined device identifier",
+                ));
+            }
+        };
+        Ok(self
+            .get_token(OAuthCodeExchange {
+                code: code.as_str().ok_or_else(|| {
+                    AuthError::type_error(
+                        "The typed OAuth token callback requires a string authorization code",
+                    )
+                })?,
+                redirect_uri: redirect_uri.as_str().ok_or_else(|| {
+                    AuthError::type_error(
+                        "The typed OAuth token callback requires a string redirect URI",
+                    )
+                })?,
+                code_verifier,
+                device_id,
+            })
+            .await?
+            .fields()
+            .into())
+    }
 }
 
 /// Borrowed claims from the configured OIDC signature and claim validation.
@@ -173,14 +222,16 @@ pub trait OAuthAccountSubject: Send + Sync {
     }
 
     /// Return the account subject before the shared JavaScript String conversion and validation.
-    /// The default explicitly projects JSON for the legacy callback without replacing the profile.
+    /// Native resolvers receive the original token value without reading its properties.
+    /// The default projects the token fields and profile JSON at the legacy callback boundary.
     async fn resolve_subject_native(
         &self,
-        tokens: &OAuthUserInfoRequest,
+        tokens: &FieldValue,
         profile: &FieldValue,
     ) -> AuthResult<FieldValue> {
+        let tokens = OAuthUserInfoRequest::from_fields(tokens.enumerable_fields()?);
         let profile = super::providers::json_profile_bridge(profile)?;
-        Ok(self.resolve_subject(tokens, &profile).await?.into())
+        Ok(self.resolve_subject(&tokens, &profile).await?.into())
     }
 }
 
@@ -264,10 +315,10 @@ pub struct GenericOAuthConfig {
     pub map_profile_to_user: Option<Arc<dyn OAuthProfileMapper>>,
     /// Override the immutable subject resolver (`sub` for OIDC, `id` for OAuth).
     pub account_subject: Option<Arc<dyn OAuthAccountSubject>>,
-    /// Require an explicit `requestSignUp` to create a new user.
-    pub disable_implicit_sign_up: bool,
-    /// Reject creation of new users through this provider.
-    pub disable_sign_up: bool,
+    /// Require an explicit `requestSignUp` to create a new user. Omission remains distinct from false.
+    pub disable_implicit_sign_up: Option<bool>,
+    /// Reject creation of new users through this provider. Omission remains distinct from false.
+    pub disable_sign_up: Option<bool>,
     /// Update existing local profile fields on sign-in.
     pub override_user_info: bool,
     /// Require the local user's email to be verified before issuing a session.
@@ -310,8 +361,8 @@ impl Default for GenericOAuthConfig {
             get_user_info: None,
             map_profile_to_user: None,
             account_subject: None,
-            disable_implicit_sign_up: false,
-            disable_sign_up: false,
+            disable_implicit_sign_up: None,
+            disable_sign_up: None,
             override_user_info: false,
             require_email_verification: false,
             allow_idp_initiated: false,

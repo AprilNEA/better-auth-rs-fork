@@ -61,10 +61,12 @@ fn config(trace: &Trace) -> AuthConfig {
         "updatedAt".into(),
         UserFieldConfig {
             field_type: UserFieldType::Date,
-            on_update: Some(Arc::new(move || {
-                record(&updated_trace, "updated-on-update")?;
-                Ok(super::date().into())
-            })),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    record(&updated_trace, "updated-on-update")?;
+                    Ok(super::date().into())
+                },
+            )),
             transform: Some(FieldTransforms {
                 input: Some(UserFieldTransform::new(move |value| {
                     record(&input_trace, "updated-input")?;

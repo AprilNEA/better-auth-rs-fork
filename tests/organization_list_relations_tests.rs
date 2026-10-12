@@ -210,10 +210,11 @@ async fn check<S: AuthSchema>(
     let events = Events::default();
     let name = {
         let events = events.clone();
-        let function: better_auth_core::user_fields::UserFieldFactory = Arc::new(move || {
-            events.push("function-called", FieldValue::Undefined)?;
-            Ok("called".into())
-        });
+        let function: better_auth_core::user_fields::UserFieldFactory =
+            better_auth_core::user_fields::UserFieldFactory::new(move || {
+                events.push("function-called", FieldValue::Undefined)?;
+                Ok("called".into())
+            });
         FieldValue::Function(function.into())
     };
     let auth = policies::auth(raw, native, parent, case, &events, &name).await?;

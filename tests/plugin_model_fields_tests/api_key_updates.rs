@@ -42,13 +42,13 @@ fn timestamp_policy(
         field_type: UserFieldType::Date,
         required: Some(false),
         on_update: on_update.then(|| {
-            Arc::new(move || {
+            better_auth_core::user_fields::UserFieldFactory::new(move || {
                 trace_lock(&events)?.push("onUpdate".into());
                 if failure.load(Ordering::SeqCst) == 1 {
                     return Err(AuthError::internal("ordinary updatedAt onUpdate error"));
                 }
                 Ok(date(GENERATED)?.into())
-            }) as better_auth_core::user_fields::UserFieldFactory
+            })
         }),
         transform: Some(FieldTransforms {
             input: Some(UserFieldTransform::new(move |value| {

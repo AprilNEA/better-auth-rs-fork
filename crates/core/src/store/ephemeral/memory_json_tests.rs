@@ -135,8 +135,10 @@ struct Fixture {
 impl Fixture {
     fn new() -> AuthResult<Self> {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let mut config = AuthConfig::default();
-        config.user = fields("user", &events);
+        let mut config = AuthConfig {
+            user: fields("user", &events),
+            ..Default::default()
+        };
         config.session.additional_fields = fields("session", &events).additional_fields;
         config.advanced.database.joins = Some(true);
         let next_id = AtomicUsize::new(1);

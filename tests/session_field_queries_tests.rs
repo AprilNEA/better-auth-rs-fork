@@ -315,10 +315,12 @@ fn preserve_config(events: &Events, ending: &Arc<AtomicBool>) -> AuthConfig {
         "updatedAt".into(),
         UserFieldConfig {
             field_type: UserFieldType::Date,
-            on_update: Some(Arc::new(move || {
-                update_events.push(json!("updated-on-update"))?;
-                Ok(date(9).into())
-            })),
+            on_update: Some(better_auth_core::user_fields::UserFieldFactory::new(
+                move || {
+                    update_events.push(json!("updated-on-update"))?;
+                    Ok(date(9).into())
+                },
+            )),
             transform: Some(FieldTransforms {
                 output: None,
                 input: Some(UserFieldTransform::new(move |value| {

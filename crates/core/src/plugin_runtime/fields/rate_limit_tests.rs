@@ -17,10 +17,10 @@ fn replacement() -> UserConfig {
                             required: Some(false),
                             returned: Some(false),
                             unique: Some(false),
-                            default_value_fn: Some(Arc::new(|| {
-                                Err(AuthError::internal("Discarded RateLimit default ran"))
-                            })),
-                            on_update: Some(Arc::new(|| {
+                            default_value_fn: Some(crate::user_fields::UserFieldFactory::new(
+                                || Err(AuthError::internal("Discarded RateLimit default ran")),
+                            )),
+                            on_update: Some(crate::user_fields::UserFieldFactory::new(|| {
                                 Err(AuthError::internal("Discarded RateLimit update ran"))
                             })),
                             transform: Some(FieldTransforms {

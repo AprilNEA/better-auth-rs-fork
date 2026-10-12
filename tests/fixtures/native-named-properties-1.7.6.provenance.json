@@ -1,0 +1,63 @@
+{
+  "version": "1.7.6",
+  "status": "successful upstream capture; Rust replay pending",
+  "run": "38203069452",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38203069452",
+  "commit": "250b5ddda4fd17cc26e8e01992109b2593c5242c",
+  "artifactName": "focused-check-reference-contracts-250b5ddda4fd17cc26e8e01992109b2593c5242c-1",
+  "artifactId": "11725894945",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38203069452.log",
+    "bytes": 2872,
+    "sha256": "0f29c81d3bbeccca491047112081888a9c11199a5b497bb395493b63d5a8e972"
+  },
+  "source": {
+    "path": "compat-tests/reference-server/contracts/native-named-properties.test.ts",
+    "sha256": "d50c14f19f32173d7ba4b5196af0e18fa68670e46db5eb3ae0ac75d928647194"
+  },
+  "fixture": {
+    "path": "tests/fixtures/native-named-properties-1.7.6.json",
+    "bytes": 2381,
+    "sha256": "291c1c16aa56826eedb11b15c250ab3f580cd71059a45fc29642a4662bb214ff"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1077,
+      "bytes": 445,
+      "sha256": "d34142e286f489e51e93a89df195ef6adb0543086a7ae3af1618ad92c4224a73"
+    },
+    {
+      "line": 29,
+      "byteOffset": 1522,
+      "bytes": 146,
+      "sha256": "a736a320dbe3bc062a8af33a118af604888d06a8f9c10e46be91b6695c7b5487"
+    },
+    {
+      "line": 30,
+      "byteOffset": 1668,
+      "bytes": 399,
+      "sha256": "6ed583e59d80e60b7fbc41efc7b8cb351175110cdc40a4528ca9dcf9a3197afe"
+    },
+    {
+      "line": 31,
+      "byteOffset": 2067,
+      "bytes": 145,
+      "sha256": "daade2dbb9286906deda1d3589adca80d8e2c0782db799de9bc76a9c76161d2f"
+    },
+    {
+      "line": 32,
+      "byteOffset": 2212,
+      "bytes": 327,
+      "sha256": "07df56d58e84ac2b6fb70d82eed497c35b3b372bd3db57c2011d45618548e766"
+    },
+    {
+      "line": 33,
+      "byteOffset": 2539,
+      "bytes": 149,
+      "sha256": "0dc4efee6067a5e950b2a61c58dd3bac1aba171f97611ddbe5d98abdb024e096"
+    }
+  ],
+  "preservation": "Preserve every captured property and key order. Format six complete JSON records as an array.",
+  "normalizations": []
+}
