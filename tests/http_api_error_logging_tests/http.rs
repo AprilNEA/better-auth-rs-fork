@@ -104,6 +104,10 @@ fn error_snapshot(cause: &FieldValue) -> AuthResult<Vec<(String, bool, FieldValu
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The paired contract must assert complete responses, logger events, and original error identity while setup errors propagate"
+)]
 async fn http_api_errors_keep_instance_and_exported_logger_scopes_distinct() -> AuthResult<()> {
     for nested in [false, true] {
         for status in ["FORBIDDEN", "INTERNAL_SERVER_ERROR"] {
@@ -145,7 +149,7 @@ async fn http_api_errors_keep_instance_and_exported_logger_scopes_distinct() -> 
                     b_config.logger.level = level;
                     b_config.logger.disabled = Some(disabled);
                     b_config.logger.log = Some(observations.sink("B")?);
-                    let (b_builder, b_store) = builder(b_config)?;
+                    let (b_builder, b_store) = builder(b_config, &[])?;
                     let b = Arc::new(
                         b_builder
                             .middleware(Failure {
@@ -159,7 +163,7 @@ async fn http_api_errors_keep_instance_and_exported_logger_scopes_distinct() -> 
                     let mut a_config = config(ORIGIN_A);
                     a_config.logger.level = Some(LogLevel::Error);
                     a_config.logger.log = Some(observations.sink("A")?);
-                    let (a_builder, a_store) = builder(a_config)?;
+                    let (a_builder, a_store) = builder(a_config, &[])?;
                     let a = a_builder
                         .plugin(Parent {
                             child: b.clone(),

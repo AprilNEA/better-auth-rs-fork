@@ -78,6 +78,10 @@ async fn create(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract must assert logger ownership, complete event order, and persistence while setup errors propagate"
+)]
 async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_caller()
 -> AuthResult<()> {
     for nested in [false, true] {
@@ -92,7 +96,7 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
             let mut b_config = config(ORIGIN_B);
             b_config.logger.level = Some(LogLevel::Error);
             b_config.logger.log = Some(observations.sink("B")?);
-            let (b_builder, b_store) = builder(b_config)?;
+            let (b_builder, b_store) = builder(b_config, &["apikey"])?;
             let b = b_builder
                 .plugin(ApiKeyPlugin::with_config(ApiKeyConfig {
                     disable_key_hashing: true,
@@ -116,7 +120,7 @@ async fn typed_api_key_facade_retains_its_logger_across_await_and_restores_the_c
             let mut a_config = config(ORIGIN_A);
             a_config.logger.level = Some(LogLevel::Error);
             a_config.logger.log = Some(observations.sink("A")?);
-            let (a_builder, a_store) = builder(a_config)?;
+            let (a_builder, a_store) = builder(a_config, &[])?;
             let a = a_builder.build().await?;
             lock(&observations.events)?.clear();
             async {

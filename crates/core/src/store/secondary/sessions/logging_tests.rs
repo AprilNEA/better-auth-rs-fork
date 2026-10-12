@@ -192,7 +192,9 @@ async fn secondary_logger_uses_own_instance_inside_another_endpoint() -> AuthRes
             });
             let before_cache: Vec<(&str, String)> = match mode {
                 "missing-session" => vec![("token", "{}".into())],
-                "missing-list" => vec![("token", json!({"session": session()}).to_string())],
+                "missing-list" => {
+                    vec![("token", json!({"session": session().json()?}).to_string())]
+                }
                 "delete-failure" => vec![
                     (
                         "active-sessions-owner",
@@ -200,7 +202,7 @@ async fn secondary_logger_uses_own_instance_inside_another_endpoint() -> AuthRes
                     ),
                     (
                         "token",
-                        json!({"session": session(), "user": user()}).to_string(),
+                        json!({"session": session().json()?, "user": user().json()?}).to_string(),
                     ),
                 ],
                 _ => vec![],

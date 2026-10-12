@@ -38,8 +38,11 @@ fn config(origin: &str) -> AuthConfig {
     config
 }
 
-fn builder(config: AuthConfig) -> AuthResult<(AuthBuilder<S>, Arc<EphemeralStore>)> {
-    let store = store(&config)?;
+fn builder(
+    config: AuthConfig,
+    additional_tables: &[&str],
+) -> AuthResult<(AuthBuilder<S>, Arc<EphemeralStore>)> {
+    let store = store(&config, additional_tables)?;
     let builder = AuthBuilder::new(config)
         .store_arc(store.clone())
         .rate_limit(better_auth_core::middleware::RateLimitConfig {
@@ -49,10 +52,13 @@ fn builder(config: AuthConfig) -> AuthResult<(AuthBuilder<S>, Arc<EphemeralStore
     Ok((builder, store))
 }
 
-fn store(config: &AuthConfig) -> AuthResult<Arc<EphemeralStore>> {
+fn store(config: &AuthConfig, additional_tables: &[&str]) -> AuthResult<Arc<EphemeralStore>> {
     Ok(Arc::new(EphemeralStore::from_storage(
         Arc::new(config.clone()),
-        ["user", "session", "account", "verification"].map(|name| (name.into(), Vec::new())),
+        ["user", "session", "account", "verification"]
+            .into_iter()
+            .chain(additional_tables.iter().copied())
+            .map(|name| (name.into(), Vec::new())),
     )?))
 }
 

@@ -116,11 +116,14 @@ pub(super) fn default_event(
                 &std::fs::read(path).map_err(|error| AuthError::internal(error.to_string()))?,
             )
             .map_err(|error| AuthError::internal(error.to_string()))?;
-            observation["colors"].as_bool().ok_or_else(|| {
-                AuthError::internal(
-                    "Upstream logger observation must contain a boolean colors value",
-                )
-            })?
+            observation
+                .get("colors")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    AuthError::internal(
+                        "Upstream logger observation must contain a boolean colors value",
+                    )
+                })?
         }
         None if std::env::var_os("GITHUB_ACTIONS").is_some() => {
             return Err(AuthError::internal(
