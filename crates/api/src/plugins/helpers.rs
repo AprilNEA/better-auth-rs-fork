@@ -376,13 +376,7 @@ pub(crate) async fn issue_selected_user_session_optional<S: better_auth_core::Au
     meta: &better_auth_core::RequestMeta,
     expires_in: chrono::Duration,
 ) -> Result<Option<better_auth_core::session::NativeSessionData>, SessionIssueError> {
-    let user_id = better_auth_core::SchemaValue::<String>::from_field(
-        user.as_object()
-            .map(|fields| fields.get("id"))
-            .transpose()?
-            .flatten()
-            .unwrap_or_default(),
-    );
+    let user_id = better_auth_core::SchemaValue::<String>::from_field(user.model_property("id")?);
     let session = issue_session_for_id_optional(ctx, user_id, meta, expires_in).await?;
     Ok(session.map(|session| better_auth_core::session::NativeSessionData { user, session }))
 }
@@ -529,6 +523,10 @@ mod response_tests;
 #[cfg(test)]
 #[path = "helpers/session_tests.rs"]
 mod session_tests;
+
+#[cfg(test)]
+#[path = "helpers/selected_user_property_tests.rs"]
+mod selected_user_property_tests;
 
 #[cfg(test)]
 #[path = "helpers/nullable_session_tests.rs"]

@@ -7,6 +7,10 @@ use sea_orm::{ConnectionTrait, EntityTrait, QueryFilter, QuerySelect, QueryTrait
 #[path = "plugin_record_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "shared_column_contract_tests.rs"]
+mod shared_column_contract_tests;
+
 impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> SeaOrmStore<S, O, P> {
     pub(super) async fn create_plugin_record<M: SeaOrmPluginModel>(
         &self,
