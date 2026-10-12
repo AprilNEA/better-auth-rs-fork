@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
-use better_auth_core::entity::AuthSession;
 use better_auth_core::session::NativeSessionData;
 use better_auth_core::wire::UserView;
 use better_auth_core::{

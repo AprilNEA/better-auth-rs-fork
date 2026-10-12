@@ -1,4 +1,4 @@
-use better_auth_core::entity::{AuthSession, AuthUser};
+use better_auth_core::entity::AuthUser;
 use better_auth_core::wire::UserView;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, CreateAccount, CreateUser,

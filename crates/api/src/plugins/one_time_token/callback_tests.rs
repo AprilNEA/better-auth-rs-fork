@@ -11,6 +11,7 @@
 use super::*;
 use better_auth_core::{
     AuthPlugin, CreateSession, CreateUser, HttpMethod,
+    field_value::{FieldObjectSource, FieldPropertyDescriptor},
     hooks::{RequestHookContext, with_request_hook_context_value},
     store::{EphemeralStore, StatelessSchema},
 };
@@ -508,7 +509,15 @@ struct TokenRead {
     failure: Option<FieldValue>,
 }
 
-impl better_auth_core::field_value::FieldObjectSource for TokenRead {
+impl FieldObjectSource for TokenRead {
+    fn own_keys(&self) -> AuthResult<Vec<String>> {
+        Ok(vec!["token".into()])
+    }
+
+    fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
+        Ok((name == "token").then_some(FieldPropertyDescriptor { enumerable: true }))
+    }
+
     fn get(&self, name: &str) -> AuthResult<Option<FieldValue>> {
         assert_eq!(name, "token");
         self.events.lock().unwrap().push(self.event);
@@ -530,6 +539,10 @@ impl better_auth_core::field_value::FieldObjectSource for TokenRead {
         Err(AuthError::internal(
             "Token consumption must not snapshot the Session",
         ))
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(self) as usize
     }
 }
 

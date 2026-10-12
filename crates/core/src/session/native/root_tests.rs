@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
-    AuthConfig, AuthRequest, FieldObject, FieldObjectSource, FieldPropertyDescriptor, HttpMethod,
+    AuthConfig, AuthRequest, FieldObject, HttpMethod,
+    field_value::{FieldObjectSource, FieldPropertyDescriptor},
 };
 use std::sync::{Arc, Mutex};
 
