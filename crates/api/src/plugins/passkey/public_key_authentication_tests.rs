@@ -106,17 +106,19 @@ async fn native_public_key_decoding_matches_upstream_without_relaxing_signature_
             Vec::new(),
         )
         .await?;
-        let response = authenticate(&fixture, &authenticator, owner.id.typed()?).await?;
+        let input = authentication_request(&fixture, &authenticator, owner.id.typed()?).await?;
+        let response = fixture.route(&input).await;
         if allowed {
-            assert_login(response, owner.id.typed()?)?;
+            assert_login(response?, owner.id.typed()?)?;
         } else if name == "wrong signing key" {
+            let response = response?;
             assert_eq!(response.status, 401);
             assert_eq!(
                 serde_json::from_slice::<Value>(&response.body.bytes()?)?,
                 json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
             );
         } else {
-            assert_error(response, "AUTHENTICATION_FAILED")?;
+            assert_authentication_error(response)?;
         }
         let stored = raw
             .get_passkey_by_id(passkey.id.typed()?)

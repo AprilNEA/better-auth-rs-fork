@@ -213,6 +213,27 @@ fn assert_error(response: AuthResponse, code: &str) -> TestResult {
     Ok(())
 }
 
+fn assert_authentication_error(result: AuthResult<AuthResponse>) -> TestResult {
+    let error = result
+        .err()
+        .ok_or("Authentication verification must throw an APIError")?;
+    test_helpers::assert_coded_api_error(
+        &error,
+        "BAD_REQUEST",
+        400,
+        "AUTHENTICATION_FAILED",
+        "Authentication failed",
+    );
+    let response = error.to_http_response()?;
+    assert_eq!(response.status, 400);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&response.body.bytes()?)?,
+        json!({"code":"AUTHENTICATION_FAILED","message":"Authentication failed"})
+    );
+    assert!(!response.headers.contains_key("Set-Cookie"));
+    Ok(())
+}
+
 fn assert_login(response: AuthResponse, owner: &str) -> TestResult {
     assert_eq!(response.status, 200);
     let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
@@ -234,7 +255,7 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
         CreateUser::new()
             .with_name("Owner")
             .with_email("owner@passkey.example"),
-        chrono::Duration::hours(1),
+        fixture.ctx.config.session.expires_in(),
     )
     .await;
     let (_, other_session) = test_helpers::create_user_and_session(
@@ -242,7 +263,7 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
         CreateUser::new()
             .with_name("Other")
             .with_email("other@passkey.example"),
-        chrono::Duration::hours(1),
+        fixture.ctx.config.session.expires_in(),
     )
     .await;
     let authenticator = Authenticator::new()?;
@@ -379,11 +400,11 @@ async fn native_sqlite_credential_authenticates_after_reopen() -> TestResult {
                 Some(json!({"response":response})),
                 Some(&cookie),
             ))
-            .await?;
+            .await;
         if counter == 1 {
-            assert_error(login, "AUTHENTICATION_FAILED")?;
+            assert_authentication_error(login)?;
         } else {
-            assert_login(login, owner.id.typed()?)?;
+            assert_login(login?, owner.id.typed()?)?;
             advanced.counter = 2.into();
         }
         assert_eq!(fixture.stored().await?, advanced);
@@ -495,11 +516,11 @@ async fn native_authentication_uses_projected_counter_relational_semantics() -> 
                 Some(json!({"response":response})),
                 Some(&cookie),
             ))
-            .await?;
+            .await;
         if allowed {
-            assert_login(response, owner.id.typed()?)?;
+            assert_login(response?, owner.id.typed()?)?;
         } else {
-            assert_error(response, "AUTHENTICATION_FAILED")?;
+            assert_authentication_error(response)?;
         }
         let stored = raw
             .get_passkey_by_id(passkey.id.typed()?)

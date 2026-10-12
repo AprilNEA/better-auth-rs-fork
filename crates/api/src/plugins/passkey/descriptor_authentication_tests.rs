@@ -111,11 +111,11 @@ async fn native_authentication_accepts_utf16_transport_hints_and_rejects_non_str
                 Some(json!({"response":response})),
                 Some(&cookie),
             ))
-            .await?;
+            .await;
         if allowed {
-            assert_login(response, owner.id.typed()?)?;
+            assert_login(response?, owner.id.typed()?)?;
         } else {
-            assert_error(response, "AUTHENTICATION_FAILED")?;
+            assert_authentication_error(response)?;
         }
         let stored = raw
             .get_passkey_by_id(passkey.id.typed()?)

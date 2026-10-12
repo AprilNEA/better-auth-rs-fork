@@ -41,7 +41,7 @@ async fn nullable_updates_reach_authentication_and_rename_business_boundaries() 
             CreateUser::new()
                 .with_name("Owner")
                 .with_email("null-update@passkey.example"),
-            chrono::Duration::hours(1),
+            fixture.ctx.config.session.expires_in(),
         )
         .await;
         let authenticator = Authenticator::new()?;
@@ -335,15 +335,8 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
                 .with_native_context(Default::default(), |context| async move {
                     route(&context, &input).await
                 })
-                .await?;
-            assert_eq!(response.status, 400);
-            assert_eq!(
-                serde_json::from_slice::<Value>(&response.body.bytes()?)?,
-                json!({
-                    "code":"AUTHENTICATION_FAILED", "message":"Authentication failed",
-                })
-            );
-            assert!(!response.headers.contains_key("Set-Cookie"));
+                .await;
+            assert_authentication_error(response)?;
             let (error_name, message) = if origin != ORIGIN {
                 (
                     "Error",

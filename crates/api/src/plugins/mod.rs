@@ -60,7 +60,7 @@ pub(crate) mod test_helpers {
     use better_auth_core::{
         AuthContext, AuthError, AuthInitContext, AuthPlugin, AuthRequest, AuthResult, AuthSchema,
         CreateSession, CreateUser, FieldDate, FieldFunction, FieldMap, FieldValue, HttpMethod,
-        plugin_runtime::{AdapterUserFields, ApplicationUserFields},
+        plugin_runtime::{AdapterUserFields, ApplicationUserFields, PluginRuntime},
         store::{AuthStore, schema::SchemaConfiguration},
     };
     use better_auth_seaorm::store::__private_test_support::bundled_schema::BundledSchema;
@@ -170,11 +170,33 @@ pub(crate) mod test_helpers {
             .expect("test plugin context should initialize")
     }
 
+    /// Build a mutable context without binding plugin callbacks or database hooks.
     pub async fn initialize_test_context<S: AuthSchema>(
         config: Arc<AuthConfig>,
         database: Arc<dyn AuthStore<S>>,
         plugins: &[&dyn AuthPlugin<S>],
     ) -> AuthResult<AuthContext<S>> {
+        let (context, _) = initialize_test_context_parts(config, database, plugins).await?;
+        Ok(context)
+    }
+
+    /// Keep the initialized runtime alive for plugin callbacks and database hooks.
+    pub async fn initialize_bound_test_context<S: AuthSchema>(
+        config: Arc<AuthConfig>,
+        database: Arc<dyn AuthStore<S>>,
+        plugins: &[&dyn AuthPlugin<S>],
+    ) -> AuthResult<Arc<AuthContext<S>>> {
+        let (context, runtime) = initialize_test_context_parts(config, database, plugins).await?;
+        let context = Arc::new(context);
+        runtime.bind(&context)?;
+        Ok(context)
+    }
+
+    async fn initialize_test_context_parts<S: AuthSchema>(
+        config: Arc<AuthConfig>,
+        database: Arc<dyn AuthStore<S>>,
+        plugins: &[&dyn AuthPlugin<S>],
+    ) -> AuthResult<(AuthContext<S>, PluginRuntime<S>)> {
         let mut model_fields = better_auth_core::plugin_runtime::ModelFields::default();
         for plugin in plugins {
             plugin.schema(&mut model_fields)?;
@@ -214,7 +236,7 @@ pub(crate) mod test_helpers {
         context.secondary_storage = parts.secondary_storage;
         context.password_policy = parts.password_policy;
         context.metadata = parts.metadata;
-        Ok(context)
+        Ok((context, parts.runtime))
     }
 
     pub async fn create_user(

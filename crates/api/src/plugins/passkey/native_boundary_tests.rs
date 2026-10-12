@@ -75,11 +75,11 @@ async fn seed_native(
         .await?)
 }
 
-async fn authenticate(
+async fn authentication_request(
     fixture: &Fixture,
     authenticator: &Authenticator,
     owner: &str,
-) -> TestResult<AuthResponse> {
+) -> TestResult<AuthRequest> {
     let (pending, cookie) = options(
         fixture
             .route(&request(
@@ -91,14 +91,12 @@ async fn authenticate(
             .await?,
     )?;
     let signed = authenticator.authenticate(&challenge(&pending)?, 1, owner.as_bytes())?;
-    Ok(fixture
-        .route(&request(
-            "/passkey/verify-authentication",
-            None,
-            Some(json!({"response":signed})),
-            Some(&cookie),
-        ))
-        .await?)
+    Ok(request(
+        "/passkey/verify-authentication",
+        None,
+        Some(json!({"response":signed})),
+        Some(&cookie),
+    ))
 }
 
 #[derive(Default)]
@@ -192,7 +190,8 @@ async fn authentication_preserves_native_owner_and_creates_session_before_user_l
         vec![trace.clone()],
     )
     .await?;
-    assert_login(authenticate(&fixture, &authenticator, "7").await?, "7")?;
+    let input = authentication_request(&fixture, &authenticator, "7").await?;
+    assert_login(fixture.route(&input).await?, "7")?;
     assert_eq!(*trace.owners.lock().unwrap(), vec![FieldValue::Number(7.0)]);
     assert_eq!(
         *trace.events.lock().unwrap(),
@@ -265,7 +264,7 @@ async fn registration_and_authentication_preserve_utf16_response_fields() -> Tes
         CreateUser::new()
             .with_name("Stored owner")
             .with_email("response@passkey.example"),
-        chrono::Duration::hours(1),
+        fixture.ctx.config.session.expires_in(),
     )
     .await;
     let authenticator = Authenticator::new()?;
@@ -316,7 +315,8 @@ async fn registration_and_authentication_preserve_utf16_response_fields() -> Tes
     assert_eq!(stored.name, Some("Stored authenticator".to_owned()));
     assert_eq!(stored.counter, 0);
     assert_eq!(raw.get_user_sessions(owner.id.typed()?).await?.len(), 2);
-    let response = authenticate(&fixture, &authenticator, owner.id.typed()?).await?;
+    let input = authentication_request(&fixture, &authenticator, owner.id.typed()?).await?;
+    let response = fixture.route(&input).await?;
     assert_surrogate_response(&response, false)?;
     assert_eq!(raw.get_user_sessions(owner.id.typed()?).await?.len(), 3);
     assert_eq!(

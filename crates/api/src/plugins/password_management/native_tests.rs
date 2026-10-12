@@ -101,7 +101,7 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
     ];
     let plugin_refs = plugins.iter().map(Box::as_ref).collect::<Vec<_>>();
     let mut config = test_helpers::create_test_config().disable_session_refresh(true);
-    let raw = test_helpers::initialize_test_context(
+    let raw = test_helpers::initialize_bound_test_context(
         Arc::new(config.clone()),
         database.clone(),
         &plugin_refs,
@@ -168,7 +168,8 @@ async fn check_consumers<S: AuthSchema>(database: Arc<dyn AuthStore<S>>) -> Auth
         },
     );
     let context =
-        test_helpers::initialize_test_context(Arc::new(config), database, &plugin_refs).await?;
+        test_helpers::initialize_bound_test_context(Arc::new(config), database, &plugin_refs)
+            .await?;
     let cases = [
         (
             "email-password",
