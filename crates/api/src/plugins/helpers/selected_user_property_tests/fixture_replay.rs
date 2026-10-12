@@ -1,7 +1,7 @@
 //! Replay the complete selected-User contract without reading its accessor during observation.
 
 use super::*;
-use better_auth_core::{AuthConfig, AuthContext};
+use better_auth_core::{AuthConfig, AuthContext, AuthRecordFields};
 use serde_json::{Value as Json, json};
 use test_helpers::native_observation::assert_replay;
 

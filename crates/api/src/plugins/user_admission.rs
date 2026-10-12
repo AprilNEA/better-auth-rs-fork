@@ -2,7 +2,7 @@
 
 use super::endpoint_context::EndpointContext;
 use async_trait::async_trait;
-use better_auth_core::{AuthError, AuthResponse, AuthResult, AuthSchema, CreateUser};
+use better_auth_core::{AuthError, AuthResult, AuthSchema, CreateUser};
 use better_auth_core::{FieldMap, FieldValue, SchemaValue};
 use serde::{Serialize, ser::SerializeMap};
 use std::sync::Arc;
@@ -124,13 +124,14 @@ impl UserValidationRejection {
             .unwrap_or(&self.error)
     }
     pub(crate) fn into_auth_error(self) -> AuthError {
-        match AuthResponse::json(
-            403,
-            &serde_json::json!({"code": self.error, "message": self.message()}),
-        ) {
-            Ok(response) => response.into(),
-            Err(error) => error,
-        }
+        AuthError::from_status(
+            "FORBIDDEN",
+            FieldMap::from([
+                ("code".into(), self.error.clone().into()),
+                ("message".into(), self.message().into()),
+            ])
+            .into(),
+        )
     }
 }
 

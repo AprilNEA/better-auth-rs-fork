@@ -112,7 +112,19 @@ async fn check_failure<S: AuthSchema>(
                 .is_some_and(|value| value.strict_equals(original))
         );
     } else {
-        let response = error.to_auth_response()?;
+        assert_eq!(error.status_value()?, "FORBIDDEN".into());
+        assert_eq!(error.status_code()?, 403);
+        assert!(error.is_api_error_instance(better_auth_core::ApiErrorClass::BetterAuth));
+        assert_eq!(
+            error
+                .body_value()?
+                .enumerable_fields()?
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["code", "message"],
+        );
+        let response = error.to_auth_response()?.into_http_response()?;
         assert_eq!(response.status, 403);
         assert_eq!(
             response.body.json()?,

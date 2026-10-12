@@ -5,7 +5,7 @@
 use super::*;
 use crate::plugins::test_helpers;
 use better_auth_core::{
-    AuthConfig, AuthContext, FieldDate, FieldValue, UserView,
+    AuthConfig, AuthContext, AuthResponse, FieldDate, FieldValue, UserView,
     store::database_hooks::{DatabaseHookContext, DatabaseHookUpdate, DatabaseHooks},
     store::{AuthStore, EphemeralStore, StatelessSchema, secondary::SecondaryStore},
     user_fields::{UserFieldConfig, UserFieldType},

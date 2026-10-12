@@ -125,10 +125,15 @@ async fn owner_operations<S: AuthSchema>(ctx: AuthContext<S>, sqlite: bool) -> T
         .get_passkey_by_id(original.id.typed()?)
         .await?
         .ok_or_else(|| AuthError::internal("Expected updated passkey"))?;
-    assert!(
-        (started..=chrono::Utc::now().timestamp_millis() as f64)
-            .contains(&stored.updated_at.date_milliseconds()?)
-    );
+    match ctx.database.passkey_storage() {
+        better_auth_core::PasskeyStorage::Native => {
+            assert!(stored.updated_at.field_value().is_undefined());
+        }
+        better_auth_core::PasskeyStorage::Legacy => assert!(
+            (started..=chrono::Utc::now().timestamp_millis() as f64)
+                .contains(&stored.updated_at.date_milliseconds()?)
+        ),
+    }
     let mut expected = original.clone();
     expected.name = Some("Renamed".to_owned()).into();
     expected.updated_at = stored.updated_at.clone();

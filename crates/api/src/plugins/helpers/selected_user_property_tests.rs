@@ -14,8 +14,8 @@ use crate::plugins::{
     test_helpers,
 };
 use better_auth_core::{
-    AuthError, AuthRecordFields, AuthRequest, AuthResult, FieldArray, FieldDate, FieldFunction,
-    FieldMap, FieldObject, FieldValue, FromFieldMap, HttpMethod, RequestMeta,
+    AuthError, AuthRequest, AuthResult, FieldArray, FieldDate, FieldFunction, FieldMap,
+    FieldObject, FieldValue, FromFieldMap, HttpMethod, RequestMeta,
     field_value::{FieldObjectSource, FieldPropertyDescriptor},
     session::NativeSessionData,
     store::{
@@ -254,7 +254,7 @@ impl DatabaseHooks<StatelessSchema> for Trace {
         self.observe_event(
             "delete-before",
             "arguments",
-            vec![FieldValue::from(session.field_values()?)].into(),
+            vec![FieldValue::from(FieldMap::from(session.clone()))].into(),
         )?;
         Ok(DatabaseHookControl::Continue)
     }
@@ -267,7 +267,7 @@ impl DatabaseHooks<StatelessSchema> for Trace {
         self.observe_event(
             "delete-after",
             "arguments",
-            vec![FieldValue::from(session.field_values()?)].into(),
+            vec![FieldValue::from(FieldMap::from(session.clone()))].into(),
         )?;
         Ok(())
     }

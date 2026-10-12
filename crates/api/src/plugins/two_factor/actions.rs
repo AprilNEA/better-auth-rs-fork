@@ -597,7 +597,11 @@ pub(super) async fn verify_backup_code_core(
     if !decoded.status.is_truthy() || !decoded.updated.is_truthy() {
         let _ = finish_attempt(attempt, true, ctx).await?;
         record_failure(&state, &two_factor, &config.account_lockout, ctx).await?;
-        return Err(AuthError::authentication_failed("Invalid backup code"));
+        return Err(AuthError::from_code(
+            "UNAUTHORIZED",
+            "INVALID_BACKUP_CODE",
+            "Invalid backup code",
+        ));
     }
     let backup_codes = decoded.updated;
 

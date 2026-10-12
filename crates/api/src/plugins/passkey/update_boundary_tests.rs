@@ -227,6 +227,7 @@ async fn counter_and_backup_flags_preserve_validation_order_without_persistence(
     .into();
     let mut config = fixture.ctx.config.as_ref().clone();
     config.logger = logger.into();
+    config.initialize_logger()?;
     let conversions = Arc::new(Mutex::new(Vec::<&'static str>::new()));
     let counter_value = Arc::new(FieldValue::from(FieldMap::new()));
     for (method, result) in [
