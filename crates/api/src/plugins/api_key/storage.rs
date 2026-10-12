@@ -444,7 +444,7 @@ pub(super) async fn delete_for_verification(
     let config = config.clone();
     let key = key.clone();
     better_auth_core::background::run_in_background_with_error_message(
-        Box::pin(async move {
+        better_auth_core::background::BackgroundFuture::new(async move {
             if config.storage == ApiKeyStorage::SecondaryStorage {
                 let storage = storage.ok_or_else(|| {
                     AuthError::internal(

@@ -10,6 +10,7 @@ use parking_lot::Mutex;
 use serde_json::{Value as Json, json};
 
 mod catches;
+mod completion;
 #[path = "../../../../tests/support/secondary_native_observation.rs"]
 mod observation;
 mod values;
@@ -57,16 +58,22 @@ impl Trace {
 }
 
 fn outcome(result: AuthResult<()>, errors: &Errors) -> AuthResult<Json> {
+    task_outcome(result.map(|()| FieldValue::Undefined), errors)
+}
+
+fn task_outcome(result: AuthResult<FieldValue>, errors: &Errors) -> AuthResult<Json> {
     match result {
-        Ok(()) => Ok(json!({"status":"fulfilled","value":{"type":"undefined"}})),
+        Ok(value) => Ok(json!({"status":"fulfilled","value":native_shape(&value)?})),
         Err(error) => errors.rejection(&error.into_thrown_value()?),
     }
 }
 
 fn projected_state(source: &Json) -> AuthResult<Json> {
     let mut state = source.clone();
-    if let Some(error) = state.get_mut("error") {
-        *error = source_shape(error)?;
+    for key in ["error", "value"] {
+        if let Some(value) = state.get_mut(key) {
+            *value = source_shape(value)?;
+        }
     }
     Ok(state)
 }
@@ -221,7 +228,7 @@ async fn run_case(case: &Json) -> AuthResult<()> {
         })
     });
     let gate = Arc::new(tokio::sync::Notify::new());
-    let task: BackgroundFuture = Box::pin({
+    let task = BackgroundFuture::new({
         let trace = trace.clone();
         let errors = errors.clone();
         let gate = gate.clone();
@@ -269,7 +276,7 @@ async fn run_case(case: &Json) -> AuthResult<()> {
     let mut task_states = vec![json!({"status":"pending"}); tasks.len()];
     if !pending {
         for (index, task) in tasks.drain(..).enumerate() {
-            task_states[index] = outcome(
+            task_states[index] = task_outcome(
                 task.await.map_err(|error| {
                     AuthError::internal(format!("Unexpected task join failure: {error}"))
                 })?,
@@ -292,7 +299,7 @@ async fn run_case(case: &Json) -> AuthResult<()> {
         current = outcome(result, &errors)?;
     }
     for (index, task) in tasks.drain(..).enumerate() {
-        task_states[index] = outcome(
+        task_states[index] = task_outcome(
             task.await.map_err(|error| {
                 AuthError::internal(format!("Unexpected task join failure: {error}"))
             })?,

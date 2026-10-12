@@ -261,13 +261,15 @@ impl EmailVerificationPlugin {
             let retained = endpoint.to_owned();
             let email = email.to_owned();
             better_auth_core::background::run_or_await(
-                Some(Box::pin(async move {
-                    let endpoint = retained.as_endpoint();
-                    crate::plugins::email_otp::callbacks::send_verification_override(
-                        &email, &endpoint,
-                    )
-                    .await
-                })),
+                Some(better_auth_core::background::BackgroundFuture::new(
+                    async move {
+                        let endpoint = retained.as_endpoint();
+                        crate::plugins::email_otp::callbacks::send_verification_override(
+                            &email, &endpoint,
+                        )
+                        .await
+                    },
+                )),
                 ctx.config.advanced.background_tasks.as_ref(),
                 ctx.logger(),
             )

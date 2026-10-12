@@ -55,7 +55,7 @@ pub(super) fn delivery<S: AuthSchema>(
     };
     let user = user.clone();
     let request = endpoint.request.cloned();
-    Ok(Some(Box::pin(async move {
+    Ok(Some(BackgroundFuture::new(async move {
         sender
             .on_existing_user_sign_up(&user, request.as_ref())
             .await

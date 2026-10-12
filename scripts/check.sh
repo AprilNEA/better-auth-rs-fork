@@ -614,6 +614,7 @@ run_stage() {
       local cache_status=0
       bun --no-install test \
         ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-usage-success-capture.test.ts \
         ./compat-tests/reference-server/contracts/api-key-delete-expired.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-batch.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts \
@@ -686,6 +687,11 @@ run_stage() {
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
         ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
         ./compat-tests/reference-server/contracts/logger-background-ownership-capture.test.ts \
+        ./compat-tests/reference-server/contracts/background-success-values-capture.test.ts \
+        ./compat-tests/reference-server/contracts/email-otp-override-values-capture.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-usage-success-capture.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-delete-expired.test.ts \
         ./compat-tests/reference-server/contracts/on-api-error-detached.test.ts \
         ./compat-tests/reference-server/contracts/telemetry-detached.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
@@ -704,8 +710,9 @@ run_stage() {
         store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
         plugin::tests::raw_api_errors:: || logger_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
-        plugins::user_admission_tests:: plugins::api_key::background_tests:: \
-        plugins::oauth::providers::paypal:: plugins::oauth::popup:: || logger_status=1
+        plugins::user_admission_tests:: plugins::api_key:: \
+        plugins::oauth::providers::paypal:: plugins::oauth::popup:: \
+        plugins::email_otp:: || logger_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test http_api_error_logging_tests --test observability_tests \
         --test http_conversion_ownership_tests --test logger_telemetry_ownership_tests \
@@ -714,6 +721,9 @@ run_stage() {
         --test background_notification_tests --test background_otp_notification_tests \
         --test background_transaction_tests --test lifecycle_notification_tests \
         --test remaining_notification_tests --test rate_cleanup_background_tests \
+        --test email_otp_scheduled_override_tests \
+        --test api_key_delete_expired_tests --test api_key_metadata_tests \
+        --test api_key_metadata_timing_tests \
         --test request_runtime_mutation_tests || logger_status=1
       cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || logger_status=1
       return "$logger_status"
@@ -736,6 +746,8 @@ run_stage() {
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
         ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
         ./compat-tests/reference-server/contracts/logger-background-ownership-capture.test.ts \
+        ./compat-tests/reference-server/contracts/background-success-values-capture.test.ts \
+        ./compat-tests/reference-server/contracts/email-otp-override-values-capture.test.ts \
         ./compat-tests/reference-server/contracts/on-api-error-detached.test.ts \
         ./compat-tests/reference-server/contracts/telemetry-detached.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \

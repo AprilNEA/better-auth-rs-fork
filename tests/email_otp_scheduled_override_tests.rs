@@ -12,12 +12,12 @@ use better_auth::plugins::{
 };
 use better_auth::server_api::EndpointInput;
 use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthResult};
-use better_auth_core::background::{BackgroundTask, BackgroundTasks};
+use better_auth_core::background::{BackgroundFuture, BackgroundTask, BackgroundTasks};
 use better_auth_core::store::database_hooks::{DatabaseHookContext, DatabaseHooks};
 use better_auth_core::wire::VerificationView;
 use better_auth_core::{
-    AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthRoute, HttpMethod,
-    PasswordHasher,
+    AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthRoute, FieldMap,
+    FieldValue, HttpMethod, PasswordHasher,
 };
 use better_auth_seaorm::store::__private_test_support::{bundled_schema::BundledSchema, migrator};
 use better_auth_seaorm::{
@@ -136,7 +136,7 @@ async fn run(rollback: bool) -> Value {
                         .send(move |_, endpoint| {
                             let endpoint = endpoint.to_owned();
                             let state = sender.clone();
-                            Ok(Some(Box::pin(async move {
+                            Ok(Some(BackgroundFuture::new(async move {
                                 let endpoint = endpoint.as_endpoint();
                                 let user = endpoint
                                     .transaction
@@ -181,9 +181,18 @@ async fn run(rollback: bool) -> Value {
     state.gate.notify_one();
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     let task_count = tasks.len();
+    let mut endpoint_results = 0;
     for task in tasks {
-        task.await.unwrap().unwrap();
+        let value = task.await.unwrap().unwrap();
+        if value != FieldValue::Undefined {
+            assert_eq!(
+                value,
+                FieldMap::from([("success".into(), true.into())]).into()
+            );
+            endpoint_results += 1;
+        }
     }
+    assert_eq!(endpoint_results, 1);
     json!({"rollback":rollback, "result":result, "events":*state.events.lock().unwrap(), "observations":*state.observations.lock().unwrap(), "count":count, "tasks":task_count})
 }
 #[tokio::test]

@@ -4,7 +4,7 @@
 mod tests;
 
 use crate::{
-    AuthResult,
+    AuthResult, FieldValue,
     observability::{LogArgument, Logger},
 };
 use std::{
@@ -16,12 +16,33 @@ use std::{
 };
 
 /// An application notification that may run after its endpoint completes.
-pub type BackgroundFuture = Pin<Box<dyn Future<Output = AuthResult<()>> + Send + 'static>>;
+pub struct BackgroundFuture(Pin<Box<dyn Future<Output = AuthResult<FieldValue>> + Send + 'static>>);
+
+impl BackgroundFuture {
+    /// Wrap notification work whose successful completion has no value.
+    pub fn new(future: impl Future<Output = AuthResult<()>> + Send + 'static) -> Self {
+        Self::native(async move { future.await.map(|()| FieldValue::Undefined) })
+    }
+
+    /// Preserve the task's native completion value and object identity.
+    pub fn native(future: impl Future<Output = AuthResult<FieldValue>> + Send + 'static) -> Self {
+        Self(Box::pin(future))
+    }
+}
+
+impl Future for BackgroundFuture {
+    type Output = AuthResult<FieldValue>;
+
+    fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.as_mut().poll(context)
+    }
+}
 
 /// An already-running notification. Dropping this handle does not cancel the task.
-pub struct BackgroundTask(tokio::task::JoinHandle<AuthResult<()>>);
+/// Awaiting the handle preserves its native completion value and error ownership.
+pub struct BackgroundTask(tokio::task::JoinHandle<AuthResult<FieldValue>>);
 impl Future for BackgroundTask {
-    type Output = Result<AuthResult<()>, tokio::task::JoinError>;
+    type Output = Result<AuthResult<FieldValue>, tokio::task::JoinError>;
     fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.0).poll(context)
     }
@@ -62,7 +83,7 @@ impl TaskPolicy {
         )
     }
 
-    fn catch(self, logger: &Logger, result: AuthResult<()>) -> AuthResult<()> {
+    fn catch(self, logger: &Logger, result: AuthResult<FieldValue>) -> AuthResult<FieldValue> {
         match self {
             Self::Await => catch_errors(logger, result, &["Failed to run background task:"]),
             Self::AwaitWithCatch(message) => {
@@ -74,15 +95,20 @@ impl TaskPolicy {
     }
 }
 
-fn catch_errors(logger: &Logger, mut result: AuthResult<()>, messages: &[&str]) -> AuthResult<()> {
+fn catch_errors(
+    logger: &Logger,
+    mut result: AuthResult<FieldValue>,
+    messages: &[&str],
+) -> AuthResult<FieldValue> {
     for message in messages {
-        result = result.or_else(|error| log_failure(logger, message, &error));
+        result = result
+            .or_else(|error| log_failure(logger, message, &error).map(|()| FieldValue::Undefined));
     }
     result
 }
 
-async fn first_poll(task: &mut BackgroundFuture) -> Poll<AuthResult<()>> {
-    std::future::poll_fn(|context| Poll::Ready(task.as_mut().poll(context))).await
+async fn first_poll(task: &mut BackgroundFuture) -> Poll<AuthResult<FieldValue>> {
+    std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut *task).poll(context))).await
 }
 
 /// Start an unowned promise and report its terminal rejection without an application catch.
@@ -197,7 +223,7 @@ async fn run(
         return Ok(());
     };
     if handler.is_none() && !policy.detached() {
-        return policy.catch(logger, task.await);
+        return policy.catch(logger, task.await).map(|_| ());
     }
     // JavaScript callbacks start before the handler receives their promise. Poll once
     // in the caller's context before transferring the pending Rust future.
@@ -224,8 +250,7 @@ async fn run(
         };
         if suppress {
             // Upstream runInBackground installs p.catch(() => {}) without a handler.
-            drop(result);
-            Ok(())
+            result.or(Ok(FieldValue::Undefined))
         } else {
             result
         }

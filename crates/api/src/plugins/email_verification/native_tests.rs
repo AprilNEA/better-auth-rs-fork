@@ -492,15 +492,17 @@ async fn typed_lifecycle_awaits_failures_and_replaces_legacy_hooks() -> AuthResu
                         );
                         assert_eq!(endpoint.request.unwrap().path(), "/verify-email");
                         let calls = before_calls.clone();
-                        Ok(Some(Box::pin(async move {
-                            tokio::task::yield_now().await;
-                            assert_eq!(calls.fetch_add(1, Ordering::SeqCst), 0);
-                            if fail_before {
-                                Err(AuthError::internal("Typed before failed"))
-                            } else {
-                                Ok(())
-                            }
-                        })))
+                        Ok(Some(better_auth_core::background::BackgroundFuture::new(
+                            async move {
+                                tokio::task::yield_now().await;
+                                assert_eq!(calls.fetch_add(1, Ordering::SeqCst), 0);
+                                if fail_before {
+                                    Err(AuthError::internal("Typed before failed"))
+                                } else {
+                                    Ok(())
+                                }
+                            },
+                        )))
                     })
                     .after(move |user, endpoint| {
                         assert_eq!(
@@ -509,11 +511,13 @@ async fn typed_lifecycle_awaits_failures_and_replaces_legacy_hooks() -> AuthResu
                         );
                         assert_eq!(endpoint.request.unwrap().path(), "/verify-email");
                         let calls = after_calls.clone();
-                        Ok(Some(Box::pin(async move {
-                            tokio::task::yield_now().await;
-                            assert_eq!(calls.fetch_add(1, Ordering::SeqCst), 1);
-                            Err(AuthError::internal("Typed after failed"))
-                        })))
+                        Ok(Some(better_auth_core::background::BackgroundFuture::new(
+                            async move {
+                                tokio::task::yield_now().await;
+                                assert_eq!(calls.fetch_add(1, Ordering::SeqCst), 1);
+                                Err(AuthError::internal("Typed after failed"))
+                            },
+                        )))
                     }),
             );
         let config = Arc::new(crate::plugins::test_helpers::create_test_config());

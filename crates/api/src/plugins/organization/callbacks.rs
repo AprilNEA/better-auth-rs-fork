@@ -54,5 +54,7 @@ pub(super) fn delivery<S: AuthSchema>(
     let Some(sender) = config.send_invitation_email.clone() else {
         return Ok(None);
     };
-    Ok(Some(Box::pin(async move { sender.send(&message).await })))
+    Ok(Some(BackgroundFuture::new(async move {
+        sender.send(&message).await
+    })))
 }

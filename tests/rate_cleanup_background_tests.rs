@@ -67,7 +67,10 @@ fn config(state: Arc<State>, fail_handler: bool) -> AuthConfig {
 async fn finish(state: &State) {
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     for task in tasks {
-        task.await.unwrap().unwrap();
+        assert_eq!(
+            task.await.unwrap().unwrap(),
+            better_auth_core::FieldValue::Undefined
+        );
     }
 }
 async fn read_count(db: &DatabaseConnection) -> i64 {

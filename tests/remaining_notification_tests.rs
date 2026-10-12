@@ -83,7 +83,7 @@ impl State {
         }
         let state = self.clone();
         let endpoint = endpoint.to_owned();
-        Ok(Some(Box::pin(async move {
+        Ok(Some(BackgroundFuture::new(async move {
             state.gate.notified().await;
             state.capture("released", &data, &endpoint.as_endpoint());
             state.event("sender:released");
@@ -305,7 +305,10 @@ async fn run(
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     let mut task_states = Vec::new();
     for task in tasks {
-        task.await.unwrap().unwrap();
+        assert_eq!(
+            task.await.unwrap().unwrap(),
+            better_auth_core::FieldValue::Undefined
+        );
         task_states.push("fulfilled");
     }
     let after = snapshot(&db).await;

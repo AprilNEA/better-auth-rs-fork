@@ -1,8 +1,11 @@
 use super::{EmailOtpMessage, EmailOtpPlugin, EmailOtpType};
 use crate::plugins::endpoint_context::{EndpointContext, WithCallbacks};
 use better_auth_core::background::{BackgroundFuture, run_or_await};
-use better_auth_core::{AuthPlugin, AuthResult, AuthSchema};
+use better_auth_core::{AuthPlugin, AuthResult, AuthSchema, FieldMap};
 use std::sync::Arc;
+
+#[cfg(test)]
+mod completion_tests;
 
 type Sender<S> = dyn Fn(&EmailOtpMessage, &EndpointContext<'_, S>) -> AuthResult<Option<BackgroundFuture>>
     + Send
@@ -91,7 +94,7 @@ pub(crate) async fn send_verification_override(
             context.params.clear();
             context
         });
-    let task = Box::pin(async move {
+    let task = BackgroundFuture::native(async move {
         let operation = async {
             let mut endpoint = owned.as_endpoint();
             endpoint.body = better_auth_core::FieldMap::from([
@@ -125,9 +128,10 @@ pub(crate) async fn send_verification_override(
                             .await?
                     }
                 }
-                return Ok(());
+            } else {
+                plugin.deliver(&endpoint, &email, otp, kind).await?;
             }
-            plugin.deliver(&endpoint, &email, otp, kind).await
+            Ok(FieldMap::from([("success".into(), true.into())]).into())
         };
         match request_context {
             Some(context) => {

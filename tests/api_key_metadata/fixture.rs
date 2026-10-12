@@ -299,7 +299,10 @@ impl Fixture {
         let tasks = std::mem::take(&mut *self.state.tasks.lock().unwrap());
         let mut states = Vec::new();
         for task in tasks {
-            task.await.unwrap().unwrap();
+            assert_eq!(
+                task.await.unwrap().unwrap(),
+                better_auth_core::FieldValue::Undefined
+            );
             states.push("fulfilled");
         }
         states

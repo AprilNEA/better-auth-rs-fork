@@ -12,6 +12,7 @@ use better_auth::plugins::{
 };
 use better_auth::server_api::EndpointInput;
 use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthResult};
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::store::database_hooks::{
     DatabaseHookContext, DatabaseHookControl, DatabaseHookUpdate, DatabaseHooks,
 };
@@ -186,7 +187,7 @@ async fn run(reuse: bool, outcome: &'static str) -> Value {
                             let message = message.clone();
                             let endpoint = endpoint.to_owned();
                             let state = sender.clone();
-                            Ok(Some(Box::pin(async move {
+                            Ok(Some(BackgroundFuture::new(async move {
                                 let endpoint = endpoint.as_endpoint();
                                 let transaction = endpoint.transaction.unwrap();
                                 let user = transaction.get_user_by_email(&message.email).await?;

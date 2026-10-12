@@ -1,12 +1,12 @@
 use better_auth_core::store::{ConsumeApiKeyResult, SecondaryStorage};
 use better_auth_core::{
-    ApiKey, AuthContext, AuthResult, SchemaValue,
+    ApiKey, AuthContext, AuthRecordFields, AuthResult, FieldDate, FieldValue, SchemaValue,
+    background::BackgroundFuture,
     query::{field_add, field_compare, field_date, field_number},
 };
-use chrono::Utc;
 use std::sync::Arc;
 
-use super::{ApiKeyConfig, ApiKeyStorage, cached, now, put, required_backend};
+use super::{ApiKeyConfig, ApiKeyStorage, cached, put, required_backend};
 use crate::plugins::api_key::{ApiKeyErrorCode, api_key_error};
 
 #[cfg(test)]
@@ -62,10 +62,9 @@ pub(in crate::plugins::api_key) async fn consume(
     }
 
     let mut snapshot = key.clone();
-    let milliseconds = Utc::now().timestamp_millis() as f64;
-    let current = now();
     let mut remaining = key.remaining.field_value();
     if !remaining.is_null() {
+        let milliseconds = ctx.now().timestamp_millis() as f64;
         let interval = key.refill_interval.field_value();
         let amount = key.refill_amount.field_value();
         let previous = key.last_refill_at.field_value();
@@ -80,7 +79,7 @@ pub(in crate::plugins::api_key) async fn consume(
             && milliseconds - last_time > field_number(&interval)?
         {
             remaining = amount;
-            snapshot.last_refill_at = Some(current.clone()).into();
+            snapshot.last_refill_at = Some(FieldDate::from(ctx.now())).into();
         }
         if remaining.strict_equals(&0.0.into()) {
             return Ok(ConsumeApiKeyResult::UsageExhausted);
@@ -89,6 +88,8 @@ pub(in crate::plugins::api_key) async fn consume(
     }
     let mut changed_rate = false;
     let mut changed_count = false;
+    let current: FieldDate = ctx.now().into();
+    let milliseconds = current.milliseconds();
     let window = key.rate_limit_time_window.field_value();
     let maximum = key.rate_limit_max.field_value();
     if !config.rate_limit.enabled
@@ -124,22 +125,25 @@ pub(in crate::plugins::api_key) async fn consume(
         changed_rate = true;
         changed_count = true;
     }
-    snapshot.updated_at = current.into();
+    snapshot.updated_at = FieldDate::from(ctx.now()).into();
     let storage = required_backend(config, ctx)?.clone();
     if config.defer_updates {
         let deferred = snapshot.clone();
         let lookup_hash = lookup_hash.to_owned();
         better_auth_core::background::run_in_background_with_error_message(
-            Box::pin(async move {
-                let _ = merge_usage(
+            BackgroundFuture::native(async move {
+                match merge_usage(
                     storage,
                     &deferred,
                     &lookup_hash,
                     changed_rate,
                     changed_count,
                 )
-                .await?;
-                Ok(())
+                .await?
+                {
+                    Some(key) => key.field_values().map(FieldValue::from),
+                    None => Ok(FieldValue::Null),
+                }
             }),
             ctx.config.advanced.background_tasks.as_ref(),
             ctx.logger(),

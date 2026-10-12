@@ -391,7 +391,7 @@ impl PhoneNumberPlugin {
             .await?;
         } else if let Some(task) = task {
             // The direct send endpoint propagates asynchronous failures without a handler.
-            task.await?;
+            let _ = task.await?;
         }
         AuthResponse::json(None, &json!({"message":"code sent"}))
     }

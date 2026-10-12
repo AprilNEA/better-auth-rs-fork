@@ -36,7 +36,7 @@ pub(crate) fn delivery<S: AuthSchema>(
     {
         let retained = endpoint.to_owned();
         let email = crate::plugins::helpers::user_email(&message.user_view()?)?;
-        return Ok(Some(Box::pin(async move {
+        return Ok(Some(BackgroundFuture::new(async move {
             crate::plugins::email_otp::callbacks::send_verification_override(
                 &email,
                 &retained.as_endpoint(),
@@ -56,7 +56,7 @@ pub(crate) fn delivery<S: AuthSchema>(
         .or(ctx.email_verification_policy.override_sender.as_ref())
     {
         let sender = sender.clone();
-        return Ok(Some(Box::pin(async move {
+        return Ok(Some(BackgroundFuture::new(async move {
             sender
                 .send(&message.user, &message.url, &message.token)
                 .await
@@ -64,7 +64,7 @@ pub(crate) fn delivery<S: AuthSchema>(
     }
     if config.is_some_and(|config| config.send_email_notifications) {
         if let Some(provider) = ctx.email_provider.clone() {
-            return Ok(Some(Box::pin(async move {
+            return Ok(Some(BackgroundFuture::new(async move {
                 let html = format!(
                     "<p>Click the link below to verify your email address:</p><p><a href=\"{url}\">Verify Email</a></p>",
                     url = message.url
@@ -96,7 +96,7 @@ async fn lifecycle<S: AuthSchema>(
 ) -> AuthResult<()> {
     if let Some(callback) = callback {
         if let Some(task) = callback(user, endpoint)? {
-            task.await?;
+            let _ = task.await?;
         }
     } else if let Some(legacy) = legacy {
         legacy(user).await?;

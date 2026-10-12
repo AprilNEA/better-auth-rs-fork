@@ -224,7 +224,7 @@ impl RateLimitStore for EphemeralStore {
             let store = self.clone();
             // A background handler may consume another counter before it runs this cleanup.
             crate::background::run_or_await_with_error_message(
-                Some(Box::pin(async move {
+                Some(crate::background::BackgroundFuture::new(async move {
                     store.prune_rate_limits(now, cleanup_window).await
                 })),
                 self.config.advanced.background_tasks.as_ref(),

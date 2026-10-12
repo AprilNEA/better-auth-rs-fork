@@ -141,7 +141,7 @@ impl PhoneNumberPlugin {
             let request = endpoint.request.ok_or_else(|| {
                 better_auth_core::AuthError::config("Legacy phone callbacks require a request")
             })?;
-            Ok(Some(callback(otp, request.clone())))
+            Ok(Some(BackgroundFuture::new(callback(otp, request.clone()))))
         } else {
             Err(better_auth_core::AuthError::from_code(
                 "NOT_IMPLEMENTED",

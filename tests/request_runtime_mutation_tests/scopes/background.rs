@@ -1,6 +1,8 @@
 use super::*;
 use better_auth::plugins::endpoint_context::{EndpointContext, OwnedEndpointContext};
-use better_auth_core::background::{BackgroundTask, BackgroundTasks, run_or_await};
+use better_auth_core::background::{
+    BackgroundFuture, BackgroundTask, BackgroundTasks, run_or_await,
+};
 use std::time::Duration;
 use tokio::sync::Notify;
 
@@ -48,7 +50,7 @@ impl AuthPlugin<S> for Background {
         .to_owned();
         let state = self.0.clone();
         run_or_await(
-            Some(Box::pin(async move {
+            Some(BackgroundFuture::new(async move {
                 lock(&state.events)?.push("background-start");
                 state.release.notified().await;
                 let endpoint = endpoint.as_endpoint();
@@ -137,9 +139,12 @@ async fn owned_background_callback_observes_later_writes_after_the_response() ->
     background.0.release.notify_one();
     tokio::time::timeout(Duration::from_secs(5), async {
         for task in tasks {
-            task.await
-                .expect("Background contract task completed")
-                .expect("Background contract application task succeeded");
+            assert_eq!(
+                task.await
+                    .expect("Background contract task completed")
+                    .expect("Background contract application task succeeded"),
+                better_auth_core::FieldValue::Undefined
+            );
         }
     })
     .await

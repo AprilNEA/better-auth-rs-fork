@@ -1,15 +1,15 @@
 use super::*;
 use crate::field_value::{FieldObjectSource, FieldPropertyDescriptor};
 
-struct ErrorObject(FieldObject);
+struct NonEnumerableObject(FieldObject, &'static str);
 
-impl FieldObjectSource for ErrorObject {
+impl FieldObjectSource for NonEnumerableObject {
     fn own_keys(&self) -> AuthResult<Vec<String>> {
         self.0.own_keys()
     }
     fn own_property_descriptor(&self, name: &str) -> AuthResult<Option<FieldPropertyDescriptor>> {
         Ok(self.0.own_property_descriptor(name)?.map(|mut descriptor| {
-            descriptor.enumerable = name != "token";
+            descriptor.enumerable = name != self.1;
             descriptor
         }))
     }
@@ -30,6 +30,10 @@ impl FieldObjectSource for ErrorObject {
     }
 }
 
+pub(super) fn with_hidden_property(fields: FieldMap, name: &'static str) -> FieldValue {
+    FieldObject::from_source(Arc::new(NonEnumerableObject(fields.into(), name))).into()
+}
+
 #[derive(Clone)]
 pub(super) struct Errors {
     pub(super) values: FieldValue,
@@ -44,15 +48,15 @@ impl Errors {
             .map(|name| {
                 let token: FieldValue = FieldMap::from([("owner".into(), name.into())]).into();
                 let _ = tokens.insert(name.into(), token.clone());
-                let error = FieldObject::from_source(Arc::new(ErrorObject(
+                let error = with_hidden_property(
                     FieldMap::from([
                         ("code".into(), format!("BACKGROUND_{name}").into()),
                         ("message".into(), format!("{name} original failure").into()),
                         ("token".into(), token),
-                    ])
-                    .into(),
-                )));
-                (name.to_owned(), error.into())
+                    ]),
+                    "token",
+                );
+                (name.to_owned(), error)
             })
             .collect::<FieldMap>()
             .into();

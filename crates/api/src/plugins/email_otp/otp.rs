@@ -161,7 +161,9 @@ impl EmailOtpPlugin {
                     )
                 })?
                 .clone();
-            Some(Box::pin(async move { sender.send(&message).await }))
+            Some(better_auth_core::background::BackgroundFuture::new(
+                async move { sender.send(&message).await },
+            ))
         };
         better_auth_core::background::run_or_await(
             task,

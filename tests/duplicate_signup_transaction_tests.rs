@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use better_auth::plugins::{EmailPasswordPlugin, email_password::EmailPasswordCallbacks};
 use better_auth::server_api::EndpointInput;
 use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthResult};
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::{
     AuthContext, AuthInitContext, AuthPlugin, AuthRequest, AuthResponse, AuthRoute,
     CreateVerification, HttpMethod, PasswordHasher,
@@ -141,7 +142,7 @@ async fn duplicate_notification_uses_signup_transaction_and_preserves_after_comm
                                 sender.push("sender:start");
                                 let sender = sender.clone();
                                 let endpoint = endpoint.to_owned();
-                                Ok(Some(Box::pin(async move {
+                                Ok(Some(BackgroundFuture::new(async move {
                                     let _ = endpoint
                                         .as_endpoint()
                                         .transaction

@@ -3,7 +3,7 @@ use chrono::{Duration, Utc};
 use better_auth_core::utils::password as password_utils;
 use better_auth_core::{
     AuthContext, AuthError, AuthRequest, AuthResult, SchemaValue, StatusResponse, UpdateUser,
-    session::NativeSessionData,
+    background::BackgroundFuture, session::NativeSessionData,
 };
 
 use super::UserManagementConfig;
@@ -159,7 +159,7 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
         if let Some(sender) = callbacks.and_then(|callbacks| callbacks.confirmation.as_ref()) {
             sender(&message, &endpoint)?
         } else if let Some(sender) = config.change_email.send_change_email_confirmation.clone() {
-            Some(Box::pin(async move {
+            Some(BackgroundFuture::new(async move {
                 sender
                     .send(
                         &message.user,
@@ -168,8 +168,7 @@ pub(crate) async fn change_email_core<S: better_auth_core::AuthSchema>(
                         &message.token,
                     )
                     .await
-            })
-                as better_auth_core::background::BackgroundFuture)
+            }))
         } else {
             return Err(AuthError::config(
                 "Change email confirmation sender became unavailable",
@@ -301,7 +300,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
             sender(&message, &endpoint)?
         } else if let Some(sender) = config.delete_user.send_delete_account_verification.clone() {
             let request = endpoint.request.cloned();
-            Some(Box::pin(async move {
+            Some(BackgroundFuture::new(async move {
                 sender
                     .send(
                         &message.user,
@@ -310,8 +309,7 @@ pub(crate) async fn delete_user_core<S: better_auth_core::AuthSchema>(
                         request.as_ref(),
                     )
                     .await
-            })
-                as better_auth_core::background::BackgroundFuture)
+            }))
         } else {
             return Err(AuthError::config(
                 "Delete account verification sender became unavailable",

@@ -10,7 +10,7 @@ use better_auth::plugins::{
 };
 use better_auth::server_api::EndpointInput;
 use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthResult, AuthSchema, BetterAuth};
-use better_auth_core::background::{BackgroundTask, BackgroundTasks};
+use better_auth_core::background::{BackgroundFuture, BackgroundTask, BackgroundTasks};
 use better_auth_core::store::database_hooks::{DatabaseHookContext, DatabaseHooks};
 use better_auth_core::store::{AuthStore, EphemeralStore, StatelessSchema};
 use better_auth_core::wire::{SessionView, UserView};
@@ -207,7 +207,7 @@ async fn run<S: AuthSchema>(
         EmailVerificationCallbacks::<S>::send(move |mail, endpoint| {
             callback_state.event("sender:called");
             let state=callback_state.clone();let endpoint=endpoint.to_owned();let user_id=mail.user.as_object().unwrap().get("id")?.unwrap().as_str().unwrap().to_owned();
-            Ok(Some(Box::pin(async move {
+            Ok(Some(BackgroundFuture::new(async move {
                 state.event("sender:start");
                 for phase in ["start","released"] {
                     if phase=="released" { state.gate.notified().await; }
@@ -305,7 +305,10 @@ async fn run<S: AuthSchema>(
     state.finished.notified().await;
     let tasks = std::mem::take(&mut *state.tasks.lock().unwrap());
     for task in tasks {
-        task.await.unwrap().unwrap();
+        assert_eq!(
+            task.await.unwrap().unwrap(),
+            better_auth_core::FieldValue::Undefined
+        );
     }
     let final_state = persistent(&auth, observer).await;
     let fresh = attempt(auth.store().get_user_by_email(EMAIL).await);

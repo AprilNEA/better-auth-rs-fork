@@ -5,6 +5,7 @@ use std::{
 
 use axum::{Json, Router, routing::post};
 use better_auth::plugins::two_factor::{TwoFactorCallbacks, TwoFactorPlugin};
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::{AuthError, AuthPlugin, AuthSchema, AuthUser};
 use serde_json::{Value, json};
 
@@ -29,7 +30,7 @@ impl TwoFactorContextFixture {
                 let user = user.clone();
                 let otp = otp.to_owned();
                 let endpoint = endpoint.to_owned();
-                Ok(Some(Box::pin(async move {
+                Ok(Some(BackgroundFuture::new(async move {
                     let endpoint = endpoint.as_endpoint();
                     let stored = endpoint.auth.database.get_user_by_id_value(&user.model_property("id")?).await?.expect("callback user exists");
                     fixture.events.lock().unwrap().push(json!({

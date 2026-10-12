@@ -8,6 +8,7 @@ use better_auth::{
         phone_number::{PhoneNumberCallbacks, PhoneNumberPlugin},
     },
 };
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::{AuthPlugin, AuthUser};
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -65,7 +66,7 @@ impl OtpCallbacksFixture {
                     let fixture = send.clone();
                     let message = message.clone();
                     let endpoint = endpoint.to_owned();
-                    Ok(Some(Box::pin(async move {
+                    Ok(Some(BackgroundFuture::new(async move {
                         let endpoint = endpoint.as_endpoint();
                         let exists = match endpoint.transaction {
                             Some(transaction) => transaction.get_user_by_email(&message.email).await?,
@@ -84,13 +85,13 @@ impl OtpCallbacksFixture {
         PhoneNumberPlugin::new().sign_up_on_verification(|phone| format!("{phone}@phone.example.com"))
             .require_verification(true)
             .callbacks(PhoneNumberCallbacks::<TestSchema>::default()
-                .send_otp(move |message, endpoint| { let fixture=send.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(Box::pin(async move {
+                .send_otp(move |message, endpoint| { let fixture=send.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(BackgroundFuture::new(async move {
                     let endpoint=endpoint.as_endpoint();
                     let exists=endpoint.auth.database.get_user_by_phone_number(&message.phone_number).await?.is_some();
                     fixture.event("phone.send", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint)?;
                     Self::fail(&endpoint,"phone-send")
                 }))) })
-                .send_password_reset_otp(move |message, endpoint| { let fixture=reset.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(Box::pin(async move {
+                .send_password_reset_otp(move |message, endpoint| { let fixture=reset.clone(); let message=message.clone(); let endpoint=endpoint.to_owned(); Ok(Some(BackgroundFuture::new(async move {
                     let endpoint=endpoint.as_endpoint();
                     let exists=endpoint.auth.database.get_user_by_phone_number(&message.phone_number).await?.is_some();
                     fixture.event("phone.reset", json!({"phoneNumber":message.phone_number,"userExists":exists}), &endpoint)?;

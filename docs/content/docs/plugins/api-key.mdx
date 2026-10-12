@@ -153,6 +153,8 @@ Metadata repair writes only to the database. A missing database row is a success
 
 `defer_updates` returns secondary-only usage results before writing the updated snapshot. It also defers expiration and exhausted-key deletion. Background failures are logged, matching the upstream policy for these operations. Database quota consumption remains synchronous. Installing the shared backend also enables [secondary session and verification storage](/docs/concepts/secondary-storage). Use the global session and verification configuration to retain database persistence. A configuration-specific `custom_storage` does not install a global backend.
 
+A retained usage task resolves to the complete fresh storage record, including the stored `key` field, or `FieldValue::Null` if the fresh cache read is missing. The application background handler receives that internal record; public verification still returns its sanitized snapshot. Treat retained task values as credential-bearing data. Cleanup and metadata tasks resolve to `FieldValue::Undefined`.
+
 ### Named Configurations and Organization-Owned Keys
 
 A plugin instance holds one or more configurations. Each is identified by its `config_id`, and clients select one by sending `configId`. Creation, lookup, update, and deletion use the `"default"` configuration when `configId` is absent. Listing without `configId` includes all registered configurations for the requested owner type. Register additional configurations with `configuration`:

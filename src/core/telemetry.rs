@@ -473,7 +473,9 @@ pub(super) async fn start_init(
     payload: Value,
 ) {
     better_auth_core::background::start_unowned(
-        Box::pin(async move { telemetry.publish("init", payload).await }),
+        better_auth_core::background::BackgroundFuture::new(async move {
+            telemetry.publish("init", payload).await
+        }),
         "telemetry init",
     )
     .await;

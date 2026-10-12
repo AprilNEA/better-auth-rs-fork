@@ -47,7 +47,7 @@ async fn nested_catches_forward_each_original_logger_failure_to_the_next_owner()
                     })
                 });
                 let gate = Arc::new(tokio::sync::Notify::new());
-                let task: BackgroundFuture = Box::pin({
+                let task = BackgroundFuture::new({
                     let gate = gate.clone();
                     let error = errors.value("task")?;
                     async move {
@@ -85,14 +85,14 @@ async fn nested_catches_forward_each_original_logger_failure_to_the_next_owner()
                         AuthError::internal(format!("Unexpected join failure: {error}"))
                     })?
                 } else {
-                    result
+                    result.map(|()| FieldValue::Undefined)
                 };
                 let expected = if recover {
                     json!({"status":"fulfilled","value":{"type":"undefined"}})
                 } else {
                     errors.rejection(&errors.value("handlerLogger")?)?
                 };
-                assert_eq!(outcome(actual, &errors)?, expected);
+                assert_eq!(task_outcome(actual, &errors)?, expected);
                 assert_eq!(
                     *events.lock(),
                     vec![
@@ -148,7 +148,7 @@ async fn direct_background_catch_layers_keep_handler_errors_outside_the_task() -
     });
     let error = errors.value("task")?;
     let current = run_in_background_with_error_messages(
-        Box::pin(async move { Err(AuthError::from_thrown(error)) }),
+        BackgroundFuture::new(async move { Err(AuthError::from_thrown(error)) }),
         Some(&handler),
         &logger,
         &[
@@ -169,7 +169,7 @@ async fn direct_background_catch_layers_keep_handler_errors_outside_the_task() -
         .await
         .map_err(|error| AuthError::internal(format!("Unexpected join failure: {error}")))?;
     assert_eq!(
-        outcome(result, &errors)?,
+        task_outcome(result, &errors)?,
         errors.rejection(&errors.value("handlerLogger")?)?
     );
     assert_eq!(*events.lock(), ["handler", "task", "taskLogger"]);

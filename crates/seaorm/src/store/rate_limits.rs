@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::middleware::{EndpointRateLimit, RateLimitDecision};
 use better_auth_core::query::{field_add, field_number};
 use better_auth_core::store::{RateLimitStore, schema::EntityRole};
@@ -250,7 +251,7 @@ impl<S: AuthSchema, O: SeaOrmOrganizationSchema, P: SeaOrmPluginSchema> RateLimi
                     let store = self.clone();
                     // Only pruning failures use this catch. Counter writes already committed.
                     better_auth_core::background::run_or_await_with_error_message(
-                        Some(Box::pin(async move {
+                        Some(BackgroundFuture::new(async move {
                             store.prune_rate_limits(now, cleanup_window).await
                         })),
                         self.config.advanced.background_tasks.as_ref(),

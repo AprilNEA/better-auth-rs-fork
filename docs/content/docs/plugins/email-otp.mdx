@@ -63,13 +63,14 @@ Each public route supplies a default rate limit of three requests per sixty seco
 Call `.callbacks::<AppSchema>(EmailOtpCallbacks::default().generate(...).send(...))` after configuring the plugin. `AppSchema` is the schema supplied to the auth builder. Each callback receives `EndpointContext`, which exposes the parsed `body`, endpoint `path`, original optional `request`, and the complete `AuthContext<AppSchema>` through `auth`. The signup after hook also supplies the completed `response`.
 
 ```rust
+use better_auth::config::BackgroundFuture;
 use better_auth::plugins::email_otp::{EmailOtpCallbacks, EmailOtpPlugin};
 
 let plugin = EmailOtpPlugin::new().callbacks::<AppSchema>(
     EmailOtpCallbacks::default().send(|message, endpoint| {
         let message = message.clone();
         let endpoint = endpoint.to_owned();
-        Ok(Some(Box::pin(async move {
+        Ok(Some(BackgroundFuture::new(async move {
             let endpoint = endpoint.as_endpoint();
             let user = match endpoint.transaction {
                 Some(transaction) => transaction.get_user_by_email(&message.email).await?,

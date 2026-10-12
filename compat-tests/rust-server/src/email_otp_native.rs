@@ -5,6 +5,7 @@ use better_auth::plugins::email_otp::{
     EmailOtpCallbacks, EmailOtpCodec, EmailOtpPlugin, EmailOtpStorage, EmailOtpType,
 };
 use better_auth::{AuthBuilder, AuthError, AuthResult, BetterAuth};
+use better_auth_core::background::BackgroundFuture;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 #[derive(Default, serde::Serialize)]
@@ -84,7 +85,7 @@ impl EmailOtpNativeFixture {
         let sender = self.clone();
         builder.plugin(EmailOtpPlugin::new().disable_sign_up(true).reuse_otp(true).storage(storage).callbacks(EmailOtpCallbacks::<TestSchema>::default()
    .generate(move |email,kind,endpoint|{let mut state=generator.state.lock().unwrap();state.generated+=1;state.events.push(json!({"data":{"email":email,"type":kind},"body":endpoint.body.json()?,"path":endpoint.path,"hasRequest":endpoint.request.is_some()}));if state.fail=="generate"{return Err(rejected());}Ok(Some(format!("{:06}:tail",state.generated)))})
-   .send(move |_,_|{let sender=sender.clone();Ok(Some(Box::pin(async move{sender.state.lock().unwrap().sent+=1;Ok(())})))})))
+   .send(move |_,_|{let sender=sender.clone();Ok(Some(BackgroundFuture::new(async move{sender.state.lock().unwrap().sent+=1;Ok(())})))})))
     }
     pub(super) fn reset(&self) {
         *self.state.lock().unwrap() = State::default();

@@ -1,6 +1,7 @@
 use better_auth_core::{
     ApiKeyView, AuthContext, AuthResult, AuthSchema, FieldValue, SchemaValue, UpdateApiKey,
-    background::run_or_await, observability::LogArgument,
+    background::{BackgroundFuture, run_or_await},
+    observability::LogArgument,
 };
 
 use super::{ApiKeyConfig, storage::ApiKeyStorage};
@@ -82,7 +83,7 @@ pub(super) async fn batch(
     let context = ctx.clone();
     // Even an empty page supplies a promise to the upstream application handler.
     run_or_await(
-        Some(Box::pin(async move {
+        Some(BackgroundFuture::new(async move {
             for result in
                 futures_util::future::join_all(migrations.into_iter().map(|(id, text)| {
                     let context = &context;

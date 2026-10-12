@@ -24,6 +24,7 @@ use better_auth::{
         TwoFactorPlugin, UserManagementPlugin, UsernamePlugin,
     },
 };
+use better_auth_core::background::BackgroundFuture;
 use better_auth_core::{
     AuthContext, AuthError, AuthPlugin, AuthRequest, AuthResponse, AuthResult, AuthRoute,
     AuthSchema, BeforeRequestAction, FieldMap, HttpMethod, hooks::current_request_hook_context,
@@ -192,12 +193,12 @@ fn configure<S: AuthSchema>(
                 .send_otp(move |message, _| {
                     sender.current("phone.otp.sender", None);
                     sender.1.lock().unwrap().push(json!({"kind":"phone-otp","phoneNumber":message.phone_number,"code":message.code}));
-                    Ok(Some(Box::pin(async { Ok(()) })))
+                    Ok(Some(BackgroundFuture::new(async { Ok(()) })))
                 })
                 .send_password_reset_otp(move |message, _| {
                     reset.current("phone.reset.sender", None);
                     reset.1.lock().unwrap().push(json!({"kind":"phone-reset","phoneNumber":message.phone_number,"code":message.code}));
-                    Ok(Some(Box::pin(async { Ok(()) })))
+                    Ok(Some(BackgroundFuture::new(async { Ok(()) })))
                 })))
     } else {
         builder

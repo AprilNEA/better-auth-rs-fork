@@ -1,0 +1,2627 @@
+{
+  "contract": "email-otp-override-values",
+  "version": "1.7.6",
+  "runtime": {
+    "name": "bun",
+    "version": "1.4.2"
+  },
+  "provenance": [
+    {
+      "path": "better-auth/dist/context/create-context.mjs",
+      "sha256": "4b703a84f1b5c6285a74b064447afb7c041d3195212ffec7eabcb61b27f4ab33"
+    },
+    {
+      "path": "better-auth/dist/plugins/email-otp/index.mjs",
+      "sha256": "ea6fd0e189886474d056cccf9cc9b7c8fcd6075ea63a753ad0338986a7b216bd"
+    },
+    {
+      "path": "better-auth/dist/plugins/email-otp/routes.mjs",
+      "sha256": "72c4ceb5bbc080722c7807412e16a40854edb7cc3e6cbef81b509e3274290dac"
+    }
+  ],
+  "boundary": "Invoke the real override installed by emailOTP.init on the real auth context. The inner endpoint result is a complete success object. The outer override returns undefined. A second retained task preserves the sender result and identity. Full Memory storage remains in the observation. Signup scheduling, SQL transaction rollback, missing-user cleanup, and host-runtime timing remain covered separately or unclaimed.",
+  "cases": [
+    {
+      "name": "email-otp-override/ready",
+      "timing": "ready",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "user",
+          "session",
+          "account",
+          "verification"
+        ],
+        "properties": [
+          [
+            "user",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "array",
+                "ownKeys": [
+                  "0",
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "0",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-3",
+                        "type": "object",
+                        "ownKeys": [
+                          "name",
+                          "email",
+                          "emailVerified",
+                          "image",
+                          "createdAt",
+                          "updatedAt",
+                          "id"
+                        ],
+                        "properties": [
+                          [
+                            "name",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "Override Values"
+                            }
+                          ],
+                          [
+                            "email",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "override-values@example.com"
+                            }
+                          ],
+                          [
+                            "emailVerified",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": false
+                            }
+                          ],
+                          [
+                            "image",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": null
+                            }
+                          ],
+                          [
+                            "createdAt",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "identity": "object-4",
+                                "type": "date",
+                                "ownKeys": [],
+                                "properties": [],
+                                "value": "2033-05-18T03:33:20.000Z"
+                              }
+                            }
+                          ],
+                          [
+                            "updatedAt",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "identity": "object-5",
+                                "type": "date",
+                                "ownKeys": [],
+                                "properties": [],
+                                "value": "2033-05-18T03:33:20.000Z"
+                              }
+                            }
+                          ],
+                          [
+                            "id",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "owner"
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 1
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "session",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-6",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "account",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-7",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "verification",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-8",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "beforeRelease": {
+        "overrideState": {
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "success"
+              ],
+              "properties": [
+                [
+                  "success",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": false
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "sender",
+                "optional",
+                "nullable"
+              ],
+              "properties": [
+                [
+                  "sender",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "completed"
+                  }
+                ],
+                [
+                  "optional",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "type": "undefined"
+                    }
+                  }
+                ],
+                [
+                  "nullable",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": true
+          }
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-3",
+                          "type": "object",
+                          "ownKeys": [
+                            "name",
+                            "email",
+                            "emailVerified",
+                            "image",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "name",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "Override Values"
+                              }
+                            ],
+                            [
+                              "email",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "override-values@example.com"
+                              }
+                            ],
+                            [
+                              "emailVerified",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": false
+                              }
+                            ],
+                            [
+                              "image",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": null
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-4",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-5",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "owner"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-8",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-9",
+                          "type": "object",
+                          "ownKeys": [
+                            "identifier",
+                            "value",
+                            "expiresAt",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "identifier",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "email-verification-otp-override-values@example.com"
+                              }
+                            ],
+                            [
+                              "value",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "123456:0"
+                              }
+                            ],
+                            [
+                              "expiresAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-10",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:38:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-11",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-12",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "verification-1"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        },
+        "deliveryValue": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "sender",
+            "optional",
+            "nullable"
+          ],
+          "properties": [
+            [
+              "sender",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "completed"
+              }
+            ],
+            [
+              "optional",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "nullable",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": null
+              }
+            ]
+          ]
+        }
+      },
+      "afterSettlement": {
+        "overrideState": {
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "success"
+              ],
+              "properties": [
+                [
+                  "success",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": false
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "sender",
+                "optional",
+                "nullable"
+              ],
+              "properties": [
+                [
+                  "sender",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "completed"
+                  }
+                ],
+                [
+                  "optional",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "type": "undefined"
+                    }
+                  }
+                ],
+                [
+                  "nullable",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": true
+          }
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-3",
+                          "type": "object",
+                          "ownKeys": [
+                            "name",
+                            "email",
+                            "emailVerified",
+                            "image",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "name",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "Override Values"
+                              }
+                            ],
+                            [
+                              "email",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "override-values@example.com"
+                              }
+                            ],
+                            [
+                              "emailVerified",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": false
+                              }
+                            ],
+                            [
+                              "image",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": null
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-4",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-5",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "owner"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-8",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-9",
+                          "type": "object",
+                          "ownKeys": [
+                            "identifier",
+                            "value",
+                            "expiresAt",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "identifier",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "email-verification-otp-override-values@example.com"
+                              }
+                            ],
+                            [
+                              "value",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "123456:0"
+                              }
+                            ],
+                            [
+                              "expiresAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-10",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:38:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-11",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-12",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "verification-1"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        },
+        "deliveryValue": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "sender",
+            "optional",
+            "nullable"
+          ],
+          "properties": [
+            [
+              "sender",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "completed"
+              }
+            ],
+            [
+              "optional",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "nullable",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": null
+              }
+            ]
+          ]
+        }
+      },
+      "messages": [
+        {
+          "message": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "email",
+              "otp",
+              "type"
+            ],
+            "properties": [
+              [
+                "email",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "override-values@example.com"
+                }
+              ],
+              [
+                "otp",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "123456"
+                }
+              ],
+              [
+                "type",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "email-verification"
+                }
+              ]
+            ]
+          },
+          "path": "/email-otp/send-verification-otp",
+          "body": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "email",
+              "type"
+            ],
+            "properties": [
+              [
+                "email",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "override-values@example.com"
+                }
+              ],
+              [
+                "type",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "email-verification"
+                }
+              ]
+            ]
+          },
+          "hasRequest": false
+        }
+      ],
+      "events": [
+        {
+          "phase": "handler:received",
+          "index": 0,
+          "isPromise": true
+        },
+        {
+          "phase": "override:fulfilled",
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        {
+          "phase": "sender:start"
+        },
+        {
+          "phase": "handler:received",
+          "index": 1,
+          "isPromise": true
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 1,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "sender",
+              "optional",
+              "nullable"
+            ],
+            "properties": [
+              [
+                "sender",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "completed"
+                }
+              ],
+              [
+                "optional",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "type": "undefined"
+                  }
+                }
+              ],
+              [
+                "nullable",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ]
+            ]
+          },
+          "sameDeliveryValue": true
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 0,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "success"
+            ],
+            "properties": [
+              [
+                "success",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ]
+            ]
+          },
+          "sameDeliveryValue": false
+        },
+        {
+          "phase": "gate:release"
+        }
+      ],
+      "logs": [],
+      "deliveryBefore": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "sender",
+          "optional",
+          "nullable"
+        ],
+        "properties": [
+          [
+            "sender",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "completed"
+            }
+          ],
+          [
+            "optional",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "nullable",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ]
+        ]
+      },
+      "deliveryAfter": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "sender",
+          "optional",
+          "nullable"
+        ],
+        "properties": [
+          [
+            "sender",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "completed"
+            }
+          ],
+          [
+            "optional",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "nullable",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ]
+        ]
+      },
+      "functions": []
+    },
+    {
+      "name": "email-otp-override/pending",
+      "timing": "pending",
+      "before": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "user",
+          "session",
+          "account",
+          "verification"
+        ],
+        "properties": [
+          [
+            "user",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "array",
+                "ownKeys": [
+                  "0",
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "0",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-3",
+                        "type": "object",
+                        "ownKeys": [
+                          "name",
+                          "email",
+                          "emailVerified",
+                          "image",
+                          "createdAt",
+                          "updatedAt",
+                          "id"
+                        ],
+                        "properties": [
+                          [
+                            "name",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "Override Values"
+                            }
+                          ],
+                          [
+                            "email",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "override-values@example.com"
+                            }
+                          ],
+                          [
+                            "emailVerified",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": false
+                            }
+                          ],
+                          [
+                            "image",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": null
+                            }
+                          ],
+                          [
+                            "createdAt",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "identity": "object-4",
+                                "type": "date",
+                                "ownKeys": [],
+                                "properties": [],
+                                "value": "2033-05-18T03:33:20.000Z"
+                              }
+                            }
+                          ],
+                          [
+                            "updatedAt",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": {
+                                "identity": "object-5",
+                                "type": "date",
+                                "ownKeys": [],
+                                "properties": [],
+                                "value": "2033-05-18T03:33:20.000Z"
+                              }
+                            }
+                          ],
+                          [
+                            "id",
+                            {
+                              "enumerable": true,
+                              "configurable": true,
+                              "writable": true,
+                              "value": "owner"
+                            }
+                          ]
+                        ]
+                      }
+                    }
+                  ],
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 1
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "session",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-6",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "account",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-7",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ],
+          [
+            "verification",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-8",
+                "type": "array",
+                "ownKeys": [
+                  "length"
+                ],
+                "properties": [
+                  [
+                    "length",
+                    {
+                      "enumerable": false,
+                      "configurable": false,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "beforeRelease": {
+        "overrideState": {
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "success"
+              ],
+              "properties": [
+                [
+                  "success",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": false
+          },
+          {
+            "status": "pending"
+          }
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-3",
+                          "type": "object",
+                          "ownKeys": [
+                            "name",
+                            "email",
+                            "emailVerified",
+                            "image",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "name",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "Override Values"
+                              }
+                            ],
+                            [
+                              "email",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "override-values@example.com"
+                              }
+                            ],
+                            [
+                              "emailVerified",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": false
+                              }
+                            ],
+                            [
+                              "image",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": null
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-4",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-5",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "owner"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-8",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-9",
+                          "type": "object",
+                          "ownKeys": [
+                            "identifier",
+                            "value",
+                            "expiresAt",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "identifier",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "email-verification-otp-override-values@example.com"
+                              }
+                            ],
+                            [
+                              "value",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "123456:0"
+                              }
+                            ],
+                            [
+                              "expiresAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-10",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:38:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-11",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-12",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "verification-1"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        },
+        "deliveryValue": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "sender",
+            "optional",
+            "nullable"
+          ],
+          "properties": [
+            [
+              "sender",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "completed"
+              }
+            ],
+            [
+              "optional",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "nullable",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": null
+              }
+            ]
+          ]
+        }
+      },
+      "afterSettlement": {
+        "overrideState": {
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "success"
+              ],
+              "properties": [
+                [
+                  "success",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": false
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "sender",
+                "optional",
+                "nullable"
+              ],
+              "properties": [
+                [
+                  "sender",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "completed"
+                  }
+                ],
+                [
+                  "optional",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "type": "undefined"
+                    }
+                  }
+                ],
+                [
+                  "nullable",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ]
+              ]
+            },
+            "sameDeliveryValue": true
+          }
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-3",
+                          "type": "object",
+                          "ownKeys": [
+                            "name",
+                            "email",
+                            "emailVerified",
+                            "image",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "name",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "Override Values"
+                              }
+                            ],
+                            [
+                              "email",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "override-values@example.com"
+                              }
+                            ],
+                            [
+                              "emailVerified",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": false
+                              }
+                            ],
+                            [
+                              "image",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": null
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-4",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-5",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "owner"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-8",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "identity": "object-9",
+                          "type": "object",
+                          "ownKeys": [
+                            "identifier",
+                            "value",
+                            "expiresAt",
+                            "createdAt",
+                            "updatedAt",
+                            "id"
+                          ],
+                          "properties": [
+                            [
+                              "identifier",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "email-verification-otp-override-values@example.com"
+                              }
+                            ],
+                            [
+                              "value",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "123456:0"
+                              }
+                            ],
+                            [
+                              "expiresAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-10",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:38:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "createdAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-11",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "updatedAt",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": {
+                                  "identity": "object-12",
+                                  "type": "date",
+                                  "ownKeys": [],
+                                  "properties": [],
+                                  "value": "2033-05-18T03:33:20.000Z"
+                                }
+                              }
+                            ],
+                            [
+                              "id",
+                              {
+                                "enumerable": true,
+                                "configurable": true,
+                                "writable": true,
+                                "value": "verification-1"
+                              }
+                            ]
+                          ]
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 1
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        },
+        "deliveryValue": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "sender",
+            "optional",
+            "nullable"
+          ],
+          "properties": [
+            [
+              "sender",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": "completed"
+              }
+            ],
+            [
+              "optional",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "type": "undefined"
+                }
+              }
+            ],
+            [
+              "nullable",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": null
+              }
+            ]
+          ]
+        }
+      },
+      "messages": [
+        {
+          "message": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "email",
+              "otp",
+              "type"
+            ],
+            "properties": [
+              [
+                "email",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "override-values@example.com"
+                }
+              ],
+              [
+                "otp",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "123456"
+                }
+              ],
+              [
+                "type",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "email-verification"
+                }
+              ]
+            ]
+          },
+          "path": "/email-otp/send-verification-otp",
+          "body": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "email",
+              "type"
+            ],
+            "properties": [
+              [
+                "email",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "override-values@example.com"
+                }
+              ],
+              [
+                "type",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "email-verification"
+                }
+              ]
+            ]
+          },
+          "hasRequest": false
+        }
+      ],
+      "events": [
+        {
+          "phase": "handler:received",
+          "index": 0,
+          "isPromise": true
+        },
+        {
+          "phase": "override:fulfilled",
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        {
+          "phase": "sender:start"
+        },
+        {
+          "phase": "handler:received",
+          "index": 1,
+          "isPromise": true
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 0,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "success"
+            ],
+            "properties": [
+              [
+                "success",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ]
+            ]
+          },
+          "sameDeliveryValue": false
+        },
+        {
+          "phase": "gate:release"
+        },
+        {
+          "phase": "sender:resume"
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 1,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "sender",
+              "optional",
+              "nullable"
+            ],
+            "properties": [
+              [
+                "sender",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "completed"
+                }
+              ],
+              [
+                "optional",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "type": "undefined"
+                  }
+                }
+              ],
+              [
+                "nullable",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ]
+            ]
+          },
+          "sameDeliveryValue": true
+        }
+      ],
+      "logs": [],
+      "deliveryBefore": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "sender",
+          "optional",
+          "nullable"
+        ],
+        "properties": [
+          [
+            "sender",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "completed"
+            }
+          ],
+          [
+            "optional",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "nullable",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ]
+        ]
+      },
+      "deliveryAfter": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "sender",
+          "optional",
+          "nullable"
+        ],
+        "properties": [
+          [
+            "sender",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": "completed"
+            }
+          ],
+          [
+            "optional",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "type": "undefined"
+              }
+            }
+          ],
+          [
+            "nullable",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ]
+        ]
+      },
+      "functions": []
+    }
+  ]
+}

@@ -394,7 +394,9 @@ pub(super) async fn send_otp_core<S: better_auth_core::AuthSchema>(
         Sender::Legacy(sender) => {
             let sender = sender.clone();
             let user = state.user();
-            Some(Box::pin(async move { sender.send(&user, &otp).await }))
+            Some(better_auth_core::background::BackgroundFuture::new(
+                async move { sender.send(&user, &otp).await },
+            ))
         }
     };
     better_auth_core::background::run_or_await_with_error_message(

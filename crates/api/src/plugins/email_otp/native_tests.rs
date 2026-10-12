@@ -97,16 +97,18 @@ impl Fixture {
                         let store = endpoint.auth.database.clone();
                         let user = user.clone();
                         let before = before.clone();
-                        Ok(Some(Box::pin(async move {
-                            assert!(
-                                store
-                                    .get_verification_including_expired(IDENTIFIER)
-                                    .await?
-                                    .is_none()
-                            );
-                            before.lock().unwrap().push(("before", user));
-                            Ok(())
-                        })))
+                        Ok(Some(better_auth_core::background::BackgroundFuture::new(
+                            async move {
+                                assert!(
+                                    store
+                                        .get_verification_including_expired(IDENTIFIER)
+                                        .await?
+                                        .is_none()
+                                );
+                                before.lock().unwrap().push(("before", user));
+                                Ok(())
+                            },
+                        )))
                     })
                     .after(move |user, endpoint| {
                         assert_eq!(endpoint.request.unwrap().path(), "/email-otp/verify-email");

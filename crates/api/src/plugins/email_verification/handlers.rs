@@ -43,7 +43,7 @@ async fn send_for_user<S: better_auth_core::AuthSchema>(
         VerificationEmail { user, url, token },
         endpoint,
     )? {
-        task.await?;
+        let _ = task.await?;
     }
     Ok(())
 }

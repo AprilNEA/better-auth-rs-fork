@@ -1,0 +1,4648 @@
+{
+  "contract": "api-key-usage-success",
+  "version": "1.7.6",
+  "runtime": {
+    "name": "bun",
+    "version": "1.4.2"
+  },
+  "provenance": [
+    {
+      "path": "better-auth/dist/context/create-context.mjs",
+      "sha256": "4b703a84f1b5c6285a74b064447afb7c041d3195212ffec7eabcb61b27f4ab33"
+    },
+    {
+      "path": "@better-auth/api-key/dist/index.mjs",
+      "sha256": "bcf3d507e0045b7766485bcbf55e3ccf31d4424d29fa48cddb77ba20d68e43c0"
+    }
+  ],
+  "boundary": "Real verifyApiKey with deferred secondary-storage usage. The second cache read supplies a complete fresh serialized record. Retained usage completion preserves the full fresh merged record; public verification returns the original snapshot plus usage mutations. All cache calls, serialized writes, index state, Memory rows, and task results remain observed. JSON cache decoding creates new object identities. JavaScript task reaction order is source evidence, not Tokio scheduling equivalence.",
+  "cases": [
+    {
+      "name": "deferred-success/ready",
+      "timing": "ready",
+      "original": {
+        "id": "usage-key",
+        "name": "Before eviction",
+        "start": null,
+        "prefix": null,
+        "key": "usage-secret",
+        "referenceId": "owner",
+        "configId": "default",
+        "refillInterval": null,
+        "refillAmount": null,
+        "lastRefillAt": null,
+        "enabled": true,
+        "rateLimitEnabled": false,
+        "rateLimitTimeWindow": 60000,
+        "rateLimitMax": 3,
+        "requestCount": 0,
+        "remaining": 5,
+        "lastRequest": null,
+        "expiresAt": null,
+        "createdAt": "2030-01-02T03:04:05.000Z",
+        "updatedAt": "2030-01-02T03:04:05.000Z",
+        "permissions": null,
+        "metadata": null
+      },
+      "fresh": {
+        "id": "usage-key",
+        "name": "Fresh record",
+        "start": null,
+        "prefix": null,
+        "key": "usage-secret",
+        "referenceId": "fresh-owner",
+        "configId": "default",
+        "refillInterval": null,
+        "refillAmount": null,
+        "lastRefillAt": null,
+        "enabled": true,
+        "rateLimitEnabled": false,
+        "rateLimitTimeWindow": 60000,
+        "rateLimitMax": 3,
+        "requestCount": 41,
+        "remaining": 99,
+        "lastRequest": null,
+        "expiresAt": null,
+        "createdAt": "2030-01-02T03:04:05.000Z",
+        "updatedAt": "2030-01-02T03:04:05.000Z",
+        "permissions": null,
+        "metadata": null,
+        "freshOnly": {
+          "marker": "preserved",
+          "nullable": null
+        }
+      },
+      "before": [
+        [
+          "api-key:usage-secret",
+          "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+        ],
+        [
+          "api-key:by-id:usage-key",
+          "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+        ],
+        [
+          "api-key:by-ref:owner",
+          "[\"usage-key\"]"
+        ],
+        [
+          "api-key:by-ref:fresh-owner",
+          "[\"peer\"]"
+        ]
+      ],
+      "result": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "valid",
+          "error",
+          "key"
+        ],
+        "properties": [
+          [
+            "valid",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": true
+            }
+          ],
+          [
+            "error",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ],
+          [
+            "key",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "object",
+                "ownKeys": [
+                  "id",
+                  "name",
+                  "start",
+                  "prefix",
+                  "referenceId",
+                  "configId",
+                  "refillInterval",
+                  "refillAmount",
+                  "lastRefillAt",
+                  "enabled",
+                  "rateLimitEnabled",
+                  "rateLimitTimeWindow",
+                  "rateLimitMax",
+                  "requestCount",
+                  "remaining",
+                  "lastRequest",
+                  "expiresAt",
+                  "createdAt",
+                  "updatedAt",
+                  "permissions",
+                  "metadata"
+                ],
+                "properties": [
+                  [
+                    "id",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "usage-key"
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Before eviction"
+                    }
+                  ],
+                  [
+                    "start",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "prefix",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "referenceId",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "owner"
+                    }
+                  ],
+                  [
+                    "configId",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "default"
+                    }
+                  ],
+                  [
+                    "refillInterval",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "refillAmount",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "lastRefillAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "enabled",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": true
+                    }
+                  ],
+                  [
+                    "rateLimitEnabled",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": false
+                    }
+                  ],
+                  [
+                    "rateLimitTimeWindow",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 60000
+                    }
+                  ],
+                  [
+                    "rateLimitMax",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 3
+                    }
+                  ],
+                  [
+                    "requestCount",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "remaining",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 4
+                    }
+                  ],
+                  [
+                    "lastRequest",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-3",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2033-05-18T03:33:20.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "expiresAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "createdAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2030-01-02T03:04:05.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "updatedAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-5",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2033-05-18T03:33:20.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "permissions",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "metadata",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "beforeRelease": {
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "id",
+                "name",
+                "start",
+                "prefix",
+                "key",
+                "referenceId",
+                "configId",
+                "refillInterval",
+                "refillAmount",
+                "lastRefillAt",
+                "enabled",
+                "rateLimitEnabled",
+                "rateLimitTimeWindow",
+                "rateLimitMax",
+                "requestCount",
+                "remaining",
+                "lastRequest",
+                "expiresAt",
+                "createdAt",
+                "updatedAt",
+                "permissions",
+                "metadata",
+                "freshOnly"
+              ],
+              "properties": [
+                [
+                  "id",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-key"
+                  }
+                ],
+                [
+                  "name",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Fresh record"
+                  }
+                ],
+                [
+                  "start",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "prefix",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "key",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-secret"
+                  }
+                ],
+                [
+                  "referenceId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "fresh-owner"
+                  }
+                ],
+                [
+                  "configId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "default"
+                  }
+                ],
+                [
+                  "refillInterval",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "refillAmount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "lastRefillAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "enabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ],
+                [
+                  "rateLimitEnabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": false
+                  }
+                ],
+                [
+                  "rateLimitTimeWindow",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 60000
+                  }
+                ],
+                [
+                  "rateLimitMax",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 3
+                  }
+                ],
+                [
+                  "requestCount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 41
+                  }
+                ],
+                [
+                  "remaining",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 4
+                  }
+                ],
+                [
+                  "lastRequest",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-2",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "expiresAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "createdAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-3",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2030-01-02T03:04:05.000Z"
+                    }
+                  }
+                ],
+                [
+                  "updatedAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-4",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "permissions",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "metadata",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "freshOnly",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-5",
+                      "type": "object",
+                      "ownKeys": [
+                        "marker",
+                        "nullable"
+                      ],
+                      "properties": [
+                        [
+                          "marker",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": "preserved"
+                          }
+                        ],
+                        [
+                          "nullable",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": null
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ]
+              ]
+            }
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "type": "undefined"
+            }
+          }
+        ],
+        "storageEvents": {
+          "identity": "object-1",
+          "type": "array",
+          "ownKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "length"
+          ],
+          "properties": [
+            [
+              "0",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "1",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "2",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "3",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-id:usage-key"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "4",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "5",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "[\"peer\",\"usage-key\"]"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": 6
+              }
+            ]
+          ]
+        },
+        "cacheEntries": [
+          [
+            "api-key:usage-secret",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-id:usage-key",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-ref:owner",
+            "[\"usage-key\"]"
+          ],
+          [
+            "api-key:by-ref:fresh-owner",
+            "[\"peer\",\"usage-key\"]"
+          ]
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification",
+            "apikey"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "apikey",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "afterSettlement": {
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "id",
+                "name",
+                "start",
+                "prefix",
+                "key",
+                "referenceId",
+                "configId",
+                "refillInterval",
+                "refillAmount",
+                "lastRefillAt",
+                "enabled",
+                "rateLimitEnabled",
+                "rateLimitTimeWindow",
+                "rateLimitMax",
+                "requestCount",
+                "remaining",
+                "lastRequest",
+                "expiresAt",
+                "createdAt",
+                "updatedAt",
+                "permissions",
+                "metadata",
+                "freshOnly"
+              ],
+              "properties": [
+                [
+                  "id",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-key"
+                  }
+                ],
+                [
+                  "name",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Fresh record"
+                  }
+                ],
+                [
+                  "start",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "prefix",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "key",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-secret"
+                  }
+                ],
+                [
+                  "referenceId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "fresh-owner"
+                  }
+                ],
+                [
+                  "configId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "default"
+                  }
+                ],
+                [
+                  "refillInterval",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "refillAmount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "lastRefillAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "enabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ],
+                [
+                  "rateLimitEnabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": false
+                  }
+                ],
+                [
+                  "rateLimitTimeWindow",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 60000
+                  }
+                ],
+                [
+                  "rateLimitMax",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 3
+                  }
+                ],
+                [
+                  "requestCount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 41
+                  }
+                ],
+                [
+                  "remaining",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 4
+                  }
+                ],
+                [
+                  "lastRequest",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-2",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "expiresAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "createdAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-3",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2030-01-02T03:04:05.000Z"
+                    }
+                  }
+                ],
+                [
+                  "updatedAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-4",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "permissions",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "metadata",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "freshOnly",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-5",
+                      "type": "object",
+                      "ownKeys": [
+                        "marker",
+                        "nullable"
+                      ],
+                      "properties": [
+                        [
+                          "marker",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": "preserved"
+                          }
+                        ],
+                        [
+                          "nullable",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": null
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ]
+              ]
+            }
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "type": "undefined"
+            }
+          }
+        ],
+        "storageEvents": {
+          "identity": "object-1",
+          "type": "array",
+          "ownKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "length"
+          ],
+          "properties": [
+            [
+              "0",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "1",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "2",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "3",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-id:usage-key"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "4",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "5",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "[\"peer\",\"usage-key\"]"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": 6
+              }
+            ]
+          ]
+        },
+        "cacheEntries": [
+          [
+            "api-key:usage-secret",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-id:usage-key",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-ref:owner",
+            "[\"usage-key\"]"
+          ],
+          [
+            "api-key:by-ref:fresh-owner",
+            "[\"peer\",\"usage-key\"]"
+          ]
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification",
+            "apikey"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "apikey",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [
+        {
+          "phase": "handler:received",
+          "index": 0,
+          "isPromise": true
+        },
+        {
+          "phase": "handler:received",
+          "index": 1,
+          "isPromise": true
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 1,
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 0,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "id",
+              "name",
+              "start",
+              "prefix",
+              "key",
+              "referenceId",
+              "configId",
+              "refillInterval",
+              "refillAmount",
+              "lastRefillAt",
+              "enabled",
+              "rateLimitEnabled",
+              "rateLimitTimeWindow",
+              "rateLimitMax",
+              "requestCount",
+              "remaining",
+              "lastRequest",
+              "expiresAt",
+              "createdAt",
+              "updatedAt",
+              "permissions",
+              "metadata",
+              "freshOnly"
+            ],
+            "properties": [
+              [
+                "id",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "usage-key"
+                }
+              ],
+              [
+                "name",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "Fresh record"
+                }
+              ],
+              [
+                "start",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "prefix",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "key",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "usage-secret"
+                }
+              ],
+              [
+                "referenceId",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "fresh-owner"
+                }
+              ],
+              [
+                "configId",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "default"
+                }
+              ],
+              [
+                "refillInterval",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "refillAmount",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "lastRefillAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "enabled",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ],
+              [
+                "rateLimitEnabled",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": false
+                }
+              ],
+              [
+                "rateLimitTimeWindow",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 60000
+                }
+              ],
+              [
+                "rateLimitMax",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 3
+                }
+              ],
+              [
+                "requestCount",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 41
+                }
+              ],
+              [
+                "remaining",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 4
+                }
+              ],
+              [
+                "lastRequest",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2033-05-18T03:33:20.000Z"
+                  }
+                }
+              ],
+              [
+                "expiresAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "createdAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-3",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2030-01-02T03:04:05.000Z"
+                  }
+                }
+              ],
+              [
+                "updatedAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-4",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2033-05-18T03:33:20.000Z"
+                  }
+                }
+              ],
+              [
+                "permissions",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "metadata",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "freshOnly",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-5",
+                    "type": "object",
+                    "ownKeys": [
+                      "marker",
+                      "nullable"
+                    ],
+                    "properties": [
+                      [
+                        "marker",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "preserved"
+                        }
+                      ],
+                      [
+                        "nullable",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "phase": "verification:fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "valid",
+              "error",
+              "key"
+            ],
+            "properties": [
+              [
+                "valid",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ],
+              [
+                "error",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "key",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "id",
+                      "name",
+                      "start",
+                      "prefix",
+                      "referenceId",
+                      "configId",
+                      "refillInterval",
+                      "refillAmount",
+                      "lastRefillAt",
+                      "enabled",
+                      "rateLimitEnabled",
+                      "rateLimitTimeWindow",
+                      "rateLimitMax",
+                      "requestCount",
+                      "remaining",
+                      "lastRequest",
+                      "expiresAt",
+                      "createdAt",
+                      "updatedAt",
+                      "permissions",
+                      "metadata"
+                    ],
+                    "properties": [
+                      [
+                        "id",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "usage-key"
+                        }
+                      ],
+                      [
+                        "name",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "Before eviction"
+                        }
+                      ],
+                      [
+                        "start",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "prefix",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "referenceId",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "owner"
+                        }
+                      ],
+                      [
+                        "configId",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "default"
+                        }
+                      ],
+                      [
+                        "refillInterval",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "refillAmount",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "lastRefillAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "enabled",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": true
+                        }
+                      ],
+                      [
+                        "rateLimitEnabled",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": false
+                        }
+                      ],
+                      [
+                        "rateLimitTimeWindow",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 60000
+                        }
+                      ],
+                      [
+                        "rateLimitMax",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 3
+                        }
+                      ],
+                      [
+                        "requestCount",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 0
+                        }
+                      ],
+                      [
+                        "remaining",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 4
+                        }
+                      ],
+                      [
+                        "lastRequest",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2033-05-18T03:33:20.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "expiresAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "createdAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-4",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2030-01-02T03:04:05.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "updatedAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-5",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2033-05-18T03:33:20.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "permissions",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "metadata",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "phase": "gate:release"
+        }
+      ],
+      "logs": [],
+      "functions": []
+    },
+    {
+      "name": "deferred-success/pending",
+      "timing": "pending",
+      "original": {
+        "id": "usage-key",
+        "name": "Before eviction",
+        "start": null,
+        "prefix": null,
+        "key": "usage-secret",
+        "referenceId": "owner",
+        "configId": "default",
+        "refillInterval": null,
+        "refillAmount": null,
+        "lastRefillAt": null,
+        "enabled": true,
+        "rateLimitEnabled": false,
+        "rateLimitTimeWindow": 60000,
+        "rateLimitMax": 3,
+        "requestCount": 0,
+        "remaining": 5,
+        "lastRequest": null,
+        "expiresAt": null,
+        "createdAt": "2030-01-02T03:04:05.000Z",
+        "updatedAt": "2030-01-02T03:04:05.000Z",
+        "permissions": null,
+        "metadata": null
+      },
+      "fresh": {
+        "id": "usage-key",
+        "name": "Fresh record",
+        "start": null,
+        "prefix": null,
+        "key": "usage-secret",
+        "referenceId": "fresh-owner",
+        "configId": "default",
+        "refillInterval": null,
+        "refillAmount": null,
+        "lastRefillAt": null,
+        "enabled": true,
+        "rateLimitEnabled": false,
+        "rateLimitTimeWindow": 60000,
+        "rateLimitMax": 3,
+        "requestCount": 41,
+        "remaining": 99,
+        "lastRequest": null,
+        "expiresAt": null,
+        "createdAt": "2030-01-02T03:04:05.000Z",
+        "updatedAt": "2030-01-02T03:04:05.000Z",
+        "permissions": null,
+        "metadata": null,
+        "freshOnly": {
+          "marker": "preserved",
+          "nullable": null
+        }
+      },
+      "before": [
+        [
+          "api-key:usage-secret",
+          "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+        ],
+        [
+          "api-key:by-id:usage-key",
+          "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+        ],
+        [
+          "api-key:by-ref:owner",
+          "[\"usage-key\"]"
+        ],
+        [
+          "api-key:by-ref:fresh-owner",
+          "[\"peer\"]"
+        ]
+      ],
+      "result": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "valid",
+          "error",
+          "key"
+        ],
+        "properties": [
+          [
+            "valid",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": true
+            }
+          ],
+          [
+            "error",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": null
+            }
+          ],
+          [
+            "key",
+            {
+              "enumerable": true,
+              "configurable": true,
+              "writable": true,
+              "value": {
+                "identity": "object-2",
+                "type": "object",
+                "ownKeys": [
+                  "id",
+                  "name",
+                  "start",
+                  "prefix",
+                  "referenceId",
+                  "configId",
+                  "refillInterval",
+                  "refillAmount",
+                  "lastRefillAt",
+                  "enabled",
+                  "rateLimitEnabled",
+                  "rateLimitTimeWindow",
+                  "rateLimitMax",
+                  "requestCount",
+                  "remaining",
+                  "lastRequest",
+                  "expiresAt",
+                  "createdAt",
+                  "updatedAt",
+                  "permissions",
+                  "metadata"
+                ],
+                "properties": [
+                  [
+                    "id",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "usage-key"
+                    }
+                  ],
+                  [
+                    "name",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "Before eviction"
+                    }
+                  ],
+                  [
+                    "start",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "prefix",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "referenceId",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "owner"
+                    }
+                  ],
+                  [
+                    "configId",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": "default"
+                    }
+                  ],
+                  [
+                    "refillInterval",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "refillAmount",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "lastRefillAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "enabled",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": true
+                    }
+                  ],
+                  [
+                    "rateLimitEnabled",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": false
+                    }
+                  ],
+                  [
+                    "rateLimitTimeWindow",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 60000
+                    }
+                  ],
+                  [
+                    "rateLimitMax",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 3
+                    }
+                  ],
+                  [
+                    "requestCount",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 0
+                    }
+                  ],
+                  [
+                    "remaining",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": 4
+                    }
+                  ],
+                  [
+                    "lastRequest",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-3",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2033-05-18T03:33:20.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "expiresAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "createdAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-4",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2030-01-02T03:04:05.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "updatedAt",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": {
+                        "identity": "object-5",
+                        "type": "date",
+                        "ownKeys": [],
+                        "properties": [],
+                        "value": "2033-05-18T03:33:20.000Z"
+                      }
+                    }
+                  ],
+                  [
+                    "permissions",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ],
+                  [
+                    "metadata",
+                    {
+                      "enumerable": true,
+                      "configurable": true,
+                      "writable": true,
+                      "value": null
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        ]
+      },
+      "beforeRelease": {
+        "taskStates": [
+          {
+            "status": "pending"
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "type": "undefined"
+            }
+          }
+        ],
+        "storageEvents": {
+          "identity": "object-1",
+          "type": "array",
+          "ownKeys": [
+            "0",
+            "1",
+            "length"
+          ],
+          "properties": [
+            [
+              "0",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "1",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": 2
+              }
+            ]
+          ]
+        },
+        "cacheEntries": [
+          [
+            "api-key:usage-secret",
+            "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+          ],
+          [
+            "api-key:by-id:usage-key",
+            "{\"id\":\"usage-key\",\"name\":\"Before eviction\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":0,\"remaining\":5,\"lastRequest\":null,\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2030-01-02T03:04:05.000Z\",\"permissions\":null,\"metadata\":null}"
+          ],
+          [
+            "api-key:by-ref:owner",
+            "[\"usage-key\"]"
+          ],
+          [
+            "api-key:by-ref:fresh-owner",
+            "[\"peer\"]"
+          ]
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification",
+            "apikey"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "apikey",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "afterSettlement": {
+        "taskStates": [
+          {
+            "status": "fulfilled",
+            "value": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "id",
+                "name",
+                "start",
+                "prefix",
+                "key",
+                "referenceId",
+                "configId",
+                "refillInterval",
+                "refillAmount",
+                "lastRefillAt",
+                "enabled",
+                "rateLimitEnabled",
+                "rateLimitTimeWindow",
+                "rateLimitMax",
+                "requestCount",
+                "remaining",
+                "lastRequest",
+                "expiresAt",
+                "createdAt",
+                "updatedAt",
+                "permissions",
+                "metadata",
+                "freshOnly"
+              ],
+              "properties": [
+                [
+                  "id",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-key"
+                  }
+                ],
+                [
+                  "name",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Fresh record"
+                  }
+                ],
+                [
+                  "start",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "prefix",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "key",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "usage-secret"
+                  }
+                ],
+                [
+                  "referenceId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "fresh-owner"
+                  }
+                ],
+                [
+                  "configId",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "default"
+                  }
+                ],
+                [
+                  "refillInterval",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "refillAmount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "lastRefillAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "enabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": true
+                  }
+                ],
+                [
+                  "rateLimitEnabled",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": false
+                  }
+                ],
+                [
+                  "rateLimitTimeWindow",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 60000
+                  }
+                ],
+                [
+                  "rateLimitMax",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 3
+                  }
+                ],
+                [
+                  "requestCount",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 41
+                  }
+                ],
+                [
+                  "remaining",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 4
+                  }
+                ],
+                [
+                  "lastRequest",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-2",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "expiresAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "createdAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-3",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2030-01-02T03:04:05.000Z"
+                    }
+                  }
+                ],
+                [
+                  "updatedAt",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-4",
+                      "type": "date",
+                      "ownKeys": [],
+                      "properties": [],
+                      "value": "2033-05-18T03:33:20.000Z"
+                    }
+                  }
+                ],
+                [
+                  "permissions",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "metadata",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": null
+                  }
+                ],
+                [
+                  "freshOnly",
+                  {
+                    "enumerable": true,
+                    "configurable": true,
+                    "writable": true,
+                    "value": {
+                      "identity": "object-5",
+                      "type": "object",
+                      "ownKeys": [
+                        "marker",
+                        "nullable"
+                      ],
+                      "properties": [
+                        [
+                          "marker",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": "preserved"
+                          }
+                        ],
+                        [
+                          "nullable",
+                          {
+                            "enumerable": true,
+                            "configurable": true,
+                            "writable": true,
+                            "value": null
+                          }
+                        ]
+                      ]
+                    }
+                  }
+                ]
+              ]
+            }
+          },
+          {
+            "status": "fulfilled",
+            "value": {
+              "type": "undefined"
+            }
+          }
+        ],
+        "storageEvents": {
+          "identity": "object-1",
+          "type": "array",
+          "ownKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "length"
+          ],
+          "properties": [
+            [
+              "0",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "1",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "2",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:usage-secret"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "3",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-id:usage-key"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "4",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "get"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 2
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "5",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-7",
+                  "type": "array",
+                  "ownKeys": [
+                    "0",
+                    "1",
+                    "2",
+                    "3",
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "0",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "set"
+                      }
+                    ],
+                    [
+                      "1",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "api-key:by-ref:fresh-owner"
+                      }
+                    ],
+                    [
+                      "2",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": "[\"peer\",\"usage-key\"]"
+                      }
+                    ],
+                    [
+                      "3",
+                      {
+                        "enumerable": true,
+                        "configurable": true,
+                        "writable": true,
+                        "value": {
+                          "type": "undefined"
+                        }
+                      }
+                    ],
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 4
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "length",
+              {
+                "enumerable": false,
+                "configurable": false,
+                "writable": true,
+                "value": 6
+              }
+            ]
+          ]
+        },
+        "cacheEntries": [
+          [
+            "api-key:usage-secret",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-id:usage-key",
+            "{\"id\":\"usage-key\",\"name\":\"Fresh record\",\"start\":null,\"prefix\":null,\"key\":\"usage-secret\",\"referenceId\":\"fresh-owner\",\"configId\":\"default\",\"refillInterval\":null,\"refillAmount\":null,\"lastRefillAt\":null,\"enabled\":true,\"rateLimitEnabled\":false,\"rateLimitTimeWindow\":60000,\"rateLimitMax\":3,\"requestCount\":41,\"remaining\":4,\"lastRequest\":\"2033-05-18T03:33:20.000Z\",\"expiresAt\":null,\"createdAt\":\"2030-01-02T03:04:05.000Z\",\"updatedAt\":\"2033-05-18T03:33:20.000Z\",\"permissions\":null,\"metadata\":null,\"freshOnly\":{\"marker\":\"preserved\",\"nullable\":null}}"
+          ],
+          [
+            "api-key:by-ref:owner",
+            "[\"usage-key\"]"
+          ],
+          [
+            "api-key:by-ref:fresh-owner",
+            "[\"peer\",\"usage-key\"]"
+          ]
+        ],
+        "database": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "user",
+            "session",
+            "account",
+            "verification",
+            "apikey"
+          ],
+          "properties": [
+            [
+              "user",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-2",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "session",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-3",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "account",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-4",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "verification",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-5",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ],
+            [
+              "apikey",
+              {
+                "enumerable": true,
+                "configurable": true,
+                "writable": true,
+                "value": {
+                  "identity": "object-6",
+                  "type": "array",
+                  "ownKeys": [
+                    "length"
+                  ],
+                  "properties": [
+                    [
+                      "length",
+                      {
+                        "enumerable": false,
+                        "configurable": false,
+                        "writable": true,
+                        "value": 0
+                      }
+                    ]
+                  ]
+                }
+              }
+            ]
+          ]
+        }
+      },
+      "events": [
+        {
+          "phase": "handler:received",
+          "index": 0,
+          "isPromise": true
+        },
+        {
+          "phase": "handler:received",
+          "index": 1,
+          "isPromise": true
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 1,
+          "status": "fulfilled",
+          "value": {
+            "type": "undefined"
+          }
+        },
+        {
+          "phase": "verification:fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "valid",
+              "error",
+              "key"
+            ],
+            "properties": [
+              [
+                "valid",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ],
+              [
+                "error",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "key",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "object",
+                    "ownKeys": [
+                      "id",
+                      "name",
+                      "start",
+                      "prefix",
+                      "referenceId",
+                      "configId",
+                      "refillInterval",
+                      "refillAmount",
+                      "lastRefillAt",
+                      "enabled",
+                      "rateLimitEnabled",
+                      "rateLimitTimeWindow",
+                      "rateLimitMax",
+                      "requestCount",
+                      "remaining",
+                      "lastRequest",
+                      "expiresAt",
+                      "createdAt",
+                      "updatedAt",
+                      "permissions",
+                      "metadata"
+                    ],
+                    "properties": [
+                      [
+                        "id",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "usage-key"
+                        }
+                      ],
+                      [
+                        "name",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "Before eviction"
+                        }
+                      ],
+                      [
+                        "start",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "prefix",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "referenceId",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "owner"
+                        }
+                      ],
+                      [
+                        "configId",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "default"
+                        }
+                      ],
+                      [
+                        "refillInterval",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "refillAmount",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "lastRefillAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "enabled",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": true
+                        }
+                      ],
+                      [
+                        "rateLimitEnabled",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": false
+                        }
+                      ],
+                      [
+                        "rateLimitTimeWindow",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 60000
+                        }
+                      ],
+                      [
+                        "rateLimitMax",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 3
+                        }
+                      ],
+                      [
+                        "requestCount",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 0
+                        }
+                      ],
+                      [
+                        "remaining",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": 4
+                        }
+                      ],
+                      [
+                        "lastRequest",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-3",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2033-05-18T03:33:20.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "expiresAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "createdAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-4",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2030-01-02T03:04:05.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "updatedAt",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": {
+                            "identity": "object-5",
+                            "type": "date",
+                            "ownKeys": [],
+                            "properties": [],
+                            "value": "2033-05-18T03:33:20.000Z"
+                          }
+                        }
+                      ],
+                      [
+                        "permissions",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ],
+                      [
+                        "metadata",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "phase": "gate:release"
+        },
+        {
+          "phase": "task:fulfilled",
+          "index": 0,
+          "status": "fulfilled",
+          "value": {
+            "identity": "object-1",
+            "type": "object",
+            "ownKeys": [
+              "id",
+              "name",
+              "start",
+              "prefix",
+              "key",
+              "referenceId",
+              "configId",
+              "refillInterval",
+              "refillAmount",
+              "lastRefillAt",
+              "enabled",
+              "rateLimitEnabled",
+              "rateLimitTimeWindow",
+              "rateLimitMax",
+              "requestCount",
+              "remaining",
+              "lastRequest",
+              "expiresAt",
+              "createdAt",
+              "updatedAt",
+              "permissions",
+              "metadata",
+              "freshOnly"
+            ],
+            "properties": [
+              [
+                "id",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "usage-key"
+                }
+              ],
+              [
+                "name",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "Fresh record"
+                }
+              ],
+              [
+                "start",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "prefix",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "key",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "usage-secret"
+                }
+              ],
+              [
+                "referenceId",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "fresh-owner"
+                }
+              ],
+              [
+                "configId",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": "default"
+                }
+              ],
+              [
+                "refillInterval",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "refillAmount",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "lastRefillAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "enabled",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": true
+                }
+              ],
+              [
+                "rateLimitEnabled",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": false
+                }
+              ],
+              [
+                "rateLimitTimeWindow",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 60000
+                }
+              ],
+              [
+                "rateLimitMax",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 3
+                }
+              ],
+              [
+                "requestCount",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 41
+                }
+              ],
+              [
+                "remaining",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": 4
+                }
+              ],
+              [
+                "lastRequest",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-2",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2033-05-18T03:33:20.000Z"
+                  }
+                }
+              ],
+              [
+                "expiresAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "createdAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-3",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2030-01-02T03:04:05.000Z"
+                  }
+                }
+              ],
+              [
+                "updatedAt",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-4",
+                    "type": "date",
+                    "ownKeys": [],
+                    "properties": [],
+                    "value": "2033-05-18T03:33:20.000Z"
+                  }
+                }
+              ],
+              [
+                "permissions",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "metadata",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": null
+                }
+              ],
+              [
+                "freshOnly",
+                {
+                  "enumerable": true,
+                  "configurable": true,
+                  "writable": true,
+                  "value": {
+                    "identity": "object-5",
+                    "type": "object",
+                    "ownKeys": [
+                      "marker",
+                      "nullable"
+                    ],
+                    "properties": [
+                      [
+                        "marker",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": "preserved"
+                        }
+                      ],
+                      [
+                        "nullable",
+                        {
+                          "enumerable": true,
+                          "configurable": true,
+                          "writable": true,
+                          "value": null
+                        }
+                      ]
+                    ]
+                  }
+                }
+              ]
+            ]
+          }
+        }
+      ],
+      "logs": [],
+      "functions": []
+    }
+  ]
+}

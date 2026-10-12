@@ -116,6 +116,11 @@ async function captureCase(timing) {
     const merged = { ...fresh, ...mutations, createdAt: new Date(fresh.createdAt) };
     assert.deepEqual(completions[0], merged);
     assert.deepEqual(Reflect.ownKeys(completions[0]), Reflect.ownKeys(merged));
+    assert.notEqual(completions[0].lastRequest, completions[0].updatedAt);
+    assert.equal(completions[0].lastRequest.getTime(), completions[0].updatedAt.getTime());
+    assert.equal(completions[0].lastRequest, result.key.lastRequest);
+    assert.equal(completions[0].updatedAt, result.key.updatedAt);
+    assert.notEqual(completions[0].createdAt, result.key.createdAt);
     assert.equal(completions[1], undefined);
     const serialized = JSON.stringify(merged);
     assert.deepEqual(storageEvents, [

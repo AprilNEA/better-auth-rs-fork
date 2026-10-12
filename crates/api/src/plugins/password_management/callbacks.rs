@@ -95,7 +95,7 @@ pub(super) fn delivery<S: AuthSchema>(
     })?;
     let user = serde_json::to_value(email.user)?;
     let request = endpoint.request.cloned();
-    Ok(Some(Box::pin(async move {
+    Ok(Some(BackgroundFuture::new(async move {
         sender
             .send_with_request(&user, &email.url, &email.token, request.as_ref())
             .await

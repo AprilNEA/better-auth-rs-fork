@@ -613,7 +613,8 @@ impl ApiKeyPlugin {
         outer_catch: bool,
     ) -> AuthResult<()> {
         use better_auth_core::background::{
-            run_in_background_with_error_messages, start_unowned_with_error_messages,
+            BackgroundFuture, run_in_background_with_error_messages,
+            start_unowned_with_error_messages,
         };
         const INNER: &[&str] = &["Failed to delete expired API keys:"];
         const NESTED: &[&str] = &[
@@ -622,7 +623,10 @@ impl ApiKeyPlugin {
         ];
         let plugin = self.clone();
         let context = ctx.clone();
-        let task = Box::pin(async move { plugin.maybe_delete_expired(&context, false).await });
+        let task =
+            BackgroundFuture::new(
+                async move { plugin.maybe_delete_expired(&context, false).await },
+            );
         let messages = if outer_catch { NESTED } else { INNER };
         if defer {
             run_in_background_with_error_messages(

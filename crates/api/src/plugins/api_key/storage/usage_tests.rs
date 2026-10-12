@@ -25,6 +25,18 @@ use crate::plugins::api_key::{
 };
 
 const HASH: &str = "api-key:usage-secret";
+const BY_ID: &str = "api-key:by-id:usage-key";
+const OLD_REF: &str = "api-key:by-ref:owner";
+const FRESH_REF: &str = "api-key:by-ref:fresh-owner";
+
+#[path = "../../../../../../tests/support/secondary_native_observation.rs"]
+mod observation;
+#[path = "../../../../../../tests/support/secondary_native_source.rs"]
+mod source;
+use observation::{NativeObservation, assert_replay};
+use source::source_value;
+
+mod success;
 
 fn lock<T>(mutex: &Mutex<T>) -> AuthResult<MutexGuard<'_, T>> {
     mutex
@@ -46,8 +58,10 @@ fn seed() -> Value {
 
 struct Cache {
     pending: bool,
+    fresh: Option<String>,
     values: Mutex<BTreeMap<String, String>>,
     reads: Mutex<Vec<String>>,
+    events: Mutex<Vec<Value>>,
     started: Notify,
     release: Notify,
 }
@@ -56,41 +70,90 @@ impl Cache {
     fn new(pending: bool) -> Self {
         Self {
             pending,
+            fresh: None,
             values: Mutex::new(BTreeMap::from([
                 (HASH.into(), seed().to_string()),
                 ("api-key:by-id:usage-key".into(), seed().to_string()),
                 ("api-key:by-ref:owner".into(), "[\"usage-key\"]".into()),
             ])),
             reads: Mutex::new(Vec::new()),
+            events: Mutex::new(Vec::new()),
             started: Notify::new(),
             release: Notify::new(),
         }
+    }
+
+    fn successful(pending: bool, fresh: &Value) -> AuthResult<Self> {
+        let mut cache = Self::new(pending);
+        cache.fresh = Some(serde_json::to_string(fresh)?);
+        let _ = lock(&cache.values)?.insert(FRESH_REF.into(), "[\"peer\"]".into());
+        Ok(cache)
+    }
+
+    fn entries(&self) -> AuthResult<Value> {
+        let values = lock(&self.values)?;
+        assert_eq!(values.len(), 4);
+        [HASH, BY_ID, OLD_REF, FRESH_REF]
+            .into_iter()
+            .map(|key| {
+                let value = values
+                    .get(key)
+                    .ok_or_else(|| AuthError::internal("Expected complete cache key"))?;
+                Ok(json!([key, value]))
+            })
+            .collect::<AuthResult<Vec<_>>>()
+            .map(Into::into)
     }
 }
 
 #[async_trait]
 impl SecondaryStorage for Cache {
     async fn get(&self, key: &str) -> AuthResult<Option<Value>> {
-        assert_eq!(key, HASH);
+        if self.fresh.is_none() {
+            assert_eq!(key, HASH);
+        }
+        lock(&self.events)?.push(json!(["get", key]));
         let read = {
             let mut reads = lock(&self.reads)?;
             reads.push(key.into());
             reads.len()
         };
-        if read == 2 {
-            let _ = lock(&self.values)?.remove(HASH);
+        if key == HASH && read == 2 {
+            if self.fresh.is_none() {
+                let _ = lock(&self.values)?.remove(HASH);
+            }
             self.started.notify_one();
             if self.pending {
                 self.release.notified().await;
+            }
+            if let Some(fresh) = &self.fresh {
+                return Ok(Some(fresh.clone().into()));
             }
         }
         Ok(lock(&self.values)?.get(key).cloned().map(Value::String))
     }
 
-    async fn set_native(&self, _: &FieldValue, _: &FieldValue, _: Option<f64>) -> AuthResult<()> {
-        Err(AuthError::internal(
-            "A missing fresh key must not be recreated",
-        ))
+    async fn set_native(
+        &self,
+        key: &FieldValue,
+        value: &FieldValue,
+        ttl: Option<f64>,
+    ) -> AuthResult<()> {
+        if self.fresh.is_none() {
+            return Err(AuthError::internal(
+                "A missing fresh key must not be recreated",
+            ));
+        }
+        let (FieldValue::String(key), FieldValue::String(value)) = (key, value) else {
+            return Err(AuthError::internal(
+                "Usage cache writes must retain string keys and serialized records",
+            ));
+        };
+        let ttl =
+            NativeObservation::default().observe(&ttl.map_or(FieldValue::Undefined, Into::into))?;
+        lock(&self.events)?.push(json!(["set", key, value, ttl]));
+        let _ = lock(&self.values)?.insert(key.clone(), value.clone());
+        Ok(())
     }
 
     async fn delete(&self, _: &str) -> AuthResult<()> {
@@ -143,13 +206,18 @@ impl Observation {
     async fn settle(&self, deferred: bool) -> AuthResult<()> {
         let tasks = std::mem::take(&mut *lock(&self.tasks)?);
         assert_eq!(tasks.len(), if deferred { 2 } else { 0 });
-        for task in tasks {
-            tokio::time::timeout(Duration::from_secs(5), task)
+        for (index, task) in tasks.into_iter().enumerate() {
+            let completion = tokio::time::timeout(Duration::from_secs(5), task)
                 .await
                 .map_err(|_| AuthError::internal("Deferred cache miss did not settle"))?
                 .map_err(|error| {
                     AuthError::internal(format!("Unexpected task failure: {error}"))
                 })??;
+            assert!(completion.strict_equals(&if index == 0 {
+                FieldValue::Null
+            } else {
+                FieldValue::Undefined
+            }));
         }
         Ok(())
     }
