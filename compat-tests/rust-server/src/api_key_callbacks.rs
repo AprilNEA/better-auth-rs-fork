@@ -257,8 +257,8 @@ impl ApiKeyGetter for ApiKeyCallbacks {
             .and_then(Value::as_str)
             .map(str::to_owned)
             .or_else(|| {
-                ctx.request
-                    .and_then(|request| request.headers.get("x-callback-key"))
+                ctx.headers
+                    .and_then(|headers| headers.get("x-callback-key"))
                     .cloned()
             }))
     }
@@ -286,11 +286,11 @@ impl ApiKeyDefaultPermissions for ApiKeyCallbacks {
         let mut state = self.state.lock().unwrap();
         state.events.push(
             json!({"event":"permissions","configId":self.config_id,"referenceId":reference_id.json()?,
-            "path":ctx.path,"hasRequest":ctx.request.is_some(),"name":ctx.body.get("name"),
-            "expiresIn":ctx.body.get("expiresIn"),"remaining":ctx.body.get("remaining")}),
+            "path":ctx.path,"hasRequest":ctx.request.is_some(),"name":ctx.body.model_property("name")?.json()?,
+            "expiresIn":ctx.body.model_property("expiresIn")?.json()?,"remaining":ctx.body.model_property("remaining")?.json()?}),
         );
         fail(&state, "permissions")?;
-        let action = if ctx.body.get("name").and_then(Value::as_str) == Some("Native") {
+        let action = if ctx.body.model_property("name")?.as_str() == Some("Native") {
             "native"
         } else {
             "read"

@@ -675,22 +675,16 @@ impl ApiKeyPlugin {
 
     pub(super) fn validate_metadata(
         config: &ApiKeyConfig,
-        metadata: &Option<serde_json::Value>,
+        metadata: &better_auth_core::FieldValue,
     ) -> AuthResult<()> {
-        if let Some(value) = metadata.as_ref().filter(|value| match value {
-            serde_json::Value::Null => false,
-            serde_json::Value::Bool(value) => *value,
-            serde_json::Value::Number(value) => value.as_f64() != Some(0.0),
-            serde_json::Value::String(value) => !value.is_empty(),
-            _ => true,
-        }) {
+        if metadata.is_truthy() {
             if !config.enable_metadata {
                 return Err(api_key_error(
                     "BAD_REQUEST",
                     ApiKeyErrorCode::MetadataDisabled,
                 ));
             }
-            if !value.is_object() && !value.is_array() {
+            if !metadata.is_object() && !metadata.is_array() && metadata.as_date().is_none() {
                 return Err(api_key_error(
                     "BAD_REQUEST",
                     ApiKeyErrorCode::InvalidMetadataType,
@@ -729,16 +723,14 @@ impl ApiKeyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body: CreateKeyRequest = request::read(req)?;
+        let (body, callback_body): (CreateKeyRequest, _) = request::read_with_body(req)?;
+        let input = request::CapturedInput::new(&body, &callback_body)?;
+        let endpoint = ApiKeyEndpoint::from_request(ctx, req, &callback_body);
         let config = self.resolve_configuration(body.config_id.as_deref())?;
         let session = ctx
             .native_session(req, better_auth_core::session::SessionRead::CookieBypass)
             .await?;
-        let original = req.original_request().or_else(|| {
-            better_auth_core::hooks::current_request_hook_context()
-                .is_some_and(|context| context.is_http)
-                .then_some(req)
-        });
+        let original = endpoint.request;
         let client = req.endpoint_headers().is_some() || original.is_some();
         if client {
             validate_client_create(&body)?;
@@ -758,7 +750,7 @@ impl ApiKeyPlugin {
                 .transpose()?,
             client,
         )?;
-        let response = create_key_for_user(&body, &actor, self, ctx, original).await?;
+        let response = create_key_for_user(&input, &actor, self, ctx, endpoint).await?;
         Ok(AuthResponse::native(None, response.into_field_value()?))
     }
 
@@ -792,7 +784,8 @@ impl ApiKeyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<AuthResponse> {
-        let body: UpdateKeyRequest = request::read(req)?;
+        let (body, callback_body): (UpdateKeyRequest, _) = request::read_with_body(req)?;
+        let input = request::CapturedInput::new(&body, &callback_body)?;
         let session = ctx
             .native_session(req, better_auth_core::session::SessionRead::CookieBypass)
             .await?;
@@ -825,9 +818,9 @@ impl ApiKeyPlugin {
             ));
         }
         let response = if client {
-            update_key_core(&body, actor, self, ctx).await?
+            update_key_core(&input, actor, self, ctx).await?
         } else {
-            update_key_for_user(&body, &actor, self, ctx).await?
+            update_key_for_user(&input, &actor, self, ctx).await?
         };
         Ok(AuthResponse::native(None, response.field_values()?.into()))
     }

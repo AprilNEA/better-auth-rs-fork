@@ -49,6 +49,7 @@ pub struct AuthRequest {
     original_request: Option<std::sync::Arc<AuthRequest>>,
     pub(crate) parsed_http_body: Option<crate::http_body::ParsedHttpBody>,
     pub(crate) endpoint_body: Option<crate::endpoint_input::EndpointBody>,
+    pub(crate) raw_body_input: crate::endpoint_input::RequestBodyCache,
     /// Session authenticated by a trusted plugin hook for the current request.
     pub(crate) virtual_session: Option<crate::wire::SessionView>,
     /// Cookie updates from session middleware, shared by normalized request clones.
@@ -535,6 +536,7 @@ impl AuthRequest {
             original_request: None,
             parsed_http_body: None,
             endpoint_body: None,
+            raw_body_input: Default::default(),
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
@@ -568,6 +570,7 @@ impl AuthRequest {
             original_request: None,
             parsed_http_body: None,
             endpoint_body: None,
+            raw_body_input: Default::default(),
             virtual_session: None,
             response_headers: Default::default(),
             response_status: Default::default(),
@@ -845,8 +848,6 @@ impl AuthRequest {
         if let Some(body) = self.projected_body() {
             let body = body.map_err(<serde_json::Error as serde::ser::Error>::custom)?;
             serde_json::from_value(body.unwrap_or_else(|| serde_json::json!({})))
-        } else if let Some(body) = self.parsed_http_body() {
-            serde_json::from_value(body.clone())
         } else if let Some(body) = &self.body {
             serde_json::from_slice(body)
         } else {

@@ -1285,7 +1285,7 @@ async fn test_verify_email_rejects_untrusted_callback_url() {
     let response = test_helpers::finalize_response(&ctx, &req, error.to_auth_response());
     assert_eq!(response.status, 403);
     assert_eq!(
-        response.body.bytes().unwrap(),
+        response.body.bytes().unwrap().as_ref(),
         br#"{"message":"Invalid callbackURL","code":"INVALID_CALLBACK_URL"}"#,
     );
     assert!(response.headers.get("set-cookie").is_none());

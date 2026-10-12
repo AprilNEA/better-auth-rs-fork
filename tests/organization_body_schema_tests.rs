@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use better_auth::{
-    AuthBuilder, AuthConfig, BetterAuth,
+    AuthBuilder, AuthConfig, AuthResult, BetterAuth,
     plugins::{OrganizationConfig, OrganizationPlugin},
     server_api::EndpointInput,
 };
@@ -13,12 +13,16 @@ use better_auth_core::{
 use serde_json::{Value, json};
 
 #[tokio::test]
-async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() {
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The contract asserts route isolation and propagates setup and decoding failures."
+)]
+async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() -> AuthResult<()> {
     let store = Arc::new(EphemeralStore::default());
     async fn build(
         store: Arc<EphemeralStore>,
         field_type: UserFieldType,
-    ) -> BetterAuth<StatelessSchema> {
+    ) -> AuthResult<BetterAuth<StatelessSchema>> {
         let mut plugin = OrganizationConfig::default();
         let _ = plugin.schema.organization.fields_mut().insert(
             "name".into(),
@@ -35,10 +39,9 @@ async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() {
         .plugin(OrganizationPlugin::with_config(plugin))
         .build()
         .await
-        .unwrap()
     }
-    let number = build(store.clone(), UserFieldType::Number).await;
-    let text = build(store, UserFieldType::String).await;
+    let number = build(store.clone(), UserFieldType::Number).await?;
+    let text = build(store, UserFieldType::String).await?;
     for (auth, name, status, message) in [
         (&number, json!(7), 401, None),
         (
@@ -67,12 +70,12 @@ async fn shared_store_keeps_each_route_schema_bound_to_its_auth_instance() {
             )
             .await
             .unwrap_or_else(|error| error.to_auth_response())
-            .into_http_response()
-            .unwrap();
+            .into_http_response()?;
         assert_eq!(response.status, status);
         if let Some(message) = message {
-            let body: Value = serde_json::from_slice(&response.body.bytes().unwrap()).unwrap();
+            let body: Value = serde_json::from_slice(&response.body.bytes()?)?;
             assert_eq!(body, json!({"code":"VALIDATION_ERROR","message":message}));
         }
     }
+    Ok(())
 }

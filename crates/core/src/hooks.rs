@@ -34,7 +34,7 @@ impl RequestHookContext {
             params: Default::default(),
             headers: request.headers.clone(),
             query: request.query.clone(),
-            body: request.hook_field_value()?,
+            body: request.hook_field_value(),
             meta: RequestMeta::from_request(request),
         })
     }

@@ -366,8 +366,7 @@ fn apply_before_action(
         Some(BeforeRequestAction::ReplaceBody(body)) => {
             internal.body = Some(body.clone());
             original.body = Some(body);
-            let raw_body = internal.input_body()?;
-            internal.set_endpoint_body(crate::endpoint_input::ValidatedBody::unvalidated(raw_body));
+            internal.set_endpoint_body(internal.unvalidated_input()?);
             update_request_hook_context(internal)?;
         }
         Some(BeforeRequestAction::InjectSession { session }) => {

@@ -9,7 +9,7 @@ use better_auth_core::store::SecondaryStorage;
 use better_auth_core::wire::ApiKeyView;
 use better_auth_core::{
     ApiKey, AuthContext, AuthError, AuthRecordFields, AuthResult, FieldMap, FieldValue,
-    FromFieldMap, UpdateApiKey,
+    FromFieldMap,
 };
 use chrono::Utc;
 use futures_util::{FutureExt, StreamExt, future, stream};
@@ -385,57 +385,23 @@ pub(super) async fn create(
     Ok(key)
 }
 
-pub(super) fn apply_update(key: &mut ApiKey, update: UpdateApiKey) -> AuthResult<()> {
-    if let Some(name) = update.name {
-        key.name = name;
-    }
-    macro_rules! optional { ($($field:ident),* $(,)?) => { $(if let Some(value) = update.$field { key.$field = Some(value).into(); })* }; }
-    optional!(
-        remaining,
-        rate_limit_time_window,
-        rate_limit_max,
-        refill_interval,
-        refill_amount,
-        permissions,
-        request_count
-    );
-    if let Some(value) = update.metadata {
-        key.metadata = better_auth_core::SchemaValue::from_field(FieldValue::parse_json(&value)?);
-    }
-    if let Some(value) = update.enabled {
-        key.enabled = value;
-    }
-    if let Some(value) = update.rate_limit_enabled {
-        key.rate_limit_enabled = value.into();
-    }
-    if let Some(value) = update.expires_at {
-        key.expires_at = value.into();
-    }
-    if let Some(value) = update.last_request {
-        key.last_request = value.into();
-    }
-    if let Some(value) = update.last_refill_at {
-        key.last_refill_at = value.into();
-    }
-    key.updated_at = now().into();
-    Ok(())
-}
-
 pub(super) async fn update(
     config: &ApiKeyConfig,
     ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     mut key: ApiKey,
-    update: UpdateApiKey,
+    update: FieldMap,
 ) -> AuthResult<ApiKey> {
     if config.storage == ApiKeyStorage::Database || config.fallback_to_database {
-        key = match ctx.database.update_api_key(&key.id, update).await {
-            Ok(updated) => updated,
+        key = match ctx.database.update_api_key_record(&key.id, update).await? {
+            Some(updated) => ApiKey::from_field_values(updated)?,
             // Upstream adapter.update returns null when a row disappears after the ownership lookup.
-            Err(AuthError::NotFound(_)) => return Ok(key),
-            Err(error) => return Err(error),
+            None => return Ok(key),
         };
     } else {
-        apply_update(&mut key, update)?;
+        let mut fields = key.field_values()?;
+        fields.extend(update);
+        let _ = fields.insert("updatedAt".into(), now().into());
+        key = ApiKey::from_field_values(fields)?;
     }
     if config.storage == ApiKeyStorage::SecondaryStorage {
         put(

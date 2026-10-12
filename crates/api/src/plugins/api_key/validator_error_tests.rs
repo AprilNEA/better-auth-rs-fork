@@ -131,7 +131,8 @@ struct RejectingValidator {
 #[async_trait]
 impl ApiKeyValidator for RejectingValidator {
     async fn validate(&self, key: &str, ctx: ApiKeyEndpoint<'_>) -> AuthResult<bool> {
-        self.trace.push(json!(["validator:enter", key, ctx.body]))?;
+        self.trace
+            .push(json!(["validator:enter", key, ctx.body.json()?]))?;
         let updated = ctx
             .api_keys
             .update_api_key_record(

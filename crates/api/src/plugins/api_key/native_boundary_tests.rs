@@ -1,7 +1,7 @@
 use super::*;
 use better_auth_core::{
-    AuthInitContext, CreateMember, CreateOrganization, CreateOrganizationRole, FieldValue,
-    SchemaValue, UpdateOrganizationRole,
+    AuthInitContext, CreateMember, CreateOrganization, CreateOrganizationRole, FieldMap,
+    FieldValue, SchemaValue, UpdateOrganizationRole,
     organization_fields::OrganizationFields,
     store::{EphemeralStore, schema::EntityRole},
     user_fields::{
@@ -107,11 +107,15 @@ async fn check_organization_reference<S: better_auth_core::AuthSchema>(ctx: Auth
         .await
         .unwrap();
     let created = super::super::handlers::create_key_for_user(
-        &CreateKeyRequest::default(),
+        &super::super::request::CapturedInput::new(
+            &CreateKeyRequest::default(),
+            &FieldValue::Undefined,
+        )
+        .unwrap(),
         &"41".into(),
         &ApiKeyPlugin::builder().build(),
         &ctx,
-        None,
+        ApiKeyEndpoint::new(&ctx, None, Some("/api-key/create"), &FieldMap::new().into()),
     )
     .await
     .unwrap();

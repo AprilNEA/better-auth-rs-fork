@@ -1,5 +1,6 @@
 use super::types::RoleInput;
 use crate::plugins::json_body;
+pub(super) use crate::plugins::json_body::native_invalid_type;
 use better_auth_core::{
     AuthError, AuthResult, FieldMap, FieldValue, SchemaValue, user_fields::UserConfig,
 };
@@ -199,28 +200,6 @@ fn field_value(
         }
     }
     Ok(value.cloned())
-}
-
-pub(super) fn native_invalid_type(
-    location: &str,
-    expected: &str,
-    value: Option<&FieldValue>,
-) -> String {
-    let actual = match value {
-        None | Some(FieldValue::Undefined) => "undefined",
-        Some(FieldValue::Null) => "null",
-        Some(FieldValue::Bool(_)) => "boolean",
-        Some(FieldValue::Number(value)) if value.is_nan() => "NaN",
-        Some(FieldValue::Number(value)) if *value == f64::INFINITY => "Infinity",
-        Some(FieldValue::Number(value)) if *value == f64::NEG_INFINITY => "-Infinity",
-        Some(FieldValue::Number(_)) => "number",
-        Some(FieldValue::String(_) | FieldValue::Utf16String(_)) => "string",
-        Some(FieldValue::Date(_)) => "Date",
-        Some(FieldValue::Array(_)) => "array",
-        Some(FieldValue::Object(_)) => "object",
-        Some(FieldValue::Function(_)) => "function",
-    };
-    format!("[{location}] Invalid input: expected {expected}, received {actual}")
 }
 
 pub(super) fn parse_roles(value: &SchemaValue<RoleInput>) -> AuthResult<SchemaValue<String>> {

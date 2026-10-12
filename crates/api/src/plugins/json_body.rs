@@ -1,4 +1,4 @@
-use better_auth_core::{AuthError, AuthRequest, AuthResult};
+use better_auth_core::{AuthError, AuthRequest, AuthResult, FieldValue};
 use serde_json::Value;
 
 pub(crate) fn is_truthy(value: &Value) -> bool {
@@ -69,6 +69,28 @@ pub(crate) fn invalid_type(location: &str, expected: &str, value: Option<&Value>
         "[{location}] Invalid input: expected {expected}, received {}",
         type_name(value)
     )
+}
+
+pub(crate) fn native_invalid_type(
+    location: &str,
+    expected: &str,
+    value: Option<&FieldValue>,
+) -> String {
+    let actual = match value {
+        None | Some(FieldValue::Undefined) => "undefined",
+        Some(FieldValue::Null) => "null",
+        Some(FieldValue::Bool(_)) => "boolean",
+        Some(FieldValue::Number(value)) if value.is_nan() => "NaN",
+        Some(FieldValue::Number(value)) if *value == f64::INFINITY => "Infinity",
+        Some(FieldValue::Number(value)) if *value == f64::NEG_INFINITY => "-Infinity",
+        Some(FieldValue::Number(_)) => "number",
+        Some(FieldValue::String(_) | FieldValue::Utf16String(_)) => "string",
+        Some(FieldValue::Date(_)) => "Date",
+        Some(FieldValue::Array(_)) => "array",
+        Some(FieldValue::Object(_)) => "object",
+        Some(FieldValue::Function(_)) => "function",
+    };
+    format!("[{location}] Invalid input: expected {expected}, received {actual}")
 }
 
 pub(crate) fn validation_error(message: &str) -> AuthError {

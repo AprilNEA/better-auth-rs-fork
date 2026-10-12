@@ -1,10 +1,9 @@
 use async_trait::async_trait;
 use better_auth_core::{
-    AuthConfig, AuthContext, AuthRequest, AuthResult, AuthSchema, RuntimeExtensions,
+    AuthConfig, AuthContext, AuthRequest, AuthResult, AuthSchema, FieldValue, RuntimeExtensions,
     plugin::MetadataMap,
     store::{ApiKeyStore, MemberStore, OrganizationStore},
 };
-use serde_json::Value;
 use std::collections::HashMap;
 
 /// Resource permissions assigned to an API key.
@@ -13,12 +12,14 @@ pub type ApiKeyPermissions = HashMap<String, Vec<String>>;
 /// Endpoint data available to application API key callbacks.
 #[derive(Clone, Copy)]
 pub struct ApiKeyEndpoint<'a> {
-    /// HTTP request, absent for a requestless server API call.
+    /// Original Request, absent for a requestless server API call.
     pub request: Option<&'a AuthRequest>,
+    /// Endpoint headers, including headers supplied without an original Request.
+    pub headers: Option<&'a HashMap<String, String>>,
     /// Endpoint path; absent in the server-only verification hook matcher.
     pub path: Option<&'a str>,
-    /// Parsed endpoint input, including route defaults.
-    pub body: &'a Value,
+    /// Native endpoint input, including route defaults after validation.
+    pub body: &'a FieldValue,
     /// Global authentication configuration.
     pub auth_config: &'a AuthConfig,
     /// Application runtime state registered with the authentication instance.
@@ -34,14 +35,31 @@ pub struct ApiKeyEndpoint<'a> {
 }
 
 impl<'a> ApiKeyEndpoint<'a> {
+    pub(super) fn from_request<S: AuthSchema>(
+        ctx: &'a AuthContext<S>,
+        request: &'a AuthRequest,
+        body: &'a FieldValue,
+    ) -> Self {
+        let original = request.original_request().or_else(|| {
+            better_auth_core::hooks::current_request_hook_context()
+                .is_some_and(|context| context.is_http)
+                .then_some(request)
+        });
+        Self {
+            headers: request.endpoint_headers(),
+            ..Self::new(ctx, original, Some(request.path()), body)
+        }
+    }
+
     pub(super) fn new<S: AuthSchema>(
         ctx: &'a AuthContext<S>,
         request: Option<&'a AuthRequest>,
         path: Option<&'a str>,
-        body: &'a Value,
+        body: &'a FieldValue,
     ) -> Self {
         Self {
             request,
+            headers: request.map(|request| &request.headers),
             path,
             body,
             auth_config: &ctx.config,

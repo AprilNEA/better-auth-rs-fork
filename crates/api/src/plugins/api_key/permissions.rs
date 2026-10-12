@@ -4,52 +4,48 @@ use better_auth_core::{AuthError, AuthResult, FieldValue, Utf16String};
 
 pub(super) fn check_permissions(
     key_permissions: &FieldValue,
-    required: &serde_json::Value,
+    required: &FieldValue,
 ) -> AuthResult<bool> {
     let permissions = safe_parse_field(key_permissions)?;
     if !permissions.is_truthy() {
         return Ok(false);
     }
-    let Some(required) = required.as_object() else {
-        return Ok(false);
-    };
-    let mut resources: Vec<_> = required.iter().collect();
-    resources.sort_by_key(|(name, _)| array_index(name).map_or((true, 0), |index| (false, index)));
-    for (resource, requested) in resources {
+    let required = required.enumerable_fields()?;
+    for (resource, requested) in &required {
         let Some(allowed) = property(&permissions, resource)?.filter(AllowedActions::is_truthy)
         else {
             return Ok(false);
         };
         let (actions, any) = if let Some(actions) = requested.as_array() {
-            (actions.as_slice(), false)
-        } else if let Some(requested) = requested.as_object() {
+            (Some(actions.clone()), false)
+        } else if requested.is_object() || requested.as_date().is_some() {
+            let actions = requested.model_property("actions")?;
+            let connector = requested.model_property("connector")?;
             (
-                requested
-                    .get("actions")
-                    .and_then(serde_json::Value::as_array)
-                    .map_or(&[][..], Vec::as_slice),
-                requested
-                    .get("connector")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("OR"),
+                actions.as_array().cloned(),
+                connector.strict_equals(&"OR".into()),
             )
         } else {
             return Err(AuthError::internal("Invalid access control request"));
         };
-        if actions.is_empty() {
+        let Some(actions) = actions else {
+            return Ok(false);
+        };
+        if actions.len()? == 0 {
             return Ok(false);
         }
-        let mut authorized = !any;
-        for action in actions {
-            let included = match action.as_str() {
-                Some(action) => allowed.includes(action)?,
-                None => false,
-            };
-            if included == any {
-                authorized = included;
-                break;
+        let includes = |action: &FieldValue| {
+            if action.is_string() {
+                allowed.includes(action)
+            } else {
+                Ok(false)
             }
-        }
+        };
+        let authorized = if any {
+            !actions.every(|action| includes(action).map(|included| !included))?
+        } else {
+            actions.every(includes)?
+        };
         if !authorized {
             return Ok(false);
         }
@@ -73,16 +69,14 @@ impl AllowedActions {
         }
     }
 
-    fn includes(&self, action: &str) -> AuthResult<bool> {
+    fn includes(&self, action: &FieldValue) -> AuthResult<bool> {
         match self {
-            Self::Value(FieldValue::Array(values)) => {
-                let action = FieldValue::from(action);
-                values.includes(&action)
-            }
-            Self::StringPrototype => Ok(action.is_empty()),
+            Self::Value(FieldValue::Array(values)) => values.includes(action),
+            Self::StringPrototype => Ok(action.display_utf16()?.as_utf16().is_empty()),
             Self::Value(value) => {
                 let units = field_string_units(value).ok_or_else(includes_error)?;
-                let action = action.encode_utf16().collect::<Vec<_>>();
+                let action = action.display_utf16()?;
+                let action = action.as_utf16();
                 Ok(action.is_empty() || units.windows(action.len()).any(|units| units == action))
             }
             _ => Err(includes_error()),
@@ -318,13 +312,13 @@ mod tests {
         });
         let function = FieldValue::from(FieldFunction::from(factory));
         assert!(matches!(
-            check_permissions(&function, &json!({"name":["read"]})),
+            check_permissions(&function, &FieldValue::from(json!({"name":["read"]}))),
             Err(AuthError::Internal(message))
                 if message == "JavaScript function properties are unavailable for this Rust field callback"
         ));
         let permissions = FieldValue::from(FieldMap::from([("documents".into(), function)]));
         assert!(matches!(
-            check_permissions(&permissions, &json!({"documents":["read"]})),
+            check_permissions(&permissions, &FieldValue::from(json!({"documents":["read"]}))),
             Err(AuthError::Internal(message))
                 if message == "allowedActions.includes is not a function"
         ));

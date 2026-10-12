@@ -586,7 +586,8 @@ async fn input_boundary<S: AuthSchema>(
     let actual = observed(&events)?;
     let [created, updated] = [1, 2].map(|index| {
         let event = required(actual.get(index).and_then(FieldValue::as_array))?;
-        let observed = required(event.get(1).and_then(FieldValue::as_date))?;
+        let value = required(event.get(1)?)?;
+        let observed = required(value.as_date())?;
         let milliseconds = observed.milliseconds();
         assert!(milliseconds >= started as f64 && milliseconds <= finished as f64);
         Ok::<_, AuthError>(observed.clone())

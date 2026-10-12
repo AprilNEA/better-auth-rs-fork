@@ -138,18 +138,8 @@ impl AnonymousPlugin {
             }
             custom_email
         };
-        let body = req
-            .body
-            .as_deref()
-            .filter(|body| !body.is_empty())
-            .map(super::json_body::decode)
-            .transpose()?
-            .unwrap_or(serde_json::Value::Null);
-        let mut endpoint = super::endpoint_context::EndpointContext::new(
-            Some(req),
-            better_auth_core::FieldValue::from_json(body)?,
-            ctx,
-        );
+        let mut endpoint =
+            super::endpoint_context::EndpointContext::new(Some(req), req.input_field_value()?, ctx);
         endpoint.session = previous;
         let name = if let Some(generate) = ctx
             .extensions
@@ -386,16 +376,9 @@ impl AnonymousPlugin {
             .get::<Arc<AnonymousCallbacks<S>>>()
             .and_then(|callbacks| callbacks.link.as_ref())
         {
-            let body = req
-                .body
-                .as_deref()
-                .filter(|body| !body.is_empty())
-                .map(super::json_body::decode)
-                .transpose()?
-                .unwrap_or(serde_json::Value::Null);
             let mut endpoint = super::endpoint_context::EndpointContext::new(
                 Some(req),
-                better_auth_core::FieldValue::from_json(body)?,
+                req.input_field_value()?,
                 ctx,
             );
             endpoint.session = Some(previous.clone());

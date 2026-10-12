@@ -5,38 +5,19 @@ use serde_json::Value;
 
 mod body_validator;
 pub use body_validator::BodyValidator;
+mod request_cache;
+pub(crate) use request_cache::RequestBodyCache;
+
+#[cfg(test)]
+mod dispatch_tests;
+#[cfg(test)]
+mod tests;
 
 /// One schema result, retaining its typed input and exact callback projection.
 #[derive(Clone)]
 pub struct ValidatedBody {
-    projection: InputValue,
+    projection: FieldValue,
     typed: RuntimeExtensions,
-}
-
-#[derive(Debug, Clone)]
-enum InputValue {
-    Json(Option<Value>),
-    Native(FieldValue),
-}
-
-impl InputValue {
-    fn json(&self) -> AuthResult<Option<Value>> {
-        match self {
-            Self::Json(value) => Ok(value.clone()),
-            Self::Native(value) => crate::field_value::project_input_json(value),
-        }
-    }
-
-    fn field_value(&self) -> AuthResult<FieldValue> {
-        match self {
-            Self::Json(value) => value
-                .clone()
-                .map(FieldValue::from_json)
-                .transpose()
-                .map(Option::unwrap_or_default),
-            Self::Native(value) => Ok(value.clone()),
-        }
-    }
 }
 
 impl std::fmt::Debug for ValidatedBody {
@@ -49,21 +30,13 @@ impl std::fmt::Debug for ValidatedBody {
 
 impl ValidatedBody {
     pub fn new<T: Send + Sync + 'static>(projection: Option<Value>, value: T) -> Self {
-        let mut typed = RuntimeExtensions::default();
-        typed.insert(value);
-        Self {
-            projection: InputValue::Json(projection),
-            typed,
-        }
+        Self::native(projection.map(FieldValue::from).unwrap_or_default(), value)
     }
 
     pub fn native<T: Send + Sync + 'static>(projection: FieldValue, value: T) -> Self {
         let mut typed = RuntimeExtensions::default();
         typed.insert(value);
-        Self {
-            projection: InputValue::Native(projection),
-            typed,
-        }
+        Self { projection, typed }
     }
 
     /// Read the typed result without parsing the validated projection again.
@@ -71,17 +44,19 @@ impl ValidatedBody {
         self.typed.get()
     }
 
+    /// Share the validated projection without reading properties or serializing native values.
+    pub fn field_value(&self) -> FieldValue {
+        self.projection.clone()
+    }
+
     /// Preserve input for endpoints without a body schema.
     pub fn unvalidated(projection: Option<Value>) -> Self {
-        Self {
-            projection: InputValue::Json(projection),
-            typed: RuntimeExtensions::default(),
-        }
+        Self::unvalidated_native(projection.map(FieldValue::from).unwrap_or_default())
     }
 
     pub fn unvalidated_native(value: FieldValue) -> Self {
         Self {
-            projection: InputValue::Native(value),
+            projection: value,
             typed: RuntimeExtensions::default(),
         }
     }
@@ -128,73 +103,38 @@ pub(crate) struct EndpointBody {
 }
 
 impl AuthRequest {
-    // The HTTP media parser must select its policy before any hook decodes raw request bytes.
-    pub(crate) fn hook_field_value(&self) -> AuthResult<FieldValue> {
-        if let Some(body) = self
-            .endpoint_body
+    fn parsed_input(&self) -> Option<FieldValue> {
+        self.endpoint_body
             .as_ref()
             .filter(|body| body.source == self.body)
-        {
-            body.value.projection.field_value()
-        } else {
-            self.parsed_http_body()
-                .cloned()
-                .map(FieldValue::from_json)
-                .transpose()
-                .map(Option::unwrap_or_default)
-        }
+            .map(|body| body.value.field_value())
+            .or_else(|| self.parsed_http_field_value())
+    }
+
+    fn current_input(&self) -> Option<FieldValue> {
+        self.parsed_input()
+            .or_else(|| self.raw_body_input.cached(&self.body))
+    }
+
+    // The HTTP media parser must select its policy before any hook decodes raw request bytes.
+    pub(crate) fn hook_field_value(&self) -> FieldValue {
+        self.current_input().unwrap_or_default()
     }
 
     /// Project JSON-only endpoint input without invoking `toJSON` or changing Request bytes.
     /// Use `input_field_value` to retain native values and handles.
     pub fn input_body(&self) -> AuthResult<Option<Value>> {
-        if let Some(body) = self
-            .endpoint_body
-            .as_ref()
-            .filter(|body| body.source == self.body)
-        {
-            body.value.projection.json()
-        } else if let Some(body) = self.parsed_http_body() {
-            Ok(Some(body.clone()))
-        } else {
-            self.body
-                .as_deref()
-                .filter(|bytes| !bytes.is_empty())
-                .map(serde_json::from_slice)
-                .transpose()
-                .map_err(Into::into)
-        }
+        crate::field_value::project_input_json(&self.input_field_value()?)
     }
 
-    /// Read endpoint fields without crossing a JSON boundary.
+    /// Share endpoint input without reading properties or crossing a JSON boundary.
     pub fn input_field_value(&self) -> AuthResult<FieldValue> {
-        if let Some(body) = self
-            .endpoint_body
-            .as_ref()
-            .filter(|body| body.source == self.body)
-        {
-            body.value.projection.field_value()
-        } else {
-            self.input_body()?
-                .map(FieldValue::from_json)
-                .transpose()
-                .map(Option::unwrap_or_default)
-        }
+        self.current_input()
+            .map_or_else(|| self.raw_body_input.read(&self.body), Ok)
     }
 
     pub(crate) fn unvalidated_input(&self) -> AuthResult<ValidatedBody> {
-        if let Some(body) = self
-            .endpoint_body
-            .as_ref()
-            .filter(|body| body.source == self.body)
-        {
-            Ok(ValidatedBody {
-                projection: body.value.projection.clone(),
-                typed: RuntimeExtensions::default(),
-            })
-        } else {
-            Ok(ValidatedBody::unvalidated(self.input_body()?))
-        }
+        Ok(ValidatedBody::unvalidated_native(self.input_field_value()?))
     }
 
     /// Read the typed result installed by the matched route's body validator.
@@ -215,10 +155,14 @@ impl AuthRequest {
     }
 
     pub(crate) fn projected_body(&self) -> Option<AuthResult<Option<Value>>> {
-        self.endpoint_body
-            .as_ref()
-            .filter(|body| body.source == self.body)
-            .map(|body| body.value.projection.json())
+        self.parsed_input()
+            .or_else(|| {
+                self.body
+                    .as_deref()
+                    .filter(|bytes| !bytes.is_empty())
+                    .and_then(|_| self.raw_body_input.cached(&self.body))
+            })
+            .map(|value| crate::field_value::project_input_json(&value))
     }
 }
 
@@ -236,16 +180,9 @@ impl EndpointInputPatch {
     }
 
     pub fn apply(self, request: &mut AuthRequest) -> AuthResult<()> {
-        if self.body.is_some() {
+        if let Some(patch) = self.body {
             let mut body = request.unvalidated_input()?;
-            match &mut body.projection {
-                InputValue::Json(value) => merge_input(value, self.body),
-                InputValue::Native(value) => {
-                    if let Some(patch) = self.body {
-                        merge_field_value(value, FieldValue::from_json(patch)?)?;
-                    }
-                }
-            }
+            merge_field_value(&mut body.projection, patch.into())?;
             request.set_endpoint_body(body);
         }
         merge_input(&mut request.query, self.query);

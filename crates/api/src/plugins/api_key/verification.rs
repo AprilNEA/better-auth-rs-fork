@@ -2,10 +2,11 @@ use better_auth_core::entity::AuthUser;
 use better_auth_core::store::ConsumeApiKeyResult;
 use better_auth_core::wire::{ApiKeyView, SessionView};
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, BeforeRequestAction,
+    AuthContext, AuthError, AuthRequest, AuthResponse, AuthResult, BeforeRequestAction, FieldValue,
 };
 use serde::Serialize;
 
+use super::request::{CapturedInput, VerifyKeyRequest};
 use super::{ApiKeyEndpoint, ApiKeyErrorCode, ApiKeyPlugin, ApiKeyReferences, config_id_matches};
 
 #[cfg(test)]
@@ -200,25 +201,32 @@ impl ApiKeyPlugin {
         if let Some(permissions) = input.permissions {
             let _ = body.insert("permissions".into(), permissions.clone());
         }
-        let body = serde_json::Value::Object(body);
+        let body = FieldValue::from_json(serde_json::Value::Object(body))?;
         let endpoint = ApiKeyEndpoint::new(ctx, None, None, &body);
         let session = self
             .authenticate_api_key(endpoint, ctx)
             .await
             .map_err(ApiKeyVerificationError::Endpoint)?;
-        let _ = super::request::validate_value("verifyApiKey", Some(&body))
+        let validated = super::request::validate_value("verifyApiKey", &body)
             .map_err(ApiKeyVerificationError::Endpoint)?;
+        let body = validated.field_value();
+        let input = validated.get::<VerifyKeyRequest>().ok_or_else(|| {
+            ApiKeyVerificationError::Endpoint(AuthError::internal(
+                "API key body validator returned a different input type",
+            ))
+        })?;
         let endpoint = ApiKeyEndpoint {
             path: Some(if session.is_some() { "/" } else { "virtual:" }),
+            body: &body,
             ..endpoint
         };
         let config = self
-            .resolve_configuration(input.config_id)
+            .resolve_configuration(input.config_id.as_deref())
             .map_err(ApiKeyVerificationError::Endpoint)?;
         if input.config_id.is_some()
             && let Some(validator) = &config.custom_api_key_validator
             && !validator
-                .validate(input.key, endpoint)
+                .validate(&input.key, endpoint)
                 .await
                 .map_err(ApiKeyVerificationError::Endpoint)?
         {
@@ -226,9 +234,12 @@ impl ApiKeyPlugin {
                 ApiKeyValidationError::invalid_constant(ApiKeyErrorCode::KeyNotFound),
             ));
         }
-        let result = self
-            .validate_api_key(input, ctx, endpoint, input.config_id.is_none())
-            .await;
+        let result = async {
+            let captured = CapturedInput::new(input, &body)?;
+            self.validate_api_key(&captured, ctx, endpoint, input.config_id.is_none())
+                .await
+        }
+        .await;
         let key = match result {
             Ok(key) => key,
             Err(error) => {
@@ -267,25 +278,27 @@ impl ApiKeyPlugin {
 
     async fn validate_api_key(
         &self,
-        input: &VerifyApiKey<'_>,
+        input: &CapturedInput<'_, VerifyKeyRequest>,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
         endpoint: ApiKeyEndpoint<'_>,
         run_custom_validator: bool,
     ) -> Result<ApiKeyView, ApiKeyVerificationError> {
         let lookup_config = self
-            .resolve_configuration(input.config_id)
+            .resolve_configuration(input.typed.config_id.as_deref())
             .map_err(|_| ApiKeyErrorCode::NoDefaultConfiguration)?;
         let hashed = if lookup_config.disable_key_hashing {
-            input.key.to_owned()
+            input.typed.key.clone()
         } else {
-            Self::hash_key(input.key)
+            Self::hash_key(&input.typed.key)
         };
         let api_key = super::storage::get_by_hash(lookup_config, ctx, &hashed)
             .await?
             .ok_or(ApiKeyErrorCode::InvalidApiKey)?;
 
         if input
+            .typed
             .config_id
+            .as_deref()
             .is_some_and(|expected| !config_id_matches(&api_key.config_id, expected))
         {
             return Err(ApiKeyErrorCode::InvalidApiKey.into());
@@ -296,7 +309,7 @@ impl ApiKeyPlugin {
 
         if run_custom_validator
             && let Some(validator) = &config.custom_api_key_validator
-            && !validator.validate(input.key, endpoint).await?
+            && !validator.validate(&input.typed.key, endpoint).await?
         {
             return Err(ApiKeyErrorCode::KeyNotFound.into());
         }
@@ -313,10 +326,11 @@ impl ApiKeyPlugin {
             return Err(ApiKeyErrorCode::KeyExpired.into());
         }
 
-        if let Some(required) = input.permissions {
+        let required = input.field("permissions");
+        if required.is_truthy() {
             let permissions = api_key.permissions.field_value();
             let permitted = permissions.is_truthy()
-                && super::permissions::check_permissions(&permissions, required)?;
+                && super::permissions::check_permissions(&permissions, &required)?;
             if !permitted {
                 return Err(ApiKeyErrorCode::KeyNotFound.into());
             }
@@ -341,34 +355,8 @@ impl ApiKeyPlugin {
         req: &AuthRequest,
         ctx: &AuthContext<impl better_auth_core::AuthSchema>,
     ) -> AuthResult<Option<BeforeRequestAction>> {
-        let body = if let Some(body) = req.parsed_http_body() {
-            body.clone()
-        } else {
-            match req.body.as_deref().filter(|body| !body.is_empty()) {
-                Some(body)
-                    if req.headers.iter().any(|(name, value)| {
-                        name.eq_ignore_ascii_case("content-type")
-                            && value
-                                .to_ascii_lowercase()
-                                .contains("application/x-www-form-urlencoded")
-                    }) =>
-                {
-                    serde_json::Value::Object(
-                        url::form_urlencoded::parse(body)
-                            .map(|(name, value)| {
-                                (
-                                    name.into_owned(),
-                                    serde_json::Value::String(value.into_owned()),
-                                )
-                            })
-                            .collect(),
-                    )
-                }
-                Some(body) => crate::plugins::json_body::decode(body)?,
-                None => serde_json::Value::Null,
-            }
-        };
-        let endpoint = ApiKeyEndpoint::new(ctx, Some(req), Some(req.path()), &body);
+        let body = req.input_field_value()?;
+        let endpoint = ApiKeyEndpoint::from_request(ctx, req, &body);
         let Some((session, user)) = self.authenticate_api_key(endpoint, ctx).await? else {
             return Ok(None);
         };
@@ -467,11 +455,11 @@ impl ApiKeyPlugin {
                     )?
                     .into());
                 }
-                let input = VerifyApiKey {
-                    key: &key,
-                    config_id: Some(&config.config_id),
-                    permissions: None,
+                let input = VerifyKeyRequest {
+                    key: key.clone(),
+                    config_id: Some(config.config_id.clone()),
                 };
+                let input = CapturedInput::new(&input, &FieldValue::Undefined)?;
                 let view = match self.validate_api_key(&input, ctx, endpoint, false).await {
                     Ok(view) => view,
                     Err(ApiKeyVerificationError::Validation(error)) => {
@@ -560,8 +548,8 @@ impl ApiKeyPlugin {
             } else {
                 config.api_key_headers.iter().find_map(|header| {
                     endpoint
-                        .request
-                        .and_then(|request| request.headers.get(&header.to_ascii_lowercase()))
+                        .headers
+                        .and_then(|headers| headers.get(&header.to_ascii_lowercase()))
                         .filter(|key| !key.is_empty())
                         .cloned()
                 })

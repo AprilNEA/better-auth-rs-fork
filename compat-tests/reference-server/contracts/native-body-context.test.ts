@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { APIError } from "@better-auth/core/error";
+import { APIError as EndpointAPIError } from "better-call";
 import { apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -55,12 +56,12 @@ for (const http of [false, true]) for (const apiKeyHook of [false, true]) for (c
         },
         ...(apiKeyHook ? [apiKey({
           enableSessionForAPIKeys: true,
-          customAPIKeyGetter(ctx) { check(ctx.body, "key-getter"); return "x".repeat(64); },
-          async customAPIKeyValidator({ ctx }) { check(ctx.body, "key-validator"); throw failure; },
+          customAPIKeyGetter(ctx) { check(ctx.body, "key-getter"); expect(Boolean(ctx.request)).toBe(http); return "x".repeat(64); },
+          async customAPIKeyValidator({ ctx }) { check(ctx.body, "key-validator"); expect(Boolean(ctx.request)).toBe(http); throw failure; },
         })] : []),
         anonymous({
           generateRandomEmail() { events.push("email"); return "body@anonymous.test"; },
-          generateName(ctx) { check(ctx.body, "name"); throw failure; },
+          generateName(ctx) { check(ctx.body, "name"); expect(Boolean(ctx.request)).toBe(http); throw failure; },
         }),
       ],
     });
@@ -109,9 +110,12 @@ for (const [method, field, body] of [
     let caught: any;
     try { await auth.api[method]({ body: { ...body } } as any); }
     catch (error) { caught = error; }
-    expect(caught).toBeInstanceOf(APIError);
-    expect(caught.status).toBe("BAD_REQUEST");
+    expect(caught).toBeInstanceOf(EndpointAPIError);
+    expect(caught).not.toBeInstanceOf(APIError);
+    expect(caught.status).toBe(400);
+    expect(caught.statusCode).toBe(400);
     expect(caught.body).toStrictEqual({ code: "VALIDATION_ERROR", message: `[body.${field}] Invalid input: expected string, received number` });
+    expect(Object.keys(caught.body)).toStrictEqual(["message", "code"]);
     expect(calls).toBe(1);
     expect(database).toStrictEqual({ user: [], session: [], account: [], verification: [], apikey: [] });
   });
@@ -149,3 +153,118 @@ test("API Key schema retains native metadata until the permission callback", asy
   expect(events).toStrictEqual(["getter", "generator", "permissions"]);
   expect(database).toStrictEqual({ user: [], session: [], account: [], verification: [], apikey: [] });
 });
+
+test("API Key create retains captured permissions through nested mutation and top-level replacement", async () => {
+  const database = { user: [], session: [], account: [], verification: [], apikey: [] };
+  const input = { userId: "owner", permissions: { nodes: ["read"] } };
+  const events: string[] = [];
+  const key = "x".repeat(64);
+  const auth = betterAuth({
+    baseURL: origin, secret, database: memoryAdapter(database),
+    logger: { disabled: true }, telemetry: { enabled: false },
+    plugins: [apiKey({
+      disableKeyHashing: true, startingCharactersConfig: { shouldStore: false }, deferUpdates: false,
+      customKeyGenerator() { events.push("generator"); return key; },
+      permissions: { defaultPermissions(referenceId, ctx) {
+        events.push("permissions");
+        expect(referenceId).toBe("owner");
+        expect(ctx.body).not.toBe(input);
+        expect(ctx.body.permissions).not.toBe(input.permissions);
+        expect(ctx.body.permissions.nodes).not.toBe(input.permissions.nodes);
+        expect(ctx.body.permissions).toStrictEqual({ nodes: ["read"] });
+        const captured = ctx.body.permissions;
+        captured.nodes = ["read", "write"];
+        ctx.body.permissions = { nodes: ["replacement"] };
+        expect(captured).toStrictEqual({ nodes: ["read", "write"] });
+        expect(ctx.body.permissions).not.toBe(captured);
+        return { nodes: ["default"] };
+      } },
+    })],
+  });
+  const started = Date.now();
+  const created = await auth.api.createApiKey({ body: input });
+  const finished = Date.now();
+  expect(typeof created.id).toBe("string");
+  expect(created.id.length).toBeGreaterThan(0);
+  for (const date of [created.createdAt, created.updatedAt]) {
+    expect(date).toBeInstanceOf(Date);
+    expect(date.getTime()).toBeGreaterThanOrEqual(started);
+    expect(date.getTime()).toBeLessThanOrEqual(finished);
+  }
+  const expected = {
+    id: created.id, key, configId: "default", name: null, prefix: null, start: null,
+    enabled: true, expiresAt: null, referenceId: "owner", lastRefillAt: null, lastRequest: null,
+    metadata: null, rateLimitMax: 10, rateLimitTimeWindow: 86_400_000, remaining: null,
+    refillAmount: null, refillInterval: null, rateLimitEnabled: true, requestCount: 0,
+    createdAt: created.createdAt, updatedAt: created.updatedAt,
+    permissions: { nodes: ["read", "write"] },
+  };
+  expect(created).toStrictEqual(expected);
+  expect(database).toStrictEqual({
+    user: [], session: [], account: [], verification: [],
+    apikey: [{ ...expected, permissions: '{"nodes":["read","write"]}' }],
+  });
+  expect(input).toStrictEqual({ userId: "owner", permissions: { nodes: ["read"] } });
+  expect(events).toStrictEqual(["generator", "permissions"]);
+});
+
+for (const suppliedConfig of [false, true]) {
+  test(`API Key verification reads permissions ${suppliedConfig ? "after" : "before"} the custom validator`, async () => {
+    const database = { user: [], session: [], account: [], verification: [], apikey: [] };
+    const key = "x".repeat(64);
+    const input = { ...(suppliedConfig ? { configId: "default" } : {}), key, permissions: { nodes: ["read"] } };
+    let validatorCalls = 0;
+    const auth = betterAuth({
+      baseURL: origin, secret, database: memoryAdapter(database),
+      logger: { disabled: true }, telemetry: { enabled: false },
+      plugins: [apiKey({
+        disableKeyHashing: true, startingCharactersConfig: { shouldStore: false }, deferUpdates: false,
+        customKeyGenerator() { return key; },
+        customAPIKeyValidator({ ctx, key: observedKey }) {
+          validatorCalls++;
+          expect(observedKey).toBe(key);
+          expect(ctx.body).not.toBe(input);
+          expect(ctx.body.permissions).not.toBe(input.permissions);
+          expect(ctx.body.permissions.nodes).not.toBe(input.permissions.nodes);
+          expect(ctx.body.permissions).toStrictEqual({ nodes: ["read"] });
+          const captured = ctx.body.permissions;
+          if (!suppliedConfig) captured.nodes = ["write"];
+          ctx.body.permissions = { nodes: [suppliedConfig ? "write" : "read"] };
+          expect(captured).toStrictEqual({ nodes: [suppliedConfig ? "read" : "write"] });
+          expect(ctx.body.permissions).not.toBe(captured);
+          return true;
+        },
+      })],
+    });
+    const started = Date.now();
+    const created = await auth.api.createApiKey({ body: { userId: "owner", permissions: { nodes: ["read"] }, remaining: 3 } });
+    const finished = Date.now();
+    expect(typeof created.id).toBe("string");
+    expect(created.id.length).toBeGreaterThan(0);
+    for (const date of [created.createdAt, created.updatedAt]) {
+      expect(date).toBeInstanceOf(Date);
+      expect(date.getTime()).toBeGreaterThanOrEqual(started);
+      expect(date.getTime()).toBeLessThanOrEqual(finished);
+    }
+    const expected = {
+      id: created.id, key, configId: "default", name: null, prefix: null, start: null,
+      enabled: true, expiresAt: null, referenceId: "owner", lastRefillAt: null, lastRequest: null,
+      metadata: null, rateLimitMax: 10, rateLimitTimeWindow: 86_400_000, remaining: 3,
+      refillAmount: null, refillInterval: null, rateLimitEnabled: true, requestCount: 0,
+      createdAt: created.createdAt, updatedAt: created.updatedAt,
+      permissions: { nodes: ["read"] },
+    };
+    expect(created).toStrictEqual(expected);
+    expect(database).toStrictEqual({
+      user: [], session: [], account: [], verification: [],
+      apikey: [{ ...expected, permissions: '{"nodes":["read"]}' }],
+    });
+    expect(validatorCalls).toBe(0);
+    const before = structuredClone(database);
+    const result = await auth.api.verifyApiKey({ body: input });
+    expect(result).toStrictEqual({ valid: false, error: { message: "API Key not found", code: "KEY_NOT_FOUND" }, key: null });
+    expect(database).toStrictEqual(before);
+    expect(input).toStrictEqual({ ...(suppliedConfig ? { configId: "default" } : {}), key, permissions: { nodes: ["read"] } });
+    expect(validatorCalls).toBe(1);
+  });
+}

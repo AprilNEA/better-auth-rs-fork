@@ -45,6 +45,7 @@ fn auth_request_body_as_json_with_body() {
         original_request: None,
         parsed_http_body: None,
         endpoint_body: None,
+        raw_body_input: Default::default(),
         virtual_session: None,
         response_headers: Default::default(),
         response_status: Default::default(),

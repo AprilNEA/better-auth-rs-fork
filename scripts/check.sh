@@ -619,30 +619,34 @@ run_stage() {
         ./compat-tests/reference-server/contracts/endpoint-content-type.test.ts \
         ./compat-tests/reference-server/contracts/http-body-classification.test.ts \
         ./compat-tests/reference-server/contracts/http-json-wrapper.test.ts \
+        ./compat-tests/reference-server/contracts/native-body-context.test.ts \
         ./compat-tests/reference-server/contracts/oauth-native-projection.test.ts \
         ./compat-tests/reference-server/contracts/oauth-proxy-native-result.test.ts || json_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || json_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests --test native_endpoint_tests --test server_api_tests \
+        --test organization_body_schema_tests \
         --test api_key_number_name_tests --test api_key_additional_fields_tests \
         --test oauth_token_duration_tests -- -D warnings || json_status=1
       cargo test --locked -p better-auth-core --lib -- \
-        error:: field_value:: schema_value:: session:: utils::jwt:: utils::jwe:: wire:: \
+        error:: field_value:: schema_value:: session:: endpoint_input:: http_body:: utils::jwt:: utils::jwe:: wire:: \
         plugin::tests::raw_api_errors:: \
         plugin::tests::response_values:: plugin::tests::response_headers:: \
         plugin::tests::response_status:: response_body::http_tests:: types::response:: \
         types::request_headers:: || json_status=1
       cargo test --locked -p better-auth-api --features axum --lib -- \
-        plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::oauth:: \
+        plugins::jwt:: plugins::organization:: plugins::api_key:: plugins::anonymous:: plugins::oauth:: \
         plugins::passkey:: plugins::siwe:: \
         plugins::admin:: plugins::email_password:: plugins::username:: plugins::password_management:: || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test plugin_model_fields_tests -- response_to_json:: || json_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test native_endpoint_tests --test server_api_tests \
+        --test organization_body_schema_tests \
         --test api_key_number_name_tests --test oauth_token_duration_tests || json_status=1
       cargo test --locked --features axum,seaorm2,redis-cache \
         --test api_key_additional_fields_tests -- typed_metadata:: || json_status=1
+      cargo check --locked --manifest-path compat-tests/rust-server/Cargo.toml || json_status=1
       return "$json_status"
       ;;
     runtime-values)

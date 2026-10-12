@@ -303,16 +303,31 @@ async fn check(case: &'static str, signed_cookie: bool) -> AuthResult<()> {
         } else {
             assert!(observed.issued.is_empty());
             assert!(!error.is_api_error()?);
-            let raw = error
-                .raw_value()
-                .ok_or_else(|| AuthError::internal("Expected native thrown value"))?;
             if matches!(
                 case,
                 "before-error" | "after-error" | "getter-error" | "getter-fallback-error"
             ) {
+                let raw = error.raw_value().ok_or_else(|| {
+                    AuthError::internal(format!(
+                        "Expected native thrown value for {case}/{signed_cookie}"
+                    ))
+                })?;
                 assert!(raw.strict_equals(&hooks.thrown));
             } else {
-                assert_eq!(raw.model_property("name")?, FieldValue::from("TypeError"));
+                let receiver = match case {
+                    "null-user" => "null",
+                    "undefined-user" => "undefined",
+                    _ => {
+                        return Err(AuthError::internal(format!(
+                            "Unexpected runtime error case {case}/{signed_cookie}"
+                        )));
+                    }
+                };
+                assert!(
+                    matches!(&error, AuthError::TypeError(message)
+                        if message == &format!("Cannot read properties of {receiver} (reading 'id')")),
+                    "{case}/{signed_cookie}: {error:?}"
+                );
             }
         }
         return Ok(());

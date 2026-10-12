@@ -26,10 +26,11 @@ impl ApiKeyDefaultPermissions for Permissions {
             .api_keys
             .count_api_keys_by_reference_value(reference)
             .await?;
-        self.0
-            .lock()
-            .unwrap()
-            .push(json!([reference.json()?, ctx.body["metadata"], count]));
+        self.0.lock().unwrap().push(json!([
+            reference.json()?,
+            ctx.body.model_property("metadata")?.json()?,
+            count
+        ]));
         Ok(serde_json::from_value(cases()["permissions"].clone()).unwrap())
     }
 }

@@ -1,4 +1,6 @@
-use crate::{ApiErrorClass, ApiErrorInit, AuthError, AuthRequest, AuthResult, FieldMap};
+use crate::{
+    ApiErrorClass, ApiErrorInit, AuthError, AuthRequest, AuthResult, FieldMap, FieldValue,
+};
 use serde_json::Value;
 
 #[derive(Clone, Debug)]
@@ -6,6 +8,7 @@ pub(crate) struct ParsedHttpBody {
     // Public raw bodies and before-request hooks can replace input after HTTP parsing.
     source: Option<Vec<u8>>,
     value: Option<Value>,
+    native: FieldValue,
 }
 
 fn error(status: u16, code: &str, message: &str) -> AuthError {
@@ -30,6 +33,7 @@ impl AuthRequest {
             self.parsed_http_body = Some(ParsedHttpBody {
                 source: None,
                 value: None,
+                native: FieldValue::Undefined,
             });
             return Ok(());
         };
@@ -70,17 +74,26 @@ impl AuthRequest {
         };
         self.parsed_http_body = Some(ParsedHttpBody {
             source: self.body.clone(),
+            native: value.clone().into(),
             value: Some(value),
         });
         Ok(())
     }
 
-    /// Return HTTP-decoded input when no subsequent hook has replaced the raw body.
+    /// Return the HTTP parser's JSON snapshot while the raw body remains unchanged.
+    /// Use `input_body` to project subsequent native input mutations.
     pub fn parsed_http_body(&self) -> Option<&Value> {
         self.parsed_http_body
             .as_ref()
             .filter(|parsed| parsed.source == self.body)
             .and_then(|parsed| parsed.value.as_ref())
+    }
+
+    pub(crate) fn parsed_http_field_value(&self) -> Option<FieldValue> {
+        self.parsed_http_body
+            .as_ref()
+            .filter(|parsed| parsed.source == self.body)
+            .map(|parsed| parsed.native.clone())
     }
 
     /// Whether the HTTP router has decoded this request, including an absent body.

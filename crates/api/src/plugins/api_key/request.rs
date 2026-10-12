@@ -1,10 +1,10 @@
 use super::types::{CreateKeyRequest, DeleteKeyRequest, UpdateKeyRequest};
-use crate::plugins::json_body::{invalid_type, validation_error};
+use crate::plugins::json_body::{native_invalid_type, validation_error};
 use better_auth_core::{
-    AuthError, AuthRequest, AuthResult, SchemaValue, endpoint_input::ValidatedBody,
+    AuthError, AuthRequest, AuthResult, FieldMap, FieldValue, SchemaValue,
+    endpoint_input::ValidatedBody,
 };
-use serde::de::DeserializeOwned;
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[derive(Clone, Copy)]
 enum Field {
@@ -19,39 +19,91 @@ enum Field {
 
 type Spec = (&'static str, Field, bool, bool);
 
-pub(super) fn read<T: Clone + Send + Sync + 'static>(req: &AuthRequest) -> AuthResult<T> {
-    if let Some(body) = req.validated_body::<T>() {
-        return Ok(body.clone());
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct VerifyKeyRequest {
+    pub key: String,
+    pub config_id: Option<String>,
+}
+
+/// Capture endpoint destructuring before callbacks while retaining shared child values.
+pub(super) struct CapturedInput<'a, T> {
+    pub typed: &'a T,
+    fields: FieldMap,
+}
+
+impl<'a, T> CapturedInput<'a, T> {
+    pub fn new(typed: &'a T, body: &FieldValue) -> AuthResult<Self> {
+        Ok(Self {
+            typed,
+            fields: body.enumerable_fields()?,
+        })
     }
-    validate(req)?.get::<T>().cloned().ok_or_else(|| {
+
+    pub fn field(&self, name: &str) -> FieldValue {
+        self.fields.get(name).cloned().unwrap_or_default()
+    }
+}
+
+pub(super) fn read<T: Clone + Send + Sync + 'static>(req: &AuthRequest) -> AuthResult<T> {
+    read_with_body(req).map(|(body, _)| body)
+}
+
+pub(super) fn read_with_body<T: Clone + Send + Sync + 'static>(
+    req: &AuthRequest,
+) -> AuthResult<(T, FieldValue)> {
+    if let Some(body) = req.validated_body::<T>() {
+        return Ok((body.clone(), req.input_field_value()?));
+    }
+    let validated = validate(req)?;
+    let body = validated.get::<T>().cloned().ok_or_else(|| {
         AuthError::internal("API key body validator returned a different input type")
-    })
+    })?;
+    Ok((body, validated.field_value()))
 }
 
 pub(super) fn validate(req: &AuthRequest) -> AuthResult<ValidatedBody> {
-    validate_value(req.path(), req.input_body()?.as_ref())
+    validate_value(req.path(), &req.input_field_value()?)
 }
 
-fn typed<T: DeserializeOwned + Send + Sync + 'static>(body: Value) -> AuthResult<ValidatedBody> {
-    Ok(ValidatedBody::new(
-        Some(body.clone()),
-        serde_json::from_value::<T>(body)?,
+pub(super) fn typed_input(
+    input: &impl Serialize,
+    numbers: &[(&str, Option<f64>)],
+) -> AuthResult<FieldValue> {
+    let value = FieldValue::from_json(serde_json::to_value(input)?)?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| AuthError::internal("API key request DTO must serialize to an object"))?;
+    // Restore Rust numbers before hooks; validation must read the values left by those hooks.
+    for &(name, number) in numbers {
+        if let Some(number) = number {
+            let _ = object.set(name, number.into())?;
+        }
+    }
+    Ok(value)
+}
+
+fn typed<T: DeserializeOwned + Send + Sync + 'static>(
+    native: FieldMap,
+    body: FieldMap,
+) -> AuthResult<ValidatedBody> {
+    let body: FieldValue = body.into();
+    Ok(ValidatedBody::native(
+        native.into(),
+        serde_json::from_value::<T>(body.decode()?)?,
     ))
 }
 
-pub(super) fn validate_value(path: &str, input: Option<&Value>) -> AuthResult<ValidatedBody> {
-    validate_numbers(path, input, &[])
-}
-
-pub(super) fn validate_numbers(
-    path: &str,
-    input: Option<&Value>,
-    numbers: &[(&str, Option<f64>)],
-) -> AuthResult<ValidatedBody> {
+pub(super) fn validate_value(path: &str, input: &FieldValue) -> AuthResult<ValidatedBody> {
     use Field::*;
-    let body = input
-        .and_then(Value::as_object)
-        .ok_or_else(|| validation_error(&invalid_type("body", "object", input)))?;
+    if !input.is_object() && input.as_date().is_none() {
+        return Err(validation_error(&native_invalid_type(
+            "body",
+            "object",
+            Some(input),
+        )));
+    }
+    let body = input.as_object();
     // Tuple flags describe required and nullable fields, in the declared Zod order.
     let fields: &[Spec] = match path {
         "/api-key/create" => &[
@@ -97,101 +149,133 @@ pub(super) fn validate_numbers(
         ],
         _ => return Err(AuthError::internal("Unknown API key input schema")),
     };
-    let mut output = Map::new();
+    let mut output = FieldMap::new();
+    let mut typed_output = FieldMap::new();
     let mut errors = Vec::new();
     for &(name, kind, required, nullable) in fields {
-        // serde_json serializes non-finite Rust numbers as null. Retain their schema error before that lossy boundary.
-        if let Some(value) = numbers
-            .iter()
-            .find_map(|(field, value)| (*field == name).then_some(*value).flatten())
-            .filter(|value| !value.is_finite())
-        {
-            errors.push(format!(
-                "[body.{name}] {}",
-                super::types::nonfinite_number_error(value)
-            ));
-            continue;
-        }
-        let value = body.get(name);
-        if value.is_none() && !required {
-            if path == "/api-key/create" && matches!(name, "expiresIn" | "remaining") {
-                let _ = output.insert(name.into(), Value::Null);
-            }
-            continue;
-        }
+        let input = body
+            .map_or(Ok(None), |body| body.get(name))?
+            .unwrap_or_default();
+        let defaulted = path == "/api-key/create" && matches!(name, "expiresIn" | "remaining");
+        let mut field_errors = Vec::new();
         let location = format!("body.{name}");
-        if matches!(kind, Id) {
-            let value = SchemaValue::<better_auth_core::FieldValue>::from_json(value.cloned())?
-                .display_string()?;
-            let _ = output.insert(name.into(), Value::String(value));
+        let value = field_value(
+            input,
+            (name, kind, required, nullable),
+            defaulted,
+            &mut field_errors,
+        )?;
+        let present = body.map_or(Ok(false), |body| body.has_property(name))?;
+        if !present && !required && !defaulted {
             continue;
         }
-        if nullable && value.is_some_and(Value::is_null) {
-            let _ = output.insert(name.into(), Value::Null);
+        if !present && required && field_errors.is_empty() {
+            field_errors.push(native_invalid_type(&location, "nonoptional", None));
+        }
+        errors.extend(field_errors);
+        if !present && value.is_undefined() {
             continue;
         }
-        let (valid, expected) = match kind {
-            String | Prefix => (value.is_some_and(Value::is_string), "string"),
-            Boolean => (value.is_some_and(Value::is_boolean), "boolean"),
-            Number(_) => (value.is_some_and(Value::is_number), "number"),
-            Permissions => (value.is_some_and(Value::is_object), "record"),
-            Any | Id => (true, "unknown"),
-        };
-        if !valid {
-            errors.push(invalid_type(&location, expected, value));
-            continue;
+        // Arbitrary values remain in the native projection until business or storage code consumes them.
+        if !matches!(kind, Any) && !value.is_undefined() {
+            let _ = typed_output.insert(name.into(), value.clone());
         }
-        let Some(value) = value else {
-            continue;
-        };
-        match kind {
-            Prefix
-                if value.as_str().is_some_and(|prefix| {
-                    prefix.is_empty()
-                        || !prefix
-                            .bytes()
-                            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
-                }) =>
-            {
-                errors.push(format!("[{location}] Invalid prefix format, must be alphanumeric and contain only underscores and hyphens."));
-            }
-            Number(Some(minimum)) if value.as_f64().is_some_and(|value| value < minimum) => {
-                errors.push(format!(
-                    "[{location}] Too small: expected number to be >={minimum}"
-                ));
-            }
-            Permissions => {
-                if let Some(permissions) = value.as_object() {
-                    for (resource, actions) in permissions {
-                        let location = format!("{location}.{resource}");
-                        if let Some(actions) = actions.as_array() {
-                            for (index, action) in actions.iter().enumerate() {
-                                if !action.is_string() {
-                                    errors.push(invalid_type(
-                                        &format!("{location}.{index}"),
-                                        "string",
-                                        Some(action),
-                                    ));
-                                }
-                            }
-                        } else {
-                            errors.push(invalid_type(&location, "array", Some(actions)));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        let _ = output.insert(name.into(), value.clone());
+        let _ = output.insert(name.into(), value);
     }
     if !errors.is_empty() {
         return Err(validation_error(&errors.join("; ")));
     }
-    let output = Value::Object(output);
     match path {
-        "/api-key/create" => typed::<CreateKeyRequest>(output),
-        "/api-key/update" => typed::<UpdateKeyRequest>(output),
-        "/api-key/delete" => typed::<DeleteKeyRequest>(output),
-        _ => Ok(ValidatedBody::new(Some(output.clone()), output)),
+        "/api-key/create" => typed::<CreateKeyRequest>(output, typed_output),
+        "/api-key/update" => typed::<UpdateKeyRequest>(output, typed_output),
+        "/api-key/delete" => typed::<DeleteKeyRequest>(output, typed_output),
+        _ => typed::<VerifyKeyRequest>(output, typed_output),
     }
+}
+
+fn field_value(
+    value: FieldValue,
+    (name, kind, required, nullable): Spec,
+    defaulted: bool,
+    errors: &mut Vec<String>,
+) -> AuthResult<FieldValue> {
+    use Field::*;
+    let location = format!("body.{name}");
+    if value.is_undefined() && !required {
+        return Ok(if defaulted { FieldValue::Null } else { value });
+    }
+    if matches!(kind, Id) {
+        return Ok(SchemaValue::<FieldValue>::from_field(value)
+            .display_string()?
+            .into());
+    }
+    if nullable && value.is_null() {
+        return Ok(value);
+    }
+    let (valid, expected) = match kind {
+        String | Prefix => (value.is_string(), "string"),
+        Boolean => (value.as_bool().is_some(), "boolean"),
+        Number(_) => (value.as_f64().is_some_and(f64::is_finite), "number"),
+        Permissions => (value.is_object() || value.as_date().is_some(), "record"),
+        Any | Id => (true, "unknown"),
+    };
+    if !valid {
+        errors.push(native_invalid_type(&location, expected, Some(&value)));
+        return Ok(value);
+    }
+    match kind {
+        Prefix => {
+            let prefix = value.display_utf16()?;
+            if prefix.as_utf16().is_empty()
+                || !prefix.as_utf16().iter().all(|unit| {
+                    u8::try_from(*unit).is_ok_and(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+                    })
+                })
+            {
+                errors.push(format!("[{location}] Invalid prefix format, must be alphanumeric and contain only underscores and hyphens."));
+            }
+        }
+        Number(Some(minimum)) if value.as_f64().is_some_and(|value| value < minimum) => {
+            errors.push(format!(
+                "[{location}] Too small: expected number to be >={minimum}"
+            ));
+        }
+        Permissions => {
+            let mut parsed = FieldMap::new();
+            if let Some(permissions) = value.as_object() {
+                for resource in permissions.own_keys()? {
+                    if resource == "__proto__"
+                        || !permissions
+                            .own_property_descriptor(&resource)?
+                            .is_some_and(|descriptor| descriptor.enumerable)
+                    {
+                        continue;
+                    }
+                    let actions = permissions.get(&resource)?.unwrap_or_default();
+                    let location = format!("{location}.{resource}");
+                    if let Some(actions) = actions.as_array() {
+                        let mut parsed_actions = Vec::new();
+                        for (index, action) in actions.iter()?.enumerate() {
+                            let action = action?;
+                            if !action.is_string() {
+                                errors.push(native_invalid_type(
+                                    &format!("{location}.{index}"),
+                                    "string",
+                                    Some(&action),
+                                ));
+                            }
+                            parsed_actions.push(action);
+                        }
+                        let _ = parsed.insert(resource, parsed_actions.into());
+                    } else {
+                        errors.push(native_invalid_type(&location, "array", Some(&actions)));
+                    }
+                }
+            }
+            return Ok(parsed.into());
+        }
+        _ => {}
+    }
+    Ok(value)
 }
