@@ -36,24 +36,26 @@ export function createSecondaryRuntimeObserver(native) {
       return [key, value(descriptor.value)];
     }));
   }
-  const snapshot = native.snapshot;
-  native.snapshot = input => {
-    const observation = snapshot(input);
-    if (observation !== null && typeof observation === "object") capturedValues.set(observation, value(input));
-    return observation;
-  };
-  const record = native.record;
-  native.record = (phase, fields = {}) => {
-    record(phase, fields);
-    events.push({ phase, ...Object.fromEntries(Object.entries(fields).map(([key, field]) => [
-      key, field !== null && typeof field === "object" && capturedValues.has(field) ? capturedValues.get(field) : field,
-    ])) });
-  };
-  const call = native.call;
-  native.call = (phase, receiver, expected, args) => {
-    call(phase, receiver, expected, args);
-    events.push({ phase, sameReceiver: receiver === expected, arguments: value(args) });
-  };
+  if (native) {
+    const snapshot = native.snapshot;
+    native.snapshot = input => {
+      const observation = snapshot(input);
+      if (observation !== null && typeof observation === "object") capturedValues.set(observation, value(input));
+      return observation;
+    };
+    const record = native.record;
+    native.record = (phase, fields = {}) => {
+      record(phase, fields);
+      events.push({ phase, ...Object.fromEntries(Object.entries(fields).map(([key, field]) => [
+        key, field !== null && typeof field === "object" && capturedValues.has(field) ? capturedValues.get(field) : field,
+      ])) });
+    };
+    const call = native.call;
+    native.call = (phase, receiver, expected, args) => {
+      call(phase, receiver, expected, args);
+      events.push({ phase, sameReceiver: receiver === expected, arguments: value(args) });
+    };
+  }
   async function capture(operation, original) {
     try {
       const result = await operation();
