@@ -1,16 +1,22 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { runStandaloneCapture } from "./standalone-capture";
+import { expectStandaloneObservation, readStandaloneFixture } from "./standalone-capture";
 import { twoFactorBackupCodeEncodingCases, twoFactorBackupCodeEncodingRouteCases } from "./two-factor-backup-code-encoding-capture.mjs";
-import { writeObservation } from "./write-observation.mjs";
 
-test("capture the real backup-code undefined JSON encoding boundary", async () => {
-  const result = await runStandaloneCapture(new URL("./two-factor-backup-code-encoding-capture.mjs", import.meta.url));
-  await writeObservation(result.stdout);
-  expect({ status: result.status, stderr: result.stderr }, `Capture evidence: ${result.directory}`).toEqual({ status: 0, stderr: "" });
-  const observation = JSON.parse(readFileSync(result.output, "utf8"));
+test("real backup-code encoding retains undefined JSON and native encryption failures", async () => {
+  const fixture = new URL("../../../tests/fixtures/two-factor-backup-code-encoding-1.7.6.json", import.meta.url);
+  const observation = JSON.parse(readStandaloneFixture(fixture));
   expect(observation.contract).toBe("two-factor-backup-code-encoding");
   expect(observation.version).toBe("1.7.6");
   expect(observation.cases.map(({ scenario }: { scenario: unknown }) => scenario)).toStrictEqual(twoFactorBackupCodeEncodingRouteCases);
   expect(observation.encodings.map(({ scenario }: { scenario: unknown }) => scenario)).toStrictEqual(twoFactorBackupCodeEncodingCases);
+  const hostPaths = new Set([2, 3].flatMap(index => [
+    `/encodings/${index}/outcome/error/properties/5/1/value`,
+    `/encodings/${index}/outcome/error/properties/6/1/value`,
+  ]));
+  await expectStandaloneObservation(
+    new URL("./two-factor-backup-code-encoding-capture.mjs", import.meta.url),
+    fixture,
+    "two-factor-backup-code-encoding",
+    hostPaths,
+  );
 }, 120_000);

@@ -19,7 +19,7 @@ use std::sync::{
 
 use super::native_observation as observation;
 
-mod object;
+pub(crate) mod object;
 #[path = "../../../../../../tests/support/replay_failures.rs"]
 mod replay_failures;
 mod storage;
@@ -216,6 +216,7 @@ pub(crate) struct Harness {
     pub(crate) target_key: String,
     state: Arc<State>,
     retained: FieldValue,
+    model_rows: Vec<(&'static str, EntityRole, Vec<FieldMap>)>,
 }
 
 impl Harness {
@@ -262,7 +263,18 @@ impl Harness {
             target_key,
             state,
             retained,
+            model_rows: Vec::new(),
         })
+    }
+
+    pub(crate) fn with_model_rows(
+        mut self,
+        name: &'static str,
+        role: EntityRole,
+        rows: Vec<FieldMap>,
+    ) -> Self {
+        self.model_rows.push((name, role, rows));
+        self
     }
 
     pub(crate) fn config(&self) -> AuthResult<AuthConfig> {
@@ -303,15 +315,18 @@ impl Harness {
         plugins: &[&dyn AuthPlugin<StatelessSchema>],
     ) -> AuthResult<(AuthContext<StatelessSchema>, Arc<EphemeralStore>)> {
         let config = Arc::new(self.config()?);
-        let inner = Arc::new(EphemeralStore::from_storage(
-            config.clone(),
-            vec![
-                ("user".into(), vec![consumer_user()]),
-                ("session".into(), Vec::new()),
-                ("account".into(), Vec::new()),
-                ("verification".into(), Vec::new()),
-            ],
-        )?);
+        let mut tables = vec![
+            ("user".into(), vec![consumer_user()]),
+            ("session".into(), Vec::new()),
+            ("account".into(), Vec::new()),
+            ("verification".into(), Vec::new()),
+        ];
+        tables.extend(
+            self.model_rows
+                .iter()
+                .map(|(name, _, rows)| ((*name).into(), rows.clone())),
+        );
+        let inner = Arc::new(EphemeralStore::from_storage(config.clone(), tables)?);
         let store = SecondaryStore::new(
             inner.clone(),
             self.cache.clone(),
@@ -357,6 +372,7 @@ impl Harness {
             ("verification", EntityRole::Verification),
         ]
         .into_iter()
+        .chain(self.model_rows.iter().map(|(name, role, _)| (*name, *role)))
         .map(|(name, role)| {
             Ok((
                 name.into(),

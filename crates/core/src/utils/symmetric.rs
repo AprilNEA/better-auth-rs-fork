@@ -6,6 +6,7 @@ use chacha20poly1305::{
 };
 use rand::RngCore;
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 
 use crate::{AuthError, AuthResult, FieldValue, config::SecretKey};
 
@@ -48,13 +49,37 @@ fn parse_envelope(data: &str) -> Option<(u128, &str)> {
 
 /// Encrypt with the current key. Versioned keys add a `$ba$<version>$` envelope.
 pub fn encrypt<'a>(key: impl Into<SecretKey<'a>>, plaintext: &str) -> AuthResult<String> {
-    match key.into() {
-        SecretKey::Single(secret) => raw_encrypt(secret, plaintext),
+    encrypt_with_key(key.into(), |secret| raw_encrypt(secret, plaintext))
+}
+
+/// Consume native plaintext at the cipher's UTF-8 string boundary without coercion.
+pub fn encrypt_field<'a>(
+    key: impl Into<SecretKey<'a>>,
+    plaintext: &FieldValue,
+) -> AuthResult<String> {
+    encrypt_with_key(key.into(), |secret| {
+        let plaintext = match plaintext {
+            FieldValue::String(plaintext) => Cow::Borrowed(plaintext.as_str()),
+            FieldValue::Utf16String(plaintext) => {
+                Cow::Owned(String::from_utf16_lossy(plaintext.as_utf16()))
+            }
+            _ => return Err(AuthError::type_error("string expected")),
+        };
+        raw_encrypt(secret, &plaintext)
+    })
+}
+
+fn encrypt_with_key(
+    key: SecretKey<'_>,
+    encrypt: impl FnOnce(&str) -> AuthResult<String>,
+) -> AuthResult<String> {
+    match key {
+        SecretKey::Single(secret) => encrypt(secret),
         SecretKey::Versioned { keys, .. } => {
             let current = keys
                 .first()
                 .ok_or_else(|| AuthError::config("Missing current encryption key"))?;
-            let ciphertext = raw_encrypt(&current.value, plaintext)?;
+            let ciphertext = encrypt(&current.value)?;
             Ok(format!("$ba${}${ciphertext}", current.version))
         }
     }

@@ -44,6 +44,10 @@ use helpers::*;
 use security::*;
 
 #[cfg(test)]
+mod backup_code_native_contract;
+#[cfg(test)]
+mod backup_encoding_native_contract;
+#[cfg(test)]
 mod enrollment_tests;
 #[cfg(test)]
 mod native_tests;

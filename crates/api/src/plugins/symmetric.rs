@@ -1,1 +1,3 @@
-pub(crate) use better_auth_core::utils::symmetric::{decrypt, decrypt_field, encrypt};
+pub(crate) use better_auth_core::utils::symmetric::{
+    decrypt, decrypt_field, encrypt, encrypt_field,
+};

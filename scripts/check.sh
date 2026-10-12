@@ -1242,12 +1242,18 @@ run_stage() {
       ;;
     two-factor)
       cargo fmt --all -- --check
-      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm -- -D warnings
-      cargo test --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib two_factor
-      cargo test --locked --features axum,seaorm2,redis-cache --test observability_tests --test two_factor_cookie_duration_tests --test two_factor_additional_fields_tests
-      bun --no-install test ./compat-tests/reference-server/contracts/two-factor-fields.test.ts
+      local two_factor_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/two-factor-fields.test.ts \
+        ./compat-tests/reference-server/contracts/two-factor-backup-code-native-capture.test.ts \
+        ./compat-tests/reference-server/contracts/two-factor-backup-code-encoding-capture.test.ts || two_factor_status=1
+      cargo clippy --locked -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib -- -D warnings || two_factor_status=1
+      cargo test --locked --no-fail-fast -p better-auth-core -p better-auth-api -p better-auth-seaorm --lib two_factor || two_factor_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test observability_tests --test two_factor_cookie_duration_tests --test two_factor_additional_fields_tests || two_factor_status=1
       COMPAT_TEST_PROFILE=native-two-factor cargo test --locked --test client_compat_tests -- \
-        --ignored --nocapture --exact --test-threads=1 phase11_client_compat phase12_client_compat configuration_client_compat
+        --ignored --nocapture --exact --test-threads=1 phase11_client_compat phase12_client_compat configuration_client_compat || two_factor_status=1
+      return "$two_factor_status"
       ;;
     device-storage)
       cargo fmt --all -- --check

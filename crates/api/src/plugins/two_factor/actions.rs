@@ -601,7 +601,7 @@ pub(super) async fn verify_backup_code_core(
         )
         .await
     {
-        Ok(codes) => options::remaining_backup_codes(&codes, &body.code),
+        Ok(codes) => options::verify_backup_code(&codes, &body.code),
         Err(error) => {
             let _ = finish_attempt(attempt, false, ctx).await?;
             return Err(error);
@@ -614,11 +614,12 @@ pub(super) async fn verify_backup_code_core(
             return Err(error);
         }
     };
-    let Some(backup_codes) = decoded else {
+    if !decoded.status.is_truthy() || !decoded.updated.is_truthy() {
         let _ = finish_attempt(attempt, true, ctx).await?;
         record_failure(&state, &two_factor, &config.account_lockout, ctx).await?;
         return Err(AuthError::authentication_failed("Invalid backup code"));
-    };
+    }
+    let backup_codes = decoded.updated;
 
     let encrypted = config
         .backup_code_options

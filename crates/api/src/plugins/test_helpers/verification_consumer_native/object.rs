@@ -16,14 +16,14 @@ enum Property {
 #[derive(Default)]
 struct Properties(Mutex<indexmap::IndexMap<String, Property>>);
 
-pub(super) struct Root {
-    pub(super) value: FieldValue,
+pub(crate) struct Root {
+    pub(crate) value: FieldValue,
     owner: Arc<OnceLock<FieldValue>>,
     fields: Arc<Properties>,
 }
 
 impl Root {
-    pub(super) fn new(kind: &str) -> Self {
+    pub(crate) fn new(kind: &str) -> Self {
         let fields = Arc::new(Properties::default());
         let object = FieldObject::from_source(fields.clone());
         let value: FieldValue = match kind {
@@ -43,11 +43,11 @@ impl Root {
         }
     }
 
-    pub(super) fn owner(&self) -> Weak<OnceLock<FieldValue>> {
+    pub(crate) fn owner(&self) -> Weak<OnceLock<FieldValue>> {
         Arc::downgrade(&self.owner)
     }
 
-    pub(super) fn data(&self, name: &str, value: FieldValue) {
+    pub(crate) fn data(&self, name: &str, value: FieldValue) {
         let _ = self
             .fields
             .0
@@ -56,7 +56,7 @@ impl Root {
             .insert(name.into(), Property::Value(value));
     }
 
-    pub(super) fn getter(
+    pub(crate) fn getter(
         &self,
         name: &str,
         enumerable: bool,

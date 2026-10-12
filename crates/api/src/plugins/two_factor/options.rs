@@ -17,13 +17,18 @@ pub trait TwoFactorCipher: Send + Sync {
     async fn encrypt(&self, plaintext: &str) -> AuthResult<String>;
     /// Decrypt a stored value before verification.
     async fn decrypt(&self, ciphertext: &str) -> AuthResult<String>;
-    /// Encrypt plaintext without restricting the stored representation to a string.
-    async fn encrypt_native(&self, plaintext: &str) -> AuthResult<FieldValue> {
-        self.encrypt(plaintext).await.map(Into::into)
+    /// Receive the native plaintext and retain the callback's stored representation.
+    ///
+    /// Backup-code JSON serialization can produce `FieldValue::Undefined`. Override
+    /// this method to consume that value; the default adapts string inputs to `encrypt`.
+    async fn encrypt_native(&self, plaintext: &FieldValue) -> AuthResult<FieldValue> {
+        self.encrypt(&cipher_string(plaintext, "plaintext")?)
+            .await
+            .map(Into::into)
     }
     /// Receive the projected ciphertext before JSON parsing or text encoding.
     async fn decrypt_native(&self, ciphertext: &FieldValue) -> AuthResult<FieldValue> {
-        self.decrypt(&ciphertext_string(ciphertext)?)
+        self.decrypt(&cipher_string(ciphertext, "ciphertext")?)
             .await
             .map(Into::into)
     }
@@ -56,7 +61,9 @@ impl TwoFactorOtpStorage {
             Self::Hashed => Ok(URL_SAFE_NO_PAD.encode(Sha256::digest(value.as_bytes()))),
             Self::Encrypted => crate::plugins::symmetric::encrypt(secret, value),
             Self::CustomHash(hash) => hash(value.to_owned()).await,
-            Self::CustomEncryption(cipher) => return cipher.encrypt_native(value).await,
+            Self::CustomEncryption(cipher) => {
+                return cipher.encrypt_native(&FieldValue::from(value)).await;
+            }
         }?;
         Ok(encoded.into())
     }
@@ -99,15 +106,14 @@ impl BackupCodeStorage {
         codes: &FieldValue,
         secret: SecretKey<'_>,
     ) -> AuthResult<FieldValue> {
-        let json = codes
-            .stringify()?
-            .ok_or_else(|| AuthError::internal("Cannot encode undefined backup codes"))?;
-        let encoded = match self {
+        let json = codes.stringify_native()?;
+        match self {
             Self::Plain => Ok(json),
-            Self::Encrypted => crate::plugins::symmetric::encrypt(secret, &json),
-            Self::Custom(cipher) => return cipher.encrypt_native(&json).await,
-        }?;
-        Ok(encoded.into())
+            Self::Encrypted => {
+                crate::plugins::symmetric::encrypt_field(secret, &json).map(Into::into)
+            }
+            Self::Custom(cipher) => cipher.encrypt_native(&json).await,
+        }
     }
 
     pub(super) async fn decode(
@@ -124,15 +130,15 @@ impl BackupCodeStorage {
     }
 }
 
-fn ciphertext_string(value: &FieldValue) -> AuthResult<String> {
+fn cipher_string(value: &FieldValue, parameter: &str) -> AuthResult<String> {
     match value {
         FieldValue::String(value) => Ok(value.clone()),
         FieldValue::Utf16String(value) => value
             .to_utf8()
             .map_err(|error| AuthError::internal(error.to_string())),
-        _ => Err(AuthError::internal(
-            "The string cipher callback requires string ciphertext",
-        )),
+        _ => Err(AuthError::internal(format!(
+            "The string cipher callback requires string {parameter}"
+        ))),
     }
 }
 
@@ -143,30 +149,33 @@ fn text_encoder_bytes(value: &FieldValue) -> AuthResult<Vec<u8>> {
     Ok(String::from_utf16_lossy(value.display_utf16()?.as_utf16()).into_bytes())
 }
 
-/// Preserve the distinct invalid-code and method-call failure paths before consuming a code.
-pub(super) fn remaining_backup_codes(
+pub(super) struct BackupCodeVerification {
+    pub(super) status: FieldValue,
+    pub(super) updated: FieldValue,
+}
+
+/// Evaluate both methods before the route decides whether verification succeeded.
+pub(super) fn verify_backup_code(
     codes: &FieldValue,
     code: &str,
-) -> AuthResult<Option<FieldValue>> {
+) -> AuthResult<BackupCodeVerification> {
     if !codes.is_truthy() {
-        return Ok(None);
+        return Ok(BackupCodeVerification {
+            status: false.into(),
+            updated: FieldValue::Null,
+        });
     }
-    let Some(codes) = codes.as_array() else {
-        return Err(AuthError::internal(if codes.is_string() {
-            "codes.filter is not a function"
-        } else {
-            "codes.includes is not a function"
-        }));
-    };
     let code = FieldValue::from(code);
-    if !codes.includes(&code)? {
-        return Ok(None);
-    }
-    Ok(Some(
-        codes
-            .filter(|candidate| Ok(!candidate.strict_equals(&code)))?
-            .into(),
-    ))
+    let status = codes.includes_method(&code, "codes")?;
+    let predicate = better_auth_core::FieldFunction::contextual(move |_, arguments| {
+        Ok((!arguments
+            .first()
+            .unwrap_or(&FieldValue::Undefined)
+            .strict_equals(&code))
+        .into())
+    });
+    let updated = codes.filter_method(&predicate, "codes")?;
+    Ok(BackupCodeVerification { status, updated })
 }
 
 /// Recovery-code generation and passwordless management policy.

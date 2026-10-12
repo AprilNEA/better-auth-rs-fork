@@ -1,0 +1,82 @@
+{
+  "version": "1.7.6",
+  "status": "successful incremental upstream source capture; strict Rust runtime replay pending",
+  "run": "38249777763",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38249777763",
+  "commit": "b5ab3e989c6619de6f9acb181c9e8658de82f043",
+  "runConclusion": "success",
+  "captureTest": {
+    "name": "capture the real backup-code undefined JSON encoding boundary",
+    "conclusion": "success",
+    "routeCases": 4,
+    "encodingCases": 4
+  },
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38249777763.log",
+    "bytes": 167727,
+    "sha256": "81e592eb6b2a84c9c196a793e3113cd9a81ce47dd472bdc525567921417ab3ea"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/two-factor-backup-code-encoding-capture.mjs",
+      "bytes": 5728,
+      "sha256": "c5eec75be37c6ae5a449d23636c7d8ab62fb8641dff09c9deab511bb3364beb1"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/two-factor-backup-code-encoding-capture.test.ts",
+      "bytes": 1195,
+      "sha256": "48a2de155f75e5418349f0a9eee1f68248c1b06291d21a304b9ead85e95b5931"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/two-factor-backup-code-native-capture.mjs",
+      "bytes": 11276,
+      "sha256": "bdb7919350c70176c9bb074057c24450e0da8516b4f498445c733b5a2081877d"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/verification-consumer-native-shared.mjs",
+      "bytes": 10402,
+      "sha256": "c4be4a65ac05655db5a4f1ef672a74df1d663a4017e21526439d8ef7331309db"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-shared.mjs",
+      "bytes": 3625,
+      "sha256": "7f708484df4fec8a65d920d12a44fdce06278154e63b484d891f47e396b3193f"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/secondary-native-runtime.mjs",
+      "bytes": 3145,
+      "sha256": "69630e525760cf34de80dbc1ae8717093481316fc426cd50dc7b84e7a179d017"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/protected-function-shared.mjs",
+      "bytes": 20940,
+      "sha256": "4b833be668fe0e40075695641ac9593a9314a63babe98064ca4a4bf2475e7dea"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/email-verification-duration-capture.mjs",
+      "bytes": 11739,
+      "sha256": "03d3f3001d5db30af7dabf494b20b6f41a4d939919b3cda75e5aaa96bd6bf805"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/two-factor-backup-code-encoding-1.7.6.json",
+    "bytes": 511595,
+    "sha256": "8f54424595098f03337fe2bbe3a098cf7ceb5b9111653f7c6751b37335ea74f6"
+  },
+  "records": [
+    {
+      "line": 28,
+      "byteOffset": 1093,
+      "bytes": 166467,
+      "sha256": "305911e2027f484f9382f83b6bc1595b32f8e9c1a8dec6d848161198e2abfdda"
+    }
+  ],
+  "replayBoundary": "Retain the complete incremental source observation without normalization, including the full runtime generation wrapper. Source replay excludes only four explicit host-dependent string values: TypeError sourceURL and stack for the two Encrypted observations. The frozen fixture retains all four strings. Rust compares the four complete endpoint runtime observations. The four direct encoding replays compare BackupCodeStorage::encode input, JSON callbacks, and encoded output or error against the observed upstream encoding boundary. Rust does not fabricate the source generation callback or wrapper; arbitrary native generator values and generation-wrapper identity remain explicitly unpaired because the Rust convenience callback returns Vec<String>. The original sixteen-case fixture is unchanged.",
+  "artifactId": 11746997496,
+  "artifactName": "focused-check-reference-contracts-b5ab3e989c6619de6f9acb181c9e8658de82f043-1"
+}
