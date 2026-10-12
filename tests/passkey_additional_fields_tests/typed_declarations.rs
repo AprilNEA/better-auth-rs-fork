@@ -376,7 +376,9 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
                 result?
             };
             let rows = storage.rows().await?;
-            let private = typed && matches!(&storage, Storage::Memory(_));
+            let private = typed
+                && matches!(&storage, Storage::Memory(_))
+                && store.passkey_storage() == PasskeyStorage::Legacy;
             if stage == "auth" {
                 private_credential = "private-auth";
             }
@@ -425,6 +427,10 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
             }
             let observed = match returned {
                 Some(Returned::Typed(row)) => {
+                    if store.passkey_storage() == PasskeyStorage::Native {
+                        assert!(row.credential.field_value().is_undefined());
+                        assert!(row.updated_at.field_value().is_undefined());
+                    }
                     let view = PasskeyView::from(row.as_ref());
                     let public = view.field_values()?;
                     assert_record(&public, &expected, stage);
@@ -494,8 +500,13 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>, storage: Storage) -
 #[tokio::test]
 async fn memory_typed_passkey_declarations_match_raw_records_and_keep_private_state_separate()
 -> TestResult {
-    let raw = EphemeralStore::new(Arc::new(config()));
-    contract(Arc::new(raw.clone()), Storage::Memory(Box::new(raw))).await
+    for raw in [
+        EphemeralStore::new(Arc::new(config())),
+        EphemeralStore::new(Arc::new(config())).with_passkey_storage(PasskeyStorage::Legacy),
+    ] {
+        contract(Arc::new(raw.clone()), Storage::Memory(Box::new(raw))).await?;
+    }
+    Ok(())
 }
 
 #[tokio::test]
@@ -516,7 +527,7 @@ async fn memory_legacy_private_credentials_do_not_overwrite_declared_aliases_or_
 -> TestResult {
     for omit in [false, true] {
         let config = Arc::new(config());
-        let raw = EphemeralStore::new(config.clone());
+        let raw = EphemeralStore::new(config.clone()).with_passkey_storage(PasskeyStorage::Legacy);
         let events = Events::default();
         let object = FieldValue::Null;
         let mut declaration = fields(&events, &object, "credential");

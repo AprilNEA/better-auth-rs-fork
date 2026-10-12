@@ -1,7 +1,7 @@
 use super::{contract, display_fixture};
 use better_auth::{
     __private_core::{
-        AuthError,
+        AuthError, PasskeyStorage,
         store::EphemeralStore,
         user_fields::{UserConfig, UserFieldConfig},
     },
@@ -49,12 +49,13 @@ async fn paired(backend: &str) -> TestResult {
         );
         assert_eq!(case.get("column").ok_or("Captured column")?, "display");
         if backend == "memory" {
-            run(
-                Arc::new(EphemeralStore::new(Arc::new(config()))),
-                None,
-                case,
-            )
-            .await?;
+            for store in [
+                EphemeralStore::new(Arc::new(config())),
+                EphemeralStore::new(Arc::new(config()))
+                    .with_passkey_storage(PasskeyStorage::Legacy),
+            ] {
+                run(Arc::new(store), None, case).await?;
+            }
         } else {
             let (store, database) =
                 display_fixture::sqlite::<fixture::model::Model>(config()).await;

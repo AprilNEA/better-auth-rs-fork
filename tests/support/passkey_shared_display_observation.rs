@@ -72,13 +72,21 @@ impl Check {
             Ok(json!([observation(fields)]))
         } else {
             assert_eq!(row.name, row.aaguid);
-            assert_eq!(row.credential.typed()?, "ordinary-private-record");
-            let updated = row
-                .updated_at
-                .typed()?
-                .to_datetime()?
-                .ok_or("Valid stored updatedAt")?;
-            assert!(updated >= created && updated <= chrono::Utc::now());
+            match reader.passkey_storage() {
+                PasskeyStorage::Native => {
+                    assert!(row.credential.field_value().is_undefined());
+                    assert!(row.updated_at.field_value().is_undefined());
+                }
+                PasskeyStorage::Legacy => {
+                    assert_eq!(row.credential.typed()?, "ordinary-private-record");
+                    let updated = row
+                        .updated_at
+                        .typed()?
+                        .to_datetime()?
+                        .ok_or("Valid stored updatedAt")?;
+                    assert!(updated >= created && updated <= chrono::Utc::now());
+                }
+            }
             let mut fields = serde_json::to_value(PasskeyView::from(&row))?;
             let object = fields.as_object_mut().expect("Memory Passkey fields");
             let display = object.remove("name").expect("stored name");

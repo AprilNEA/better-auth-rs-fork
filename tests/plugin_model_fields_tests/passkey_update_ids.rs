@@ -1,6 +1,8 @@
 use super::*;
 use better_auth::plugins::passkey::PasskeyPlugin;
-use better_auth_core::{SchemaValue, UpdatePasskey, id::IdGeneration};
+use better_auth_core::{
+    PasskeyCredentialState, PasskeyStorage, SchemaValue, UpdatePasskey, id::IdGeneration,
+};
 use better_auth_seaorm::{
     sea_orm::{ActiveModelTrait, ConnectionTrait, IntoActiveModel, Schema},
     store::entities::passkey,
@@ -116,10 +118,19 @@ async fn contract<S: AuthSchema>(raw: Arc<dyn AuthStore<S>>) -> AuthResult<()> {
 
 #[tokio::test]
 async fn memory_serial_passkey_update_preserves_atomic_dynamic_fields() -> AuthResult<()> {
-    let raw: Arc<dyn AuthStore<StatelessSchema>> =
-        Arc::new(EphemeralStore::new(Arc::new(serial_config())));
-    let _ = raw.create_passkey(input("1", "before")).await?;
-    contract(raw).await
+    for raw in [
+        EphemeralStore::new(Arc::new(serial_config())),
+        EphemeralStore::new(Arc::new(serial_config())).with_passkey_storage(PasskeyStorage::Legacy),
+    ] {
+        let raw: Arc<dyn AuthStore<StatelessSchema>> = Arc::new(raw);
+        let mut data = input("1", "before");
+        if raw.passkey_storage() == PasskeyStorage::Native {
+            data.credential = PasskeyCredentialState::Native;
+        }
+        let _ = raw.create_passkey(data).await?;
+        contract(raw).await?;
+    }
+    Ok(())
 }
 
 #[tokio::test]

@@ -374,7 +374,7 @@ pub(crate) async fn run<S: AuthSchema>(
     );
     assert!(take(&events).is_empty());
     eprintln!(
-        "Passkey shared display boundaries: compare complete field sets without JavaScript key order; compare HTTP JSON without byte order or statusText; verify real creation timestamps and storage equality before normalization; Memory retains its verified legacy credential and updatedAt envelope; CLI acceptance owns catalog types, indexes, foreign keys, and DDL"
+        "Passkey shared display boundaries: compare complete field sets without JavaScript key order; compare HTTP JSON without byte order or statusText; verify real creation timestamps and storage equality before normalization; verify Native Memory omits private fields and Legacy Memory retains credential and updatedAt; CLI acceptance owns catalog types, indexes, foreign keys, and DDL"
     );
     Ok(())
 }
