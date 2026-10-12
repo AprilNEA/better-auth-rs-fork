@@ -1,12 +1,17 @@
 use better_auth_core::store::{ConsumeApiKeyResult, SecondaryStorage};
 use better_auth_core::{
-    ApiKey, AuthContext, AuthError, AuthResult, SchemaValue,
+    ApiKey, AuthContext, AuthResult, SchemaValue,
     query::{field_add, field_compare, field_date, field_number},
 };
 use chrono::Utc;
 use std::sync::Arc;
 
 use super::{ApiKeyConfig, ApiKeyStorage, cached, now, put, required_backend};
+use crate::plugins::api_key::{ApiKeyErrorCode, api_key_error};
+
+#[cfg(test)]
+#[path = "usage_tests.rs"]
+mod tests;
 
 async fn merge_usage(
     storage: Arc<dyn SecondaryStorage>,
@@ -14,10 +19,10 @@ async fn merge_usage(
     lookup_hash: &str,
     changed_rate: bool,
     changed_count: bool,
-) -> AuthResult<ApiKey> {
-    let mut fresh = cached(storage.as_ref(), &format!("api-key:{lookup_hash}"))
-        .await?
-        .ok_or_else(|| AuthError::internal("Failed to update API key"))?;
+) -> AuthResult<Option<ApiKey>> {
+    let Some(mut fresh) = cached(storage.as_ref(), &format!("api-key:{lookup_hash}")).await? else {
+        return Ok(None);
+    };
     fresh.remaining.clone_from(&snapshot.remaining);
     fresh.last_refill_at.clone_from(&snapshot.last_refill_at);
     fresh.updated_at.clone_from(&snapshot.updated_at);
@@ -28,7 +33,7 @@ async fn merge_usage(
         fresh.request_count.clone_from(&snapshot.request_count);
     }
     put(storage, &fresh, false).await?;
-    Ok(fresh)
+    Ok(Some(fresh))
 }
 
 pub(in crate::plugins::api_key) async fn consume(
@@ -143,7 +148,13 @@ pub(in crate::plugins::api_key) async fn consume(
         .await?;
         return Ok(ConsumeApiKeyResult::Allowed(Box::new(snapshot)));
     }
-    Ok(ConsumeApiKeyResult::Allowed(Box::new(
-        merge_usage(storage, &snapshot, lookup_hash, changed_rate, changed_count).await?,
-    )))
+    let updated = merge_usage(storage, &snapshot, lookup_hash, changed_rate, changed_count)
+        .await?
+        .ok_or_else(|| {
+            api_key_error(
+                "INTERNAL_SERVER_ERROR",
+                ApiKeyErrorCode::FailedToUpdateApiKey,
+            )
+        })?;
+    Ok(ConsumeApiKeyResult::Allowed(Box::new(updated)))
 }

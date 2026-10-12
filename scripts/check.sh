@@ -613,6 +613,7 @@ run_stage() {
       cargo fmt --all -- --check
       local cache_status=0
       bun --no-install test \
+        ./compat-tests/reference-server/contracts/api-key-usage-miss.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-batch.test.ts \
         ./compat-tests/reference-server/contracts/api-key-cache-sort.test.ts \
         ./compat-tests/reference-server/contracts/secondary-user-refresh.test.ts \
