@@ -6,6 +6,18 @@ use serde_json::{Value as Json, json};
 /// Select the executable value boundary from a complete descriptor snapshot.
 /// Reflection flags remain in the frozen source; unsupported shapes fail explicitly.
 pub(crate) fn source_value(source: &Json) -> AuthResult<Json> {
+    source_value_with(source, &|_| Ok(None))
+}
+
+/// Select an explicit runtime boundary before decoding the remaining source descriptors.
+/// Callers must record every excluded reflection path in their coverage ledger.
+pub(crate) fn source_value_with(
+    source: &Json,
+    boundary: &impl Fn(&Json) -> AuthResult<Option<Json>>,
+) -> AuthResult<Json> {
+    if let Some(value) = boundary(source)? {
+        return Ok(value);
+    }
     if source.get("reference").is_some() {
         return Err(AuthError::internal(
             "Source value projection cannot discard shared references",
@@ -61,7 +73,7 @@ pub(crate) fn source_value(source: &Json) -> AuthResult<Json> {
                 "Native observation cannot discard a non-enumerable property",
             ));
         }
-        let value = source_value(value)?;
+        let value = source_value_with(value, boundary)?;
         match kind {
             "object" => {
                 let _ = object.insert(name.into(), value);

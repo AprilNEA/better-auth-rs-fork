@@ -26,6 +26,7 @@ const PASSWORD: &str = "CorrectHorseBattery1!";
 
 mod authoritative_session;
 mod change_success;
+mod fixture_replay;
 mod session_boundary;
 
 #[derive(Default)]
