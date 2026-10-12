@@ -33,14 +33,14 @@ pub(super) struct CapturedInput<'a, T> {
 }
 
 impl<'a, T> CapturedInput<'a, T> {
-    pub fn new(typed: &'a T, body: &FieldValue) -> AuthResult<Self> {
+    pub(super) fn new(typed: &'a T, body: &FieldValue) -> AuthResult<Self> {
         Ok(Self {
             typed,
             fields: body.enumerable_fields()?,
         })
     }
 
-    pub fn field(&self, name: &str) -> FieldValue {
+    pub(super) fn field(&self, name: &str) -> FieldValue {
         self.fields.get(name).cloned().unwrap_or_default()
     }
 }

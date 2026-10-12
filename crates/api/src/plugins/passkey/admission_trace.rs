@@ -1,14 +1,22 @@
 use super::*;
 use std::{
     future::Future,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Once,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 use tracing::{
-    Event, Metadata, Subscriber, field::Visit, instrument::WithSubscriber,
-    level_filters::LevelFilter, span,
+    Event, Metadata, Subscriber, field::Visit, level_filters::LevelFilter, span,
+    subscriber::Interest,
 };
 
+static RECORDER: Once = Once::new();
 static NEXT_SPAN: AtomicU64 = AtomicU64::new(0);
+
+tokio::task_local! {
+    static ACTIVE_TRACE: Arc<AdmissionTrace>;
+}
 
 #[derive(Default)]
 pub(super) struct AdmissionTrace {
@@ -23,7 +31,13 @@ impl AdmissionTrace {
         self: &Arc<Self>,
         operation: F,
     ) -> impl Future<Output = F::Output> + use<F> {
-        operation.with_subscriber(DatabaseSpans(self.clone()))
+        // Keep the subscriber available when another thread registers a callsite between future polls.
+        RECORDER.call_once(|| {
+            tracing::subscriber::set_global_default(DatabaseSpans).expect(
+                "Passkey admission recorder must own the API test binary's global subscriber",
+            );
+        });
+        ACTIVE_TRACE.scope(self.clone(), operation)
     }
 }
 
@@ -55,7 +69,7 @@ impl DatabaseHooks<StatelessSchema> for AdmissionTrace {
     }
 }
 
-struct DatabaseSpans(Arc<AdmissionTrace>);
+struct DatabaseSpans;
 struct SpanFields<'a>(&'a AdmissionTrace);
 
 impl Visit for SpanFields<'_> {
@@ -78,8 +92,13 @@ impl Visit for SpanFields<'_> {
 }
 
 impl Subscriber for DatabaseSpans {
+    fn register_callsite(&self, _: &'static Metadata<'static>) -> Interest {
+        // Route each emission through the current task scope, including nested and parallel captures.
+        Interest::sometimes()
+    }
+
     fn enabled(&self, _: &Metadata<'_>) -> bool {
-        true
+        ACTIVE_TRACE.try_with(|_| ()).is_ok()
     }
 
     fn max_level_hint(&self) -> Option<LevelFilter> {
@@ -87,7 +106,7 @@ impl Subscriber for DatabaseSpans {
     }
 
     fn new_span(&self, attributes: &span::Attributes<'_>) -> span::Id {
-        attributes.record(&mut SpanFields(&self.0));
+        ACTIVE_TRACE.with(|trace| attributes.record(&mut SpanFields(trace)));
         span::Id::from_u64(NEXT_SPAN.fetch_add(1, Ordering::Relaxed) + 1)
     }
 
@@ -147,6 +166,30 @@ async fn unscoped_first_span_preserves_parallel_capture_isolation() {
     );
     assert_eq!(
         *second.events.lock().unwrap(),
+        ["db findOne user", "db update user"]
+    );
+
+    let parent = Arc::<AdmissionTrace>::default();
+    let child = Arc::<AdmissionTrace>::default();
+    parent
+        .capture(async {
+            database_operation("passkey", "findOne").await;
+            child
+                .capture(async {
+                    database_operation("user", "findOne").await;
+                    tokio::task::yield_now().await;
+                    database_operation("user", "update").await;
+                })
+                .await;
+            database_operation("passkey", "update").await;
+        })
+        .await;
+    assert_eq!(
+        *parent.events.lock().unwrap(),
+        ["db findOne passkey", "db update passkey"]
+    );
+    assert_eq!(
+        *child.events.lock().unwrap(),
         ["db findOne user", "db update user"]
     );
 }
