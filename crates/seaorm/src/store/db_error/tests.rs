@@ -188,6 +188,10 @@ async fn live_database(variable: &str) -> TestResult {
             DbBackend::Postgres => postgres_metadata(&worker).await,
             DbBackend::MySql => mysql_metadata(&worker).await,
             DbBackend::Sqlite => Err("Expected a server database".into()),
+            backend => Err(format!(
+                "Unsupported database backend for metadata acceptance: {backend:?}"
+            )
+            .into()),
         }
     })
     .await;

@@ -123,9 +123,15 @@ fn database_error_reads_native_properties_and_keeps_captured_headers() -> AuthRe
     );
     let http = response.into_http_response()?;
     assert_eq!(http.status, 418);
-    assert_eq!(http.headers.get("x-driver"), Some("native"));
+    assert_eq!(
+        http.headers.get("x-driver").map(String::as_str),
+        Some("native")
+    );
     assert_eq!(http.headers.get("x-endpoint"), None);
-    assert_eq!(http.body.bytes()?, br#"{"message":"public replacement"}"#);
+    assert_eq!(
+        http.body.bytes()?.as_ref(),
+        br#"{"message":"public replacement"}"#
+    );
     Ok(())
 }
 
@@ -135,7 +141,7 @@ fn ordinary_database_error_has_no_native_status_and_returns_an_empty_http_500() 
     assert!(error.status_code()?.field_value().is_undefined());
     let response = error.to_http_response()?;
     assert_eq!(response.status, 500);
-    assert_eq!(response.status_text, "Internal Server Error");
+    assert_eq!(response.status_text, "Internal Server Error".into());
     assert!(response.body.bytes()?.is_empty());
     Ok(())
 }
