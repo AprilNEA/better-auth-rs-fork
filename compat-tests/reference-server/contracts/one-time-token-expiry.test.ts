@@ -31,22 +31,24 @@ const nativeErrors = [
   ["invalid-token", "Invalid token"],
   ["missing-session", "Session not found"],
   ["expired-session", "Session expired"],
+  ["client-request-only", "Unauthorized"],
   ["client-disabled", "Client requests are disabled"],
 ] as const;
 
 for (const [mode, message] of nativeErrors) {
   for (const http of [false, true]) {
-    test(`One Time Token ${mode} retains Better Call errors and preceding writes HTTP=${http}`, async () => {
+    test(`One Time Token ${mode} retains error provenance and preceding writes HTTP=${http}`, async () => {
       const origin = "http://one-time-token-errors.test";
       const secret = "one-time-token-native-errors-secret-at-least-32-characters";
       const memory: Record<string, unknown[]> = { user: [], session: [], account: [], verification: [] };
+      const generate = mode.startsWith("client-");
       let generated = 0;
       const auth = betterAuth({
         baseURL: origin, secret, database: memoryAdapter(memory),
         logger: { disabled: true }, telemetry: { enabled: false }, rateLimit: { enabled: false },
         session: { disableSessionRefresh: true, cookieCache: { enabled: false } },
         plugins: [oneTimeToken({
-          disableClientRequest: mode === "client-disabled",
+          disableClientRequest: generate,
           generateToken: async () => { generated++; return "unexpected-token"; },
         })],
       });
@@ -71,34 +73,39 @@ for (const [mode, message] of nativeErrors) {
       const before = structuredClone(memory);
       const signature = createHmac("sha256", secret).update(token).digest("base64");
       const cookie = `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
-      const request = new Request(`${origin}/api/auth/one-time-token/${mode === "client-disabled" ? "generate" : "verify"}`, {
-        method: mode === "client-disabled" ? "GET" : "POST",
-        headers: { "content-type": "application/json", ...(mode === "client-disabled" ? { cookie } : {}) },
-        ...(mode === "client-disabled" ? {} : { body: JSON.stringify({ token: "transfer-token" }) }),
+      const request = new Request(`${origin}/api/auth/one-time-token/${generate ? "generate" : "verify"}`, {
+        method: generate ? "GET" : "POST",
+        headers: { "content-type": "application/json", ...(generate ? { cookie } : {}) },
+        ...(generate ? {} : { body: JSON.stringify({ token: "transfer-token" }) }),
       });
       let caught: APIError | undefined;
       let result: unknown;
       try {
-        const options = { request, asResponse: http };
-        result = mode === "client-disabled"
+        const options = {
+          request, asResponse: http,
+          ...(mode === "client-disabled" ? { headers: request.headers } : {}),
+        };
+        result = generate
           ? await auth.api.generateOneTimeToken(options)
           : await auth.api.verifyOneTimeToken({ ...options, body: { token: "transfer-token" } });
       } catch (error) {
         expect(error).toBeInstanceOf(APIError);
         caught = error as APIError;
       }
-      const expected = { message };
+      const sessionGuard = mode === "client-request-only";
+      const expected = { message, ...(sessionGuard ? { code: "UNAUTHORIZED" } : {}) };
+      const status = sessionGuard ? 401 : 400;
       expect(Boolean(caught)).toBe(!http);
       if (caught) {
-        expect(caught).not.toBeInstanceOf(BetterAuthAPIError);
-        expect(caught.status).toBe("BAD_REQUEST");
-        expect(caught.statusCode).toBe(400);
+        expect(caught instanceof BetterAuthAPIError).toBe(sessionGuard);
+        expect(caught.status).toBe(sessionGuard ? "UNAUTHORIZED" : "BAD_REQUEST");
+        expect(caught.statusCode).toBe(status);
         expect(caught.body).toStrictEqual(expected);
-        expect(Object.keys(caught.body!)).toStrictEqual(["message"]);
+        expect(Object.keys(caught.body!)).toStrictEqual(sessionGuard ? ["message", "code"] : ["message"]);
       } else {
         expect(result).toBeInstanceOf(Response);
         const response = result as Response;
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(status);
         expect(await response.clone().json()).toStrictEqual(expected);
         expect(await response.text()).toBe(JSON.stringify(expected));
         const cookies = response.headers.getSetCookie();

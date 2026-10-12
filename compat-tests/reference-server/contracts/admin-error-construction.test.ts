@@ -12,8 +12,8 @@ const origin = "http://admin-errors.test";
 const secret = "admin-error-construction-contract-secret-at-least-32";
 const createdAt = new Date("2025-01-01T00:00:00.000Z");
 
-for (const backend of ["memory", "sqlite"] as const) {
-  test(`Admin error declarations preserve native provenance and storage on ${backend}`, async () => {
+for (const backend of ["memory", "sqlite"] as const) for (const scenario of cases) {
+  test(`Admin ${scenario.name} preserves native provenance and storage on ${backend}`, async () => {
     const sql = backend === "sqlite" ? new Database(":memory:") : undefined;
     const memory = { user: [], session: [], account: [], verification: [] };
     const auth = betterAuth({
@@ -41,31 +41,29 @@ for (const backend of ["memory", "sqlite"] as const) {
         ? Object.fromEntries(["user", "session", "account", "verification"].map(model => [model, sql.query(`SELECT * FROM "${model}" ORDER BY id`).all()]))
         : structuredClone(memory);
       const stored = await snapshot();
-      for (const scenario of cases) {
-        const headers = scenario.actor === "server" ? undefined : new Headers(
-          scenario.actor === "anonymous" ? {} : { cookie: cookies[scenario.actor] },
-        );
-        let thrown: unknown;
-        try {
-          await Reflect.apply(auth.api[scenario.operation as keyof typeof auth.api], undefined, [{
-            ...(headers === undefined ? {} : { headers }),
-            ...("body" in scenario ? { body: scenario.body } : {}),
-            ...("query" in scenario ? { query: scenario.query } : {}),
-          }]);
-        } catch (error) { thrown = error; }
-        expect(thrown, scenario.name).toBeInstanceOf(CallError);
-        expect(thrown instanceof APIError, scenario.name).toBe(scenario.brand === "BetterAuth");
-        const error = thrown as CallError;
-        const body = "expectedBody" in scenario ? scenario.expectedBody : undefined;
-        expect(error.status, scenario.name).toBe(scenario.status);
-        expect(error.statusCode, scenario.name).toBe(scenario.httpStatus);
-        expect(error.body, scenario.name).toStrictEqual(body);
-        expect(Object.keys(error.body ?? {}), scenario.name).toStrictEqual(Object.keys(body ?? {}));
-        const response = toResponse(error);
-        expect(response.status, scenario.name).toBe(scenario.httpStatus);
-        expect(await response.text(), scenario.name).toBe(body === undefined ? "" : JSON.stringify(body));
-        expect(await snapshot(), scenario.name).toStrictEqual(stored);
-      }
+      const headers = scenario.actor === "server" ? undefined : new Headers(
+        scenario.actor === "anonymous" ? {} : { cookie: cookies[scenario.actor] },
+      );
+      let thrown: unknown;
+      try {
+        await Reflect.apply(auth.api[scenario.operation as keyof typeof auth.api], undefined, [{
+          ...(headers === undefined ? {} : { headers }),
+          ...("body" in scenario ? { body: scenario.body } : {}),
+          ...("query" in scenario ? { query: scenario.query } : {}),
+        }]);
+      } catch (error) { thrown = error; }
+      expect(thrown, scenario.name).toBeInstanceOf(CallError);
+      expect(thrown instanceof APIError, scenario.name).toBe(scenario.brand === "BetterAuth");
+      const error = thrown as CallError;
+      const body = "expectedBody" in scenario ? scenario.expectedBody : undefined;
+      expect(error.status, scenario.name).toBe(scenario.status);
+      expect(error.statusCode, scenario.name).toBe(scenario.httpStatus);
+      expect(error.body, scenario.name).toStrictEqual(body);
+      expect(Object.keys(error.body ?? {}), scenario.name).toStrictEqual(Object.keys(body ?? {}));
+      const response = toResponse(error);
+      expect(response.status, scenario.name).toBe(scenario.httpStatus);
+      expect(await response.text(), scenario.name).toBe(body === undefined ? "" : JSON.stringify(body));
+      expect(await snapshot(), scenario.name).toStrictEqual(stored);
     } finally { sql?.close(); }
   });
 }

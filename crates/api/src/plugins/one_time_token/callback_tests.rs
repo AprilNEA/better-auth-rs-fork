@@ -386,6 +386,36 @@ async fn generation_requires_session_before_client_policy_and_skips_both_generat
         "Unauthorized",
     );
     let request = request(&ctx, &data, "/one-time-token/generate")?;
+    let request_only = request
+        .clone()
+        .with_optional_headers(None)
+        .with_original_request(request.clone());
+    let scope = RequestHookContext::from_request(&request_only)?;
+    let error = with_request_hook_context_value(scope, plugin.on_request(&request_only, &ctx))
+        .await
+        .unwrap_err();
+    crate::plugins::test_helpers::assert_coded_api_error(
+        &error,
+        "UNAUTHORIZED",
+        401,
+        "UNAUTHORIZED",
+        "Unauthorized",
+    );
+    let response = crate::plugins::test_helpers::finalize_response(
+        &ctx,
+        &request_only,
+        error.to_auth_response(),
+    );
+    assert_eq!(response.status, 401);
+    assert_eq!(
+        response.body.bytes()?.as_ref(),
+        br#"{"message":"Unauthorized","code":"UNAUTHORIZED"}"#
+    );
+    assert!(!response.headers.contains_key("set-cookie"));
+    assert!(request_only.new_session()?.is_none());
+    assert!(observations.lock().unwrap().is_empty());
+    assert_eq!(legacy_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(hash_calls.load(Ordering::SeqCst), 0);
     let error = plugin.on_request(&request, &ctx).await.unwrap_err();
     super::tests::assert_message_error(&error, "Client requests are disabled");
     let response = error.to_auth_response();

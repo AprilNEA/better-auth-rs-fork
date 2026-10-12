@@ -2,7 +2,7 @@
   {
     "name": "deny-set-role",
     "path": "/admin/set-role",
-    "operation": "setUserRole",
+    "operation": "setRole",
     "actor": "target",
     "method": "POST",
     "status": "FORBIDDEN",
@@ -90,7 +90,7 @@
   {
     "name": "deny-list-user-sessions",
     "path": "/admin/list-user-sessions",
-    "operation": "adminListUserSessions",
+    "operation": "listUserSessions",
     "actor": "target",
     "method": "POST",
     "status": "FORBIDDEN",
@@ -281,7 +281,7 @@
   {
     "name": "missing-set-role",
     "path": "/admin/set-role",
-    "operation": "setUserRole",
+    "operation": "setRole",
     "actor": "actor",
     "method": "POST",
     "status": "NOT_FOUND",
