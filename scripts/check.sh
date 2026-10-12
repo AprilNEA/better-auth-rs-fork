@@ -639,6 +639,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/jwk-native-date-methods.test.ts \
         ./compat-tests/reference-server/contracts/jwt-native-callbacks.test.ts \
         ./compat-tests/reference-server/contracts/jwt-native-options.test.ts \
+        ./compat-tests/reference-server/contracts/jwt-native-resolved-key-null.test.ts \
         ./compat-tests/reference-server/contracts/native-sort-consumers-capture.test.ts \
         ./compat-tests/reference-server/contracts/native-sort-data-capture.test.ts || jwt_status=1
       cargo clippy --locked -p better-auth-core -p better-auth-api --lib -- -D warnings || jwt_status=1
@@ -646,9 +647,11 @@ run_stage() {
       cargo test --locked -p better-auth-api --lib -- plugins::jwt:: plugins::json_body:: || jwt_status=1
       cargo clippy --locked --features axum,seaorm2,redis-cache \
         --test jwt_transaction_tests --test jwk_additional_fields_tests \
+        --test jwt_native_resolved_key_null_tests \
         --test native_endpoint_tests -- -D warnings || jwt_status=1
       cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
         --test jwt_transaction_tests --test jwk_additional_fields_tests \
+        --test jwt_native_resolved_key_null_tests \
         --test native_endpoint_tests || jwt_status=1
       return "$jwt_status"
       ;;
