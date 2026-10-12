@@ -62,7 +62,8 @@ fn merge_preserves_private_changes_and_concurrent_rows_without_resurrecting_dele
         .unwrap()
         .set_field("password".into(), "concurrent".into())
         .unwrap();
-    let _ = live.remove("removed").unwrap();
+    let removed = live.get_ref("removed").unwrap().unwrap();
+    live = live.without_refs(&[removed]).unwrap();
     live.push(account("new-live", "concurrent").field_values().unwrap())
         .unwrap();
     let working = base

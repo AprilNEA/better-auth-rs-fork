@@ -40,7 +40,7 @@ pub(super) fn select_one(
         .next())
 }
 
-/// Organization tables store physical fields. Typed values are read-only business views.
+#[cfg(test)]
 pub(super) trait OrganizationRows {
     fn get_ref<Q: ?Sized>(&self, id: &Q) -> AuthResult<Option<RowRef<FieldMap>>>
     where
@@ -49,16 +49,9 @@ pub(super) trait OrganizationRows {
     fn get<Q: ?Sized>(&self, id: &Q) -> AuthResult<Option<FieldMap>>
     where
         crate::SchemaValue<String>: PartialEq<Q>;
-
-    fn replace<Q: ?Sized>(&self, id: &Q, fields: FieldMap) -> AuthResult<bool>
-    where
-        crate::SchemaValue<String>: PartialEq<Q>;
-
-    fn remove<Q: ?Sized>(&mut self, id: &Q) -> AuthResult<Option<FieldMap>>
-    where
-        crate::SchemaValue<String>: PartialEq<Q>;
 }
 
+#[cfg(test)]
 impl OrganizationRows for TableRef<FieldMap> {
     fn get_ref<Q: ?Sized>(&self, id: &Q) -> AuthResult<Option<RowRef<FieldMap>>>
     where
@@ -82,30 +75,6 @@ impl OrganizationRows for TableRef<FieldMap> {
         self.get_ref(id)?
             .map(|row| row.shallow_fields())
             .transpose()
-    }
-
-    fn replace<Q: ?Sized>(&self, id: &Q, fields: FieldMap) -> AuthResult<bool>
-    where
-        crate::SchemaValue<String>: PartialEq<Q>,
-    {
-        if let Some(row) = self.get_ref(id)? {
-            row.replace(fields)?;
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
-    fn remove<Q: ?Sized>(&mut self, id: &Q) -> AuthResult<Option<FieldMap>>
-    where
-        crate::SchemaValue<String>: PartialEq<Q>,
-    {
-        let Some(row) = self.get_ref(id)? else {
-            return Ok(None);
-        };
-        let fields = row.shallow_fields()?;
-        *self = self.without_refs(std::slice::from_ref(&row))?;
-        Ok(Some(fields))
     }
 }
 

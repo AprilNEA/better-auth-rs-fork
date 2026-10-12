@@ -110,8 +110,10 @@ use crate::store::database_hooks::DatabaseHooks;
 use hooks::{PendingHook, PendingHookQueue};
 use operation::{MemoryGate, MemoryOperation};
 #[cfg(test)]
+use organization_rows::OrganizationRows;
+#[cfg(test)]
 use organization_rows::id as organization_id;
-use organization_rows::{OrganizationRows, value as organization_value};
+use organization_rows::value as organization_value;
 use state::State;
 use transactions::EphemeralTransaction;
 

@@ -451,7 +451,7 @@ async fn organization_id_list_binds_one_alias_for_the_complete_in_operand() -> A
 }
 
 #[tokio::test]
-async fn member_join_retains_the_first_user_id_alias_in_both_join_modes() -> AuthResult<()> {
+async fn member_unique_join_retains_the_first_user_id_alias_in_both_join_modes() -> AuthResult<()> {
     for native in [false, true] {
         let mut config = (*test_config()).clone();
         config.advanced.database.joins = Some(native);
@@ -460,6 +460,14 @@ async fn member_join_retains_the_first_user_id_alias_in_both_join_modes() -> Aut
             .fields_mut()
             .insert("id".into(), mapped("lookup"));
         let store = EphemeralStore::new(Arc::new(config));
+        let mut fields = OrganizationFields::default();
+        let mut reference = fields.schema_for(EntityRole::Member)?.fields()["userId"].clone();
+        reference.unique = Some(true);
+        let _ = fields
+            .member
+            .fields_mut()
+            .insert("userId".into(), reference);
+        store.configure_organization_fields(fields)?;
         let now = Value::from(Utc::now());
         let user: FieldMap = [
             ("id".into(), "canonical-user".into()),
@@ -491,7 +499,7 @@ async fn member_join_retains_the_first_user_id_alias_in_both_join_modes() -> Aut
             .unwrap();
         assert_eq!(joined.member.field_values()?, member);
         assert_eq!(joined.user.id, "canonical-user");
-        assert_eq!(joined.user.name, "Alias owner");
+        assert_eq!(joined.user.name.field_value(), Value::from("Alias owner"));
         assert_eq!(store.storage_rows(EntityRole::User)?, vec![user]);
         assert_eq!(store.storage_rows(EntityRole::Member)?, vec![member]);
     }
@@ -588,5 +596,66 @@ async fn invitation_alias_change_after_claim_restores_status_without_committing_
     );
     assert!(store.storage_rows(EntityRole::Member)?.is_empty());
     assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+    Ok(())
+}
+
+#[tokio::test]
+async fn invitation_claim_accepts_its_own_selector_update() -> AuthResult<()> {
+    for column in ["id", "lookup"] {
+        let baseline = EphemeralStore::new(test_config());
+        let _ = create(&baseline, EntityRole::Invitation, FieldMap::new()).await?;
+        let mut invitation = stored(&baseline, EntityRole::Invitation)?;
+        let _ = invitation.insert(column.into(), "invitation-alias".into());
+        let store = fresh_id_alias_store(EntityRole::Invitation, vec![invitation.clone()])?;
+        let mut fields = store.organization_fields()?;
+        let _ = fields
+            .invitation
+            .fields_mut()
+            .insert("id".into(), mapped(column));
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed_calls = calls.clone();
+        let _ = fields.invitation.fields_mut().insert(
+            "claimLookup".into(),
+            UserFieldConfig {
+                on_update: Some(Arc::new(move || {
+                    observed_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Ok("claimed-alias".into())
+                })),
+                ..mapped(column)
+            },
+        );
+        store.configure_organization_fields(fields)?;
+        let (member, accepted, session) = store
+            .accept_invitation_with_teams_values(
+                &"invitation-alias".into(),
+                &"recipient".into(),
+                None,
+                false,
+                crate::store::TeamMemberLimits::Fixed(None),
+            )
+            .await?;
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(accepted.status, InvitationStatus::Accepted);
+        assert_eq!(
+            accepted.additional_fields["claimLookup"],
+            Value::from("claimed-alias")
+        );
+        let _ = invitation.insert(column.into(), "claimed-alias".into());
+        let _ = invitation.insert("status".into(), "accepted".into());
+        assert_eq!(accepted.id.field_value(), invitation["id"]);
+        assert_eq!(
+            store.storage_rows(EntityRole::Invitation)?,
+            vec![invitation]
+        );
+        assert_eq!(member.organization_id, "organization");
+        assert_eq!(member.user_id, "recipient");
+        assert_eq!(member.role, "member");
+        assert_eq!(
+            store.storage_rows(EntityRole::Member)?,
+            vec![member.field_values()?]
+        );
+        assert!(store.storage_rows(EntityRole::TeamMember)?.is_empty());
+        assert!(session.is_none());
+    }
     Ok(())
 }

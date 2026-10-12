@@ -3,6 +3,7 @@ use crate::AuthRecordFields;
 use crate::plugin_runtime::ModelFields;
 use crate::store::{ApiKeyStore, DeviceCodeStore, PasskeyStore, TwoFactorStore, UserStore};
 
+mod cleanup_tests;
 mod operations;
 
 const OPERATIONS: [(&str, &str, &str); 10] = [

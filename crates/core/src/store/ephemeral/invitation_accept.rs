@@ -44,7 +44,7 @@ impl InvitationClaim {
             return Err(AuthError::conflict(changed_message));
         }
         if !super::organization_rows::field(&self.row, &self.schema, "status")?
-            .strict_equals(&"accepted".into())
+            .same_value_zero(&organization_value(&self.fields, &self.schema, "status"))
         {
             return Err(AuthError::bad_request("Invitation not found"));
         }
@@ -71,6 +71,8 @@ impl EphemeralStore {
     ) -> AuthResult<(Member, Invitation, Option<SessionView>)> {
         let bound_id =
             self.organization_query_field(EntityRole::Invitation, "id", invitation_id.clone())?;
+        let pending_status =
+            self.organization_query_field(EntityRole::Invitation, "status", "pending".into())?;
         let patch = self
             .prepare_increment_one_patch(
                 EntityRole::Invitation,
@@ -85,10 +87,7 @@ impl EphemeralStore {
             let row = self
                 .select_organization_rows(
                     EntityRole::Invitation,
-                    &[
-                        bound_id.clone(),
-                        (schema.record_storage_key("status").into(), "pending".into()),
-                    ],
+                    &[bound_id.clone(), pending_status],
                 )?
                 .into_iter()
                 .next()
@@ -101,11 +100,12 @@ impl EphemeralStore {
                 })?;
             row.apply_patch(patch.apply(FieldMap::new()))?;
             let fields = row.shallow_fields()?;
+            let selector_value = fields.get(&bound_id.0).cloned().unwrap_or_default();
             Ok(InvitationClaim {
                 row,
                 fields,
                 schema,
-                selector: bound_id,
+                selector: (bound_id.0, selector_value),
             })
         })?;
         // Claim output follows the committed claim and precedes the compensation boundary.
@@ -123,13 +123,22 @@ impl EphemeralStore {
         {
             Ok((member, session)) => Ok((member, accepted, session)),
             Err(error) => {
-                self.restore_pending_invitation(&claim).await?;
+                self.restore_pending_invitation(&claim, invitation_id)
+                    .await?;
                 Err(error)
             }
         }
     }
 
-    async fn restore_pending_invitation(&self, claim: &InvitationClaim) -> AuthResult<()> {
+    async fn restore_pending_invitation(
+        &self,
+        claim: &InvitationClaim,
+        invitation_id: &Value,
+    ) -> AuthResult<()> {
+        let _id =
+            self.organization_query_field(EntityRole::Invitation, "id", invitation_id.clone())?;
+        let status =
+            self.organization_query_field(EntityRole::Invitation, "status", "accepted".into())?;
         let patch = self
             .prepare_increment_one_patch(
                 EntityRole::Invitation,
@@ -137,12 +146,14 @@ impl EphemeralStore {
                 FieldMap::new(),
             )
             .await?;
+        // Compensation retains the claimed row; a changed alias must not select a replacement row.
         let restored = self.operation(|op| {
             if op
                 .capture_table(EntityRole::Invitation)?
                 .contains_ref(&claim.row)?
+                && super::organization_rows::matches(&claim.row, &[status])?
                 && super::organization_rows::field(&claim.row, &claim.schema, "status")?
-                    .strict_equals(&"accepted".into())
+                    .same_value_zero(&organization_value(&claim.fields, &claim.schema, "status"))
             {
                 claim.row.apply_patch(patch.apply(FieldMap::new()))?;
                 Ok(Some(claim.row.shallow_fields()?))

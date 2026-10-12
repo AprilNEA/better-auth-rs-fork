@@ -38,4 +38,6 @@ test("Invitation claims apply declared status query and write policies", async (
     expect(restore.before).toStrictEqual(step.after);
     expect(restore.after).toStrictEqual(step.after);
   }
+  const fixture = await Bun.file(new URL("../../../tests/fixtures/invitation-claim-status-1.7.6.json", import.meta.url)).json();
+  expect(observation).toStrictEqual(fixture);
 });

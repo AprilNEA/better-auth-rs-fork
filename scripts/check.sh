@@ -330,6 +330,11 @@ run_stage() {
         ./compat-tests/reference-server/contracts/organization-physical-fields.test.ts \
         ./compat-tests/reference-server/contracts/query-binding-order.test.ts \
         ./compat-tests/reference-server/contracts/core-query-id-alias.test.ts \
+        ./compat-tests/reference-server/contracts/core-query-id-sort.test.ts \
+        ./compat-tests/reference-server/contracts/api-key-cleanup-fields.test.ts \
+        ./compat-tests/reference-server/contracts/organization-query-id-alias.test.ts \
+        ./compat-tests/reference-server/contracts/organization-query-id-alias-boundaries.test.ts \
+        ./compat-tests/reference-server/contracts/invitation-claim-status.test.ts \
         ./compat-tests/reference-server/contracts/plugin-model-fields.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-input.test.ts \
         ./compat-tests/reference-server/contracts/user-runtime-output.test.ts \

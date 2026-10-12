@@ -426,7 +426,11 @@ impl<'a> PreparedUserQuery<'a> {
         })
     }
 
-    pub(crate) fn for_memory_adapter(
+    /// Bind Memory search and filter operands in Where order, retaining each physical field name.
+    /// The callback resolves the original request field name, including physical aliases and `_id`.
+    /// The callback applies the complete adapter policy; `select_memory` uses `fields` for static sorting.
+    /// Prepare a new query before a separate count so the callback observes the current ID policy.
+    pub fn for_memory_adapter(
         params: &'a ListUsersParams,
         fields: &'a UserConfig,
         mut bind: impl FnMut(&str, Value) -> AuthResult<(String, Value)>,

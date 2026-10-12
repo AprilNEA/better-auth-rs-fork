@@ -315,22 +315,31 @@ impl DeviceCodeStore for EphemeralStore {
                 let table = op.capture_table(EntityRole::DeviceCode)?;
                 let selected = table
                     .select_refs(|source| {
-                        let selected = crate::query::field_matches_equality(
-                            &source.field(&selected_column)?.unwrap_or_default(),
-                            &selected_id,
-                        );
-                        if !selected {
-                            return Ok(false);
-                        }
-                        let owns = crate::memory_query::matches_all([&query], |query| {
-                            crate::memory_query::matches(
-                                source.field(&query.field)?.as_ref(),
-                                &query.value,
-                                query.operator,
-                                query.mode,
-                            )
-                        })?;
-                        if !unchanged || !owns {
+                        let matches = crate::memory_query::matches_all(
+                            [
+                                (
+                                    selected_column.as_str(),
+                                    &selected_id,
+                                    crate::WhereOperator::Eq,
+                                    crate::WhereMode::Sensitive,
+                                ),
+                                (
+                                    query.field.as_str(),
+                                    &query.value,
+                                    query.operator,
+                                    query.mode,
+                                ),
+                            ],
+                            |(field, value, operator, mode)| {
+                                crate::memory_query::matches(
+                                    source.field(field)?.as_ref(),
+                                    value,
+                                    operator,
+                                    mode,
+                                )
+                            },
+                        )?;
+                        if !unchanged || !matches {
                             return Ok(false);
                         }
                         for (name, column) in names.iter().zip(&columns) {

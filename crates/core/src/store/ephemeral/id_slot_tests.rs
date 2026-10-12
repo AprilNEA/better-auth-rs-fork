@@ -7,6 +7,8 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 mod core_query_alias_tests;
+mod core_query_sort_tests;
+mod organization_query_alias_tests;
 mod plugin_credentials;
 mod session_creates;
 mod session_undefined_alias;
