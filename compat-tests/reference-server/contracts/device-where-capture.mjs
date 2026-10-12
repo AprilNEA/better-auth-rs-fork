@@ -26,7 +26,7 @@ export const observeValue = value => {
 };
 
 export async function captureDeviceWhereGroup(backend, serial, scenarios = deviceWhereScenarios(), {
-  diagnostics = [], ownerRefType = "string", ownerId = "ordinary-owner", ownerRefTarget = "id", replaceOwnerReference = false,
+  diagnostics = [], ownerRefType = "string", ownerId = "ordinary-owner", ownerRefTarget = "id", replaceOwnerReference = false, idFieldName,
 } = {}) {
   const memory = { user: [], session: [], account: [], verification: [], deviceCode: [] };
   const sqlite = backend === "sqlite" ? new Database(":memory:") : undefined;
@@ -39,6 +39,7 @@ export async function captureDeviceWhereGroup(backend, serial, scenarios = devic
       output(value) { events.push({ phase: "output", field, value: observeValue(value) }); return value; },
     },
   }]));
+  if (idFieldName !== undefined) fields.id = { type: "string", fieldName: idFieldName };
   const configuration = {
     baseURL: "http://device-where.test", secret: "ordinary-device-where-contract-at-least-32-characters",
     logger: { disabled: true }, telemetry: { enabled: false },
@@ -76,7 +77,7 @@ export async function captureDeviceWhereGroup(backend, serial, scenarios = devic
         pollingInterval: 5000, clientId: "ordinary-client", scope: "read",
       };
       const stored = scenario.field === "ownerRef" && scenario.stored === "owner" ? owner.id : scenario.stored;
-      const data = { ...native, ...Object.fromEntries(Object.keys(fields).map(field => [field, null])), [scenario.field]: stored };
+      const data = { ...native, ...Object.fromEntries(Object.keys(fieldTypes).map(field => [field, null])), [scenario.field]: stored };
       const seeded = await adapter.create({ model: "deviceCode", data });
       assert.equal(typeof seeded.id, "string");
       assert.ok(seeded.id.length > 0);
