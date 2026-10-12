@@ -1,0 +1,615 @@
+{
+  "contract": "json-error-host-gc",
+  "sourceObservation": {
+    "run": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38213565697",
+    "commit": "b82fd693ce129a48e025ba9433673c96a8180483",
+    "provenance": {
+      "betterAuth": {
+        "path": "@better-auth/core/dist/utils/json.mjs",
+        "sha256": "2959164c7b961306247c28f29b4d051da60d94ce27b4976a90c19991a50d2275"
+      },
+      "engine": {
+        "bun": "1.4.2",
+        "revision": "744846f844374847c902b5e7fd59b4342a51ef99",
+        "webkitCommit": "2e2aa2290fac856d6f451ceacb58f7f5b44dd057"
+      },
+      "officialSources": [
+        {
+          "path": "scripts/build/deps/webkit.ts",
+          "url": "https://github.com/oven-sh/bun/blob/bun-v1.4.2/scripts/build/deps/webkit.ts",
+          "sha256": "21d397951be3ac93def2fea1756c4815e9ace068a6a01a8530c1f0c65ac4b343"
+        },
+        {
+          "path": "Source/JavaScriptCore/runtime/LiteralParser.cpp",
+          "url": "https://github.com/oven-sh/WebKit/blob/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/LiteralParser.cpp",
+          "sha256": "0c64eae7e9985a14461f30a986c5482f5eb78d851e11832e44296033679e1f60"
+        },
+        {
+          "path": "Source/JavaScriptCore/runtime/LiteralParser.h",
+          "url": "https://github.com/oven-sh/WebKit/blob/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/LiteralParser.h",
+          "sha256": "71d75286169044b1b93901422da332811c7d3a357175ea5c0759c8ac433004ab"
+        },
+        {
+          "path": "Source/JavaScriptCore/runtime/JSONObject.cpp",
+          "url": "https://github.com/oven-sh/WebKit/blob/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/JSONObject.cpp",
+          "sha256": "25006ef8b896b5860fac37815683cd4b0563f31ce879dbaebd87e86d4513a1d1"
+        }
+      ]
+    },
+    "case": {
+      "name": "array-trailing-comma",
+      "category": "array",
+      "mode": "reviver",
+      "input": "[1,]",
+      "outcome": {
+        "returned": false,
+        "sameOriginal": false,
+        "error": {
+          "identity": "object-1",
+          "type": "object",
+          "ownKeys": [
+            "message",
+            "line",
+            "column",
+            "sourceURL",
+            "stack"
+          ],
+          "properties": [
+            [
+              "message",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": true,
+                "value": "JSON Parse error: Unexpected comma at the end of array expression"
+              }
+            ],
+            [
+              "line",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": true,
+                "value": 49
+              }
+            ],
+            [
+              "column",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": true,
+                "value": 37
+              }
+            ],
+            [
+              "sourceURL",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": true,
+                "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs"
+              }
+            ],
+            [
+              "stack",
+              {
+                "enumerable": false,
+                "configurable": true,
+                "writable": true,
+                "value": "Error\n    at parse (unknown)\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:49:37)\n    at capture (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-runtime.mjs:61:28)\n    at outcome (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-shared.mjs:52:59)\n    at captureCase (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:59:32)\n    at captureJsonParseNative (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:122:95)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.test.ts:8:79)"
+              }
+            ]
+          ]
+        }
+      },
+      "error": {
+        "identity": "object-1",
+        "type": "object",
+        "ownKeys": [
+          "message",
+          "line",
+          "column",
+          "sourceURL",
+          "stack"
+        ],
+        "properties": [
+          [
+            "message",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": true,
+              "value": "JSON Parse error: Unexpected comma at the end of array expression"
+            }
+          ],
+          [
+            "line",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": true,
+              "value": 49
+            }
+          ],
+          [
+            "column",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": true,
+              "value": 37
+            }
+          ],
+          [
+            "sourceURL",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": true,
+              "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs"
+            }
+          ],
+          [
+            "stack",
+            {
+              "enumerable": false,
+              "configurable": true,
+              "writable": true,
+              "value": "Error\n    at parse (unknown)\n    at <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:49:37)\n    at capture (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-runtime.mjs:61:28)\n    at outcome (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/secondary-native-shared.mjs:52:59)\n    at captureCase (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:59:32)\n    at captureJsonParseNative (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.mjs:122:95)\n    at async <anonymous> (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-parse-native-capture.test.ts:8:79)"
+            }
+          ]
+        ]
+      },
+      "events": [],
+      "logs": [],
+      "inputAfter": "[1,]",
+      "functions": [],
+      "runtime": {
+        "outcome": {
+          "returned": false,
+          "sameOriginal": false,
+          "error": {}
+        },
+        "error": {
+          "name": "SyntaxError",
+          "message": "JSON Parse error: Unexpected comma at the end of array expression",
+          "display": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression",
+          "hasOwnMessage": true,
+          "messageEnumerable": false,
+          "hasOwnName": false,
+          "enumerable": {}
+        },
+        "events": [],
+        "reviverKeys": [],
+        "sameInput": false,
+        "mutation": {
+          "type": "undefined"
+        },
+        "functionIds": []
+      }
+    },
+    "recordSha256": "13873f427b8fc905425a978f2b9684081f2d90a90255c5bb319d119d8dfa215d"
+  },
+  "diagnostic": {
+    "run": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38215157057",
+    "commit": "f5d8668d687a2812b556cb7d536e745d21f5225b",
+    "observation": {
+      "contract": "json-error-host-diagnostic-result",
+      "status": "not-reproduced",
+      "observations": [
+        {
+          "contract": "json-error-host-diagnostic",
+          "mode": "retained",
+          "engine": {
+            "bun": "1.4.2",
+            "revision": "744846f844374847c902b5e7fd59b4342a51ef99"
+          },
+          "input": "[1,]",
+          "forcedCollections": 1,
+          "taskBoundariesBeforeCollection": 1,
+          "sameOriginal": true,
+          "callerRetained": true,
+          "callerCollected": false,
+          "retainedCallerMatches": true,
+          "effects": {
+            "parseCalls": 1,
+            "reviverCalls": 0
+          },
+          "before": null,
+          "after": {
+            "descriptors": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "message",
+                "line",
+                "column",
+                "sourceURL",
+                "stack"
+              ],
+              "properties": [
+                [
+                  "message",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "JSON Parse error: Unexpected comma at the end of array expression"
+                  }
+                ],
+                [
+                  "line",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 22
+                  }
+                ],
+                [
+                  "column",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 5
+                  }
+                ],
+                [
+                  "sourceURL",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs"
+                  }
+                ],
+                [
+                  "stack",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Error\n    at parse (unknown)\n    at createFailure (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:22:5)\n    at /home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:40:18"
+                  }
+                ]
+              ]
+            },
+            "name": "SyntaxError",
+            "message": "JSON Parse error: Unexpected comma at the end of array expression",
+            "display": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression",
+            "isSyntaxError": true
+          },
+          "signature": {
+            "missingOriginalLine": true,
+            "missingOriginalColumn": true,
+            "errorStackHeading": true,
+            "missingParseFrame": true
+          }
+        },
+        {
+          "contract": "json-error-host-diagnostic",
+          "mode": "eager-reflected",
+          "engine": {
+            "bun": "1.4.2",
+            "revision": "744846f844374847c902b5e7fd59b4342a51ef99"
+          },
+          "input": "[1,]",
+          "forcedCollections": 1,
+          "taskBoundariesBeforeCollection": 1,
+          "sameOriginal": true,
+          "callerRetained": false,
+          "callerCollected": true,
+          "retainedCallerMatches": null,
+          "effects": {
+            "parseCalls": 1,
+            "reviverCalls": 0
+          },
+          "before": {
+            "descriptors": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "message",
+                "originalLine",
+                "originalColumn",
+                "line",
+                "column",
+                "sourceURL",
+                "stack"
+              ],
+              "properties": [
+                [
+                  "message",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "JSON Parse error: Unexpected comma at the end of array expression"
+                  }
+                ],
+                [
+                  "originalLine",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 20
+                  }
+                ],
+                [
+                  "originalColumn",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 16
+                  }
+                ],
+                [
+                  "line",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 22
+                  }
+                ],
+                [
+                  "column",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 5
+                  }
+                ],
+                [
+                  "sourceURL",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs"
+                  }
+                ],
+                [
+                  "stack",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression\n    at <parse> (:0)\n    at parse (unknown)\n    at createFailure (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:22:5)\n    at /home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:40:18"
+                  }
+                ]
+              ]
+            },
+            "name": "SyntaxError",
+            "message": "JSON Parse error: Unexpected comma at the end of array expression",
+            "display": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression",
+            "isSyntaxError": true
+          },
+          "after": {
+            "descriptors": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "message",
+                "originalLine",
+                "originalColumn",
+                "line",
+                "column",
+                "sourceURL",
+                "stack"
+              ],
+              "properties": [
+                [
+                  "message",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "JSON Parse error: Unexpected comma at the end of array expression"
+                  }
+                ],
+                [
+                  "originalLine",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 20
+                  }
+                ],
+                [
+                  "originalColumn",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 16
+                  }
+                ],
+                [
+                  "line",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 22
+                  }
+                ],
+                [
+                  "column",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 5
+                  }
+                ],
+                [
+                  "sourceURL",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs"
+                  }
+                ],
+                [
+                  "stack",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression\n    at <parse> (:0)\n    at parse (unknown)\n    at createFailure (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:22:5)\n    at /home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:40:18"
+                  }
+                ]
+              ]
+            },
+            "name": "SyntaxError",
+            "message": "JSON Parse error: Unexpected comma at the end of array expression",
+            "display": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression",
+            "isSyntaxError": true
+          },
+          "signature": {
+            "missingOriginalLine": false,
+            "missingOriginalColumn": false,
+            "errorStackHeading": false,
+            "missingParseFrame": false
+          }
+        },
+        {
+          "contract": "json-error-host-diagnostic",
+          "mode": "forced-gc",
+          "engine": {
+            "bun": "1.4.2",
+            "revision": "744846f844374847c902b5e7fd59b4342a51ef99"
+          },
+          "input": "[1,]",
+          "forcedCollections": 1,
+          "taskBoundariesBeforeCollection": 1,
+          "sameOriginal": true,
+          "callerRetained": false,
+          "callerCollected": true,
+          "retainedCallerMatches": null,
+          "effects": {
+            "parseCalls": 1,
+            "reviverCalls": 0
+          },
+          "before": null,
+          "after": {
+            "descriptors": {
+              "identity": "object-1",
+              "type": "object",
+              "ownKeys": [
+                "message",
+                "line",
+                "column",
+                "sourceURL",
+                "stack"
+              ],
+              "properties": [
+                [
+                  "message",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "JSON Parse error: Unexpected comma at the end of array expression"
+                  }
+                ],
+                [
+                  "line",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 22
+                  }
+                ],
+                [
+                  "column",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": 5
+                  }
+                ],
+                [
+                  "sourceURL",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs"
+                  }
+                ],
+                [
+                  "stack",
+                  {
+                    "enumerable": false,
+                    "configurable": true,
+                    "writable": true,
+                    "value": "Error\n    at parse (unknown)\n    at createFailure (/home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:22:5)\n    at /home/runner/work/better-auth-rs/better-auth-rs/compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs:40:18"
+                  }
+                ]
+              ]
+            },
+            "name": "SyntaxError",
+            "message": "JSON Parse error: Unexpected comma at the end of array expression",
+            "display": "SyntaxError: JSON Parse error: Unexpected comma at the end of array expression",
+            "isSyntaxError": true
+          },
+          "signature": {
+            "missingOriginalLine": true,
+            "missingOriginalColumn": true,
+            "errorStackHeading": true,
+            "missingParseFrame": true
+          }
+        }
+      ]
+    },
+    "recordSha256": "e0818aab651e573bf9bfac6903f17e8d9bb4a1b7dcd42922b12acb61485d7804"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/json-parse-native-capture.mjs",
+      "sha256": "07d46a643b2413bba481884061160a99887aa06d09c47220c771adc75a8dc2c1"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/json-error-host-diagnostic.mjs",
+      "sha256": "aba6a8d6dc842b1c2924eaca867cc645784f264994b8bbe8d5aef9e95a0ff932"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/json-error-host-diagnostic.test.mjs",
+      "sha256": "cf32f2d4b305cf1421a0d80ba090a9cd4741da89f77822964303655c34842980"
+    }
+  ],
+  "interpretation": "The eager-reflected arm retains all descriptors across GC. The forced-gc arm collects the weak caller and records the same missing metadata and stack signature as the source failure. The retained arm retains only parseCaller, not every weak stack frame, so the diagnostic reports not-reproduced for its stronger three-arm criterion. No complete retained-stack control is established.",
+  "officialSources": [
+    {
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/ErrorInstance.cpp",
+      "bytes": 21409,
+      "sha256": "91410bc09e2e937893475937ee8ff07d820bfad6f4fda7206807605834879e82"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/oven-sh/WebKit/2e2aa2290fac856d6f451ceacb58f7f5b44dd057/Source/JavaScriptCore/runtime/StackFrame.cpp",
+      "bytes": 9915,
+      "sha256": "e76b063a60101b4cf1ceb7259c18ee09452958c0ad5a24198c7c7261c6c592fa"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/jsc/bindings/FormatStackTraceForJS.cpp",
+      "bytes": 35664,
+      "sha256": "9b7b5fc9b212a74951f23d891a54c67507b16096ff191cf85fe4021f63ebb4f7"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/oven-sh/bun/744846f844374847c902b5e7fd59b4342a51ef99/src/jsc/bindings/ZigGlobalObject.cpp",
+      "bytes": 227645,
+      "sha256": "c4ad973a4206b3c66d00ce9969280503fe634e70bd5085e119a4784a44b07f79"
+    }
+  ]
+}
