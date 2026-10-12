@@ -62,6 +62,7 @@ on:
           - user-fields
           - runtime-values
           - native-json
+          - logger
           - native-errors
           - serial-primary
           - secondary-user-refresh
@@ -99,7 +100,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'postgres:18.6' || '' }}
+        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "logger", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'postgres:18.6' || '' }}
         env:
           POSTGRES_USER: better_auth
           POSTGRES_PASSWORD: better_auth_ci
@@ -112,7 +113,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       mysql:
-        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'mysql:8.4.11' || '' }}
+        image: ${{ !contains(fromJSON('["lint-default", "lint-features", "format", "rustdoc", "runtime-values", "native-json", "logger", "native-errors", "secondary-user-refresh", "account-user-auth", "oauth-signin-order", "telemetry", "plugin-display-values", "memory-sorting", "memory-query", "memory-joins", "oauth-profile", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "api-key-cache", "email-verification", "cookie-attributes", "oauth-duration", "oauth-proxy", "totp-period", "credential-timing", "validation-errors"]'), inputs.stage) && 'mysql:8.4.11' || '' }}
         env:
           MYSQL_ROOT_PASSWORD: better_auth_ci
           MYSQL_ROOT_HOST: "%"
@@ -125,7 +126,7 @@ jobs:
           --health-retries 10
     env:
       CHECK_STAGE: ${{ github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
-      RUST_CACHE_STAGE: ${{ contains(fromJSON('["oauth-duration", "oauth-proxy"]'), inputs.stage) && 'provider-options' || inputs.stage == 'totp-period' && 'two-factor' || contains(fromJSON('["api-key-cache", "atomic-updates"]'), inputs.stage) && 'plugin-fields' || contains(fromJSON('["native-create", "native-json", "native-errors", "memory-query", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "field-projection", "validation-errors", "rate-limit-declarations"]'), inputs.stage) && 'user-fields' || inputs.stage == 'memory-sorting' && 'plugin-display-values' || contains(fromJSON('["credential-timing", "oauth-signin-order", "memory-joins", "oauth-profile"]'), inputs.stage) && 'account-user-auth' || github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
+      RUST_CACHE_STAGE: ${{ contains(fromJSON('["oauth-duration", "oauth-proxy"]'), inputs.stage) && 'provider-options' || inputs.stage == 'totp-period' && 'two-factor' || contains(fromJSON('["api-key-cache", "atomic-updates"]'), inputs.stage) && 'plugin-fields' || contains(fromJSON('["native-create", "native-json", "logger", "native-errors", "memory-query", "organization-fields", "organization-details", "organization-transactions", "organization-team-delete", "organization-members", "field-projection", "validation-errors", "rate-limit-declarations"]'), inputs.stage) && 'user-fields' || inputs.stage == 'memory-sorting' && 'plugin-display-values' || contains(fromJSON('["credential-timing", "oauth-signin-order", "memory-joins", "oauth-profile"]'), inputs.stage) && 'account-user-auth' || github.event_name == 'workflow_dispatch' && inputs.stage || 'all' }}
       BETTER_AUTH_TEST_POSTGRES_URL: postgres://better_auth:better_auth_ci@127.0.0.1:5432/better_auth_test
       BETTER_AUTH_TEST_MYSQL_URL: mysql://root:better_auth_ci@127.0.0.1:3306/mysql
     steps:
@@ -160,7 +161,7 @@ jobs:
         id: dependencies
         run: devenv shell -- ./scripts/check.sh dependencies
       - name: Capture upstream logger environment
-        if: ${{ !cancelled() && contains(fromJSON('["all", "native-json", "workspace-tests"]'), env.CHECK_STAGE) && steps.dependencies.outcome == 'success' }}
+        if: ${{ !cancelled() && contains(fromJSON('["all", "native-json", "logger", "workspace-tests"]'), env.CHECK_STAGE) && steps.dependencies.outcome == 'success' }}
         run: |
           devenv shell -- bun --no-install compat-tests/reference-server/contracts/logger-host-color-observation.mjs > "$RUNNER_TEMP/logger-host-color.json"
           printf '%s\n' "BETTER_AUTH_LOGGER_UPSTREAM_OBSERVATION=$RUNNER_TEMP/logger-host-color.json" >> "$GITHUB_ENV"
@@ -246,7 +247,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Preserve logger host observation
-        if: always() && contains(fromJSON('["all", "native-json", "workspace-tests"]'), env.CHECK_STAGE)
+        if: always() && contains(fromJSON('["all", "native-json", "logger", "workspace-tests"]'), env.CHECK_STAGE)
         uses: actions/upload-artifact@v4
         with:
           name: logger-host-color-${{ github.sha }}-${{ github.run_attempt }}

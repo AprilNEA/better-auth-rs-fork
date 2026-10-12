@@ -609,6 +609,28 @@ run_stage() {
         --test organization_query_limits_tests --test username_runtime_tests || errors_status=1
       return "$errors_status"
       ;;
+    logger)
+      cargo fmt --all -- --check
+      local logger_status=0
+      bun --no-install test \
+        ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
+        ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
+        ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
+        ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
+        ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
+        ./compat-tests/reference-server/contracts/observability.test.ts || logger_status=1
+      cargo clippy --locked -p better-auth-core --tests -- -D warnings || logger_status=1
+      cargo clippy --locked -p better-auth-api --lib -- -D warnings || logger_status=1
+      cargo clippy --locked --features axum,seaorm2,redis-cache \
+        --test http_api_error_logging_tests --test observability_tests -- -D warnings || logger_status=1
+      cargo test --locked -p better-auth-core --lib -- \
+        observability::logger:: error::http_tests:: \
+        store::secondary::sessions::logging_tests:: store::secondary::users::tests:: \
+        plugin::tests::raw_api_errors:: || logger_status=1
+      cargo test --locked --no-fail-fast --features axum,seaorm2,redis-cache \
+        --test http_api_error_logging_tests --test observability_tests || logger_status=1
+      return "$logger_status"
+      ;;
     native-json)
       cargo fmt --all -- --check
       local json_status=0
@@ -622,6 +644,7 @@ run_stage() {
         ./compat-tests/reference-server/contracts/http-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/http-api-error-logging.test.ts \
         ./compat-tests/reference-server/contracts/logger-color-depth.test.ts \
+        ./compat-tests/reference-server/contracts/logger-live-options.test.ts \
         ./compat-tests/reference-server/contracts/secondary-logger-scope.test.ts \
         ./compat-tests/reference-server/contracts/observability.test.ts \
         ./compat-tests/reference-server/contracts/native-body-context.test.ts \
