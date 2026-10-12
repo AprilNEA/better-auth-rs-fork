@@ -1,0 +1,6054 @@
+{
+  "version": "1.7.6",
+  "database": "mysql",
+  "cases": [
+    {
+      "name": "default",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin"
+      ],
+      "configuration": {},
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "input": false,
+                    "defaultValue": false
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "sortable",
+                    "returned"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "sortable": true,
+                    "returned": true
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "sortable",
+                    "unique",
+                    "returned",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "sortable": true,
+                    "unique": true,
+                    "returned": true,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.username(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "lastLoginMethod"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "defaultValue",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "defaultValue": false,
+                    "input": false
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "impersonatedBy",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "isAnonymous",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "phoneNumber",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "phoneNumberVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "username",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "displayUsername",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "lastLoginMethod",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "twoFactorEnabled",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "banned",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "17",
+          "name": "banReason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "18",
+          "name": "banExpires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `isAnonymous` boolean, `phoneNumber` varchar(255) unique, `phoneNumberVerified` boolean, `username` varchar(255) unique, `displayUsername` text, `lastLoginMethod` text, `twoFactorEnabled` boolean, `role` text, `banned` boolean, `banReason` text, `banExpires` timestamp(3));\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `impersonatedBy` text);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "phoneNumber",
+              "unique": "YES",
+              "position": "1",
+              "column": "phoneNumber"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "user",
+              "name": "username",
+              "unique": "YES",
+              "position": "1",
+              "column": "username"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "reversed",
+      "plugins": [
+        "admin",
+        "two-factor",
+        "last-login-method",
+        "username",
+        "phone-number",
+        "anonymous"
+      ],
+      "configuration": {},
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires",
+                "twoFactorEnabled",
+                "lastLoginMethod",
+                "username",
+                "displayUsername",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "isAnonymous"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "defaultValue",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "defaultValue": false,
+                    "input": false
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "lastLoginMethod"
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "sortable",
+                    "unique",
+                    "returned",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "sortable": true,
+                    "unique": true,
+                    "returned": true,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.username(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "sortable",
+                    "returned"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "sortable": true,
+                    "returned": true
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "input": false,
+                    "defaultValue": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "impersonatedBy",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "banned",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "banReason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "banExpires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "twoFactorEnabled",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "lastLoginMethod",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "username",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "displayUsername",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "phoneNumber",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "17",
+          "name": "phoneNumberVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "18",
+          "name": "isAnonymous",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `role` text, `banned` boolean, `banReason` text, `banExpires` timestamp(3), `twoFactorEnabled` boolean, `lastLoginMethod` text, `username` varchar(255) unique, `displayUsername` text, `phoneNumber` varchar(255) unique, `phoneNumberVerified` boolean, `isAnonymous` boolean);\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `impersonatedBy` text);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "phoneNumber",
+              "unique": "YES",
+              "position": "1",
+              "column": "phoneNumber"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "user",
+              "name": "username",
+              "unique": "YES",
+              "position": "1",
+              "column": "username"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "mapped",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin"
+      ],
+      "configuration": {
+        "user": {
+          "modelName": "plugin_users",
+          "fields": {
+            "isAnonymous": "stored_anonymous",
+            "phoneNumber": "stored_phone",
+            "phoneNumberVerified": "stored_phone_verified",
+            "username": "stored_username",
+            "displayUsername": "stored_display",
+            "lastLoginMethod": "stored_login",
+            "twoFactorEnabled": "stored_two_factor",
+            "role": "stored_role",
+            "banned": "stored_banned",
+            "banReason": "stored_ban_reason",
+            "banExpires": "stored_ban_expires"
+          }
+        },
+        "session": {
+          "modelName": "plugin_sessions",
+          "fields": {
+            "impersonatedBy": "stored_impersonator"
+          }
+        }
+      },
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "plugin_users",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "defaultValue",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "input": false,
+                    "defaultValue": false,
+                    "fieldName": "stored_anonymous"
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "sortable",
+                    "returned",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "sortable": true,
+                    "returned": true,
+                    "fieldName": "stored_phone"
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false,
+                    "fieldName": "stored_phone_verified"
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "sortable",
+                    "unique",
+                    "returned",
+                    "transform",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "sortable": true,
+                    "unique": true,
+                    "returned": true,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.username(value);\n      }"
+                        }
+                      }
+                    },
+                    "fieldName": "stored_username"
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    },
+                    "fieldName": "stored_display"
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "stored_login"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "defaultValue",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "defaultValue": false,
+                    "input": false,
+                    "fieldName": "stored_two_factor"
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false,
+                    "fieldName": "stored_role"
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": false,
+                    "input": false,
+                    "fieldName": "stored_banned"
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false,
+                    "fieldName": "stored_ban_reason"
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false,
+                    "fieldName": "stored_ban_expires"
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "plugin_sessions",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false,
+                    "fieldName": "stored_impersonator"
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "plugin_sessions",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_sessions",
+          "position": "9",
+          "name": "stored_impersonator",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "plugin_users",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "plugin_users",
+          "position": "8",
+          "name": "stored_anonymous",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "9",
+          "name": "stored_phone",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "10",
+          "name": "stored_phone_verified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "11",
+          "name": "stored_username",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "12",
+          "name": "stored_display",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "13",
+          "name": "stored_login",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "14",
+          "name": "stored_two_factor",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "15",
+          "name": "stored_role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "16",
+          "name": "stored_banned",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "17",
+          "name": "stored_ban_reason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "plugin_users",
+          "position": "18",
+          "name": "stored_ban_expires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `plugin_users` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `stored_anonymous` boolean, `stored_phone` varchar(255) unique, `stored_phone_verified` boolean, `stored_username` varchar(255) unique, `stored_display` text, `stored_login` text, `stored_two_factor` boolean, `stored_role` text, `stored_banned` boolean, `stored_ban_reason` text, `stored_ban_expires` timestamp(3));\n\ncreate table `plugin_sessions` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `plugin_users` (`id`) on delete cascade, `stored_impersonator` text);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `plugin_users` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `plugin_users` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `plugin_sessions_userId_idx` on `plugin_sessions` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "plugin_users",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "plugin_users",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "plugin_users",
+              "name": "stored_phone",
+              "unique": "YES",
+              "position": "1",
+              "column": "stored_phone"
+            },
+            {
+              "table": "plugin_users",
+              "name": "stored_username",
+              "unique": "YES",
+              "position": "1",
+              "column": "stored_username"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "plugin_sessions",
+              "name": "plugin_sessions_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "plugin_sessions",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "plugin_sessions",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "empty-mappings",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin"
+      ],
+      "configuration": {
+        "user": {
+          "fields": {
+            "isAnonymous": "",
+            "phoneNumber": "",
+            "phoneNumberVerified": "",
+            "username": "",
+            "displayUsername": "",
+            "lastLoginMethod": "",
+            "twoFactorEnabled": "",
+            "role": "",
+            "banned": "",
+            "banReason": "",
+            "banExpires": ""
+          }
+        },
+        "session": {
+          "fields": {
+            "impersonatedBy": ""
+          }
+        }
+      },
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "input": false,
+                    "defaultValue": false
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "sortable",
+                    "returned"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "sortable": true,
+                    "returned": true
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "sortable",
+                    "unique",
+                    "returned",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "sortable": true,
+                    "unique": true,
+                    "returned": true,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.username(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "lastLoginMethod"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "defaultValue",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "defaultValue": false,
+                    "input": false
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "impersonatedBy",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "isAnonymous",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "phoneNumber",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "phoneNumberVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "username",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "displayUsername",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "lastLoginMethod",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "twoFactorEnabled",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "banned",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "17",
+          "name": "banReason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "18",
+          "name": "banExpires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `isAnonymous` boolean, `phoneNumber` varchar(255) unique, `phoneNumberVerified` boolean, `username` varchar(255) unique, `displayUsername` text, `lastLoginMethod` text, `twoFactorEnabled` boolean, `role` text, `banned` boolean, `banReason` text, `banExpires` timestamp(3));\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `impersonatedBy` text);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "phoneNumber",
+              "unique": "YES",
+              "position": "1",
+              "column": "phoneNumber"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "user",
+              "name": "username",
+              "unique": "YES",
+              "position": "1",
+              "column": "username"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "replaced",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin"
+      ],
+      "configuration": {
+        "user": {
+          "additionalFields": {
+            "isAnonymous": {
+              "type": "string",
+              "required": false,
+              "fieldName": "replacement_anonymous",
+              "index": true
+            },
+            "phoneNumber": {
+              "type": "number",
+              "required": false,
+              "fieldName": "replacement_phone"
+            },
+            "phoneNumberVerified": {
+              "type": "date",
+              "required": false,
+              "fieldName": "replacement_phone_verified"
+            },
+            "username": {
+              "type": "json",
+              "required": false,
+              "fieldName": "replacement_username"
+            },
+            "displayUsername": {
+              "type": "boolean",
+              "required": true,
+              "fieldName": "replacement_display"
+            },
+            "lastLoginMethod": {
+              "type": "number",
+              "required": false,
+              "bigint": true,
+              "fieldName": "replacement_login"
+            },
+            "twoFactorEnabled": {
+              "type": "string[]",
+              "required": false,
+              "fieldName": "replacement_two_factor"
+            },
+            "role": {
+              "type": "number[]",
+              "required": false,
+              "fieldName": "replacement_role"
+            },
+            "banned": {
+              "type": "string",
+              "required": false,
+              "unique": true,
+              "fieldName": "replacement_banned"
+            },
+            "banReason": {
+              "type": "boolean",
+              "required": false,
+              "fieldName": "replacement_ban_reason"
+            },
+            "banExpires": {
+              "type": "string",
+              "required": false,
+              "fieldName": "replacement_ban_expires",
+              "references": {
+                "model": "user",
+                "field": "id",
+                "onDelete": "set null"
+              }
+            },
+            "metadata": {
+              "type": "json",
+              "required": false
+            }
+          }
+        },
+        "session": {
+          "additionalFields": {
+            "impersonatedBy": {
+              "type": "number",
+              "required": false,
+              "fieldName": "replacement_impersonator"
+            }
+          }
+        }
+      },
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires",
+                "metadata"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "replacement_anonymous",
+                    "index": true
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number",
+                    "required": false,
+                    "fieldName": "replacement_phone"
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "fieldName": "replacement_phone_verified"
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "json",
+                    "required": false,
+                    "fieldName": "replacement_username"
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": true,
+                    "fieldName": "replacement_display"
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "bigint",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number",
+                    "required": false,
+                    "bigint": true,
+                    "fieldName": "replacement_login"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string[]",
+                    "required": false,
+                    "fieldName": "replacement_two_factor"
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number[]",
+                    "required": false,
+                    "fieldName": "replacement_role"
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "fieldName": "replacement_banned"
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "fieldName": "replacement_ban_reason"
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "references"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "replacement_ban_expires",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "set null"
+                      }
+                    }
+                  }
+                },
+                "metadata": {
+                  "keys": [
+                    "type",
+                    "required"
+                  ],
+                  "value": {
+                    "type": "json",
+                    "required": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number",
+                    "required": false,
+                    "fieldName": "replacement_impersonator"
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "replacement_impersonator",
+          "type": "int",
+          "nativeType": "int",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "replacement_anonymous",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "replacement_phone",
+          "type": "int",
+          "nativeType": "int",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "replacement_phone_verified",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "replacement_username",
+          "type": "json",
+          "nativeType": "json",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "replacement_display",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "replacement_login",
+          "type": "bigint",
+          "nativeType": "bigint",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "replacement_two_factor",
+          "type": "json",
+          "nativeType": "json",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "replacement_role",
+          "type": "json",
+          "nativeType": "json",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "replacement_banned",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "17",
+          "name": "replacement_ban_reason",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "18",
+          "name": "replacement_ban_expires",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "19",
+          "name": "metadata",
+          "type": "json",
+          "nativeType": "json",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `replacement_anonymous` varchar(255), `replacement_phone` integer, `replacement_phone_verified` timestamp(3), `replacement_username` json, `replacement_display` boolean not null, `replacement_login` bigint, `replacement_two_factor` json, `replacement_role` json, `replacement_banned` varchar(255) unique, `replacement_ban_reason` boolean, `replacement_ban_expires` varchar(36) references `user` (`id`) on delete set null, `metadata` json);\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `replacement_impersonator` integer);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `user_replacement_anonymous_idx` on `user` (`replacement_anonymous`);\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "user",
+              "name": "replacement_banned",
+              "unique": "YES",
+              "position": "1",
+              "column": "replacement_banned"
+            },
+            {
+              "table": "user",
+              "name": "user_replacement_anonymous_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "replacement_anonymous"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "shared-columns",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin"
+      ],
+      "configuration": {
+        "user": {
+          "additionalFields": {
+            "isAnonymous": {
+              "type": "boolean",
+              "required": true,
+              "fieldName": "shared_status"
+            },
+            "banned": {
+              "type": "string",
+              "required": false,
+              "fieldName": "shared_status"
+            },
+            "phoneNumber": {
+              "type": "string",
+              "required": false,
+              "unique": true,
+              "fieldName": "shared_handle"
+            },
+            "username": {
+              "type": "number",
+              "required": false,
+              "fieldName": "shared_handle"
+            }
+          }
+        }
+      },
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": true,
+                    "fieldName": "shared_status"
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "fieldName": "shared_handle"
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number",
+                    "required": false,
+                    "fieldName": "shared_handle"
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "lastLoginMethod"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "defaultValue",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "defaultValue": false,
+                    "input": false
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "shared_status"
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "impersonatedBy",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "shared_status",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "shared_handle",
+          "type": "int",
+          "nativeType": "int",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "phoneNumberVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "displayUsername",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "lastLoginMethod",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "twoFactorEnabled",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "banReason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "banExpires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `shared_status` text, `shared_handle` integer, `phoneNumberVerified` boolean, `displayUsername` text, `lastLoginMethod` text, `twoFactorEnabled` boolean, `role` text, `banReason` text, `banExpires` timestamp(3));\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `impersonatedBy` text);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    },
+    {
+      "name": "duplicate-plugins",
+      "plugins": [
+        "anonymous",
+        "phone-number",
+        "username",
+        "last-login-method",
+        "two-factor",
+        "admin",
+        "admin",
+        "two-factor",
+        "last-login-method",
+        "username",
+        "phone-number",
+        "anonymous"
+      ],
+      "configuration": {
+        "user": {
+          "additionalFields": {
+            "isAnonymous": {
+              "type": "string",
+              "required": false,
+              "fieldName": "duplicate_anonymous"
+            },
+            "username": {
+              "type": "number",
+              "required": false,
+              "fieldName": "duplicate_username"
+            },
+            "twoFactorEnabled": {
+              "type": "string",
+              "required": false,
+              "fieldName": "duplicate_two_factor"
+            },
+            "banned": {
+              "type": "string",
+              "required": false,
+              "fieldName": "duplicate_banned"
+            }
+          }
+        },
+        "session": {
+          "additionalFields": {
+            "impersonatedBy": {
+              "type": "boolean",
+              "required": false,
+              "fieldName": "duplicate_impersonator"
+            }
+          }
+        }
+      },
+      "declarations": {
+        "user": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "user",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "name",
+                "email",
+                "emailVerified",
+                "image",
+                "createdAt",
+                "updatedAt",
+                "isAnonymous",
+                "phoneNumber",
+                "phoneNumberVerified",
+                "username",
+                "displayUsername",
+                "lastLoginMethod",
+                "twoFactorEnabled",
+                "role",
+                "banned",
+                "banReason",
+                "banExpires"
+              ],
+              "value": {
+                "name": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "name",
+                    "sortable": true
+                  }
+                },
+                "email": {
+                  "keys": [
+                    "type",
+                    "unique",
+                    "required",
+                    "fieldName",
+                    "sortable"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "unique": true,
+                    "required": true,
+                    "fieldName": "email",
+                    "sortable": true
+                  }
+                },
+                "emailVerified": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "defaultValue": false,
+                    "required": true,
+                    "fieldName": "emailVerified",
+                    "input": false
+                  }
+                },
+                "image": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "image"
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "createdAt"
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "defaultValue",
+                    "onUpdate",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    },
+                    "required": true,
+                    "fieldName": "updatedAt"
+                  }
+                },
+                "isAnonymous": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "duplicate_anonymous"
+                  }
+                },
+                "phoneNumber": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "unique",
+                    "sortable",
+                    "returned"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "unique": true,
+                    "sortable": true,
+                    "returned": true
+                  }
+                },
+                "phoneNumberVerified": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "returned",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "returned": true,
+                    "input": false
+                  }
+                },
+                "username": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "number",
+                    "required": false,
+                    "fieldName": "duplicate_username"
+                  }
+                },
+                "displayUsername": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "transform"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "transform": {
+                      "keys": [
+                        "input"
+                      ],
+                      "value": {
+                        "input": {
+                          "type": "function",
+                          "name": "input",
+                          "length": 1,
+                          "source": "input(value) {\n        return typeof value !== \"string\" ? value : normalizer.displayUsername(value);\n      }"
+                        }
+                      }
+                    }
+                  }
+                },
+                "lastLoginMethod": {
+                  "keys": [
+                    "type",
+                    "input",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "input": false,
+                    "required": false,
+                    "fieldName": "lastLoginMethod"
+                  }
+                },
+                "twoFactorEnabled": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "duplicate_two_factor"
+                  }
+                },
+                "role": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banned": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "duplicate_banned"
+                  }
+                },
+                "banReason": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "input": false
+                  }
+                },
+                "banExpires": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "input"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": false,
+                    "input": false
+                  }
+                }
+              }
+            },
+            "order": 1
+          }
+        },
+        "session": {
+          "keys": [
+            "modelName",
+            "indexes",
+            "fields",
+            "order"
+          ],
+          "value": {
+            "modelName": "session",
+            "indexes": [],
+            "fields": {
+              "keys": [
+                "expiresAt",
+                "token",
+                "createdAt",
+                "updatedAt",
+                "ipAddress",
+                "userAgent",
+                "userId",
+                "impersonatedBy"
+              ],
+              "value": {
+                "expiresAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "expiresAt"
+                  }
+                },
+                "token": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "unique"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": true,
+                    "fieldName": "token",
+                    "unique": true
+                  }
+                },
+                "createdAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "defaultValue"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "createdAt",
+                    "defaultValue": {
+                      "type": "function",
+                      "name": "defaultValue",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "updatedAt": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName",
+                    "onUpdate"
+                  ],
+                  "value": {
+                    "type": "date",
+                    "required": true,
+                    "fieldName": "updatedAt",
+                    "onUpdate": {
+                      "type": "function",
+                      "name": "onUpdate",
+                      "length": 0,
+                      "source": "() => new Date"
+                    }
+                  }
+                },
+                "ipAddress": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "ipAddress"
+                  }
+                },
+                "userAgent": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "required": false,
+                    "fieldName": "userAgent"
+                  }
+                },
+                "userId": {
+                  "keys": [
+                    "type",
+                    "fieldName",
+                    "references",
+                    "required",
+                    "index"
+                  ],
+                  "value": {
+                    "type": "string",
+                    "fieldName": "userId",
+                    "references": {
+                      "keys": [
+                        "model",
+                        "field",
+                        "onDelete"
+                      ],
+                      "value": {
+                        "model": "user",
+                        "field": "id",
+                        "onDelete": "cascade"
+                      }
+                    },
+                    "required": true,
+                    "index": true
+                  }
+                },
+                "impersonatedBy": {
+                  "keys": [
+                    "type",
+                    "required",
+                    "fieldName"
+                  ],
+                  "value": {
+                    "type": "boolean",
+                    "required": false,
+                    "fieldName": "duplicate_impersonator"
+                  }
+                }
+              }
+            },
+            "order": 2
+          }
+        }
+      },
+      "columns": [
+        {
+          "table": "session",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "2",
+          "name": "expiresAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "3",
+          "name": "token",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "4",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "session",
+          "position": "5",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "6",
+          "name": "ipAddress",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "7",
+          "name": "userAgent",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "8",
+          "name": "userId",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "session",
+          "position": "9",
+          "name": "duplicate_impersonator",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "1",
+          "name": "id",
+          "type": "varchar",
+          "nativeType": "varchar(36)",
+          "maxLength": "36",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "2",
+          "name": "name",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "3",
+          "name": "email",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "4",
+          "name": "emailVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "NO",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "5",
+          "name": "image",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "6",
+          "name": "createdAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "7",
+          "name": "updatedAt",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "NO",
+          "default": "CURRENT_TIMESTAMP(3)"
+        },
+        {
+          "table": "user",
+          "position": "8",
+          "name": "duplicate_anonymous",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "9",
+          "name": "phoneNumber",
+          "type": "varchar",
+          "nativeType": "varchar(255)",
+          "maxLength": "255",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "10",
+          "name": "phoneNumberVerified",
+          "type": "tinyint",
+          "nativeType": "tinyint(1)",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "11",
+          "name": "duplicate_username",
+          "type": "int",
+          "nativeType": "int",
+          "maxLength": null,
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "12",
+          "name": "displayUsername",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "13",
+          "name": "lastLoginMethod",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "14",
+          "name": "duplicate_two_factor",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "15",
+          "name": "role",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "16",
+          "name": "duplicate_banned",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "17",
+          "name": "banReason",
+          "type": "text",
+          "nativeType": "text",
+          "maxLength": "65535",
+          "datetimePrecision": null,
+          "nullable": "YES",
+          "default": null
+        },
+        {
+          "table": "user",
+          "position": "18",
+          "name": "banExpires",
+          "type": "timestamp",
+          "nativeType": "timestamp(3)",
+          "maxLength": null,
+          "datetimePrecision": "3",
+          "nullable": "YES",
+          "default": null
+        }
+      ],
+      "migration": {
+        "initialSql": "create table `user` (`id` varchar(36) not null primary key, `name` varchar(255) not null, `email` varchar(255) not null unique, `emailVerified` boolean not null, `image` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `duplicate_anonymous` text, `phoneNumber` varchar(255) unique, `phoneNumberVerified` boolean, `duplicate_username` integer, `displayUsername` text, `lastLoginMethod` text, `duplicate_two_factor` text, `role` text, `duplicate_banned` text, `banReason` text, `banExpires` timestamp(3));\n\ncreate table `session` (`id` varchar(36) not null primary key, `expiresAt` timestamp(3) not null, `token` varchar(255) not null unique, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null, `ipAddress` text, `userAgent` text, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `duplicate_impersonator` boolean);\n\ncreate table `account` (`id` varchar(36) not null primary key, `accountId` text not null, `providerId` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `accessToken` text, `refreshToken` text, `idToken` text, `accessTokenExpiresAt` timestamp(3), `refreshTokenExpiresAt` timestamp(3), `scope` text, `password` text, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) not null);\n\ncreate table `verification` (`id` varchar(36) not null primary key, `identifier` varchar(255) not null, `value` text not null, `expiresAt` timestamp(3) not null, `createdAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null, `updatedAt` timestamp(3) default CURRENT_TIMESTAMP(3) not null);\n\ncreate table `twoFactor` (`id` varchar(36) not null primary key, `secret` varchar(255) not null, `backupCodes` text not null, `userId` varchar(36) not null references `user` (`id`) on delete cascade, `verified` boolean, `failedVerificationCount` integer, `lockedUntil` timestamp(3));\n\ncreate index `session_userId_idx` on `session` (`userId`);\n\ncreate index `account_userId_idx` on `account` (`userId`);\n\ncreate index `verification_identifier_idx` on `verification` (`identifier`);\n\ncreate index `twoFactor_secret_idx` on `twoFactor` (`secret`);\n\ncreate index `twoFactor_userId_idx` on `twoFactor` (`userId`);",
+        "repeatedSql": ";"
+      },
+      "observation": {
+        "user": {
+          "indexes": [
+            {
+              "table": "user",
+              "name": "email",
+              "unique": "YES",
+              "position": "1",
+              "column": "email"
+            },
+            {
+              "table": "user",
+              "name": "phoneNumber",
+              "unique": "YES",
+              "position": "1",
+              "column": "phoneNumber"
+            },
+            {
+              "table": "user",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            }
+          ],
+          "foreignKeys": []
+        },
+        "session": {
+          "indexes": [
+            {
+              "table": "session",
+              "name": "PRIMARY",
+              "unique": "YES",
+              "position": "1",
+              "column": "id"
+            },
+            {
+              "table": "session",
+              "name": "session_userId_idx",
+              "unique": "NO",
+              "position": "1",
+              "column": "userId"
+            },
+            {
+              "table": "session",
+              "name": "token",
+              "unique": "YES",
+              "position": "1",
+              "column": "token"
+            }
+          ],
+          "foreignKeys": []
+        }
+      }
+    }
+  ]
+}

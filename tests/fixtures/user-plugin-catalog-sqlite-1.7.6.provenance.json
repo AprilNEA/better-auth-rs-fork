@@ -1,0 +1,71 @@
+{
+  "contract": "user-plugin-catalog",
+  "version": "1.7.6",
+  "database": "sqlite",
+  "status": "Source assertions and repeated-process byte equality passed. Generated Rust acceptance remains pending.",
+  "run": "38245641423",
+  "runURL": "https://github.com/better-auth-rs/better-auth-rs/actions/runs/38245641423",
+  "commit": "8d63a5bd0dd593120b5e57f8973a86510b19b544",
+  "runConclusion": "success",
+  "artifact": {
+    "path": "/private/tmp/better-auth-ci-38245641423-clean.log",
+    "bytes": 284761,
+    "sha256": "44726567f5d66b7530561e7abdbf84fc8a0ae42304a69996ea915c4c3490994d"
+  },
+  "sources": [
+    {
+      "path": "compat-tests/reference-server/contracts/user-plugin-catalog-capture.mjs",
+      "bytes": 6170,
+      "sha256": "97d74e8f4b21ff39d6b184b202a53f56ab1c4efc9e60aa36eb4aa441bcfa23fd"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/user-plugin-catalog-capture.test.ts",
+      "bytes": 1440,
+      "sha256": "51351604d216f66a618b9fc156f30aac528cae700ddf016ab447de5b1bc38ca6"
+    },
+    {
+      "path": "compat-tests/schema-consumer/user-plugin-catalog-config.json",
+      "bytes": 4808,
+      "sha256": "4ff97ae740f0af6d90e7cead6205d19546005e00a7105d3805a4546b2084e775"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/server-catalog-shared.mjs",
+      "bytes": 7735,
+      "sha256": "2d4e21ffda5120886e1b4152578f6a35d678143835f0265e6731b9834e4c265a"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/sqlite-catalog.ts",
+      "bytes": 2260,
+      "sha256": "f53afd791c4e687d9da4d4c9722956374bcf1dd6547e26add4bda91d1d2ce2cc"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/standalone-capture.ts",
+      "bytes": 2919,
+      "sha256": "ee3865321448cd61b3e0cbdbb444e0711702b9f59898e5adc5f94006a377d43b"
+    },
+    {
+      "path": "compat-tests/reference-server/contracts/write-observation.mjs",
+      "bytes": 209,
+      "sha256": "a84985b984fadc555eca74c8d5df5102094d37412cface23d03587f0908bd588"
+    }
+  ],
+  "fixture": {
+    "path": "tests/fixtures/user-plugin-catalog-sqlite-1.7.6.json",
+    "bytes": 224881,
+    "sha256": "63fd4ac443f01fad1db8962e78b0c5d73afe5e2dbd3a66256c794430056fe3d3"
+  },
+  "cases": 7,
+  "record": {
+    "line": 28,
+    "byteOffset": 1059,
+    "bytes": 96829,
+    "sha256": "04d39f44a174dc0f41c966564a7a2fa17f6927adc528d9b4b0211c0d1b9404ea"
+  },
+  "extraction": "Retain the complete JSON observation and every key in source order. Restore the capture's two-space indentation and terminating newline.",
+  "normalizations": [],
+  "boundaries": [
+    "Retain complete User and Session declarations, physical catalogs, indexes, foreign keys, original migration SQL, and repeated migration results.",
+    "Run each configuration in an isolated upstream process to preserve the registration order without cross-case schema mutation.",
+    "Compare each database independently. Source replay does not establish generated Rust or business consumer parity."
+  ]
+}
