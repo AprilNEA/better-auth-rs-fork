@@ -11,7 +11,6 @@ mod page;
 mod state;
 
 mod values {
-    use crate as better_auth_core;
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/support/device_where_values.rs"
