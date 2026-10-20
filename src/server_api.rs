@@ -326,6 +326,21 @@ impl<S: AuthSchema> BetterAuth<S> {
         better_auth_api::plugins::admin::AdminApi::from_context(self.context())
     }
 
+    /// Check Admin role permissions for application resources from server code.
+    ///
+    /// The checks use the configuration of the registered `AdminPlugin` and add no routes.
+    /// This returns [`AdminPermissionError::PluginNotRegistered`] when the plugin is absent.
+    ///
+    /// [`AdminPermissionError::PluginNotRegistered`]: better_auth_api::plugins::admin::AdminPermissionError::PluginNotRegistered
+    pub fn admin_permissions(
+        &self,
+    ) -> Result<
+        better_auth_api::plugins::admin::AdminPermissionApi<'_, S>,
+        better_auth_api::plugins::admin::AdminPermissionError,
+    > {
+        better_auth_api::plugins::admin::AdminPermissionApi::from_context(self.context())
+    }
+
     /// Use the registered JWT key adapter from trusted server code.
     pub fn jwt(&self) -> AuthResult<better_auth_api::plugins::jwt::JwtApi<'_, S>> {
         better_auth_api::plugins::jwt::JwtApi::from_context(self.context())

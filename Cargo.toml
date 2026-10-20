@@ -163,6 +163,10 @@ name = "axum_server"
 required-features = ["axum", "seaorm2"]
 
 [[example]]
+name = "admin_permissions"
+required-features = ["axum", "seaorm2"]
+
+[[example]]
 name = "postgres_usage"
 required-features = ["seaorm2"]
 

@@ -10,9 +10,11 @@ use better_auth_core::{AuthContext, AuthError, AuthRequest, AuthResponse, AuthRe
 pub mod access;
 mod banned_message;
 mod native;
+mod permission_api;
 mod request;
 pub use banned_message::{BannedUserMessage, BannedUserMessageFuture};
 pub use native::AdminApi;
+pub use permission_api::{AdminPermissionApi, AdminPermissionError, AuthorizedSession};
 pub use types::{
     CreateUserRequest as CreateAdminUser, RoleInput as AdminRole, UserResponse as AdminUserResponse,
 };

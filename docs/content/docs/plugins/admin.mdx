@@ -141,6 +141,67 @@ An update with `banned: true` revokes the user's sessions after the update opera
 |----------|--------|-------------|
 | `/admin/has-permission` | POST | Check if current user has a permission |
 
+A request grants access only when one evaluated role allows every requested action of every requested resource. A comma-separated role string evaluates each role separately; the grants of different roles are not merged. Role names are not trimmed. A resource with an empty action list grants nothing, matching Better Auth 1.7.6 `isResourceAuthorized`. A user ID in `admin_user_ids` passes every check.
+
+#### Rust permission checks
+
+Application code can authorize its own resources with the registered role map. It does not need an HTTP self-call, a JSON body, or a copy of the role rules. `auth.admin_permissions()` binds the checks to the `AdminConfig` of the registered plugin and adds no routes. It returns `AdminPermissionError::PluginNotRegistered` when the plugin is absent.
+
+```rust
+use better_auth::plugins::admin::AdminPermissionError;
+use better_auth::plugins::{AdminConfig, AdminPlugin, RolePermissions};
+use std::collections::HashMap;
+
+let admin = AdminPlugin::with_config(AdminConfig {
+    roles: Some(HashMap::from([
+        ("viewer".into(), RolePermissions::new().allow("project", ["read"])),
+        ("editor".into(), RolePermissions::new().allow("project", ["read", "update"])),
+    ])),
+    ..Default::default()
+});
+
+// In a request handler, after the plugin is registered:
+let required = HashMap::from([("project".to_owned(), vec!["update".to_owned()])]);
+match auth.admin_permissions()?.authorize_request(&headers, &required).await {
+    // Use `caller.user()` as the actor of the business transaction and its audit record.
+    Ok(caller) => {}
+    Err(AdminPermissionError::Unauthenticated) => {} // respond 401
+    Err(AdminPermissionError::Forbidden) => {}       // respond 403
+    Err(error) => {}                                 // respond 500; never treat as a denial or grant
+}
+```
+
+`headers` is a `HashMap<String, String>` of the incoming request headers. Header names are matched case-insensitively. The runnable [`admin_permissions` example](https://github.com/better-auth-rs/better-auth-rs/blob/master/examples/admin_permissions.rs) converts an Axum `HeaderMap` and maps each error to a status code.
+
+| Method | Subject | Reads | Denial result | Use |
+|--------|---------|-------|---------------|-----|
+| `role_has_permission(role, permissions)` | A role string held by trusted code | Nothing | `Ok(false)` | Static role checks. This is not authentication. |
+| `user_has_permission(user_id, permissions)` | A user ID held by trusted code | The stored user, on each call | `Ok(false)` | Jobs and tools that authenticate the operator separately |
+| `authorize_request(headers, permissions)` | The session in the request headers | The session and user from the session store, on each call | `Err(Forbidden)` | Application endpoints that act for the current caller |
+
+All three methods use the evaluation of `/admin/has-permission`. Custom `roles` replace the built-in `admin` and `user` roles. A user without a role uses `default_role`. `role_has_permission` identifies no user, so `admin_user_ids` never applies to it. An impersonation session authorizes as the impersonated user; `session().impersonated_by` identifies the administrator.
+
+The typed methods return errors for input that the HTTP endpoint answers with `success`:
+
+| Input | Typed result | HTTP endpoint result |
+|-------|--------------|----------------------|
+| Empty permission map, or a resource with no actions | `EmptyPermissions` | `success: false`, or `success: true` for `admin_user_ids` |
+| Empty role or user ID | `MissingSubject` | 400 `user id or role is required` |
+| Unknown user ID | `UserNotFound` | 400 `user not found` |
+| Missing, invalid, expired, or revoked session | `Unauthenticated` | 401 |
+| Store or configuration failure | `Internal(AuthError)` | The error response |
+
+`authorize_request` takes the caller only from the framework session. It never reads a user ID or a role from the request body or from other headers. It reads the session as `SessionRead::Authoritative`, so it skips the cookie cache when a database or secondary storage exists. A revoked session returns `Unauthenticated` on the next call. A removed role returns `Forbidden` on the next call. Call it again for each operation, and do not cache the returned `AuthorizedSession`. The method does not return refreshed session cookies.
+
+Do not expose `role_has_permission` or `user_has_permission` through a client-callable route unless your route authenticates and authorizes the caller first. Application policies such as session freshness, email verification, and audit records stay in application code. `AuthorizedSession` exposes `session().created_at` and `user().email_verified` for them.
+
+The check has these limits:
+
+- Without a database or secondary storage, the session lives only in signed cookies. The check cannot detect a revocation or a role change before the cookie expires.
+- With secondary storage, the stored session holds a copy of the user. User updates through the store refresh that copy. A failed refresh is logged and leaves the old copy. Direct database writes that bypass the store do not refresh it.
+- The check does not read ban fields. The Admin ban operations revoke the sessions of the banned user.
+- `user_has_permission` has no request. With a dynamic base URL, it needs a configured fallback.
+
 ## Errors
 
 | Status | Condition |
