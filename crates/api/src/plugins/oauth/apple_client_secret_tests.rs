@@ -377,14 +377,14 @@ async fn token_requests_send_the_generated_secret_instead_of_the_static_one() ->
         None,
     )
     .await?;
-    assert_eq!(tokens.access_token.as_deref(), Some("apple-access"));
+    assert_eq!(tokens.access_token.as_str(), Some("apple-access"));
     let refreshed = refresh_tokens_via_provider(
         &provider,
-        "apple-refresh",
+        &better_auth_core::FieldValue::from("apple-refresh"),
         &AuthRequest::new(HttpMethod::Post, "/refresh-token"),
     )
     .await?;
-    assert_eq!(refreshed.refresh_token.as_deref(), Some("apple-refresh"));
+    assert_eq!(refreshed.refresh_token.as_str(), Some("apple-refresh"));
 
     let forms = server.forms();
     assert_eq!(forms.len(), 2);

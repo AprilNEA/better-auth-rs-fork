@@ -7,7 +7,7 @@ use super::AdminConfig;
 use super::access::has_permission;
 use better_auth_core::wire::{SessionView, UserView};
 use better_auth_core::{
-    AuthContext, AuthError, AuthRequest, AuthSchema, HttpMethod, NativeRequest,
+    AuthContext, AuthError, AuthRequest, AuthSchema, FieldValue, HttpMethod, NativeRequest,
 };
 use std::collections::HashMap;
 
@@ -105,7 +105,14 @@ impl<'a, S: AuthSchema> AdminPermissionApi<'a, S> {
         if role.is_empty() {
             return Err(AdminPermissionError::MissingSubject);
         }
-        Ok(has_permission(None, Some(role), self.config, permissions))
+        // An undefined user ID is not truthy, so `admin_user_ids` never matches it.
+        has_permission(
+            &FieldValue::Undefined,
+            &role.into(),
+            self.config,
+            permissions,
+        )
+        .map_err(AdminPermissionError::Internal)
     }
 
     /// Evaluate the current stored roles of a user from trusted server code.
@@ -132,12 +139,13 @@ impl<'a, S: AuthSchema> AdminPermissionApi<'a, S> {
             .await
             .map_err(AdminPermissionError::Internal)?
             .ok_or(AdminPermissionError::UserNotFound)?;
-        Ok(has_permission(
-            user.id.as_str(),
-            user.role.as_deref(),
+        has_permission(
+            &user.id.field_value(),
+            &user.role.field_value(),
             self.config,
             permissions,
-        ))
+        )
+        .map_err(AdminPermissionError::Internal)
     }
 
     /// Authenticate the caller from request headers, then require the permissions.
@@ -176,11 +184,13 @@ impl<'a, S: AuthSchema> AdminPermissionApi<'a, S> {
             .await
             .map_err(session_error)?;
         if has_permission(
-            user.id.as_str(),
-            user.role.as_deref(),
+            &user.id.field_value(),
+            &user.role.field_value(),
             self.config,
             permissions,
-        ) {
+        )
+        .map_err(AdminPermissionError::Internal)?
+        {
             Ok(AuthorizedSession { user, session })
         } else {
             Err(AdminPermissionError::Forbidden)
@@ -203,7 +213,13 @@ fn session_error(error: AuthError) -> AdminPermissionError {
         AuthError::SessionNotFound | AuthError::UserNotFound => {
             AdminPermissionError::Unauthenticated
         }
-        error if error.status_code() == 401 => AdminPermissionError::Unauthenticated,
+        error if is_unauthorized(&error) => AdminPermissionError::Unauthenticated,
         error => AdminPermissionError::Internal(error),
     }
+}
+
+fn is_unauthorized(error: &AuthError) -> bool {
+    error
+        .status_code()
+        .is_ok_and(|status| status.typed().is_ok_and(|status| *status == 401))
 }
