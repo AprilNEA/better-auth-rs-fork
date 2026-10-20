@@ -81,6 +81,7 @@ pub(super) fn configured(
                 .as_ref()
                 .map(|values| values.iter().skip(1).cloned().collect())
                 .unwrap_or_default(),
+            client_secret_signer: None,
             jwks_url: server.map(|server| format!("{}/jwks", server.url)),
         },
     );

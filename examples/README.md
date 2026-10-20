@@ -7,6 +7,7 @@ These live in the workspace and are run via `cargo run --example`.
 | Example | Command | Description |
 |---------|---------|-------------|
 | `axum_server` | `cargo run --example axum_server --features axum,seaorm2` | Full Axum server using app-owned auth entities and an explicit `AppAuthSchema`. |
+| `admin_permissions` | `cargo run --example admin_permissions --features axum,seaorm2` | Axum handlers that authorize `project:read` and `project:update` through `auth.admin_permissions()` and the registered Admin role map. Uses in-memory SQLite and prints each response status. |
 | `postgres_usage` | `cargo run --example postgres_usage --features seaorm2` | PostgreSQL example for an existing app-owned schema with numeric user IDs and seeded legacy users. Requires `DATABASE_URL`. |
 
 The default password hasher uses upstream-compatible scrypt. `postgres_usage` explicitly configures `Argon2PasswordHasher` to authenticate its seeded legacy Argon2 credentials. The selected hasher also handles new passwords in that example; it does not migrate hashes or fall back between formats.

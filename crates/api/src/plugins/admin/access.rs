@@ -35,12 +35,14 @@ impl RolePermissions {
             return false;
         }
 
+        // Better Auth 1.7.6 `isResourceAuthorized` rejects an empty action list.
         requested.iter().all(|(resource, actions)| {
-            self.permissions.get(resource).is_some_and(|allowed| {
-                actions
-                    .iter()
-                    .all(|action| allowed.iter().any(|item| item == action))
-            })
+            !actions.is_empty()
+                && self.permissions.get(resource).is_some_and(|allowed| {
+                    actions
+                        .iter()
+                        .all(|action| allowed.iter().any(|item| item == action))
+                })
         })
     }
 }

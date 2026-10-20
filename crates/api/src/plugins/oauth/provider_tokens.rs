@@ -240,9 +240,16 @@ async fn authenticate_request(
         ]);
         Ok(())
     } else {
-        request
-            .authenticate(authentication(provider, grant_type))
-            .await
+        // A configured Apple signer replaces the static secret in every token request.
+        let generated = match provider.generic {
+            Some(_) => None,
+            None => provider.config.generated_client_secret()?,
+        };
+        let mut authentication = authentication(provider, grant_type);
+        if let Some(secret) = generated.as_deref() {
+            authentication.client_secret = Some(secret);
+        }
+        request.authenticate(authentication).await
     }
 }
 

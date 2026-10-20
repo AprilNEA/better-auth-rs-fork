@@ -79,7 +79,7 @@ pub(super) fn build_authorization_url(
         }
     }
     if generic.is_none()
-        && (provider.config.client_id.is_empty() || provider.config.client_secret.is_empty())
+        && (provider.config.client_id.is_empty() || !provider.config.has_client_secret())
         && let Some(message) = provider.config.required_credentials_message()
     {
         better_auth_core::observability::logger::current().error(message, &[])?;

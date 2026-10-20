@@ -626,7 +626,24 @@ Ordinary paired contracts cover configuration, both grants, assertion callbacks,
 
 ### Apple
 
-Use `OAuthProvider::apple(client_id, client_secret, AppleOptions::default())` for Sign in with Apple. Supply the Apple client secret; the constructor does not generate or renew the secret. Authorization requests use PKCE, `response_type=code id_token`, and `response_mode=form_post`. Default scopes are `email` and `name`. Configured and request scopes retain their order and duplicates. Standalone login hints, nonce, and configured prompt are omitted. Additional authorization parameters retain the shared precedence rules.
+Use `OAuthProvider::apple(client_id, client_secret, AppleOptions::default())` for Sign in with Apple. Authorization requests use PKCE, `response_type=code id_token`, and `response_mode=form_post`. Default scopes are `email` and `name`. Configured and request scopes retain their order and duplicates. Standalone login hints, nonce, and configured prompt are omitted. Additional authorization parameters retain the shared precedence rules.
+
+Apple's client secret is an ES256 JWT that expires. Supply a static secret, or set `AppleOptions::client_secret_signer` and pass an empty secret. `AppleClientSecretSigner::new(team_id, key_id, private_key_pem)` reads the PKCS #8 `.p8` key and rejects an empty Team ID, an empty key ID, or a key that cannot sign ES256. Each secret has `iss` set to the Team ID, `sub` set to the provider's client ID, `aud` set to `https://appleid.apple.com`, and `kid` set to the key ID. A secret lasts one hour; `with_lifetime` accepts 600 to 15,777,000 seconds. The signer reuses a cached secret until less than five minutes remain, and clones share the cache. A signer replaces any static secret in token requests and satisfies the credential check for authorization requests. This is a Rust integration API. It does not change any client-observable route or payload.
+
+```rust
+use better_auth::plugins::oauth::{AppleClientSecretSigner, AppleOptions, OAuthProvider};
+
+let signer = AppleClientSecretSigner::new("TEAMID1234", "KEYID12345", private_key_pem)?;
+let apple = OAuthProvider::apple(
+    "com.example.web",
+    "",
+    AppleOptions {
+        app_bundle_identifier: Some("com.example.app".into()),
+        client_secret_signer: Some(signer),
+        ..AppleOptions::default()
+    },
+);
+```
 
 Code exchange and refresh use the existing client-secret-post transport. A configured `redirect_uri` overrides the callback supplied to code exchange. Code exchange forwards the verifier and ignores the device identifier. `client_key` follows the shared Social code option; refresh does not use that option.
 

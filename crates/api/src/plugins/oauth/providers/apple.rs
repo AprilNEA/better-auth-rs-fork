@@ -7,10 +7,14 @@ use sha2::{Digest, Sha256};
 use super::{OAuthProvider, OAuthUserInfo, OAuthUserInfoRequest, defaults::ProviderKind};
 use crate::plugins::oauth::{generic_profile::decode_claims, id_token, oidc::OidcVerifier};
 
+mod client_secret;
+
+pub use client_secret::{AppleClientSecretError, AppleClientSecretSigner};
+
 const ISSUER: &str = "https://appleid.apple.com";
 const JWKS_URL: &str = "https://appleid.apple.com/auth/keys";
 
-/// Audience selection for Sign in with Apple.
+/// Audience selection and client-secret generation for Sign in with Apple.
 #[derive(Clone, Default)]
 pub struct AppleOptions {
     /// Explicit accepted audiences. An omitted or empty list uses the bundle or client identifiers.
@@ -19,6 +23,11 @@ pub struct AppleOptions {
     pub app_bundle_identifier: Option<String>,
     /// Additional accepted client identifiers after the primary `OAuthProvider::client_id`.
     pub additional_client_ids: Vec<String>,
+    /// Signs the client secret for authorization-code exchange and token refresh.
+    ///
+    /// When set, a generated secret replaces `OAuthProvider::client_secret`
+    /// in token requests, and the configured secret may be empty.
+    pub client_secret_signer: Option<AppleClientSecretSigner>,
     #[cfg(test)]
     pub(in crate::plugins::oauth) jwks_url: Option<String>,
 }
@@ -76,7 +85,10 @@ impl AppleOptions {
 
 impl OAuthProvider {
     /// Configure Apple authorization, token grants, and direct ID-token verification.
-    /// `client_secret` is the configured Apple secret; this constructor does not generate one.
+    ///
+    /// `client_secret` is a static Apple client secret. Pass an empty string
+    /// when `AppleOptions::client_secret_signer` generates the secret.
+    /// Direct ID-token sign-in needs neither.
     pub fn apple(client_id: &str, client_secret: &str, options: AppleOptions) -> Self {
         Self {
             kind: ProviderKind::Apple(options),
@@ -94,6 +106,22 @@ impl OAuthProvider {
             ProviderKind::Apple(options) => Some(options),
             _ => None,
         }
+    }
+
+    /// Report whether the provider has a static or generated client secret.
+    pub(in crate::plugins::oauth) fn has_client_secret(&self) -> bool {
+        !self.client_secret.is_empty()
+            || self
+                .apple_options()
+                .is_some_and(|options| options.client_secret_signer.is_some())
+    }
+
+    /// Return a generated client secret that replaces the static secret.
+    pub(in crate::plugins::oauth) fn generated_client_secret(&self) -> AuthResult<Option<String>> {
+        self.apple_options()
+            .and_then(|options| options.client_secret_signer.as_ref())
+            .map(|signer| signer.client_secret(&self.client_id))
+            .transpose()
     }
 }
 
