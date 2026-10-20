@@ -10,10 +10,12 @@ use better_auth_core::{AuthRequest, AuthResponse, HttpMethod};
 
 mod account;
 #[cfg(test)]
+mod apple_client_secret_tests;
+#[cfg(test)]
 mod apple_flow_tests;
 #[cfg(test)]
 mod apple_tests;
-pub use providers::apple::AppleOptions;
+pub use providers::apple::{AppleClientSecretError, AppleClientSecretSigner, AppleOptions};
 mod authorization;
 mod callback;
 mod callbacks;
