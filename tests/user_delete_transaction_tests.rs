@@ -7,19 +7,23 @@
 //! `/delete-user` regressions on SQL stores.
 //!
 //! The upstream reference has no API-key cleanup and no route transaction, so these cases
-//! cover Rust-specific behavior: an application without the API key plugin, and a failed
-//! user write after the session and account deletions.
+//! cover Rust-specific behavior: an application without the API key plugin, a failed user
+//! write after the session and account deletions, and an after hook that fails after the
+//! commit while secondary storage still holds the user's sessions.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use better_auth::plugins::{EmailPasswordPlugin, SessionManagementPlugin, UserManagementPlugin};
 use better_auth::prelude::{AuthRequest, HttpMethod};
-use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
-use better_auth_seaorm::SeaOrmStore;
+use better_auth::{AuthBuilder, AuthConfig, AuthError, AuthResult, BetterAuth};
+use better_auth_core::store::{MemoryCacheAdapter, SecondaryStorage};
+use better_auth_core::wire::SessionView;
 use better_auth_seaorm::sea_orm::{
     ConnectOptions, ConnectionTrait, Database, DatabaseConnection, Statement,
 };
 use better_auth_seaorm::store::__private_test_support::{bundled_schema::BundledSchema, migrator};
+use better_auth_seaorm::{SeaOrmHookContext, SeaOrmHooks, SeaOrmStore};
 use serde_json::{Value, json};
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -34,6 +38,23 @@ enum Fixture {
     WithoutApiKeyTable,
     /// An application table references the user without a cascading delete.
     RestrictingReference,
+    /// Secondary storage caches the sessions, and the session after hook fails.
+    FailingSessionAfterHook,
+}
+
+/// Fails the after hook of every deleted session.
+#[derive(Clone)]
+struct FailingAfterDeleteSession;
+
+#[better_auth::database_hooks()]
+impl SeaOrmHooks<BundledSchema> for FailingAfterDeleteSession {
+    async fn after_delete_session(
+        &self,
+        _: &SessionView,
+        _: &SeaOrmHookContext<'_, BundledSchema>,
+    ) -> AuthResult<()> {
+        Err(AuthError::internal("after delete session hook"))
+    }
 }
 
 async fn send(
@@ -84,29 +105,44 @@ async fn count(
 
 async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
     migrator::run_migrations(&database).await?;
-    let _ = match fixture {
-        Fixture::WithoutApiKeyTable => database.execute_unprepared("DROP TABLE api_keys").await?,
+    match fixture {
+        Fixture::WithoutApiKeyTable => {
+            let _ = database.execute_unprepared("DROP TABLE api_keys").await?;
+        }
         Fixture::RestrictingReference => {
             // MySQL ignores column-level REFERENCES, so the constraint is table-level.
-            database
+            let _ = database
                 .execute_unprepared(
                     "CREATE TABLE profiles (user_id VARCHAR(255) NOT NULL, \
                      FOREIGN KEY (user_id) REFERENCES users (id))",
                 )
-                .await?
+                .await?;
         }
-    };
+        Fixture::FailingSessionAfterHook => {}
+    }
+    let cached = matches!(fixture, Fixture::FailingSessionAfterHook);
     let mut config =
         AuthConfig::new("delete-user-transaction-secret-at-least-thirty-two-characters")
             .base_url("http://localhost:3000");
     config.session.bearer = Some(Default::default());
-    let auth = AuthBuilder::new(config.clone())
-        .store(SeaOrmStore::<BundledSchema>::new(config, database.clone()))
+    if cached {
+        // Both stores hold the session, so the database deletion runs the session after hook.
+        config.session.store_session_in_database = Some(true);
+    }
+    let mut store = SeaOrmStore::<BundledSchema>::new(config.clone(), database.clone());
+    if cached {
+        store = store.hook(FailingAfterDeleteSession);
+    }
+    let cache = Arc::new(MemoryCacheAdapter::new());
+    let mut builder = AuthBuilder::new(config)
+        .store(store)
         .plugin(EmailPasswordPlugin::new().enable_signup(true))
         .plugin(SessionManagementPlugin::new())
-        .plugin(UserManagementPlugin::new().delete_user_enabled(true))
-        .build()
-        .await?;
+        .plugin(UserManagementPlugin::new().delete_user_enabled(true));
+    if cached {
+        builder = builder.secondary_storage(cache.clone());
+    }
+    let auth = builder.build().await?;
 
     let (status, signup) = send(
         &auth,
@@ -133,6 +169,12 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
                 "INSERT INTO profiles (user_id) VALUES ('{user_id}')"
             ))
             .await?;
+    }
+    if cached {
+        assert!(
+            cache.get(token.as_str()).await?.is_some(),
+            "{fixture:?}: sign-up did not cache the session"
+        );
     }
 
     let (status, body) = send(
@@ -176,6 +218,20 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
             )
             .await?;
             assert_eq!(status, 200, "{body}");
+        }
+        Fixture::FailingSessionAfterHook => {
+            // The hook fails after the commit. The route reports the error, and the
+            // committed deletion still removes the revoked session from secondary storage.
+            assert_eq!(status, 500, "{fixture:?}: {body}");
+            assert_eq!(rows, (0, 0, 0), "{fixture:?}");
+            assert!(
+                cache.get(token.as_str()).await?.is_none(),
+                "{fixture:?}: the deleted user's session stayed in secondary storage"
+            );
+            let (status, session) =
+                send(&auth, HttpMethod::Get, "/get-session", Some(&token), None).await?;
+            assert_eq!(status, 200, "{session}");
+            assert_eq!(session, Value::Null, "{session}");
         }
     }
     Ok(())
@@ -234,6 +290,11 @@ async fn failed_delete_user_rolls_back_sessions_and_accounts() -> TestResult {
 }
 
 #[tokio::test]
+async fn failed_session_after_hook_still_removes_cached_sessions() -> TestResult {
+    sqlite(Fixture::FailingSessionAfterHook).await
+}
+
+#[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
 async fn live_postgres_delete_user_without_api_key_table_deletes_the_user() -> TestResult {
     live("postgres", Fixture::WithoutApiKeyTable).await
@@ -246,6 +307,12 @@ async fn live_postgres_failed_delete_user_rolls_back_sessions_and_accounts() -> 
 }
 
 #[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
+async fn live_postgres_failed_session_after_hook_still_removes_cached_sessions() -> TestResult {
+    live("postgres", Fixture::FailingSessionAfterHook).await
+}
+
+#[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
 async fn live_mysql_delete_user_without_api_key_table_deletes_the_user() -> TestResult {
     live("mysql", Fixture::WithoutApiKeyTable).await
@@ -255,4 +322,10 @@ async fn live_mysql_delete_user_without_api_key_table_deletes_the_user() -> Test
 #[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
 async fn live_mysql_failed_delete_user_rolls_back_sessions_and_accounts() -> TestResult {
     live("mysql", Fixture::RestrictingReference).await
+}
+
+#[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
+async fn live_mysql_failed_session_after_hook_still_removes_cached_sessions() -> TestResult {
+    live("mysql", Fixture::FailingSessionAfterHook).await
 }

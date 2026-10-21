@@ -362,19 +362,19 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
             return self.inner.delete_user_value(id).await;
         }
         let sessions = self.runtime.references_value(id).await?;
+        // Queued before the user's after hooks, so a failing hook cannot skip it after the commit.
+        let deleted = self.runtime.queue_armed_cached_user_session_deletion(
+            id.clone(),
+            sessions,
+            self.inner.as_ref(),
+        )?;
         if self
             .inner
             .delete_user_optional_value(id, self.runtime.database_sessions())
             .await?
             .is_some()
         {
-            self.runtime
-                .queue_cached_user_session_deletion_value(
-                    id.clone(),
-                    sessions,
-                    Some(self.inner.as_ref()),
-                )
-                .await?;
+            deleted.store(true, std::sync::atomic::Ordering::Release);
         }
         Ok(())
     }
@@ -397,6 +397,14 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
             return self.inner.delete_user_sessions_by_user_value(user_id).await;
         }
         let references = self.runtime.references_value(user_id).await?;
+        // Cached sessions are not transactional, so their deletion waits for the commit. It is
+        // queued before the session after hooks: a failing hook must not keep revoked sessions
+        // in secondary storage after the database deletion has committed.
+        let deleted = self.runtime.queue_armed_cached_user_session_deletion(
+            user_id.clone(),
+            references,
+            self.inner.as_ref(),
+        )?;
         if self.runtime.database_sessions()
             && self
                 .inner
@@ -409,14 +417,8 @@ impl<S: AuthSchema> AuthTransaction<S> for Transaction<S> {
         {
             return Ok(());
         }
-        // Cached sessions are not transactional, so their deletion waits for the commit.
-        self.runtime
-            .queue_cached_user_session_deletion_value(
-                user_id.clone(),
-                references,
-                Some(self.inner.as_ref()),
-            )
-            .await
+        deleted.store(true, std::sync::atomic::Ordering::Release);
+        Ok(())
     }
 
     async fn delete_user_sessions_optional_value(
