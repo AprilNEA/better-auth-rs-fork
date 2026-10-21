@@ -1,0 +1,50 @@
+name: Release ICU dry run
+
+# Temporary check on the fork only. It replays the two release-plz steps that
+# compile better-auth-core: the next-version computation with semver checks,
+# and the cargo publish verification build.
+on:
+  push:
+    branches: ['test/release-icu']
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: devenv
+          skipPush: true
+
+      - name: Provide ICU 78 from the locked devenv nixpkgs revision
+        run: |
+          nixpkgs_rev=$(python3 -c 'import json; print(json.load(open("devenv.lock"))["nodes"]["nixpkgs"]["locked"]["rev"])')
+          icu=$(nix build --no-link --print-out-paths "github:cachix/devenv-nixpkgs/${nixpkgs_rev}#icu78^out")
+          echo "RUST_ICU_MAJOR_VERSION_NUMBER=78" >> "$GITHUB_ENV"
+          echo "RUST_ICU_LINK_SEARCH_DIR=${icu}/lib" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: release-plz,cargo-semver-checks
+
+      - name: Compute the next versions with semver checks
+        run: |
+          release-plz update
+          git diff --stat
+
+      - name: Verify the workspace with a publish dry run
+        run: cargo publish --dry-run --workspace --allow-dirty
