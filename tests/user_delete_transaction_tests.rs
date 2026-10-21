@@ -6,12 +6,13 @@
 
 //! `/delete-user` regressions on SQL stores.
 //!
-//! The upstream reference has no API-key cleanup, so these cases cover Rust-specific
-//! behavior: an application without the API key plugin.
+//! The upstream reference has no API-key cleanup and no route transaction, so these cases
+//! cover Rust-specific behavior: an application without the API key plugin, and a failed
+//! user write after the session and account deletions.
 
 use std::collections::HashMap;
 
-use better_auth::plugins::{EmailPasswordPlugin, UserManagementPlugin};
+use better_auth::plugins::{EmailPasswordPlugin, SessionManagementPlugin, UserManagementPlugin};
 use better_auth::prelude::{AuthRequest, HttpMethod};
 use better_auth::{AuthBuilder, AuthConfig, BetterAuth};
 use better_auth_seaorm::SeaOrmStore;
@@ -31,6 +32,8 @@ const PASSWORD: &str = "delete-user-password";
 enum Fixture {
     /// The application does not register the API key plugin and has no `api_keys` table.
     WithoutApiKeyTable,
+    /// An application table references the user without a cascading delete.
+    RestrictingReference,
 }
 
 async fn send(
@@ -83,6 +86,15 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
     migrator::run_migrations(&database).await?;
     let _ = match fixture {
         Fixture::WithoutApiKeyTable => database.execute_unprepared("DROP TABLE api_keys").await?,
+        Fixture::RestrictingReference => {
+            // MySQL ignores column-level REFERENCES, so the constraint is table-level.
+            database
+                .execute_unprepared(
+                    "CREATE TABLE profiles (user_id VARCHAR(255) NOT NULL, \
+                     FOREIGN KEY (user_id) REFERENCES users (id))",
+                )
+                .await?
+        }
     };
     let mut config =
         AuthConfig::new("delete-user-transaction-secret-at-least-thirty-two-characters")
@@ -91,6 +103,7 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
     let auth = AuthBuilder::new(config.clone())
         .store(SeaOrmStore::<BundledSchema>::new(config, database.clone()))
         .plugin(EmailPasswordPlugin::new().enable_signup(true))
+        .plugin(SessionManagementPlugin::new())
         .plugin(UserManagementPlugin::new().delete_user_enabled(true))
         .build()
         .await?;
@@ -114,6 +127,13 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
         .and_then(Value::as_str)
         .ok_or("sign-up returned no session token")?
         .to_owned();
+    if let Fixture::RestrictingReference = fixture {
+        let _ = database
+            .execute_unprepared(&format!(
+                "INSERT INTO profiles (user_id) VALUES ('{user_id}')"
+            ))
+            .await?;
+    }
 
     let (status, body) = send(
         &auth,
@@ -134,6 +154,28 @@ async fn check(database: DatabaseConnection, fixture: Fixture) -> TestResult {
             assert_eq!(status, 200, "{fixture:?}: {body}");
             assert_eq!(body.get("success"), Some(&Value::Bool(true)), "{body}");
             assert_eq!(rows, (0, 0, 0), "{fixture:?}");
+        }
+        Fixture::RestrictingReference => {
+            // The failed user write rolls back the earlier session and account deletions.
+            assert_eq!(status, 500, "{fixture:?}: {body}");
+            assert_eq!(rows, (1, 1, 1), "{fixture:?}");
+            let (status, session) =
+                send(&auth, HttpMethod::Get, "/get-session", Some(&token), None).await?;
+            assert_eq!(status, 200, "{session}");
+            assert_eq!(
+                session.pointer("/user/id").and_then(Value::as_str),
+                Some(user_id.as_str()),
+                "{session}"
+            );
+            let (status, body) = send(
+                &auth,
+                HttpMethod::Post,
+                "/sign-in/email",
+                None,
+                Some(json!({"email": EMAIL, "password": PASSWORD})),
+            )
+            .await?;
+            assert_eq!(status, 200, "{body}");
         }
     }
     Ok(())
@@ -187,13 +229,30 @@ async fn delete_user_without_api_key_table_deletes_the_user() -> TestResult {
 }
 
 #[tokio::test]
+async fn failed_delete_user_rolls_back_sessions_and_accounts() -> TestResult {
+    sqlite(Fixture::RestrictingReference).await
+}
+
+#[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
 async fn live_postgres_delete_user_without_api_key_table_deletes_the_user() -> TestResult {
     live("postgres", Fixture::WithoutApiKeyTable).await
 }
 
 #[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_POSTGRES_URL and isolated schema permissions"]
+async fn live_postgres_failed_delete_user_rolls_back_sessions_and_accounts() -> TestResult {
+    live("postgres", Fixture::RestrictingReference).await
+}
+
+#[tokio::test]
 #[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
 async fn live_mysql_delete_user_without_api_key_table_deletes_the_user() -> TestResult {
     live("mysql", Fixture::WithoutApiKeyTable).await
+}
+
+#[tokio::test]
+#[ignore = "Requires BETTER_AUTH_TEST_MYSQL_URL and isolated database permissions"]
+async fn live_mysql_failed_delete_user_rolls_back_sessions_and_accounts() -> TestResult {
+    live("mysql", Fixture::RestrictingReference).await
 }

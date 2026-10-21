@@ -125,10 +125,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
         Ok(())
     }
 
-    pub(super) async fn references(&self, user_id: &str) -> AuthResult<FieldValue> {
-        self.references_value(&user_id.into()).await
-    }
-
     pub(super) async fn references_value(&self, user_id: &FieldValue) -> AuthResult<FieldValue> {
         Ok(cache::decode(
             self.secondary()?
@@ -270,16 +266,6 @@ impl<S: AuthSchema> SecondaryStore<S> {
                 Box::pin(async move { runtime.update_cached_session(&token, update).await })
             }),
         })
-    }
-
-    pub(super) async fn queue_cached_user_session_deletion(
-        &self,
-        user_id: String,
-        references: FieldValue,
-        transaction: Option<&dyn crate::store::AuthTransaction<S>>,
-    ) -> AuthResult<()> {
-        self.queue_cached_user_session_deletion_value(user_id.into(), references, transaction)
-            .await
     }
 
     pub(super) async fn queue_cached_user_session_deletion_value(
